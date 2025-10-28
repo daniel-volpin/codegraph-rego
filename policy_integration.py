@@ -33,17 +33,24 @@ def build_policy_input() -> Dict[str, Any]:
     with driver.session() as session:
         cypher = (
             "MATCH (m:Method) "
-            "RETURN m.signature AS signature, m.name AS name, m.annotations AS annotations, "
-            "m.modifiers AS modifiers, m.file_path AS file_path"
+            "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
+            "WITH m, collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS called_signatures "
+            "RETURN coalesce(m.full_signature, m.signature) AS sig, "
+            "       m.name AS name, "
+            "       m.annotations AS annotations, "
+            "       m.modifiers AS modifiers, "
+            "       m.file_path AS file_path, "
+            "       called_signatures"
         )
         for rec in session.run(cypher):
             items.append(
                 {
-                    "signature": rec["signature"],
+                    "signature": rec["sig"],
                     "name": rec.get("name"),
                     "annotations": rec.get("annotations") or [],
                     "modifiers": rec.get("modifiers") or [],
                     "file_path": rec.get("file_path"),
+                    "called_signatures": rec.get("called_signatures") or [],
                 }
             )
     driver.close()
