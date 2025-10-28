@@ -93,6 +93,19 @@ const PolicyPage = () => {
     }
     return llmEvaluation.enriched as Array<Record<string, unknown>>;
   }, [llmEvaluation]);
+  const toHtml = (value?: string | null) => {
+    if (!value) {
+      return "";
+    }
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      .replace(/`(.+?)`/g, "<code>$1</code>")
+      .replace(/\n/g, "<br />");
+  };
 
   const violationSummaries = useMemo(() => {
     if (!evaluation?.violations) {
@@ -109,12 +122,16 @@ const PolicyPage = () => {
         }
         return fallback;
       };
+      const control = pickString(["control", "id", "policy", "rule"], "Unknown");
+      const severity = pickString(["severity", "level", "priority"], "Low");
+      const resource = pickString(["resource", "node", "target", "entity", "asset"], "—");
+      const description = pickString(["description", "message", "detail", "reason"], "—");
       return {
         raw: record,
-        control: pickString(["control", "id", "policy", "rule"], "—"),
-        severity: pickString(["severity", "level", "priority"], "—"),
-        resource: pickString(["resource", "node", "target", "entity", "asset"], "—"),
-        description: pickString(["description", "message", "detail", "reason"], "—")
+        control,
+        severity,
+        resource,
+        description
       } satisfies ViolationSummary;
     });
   }, [evaluation]);
@@ -369,13 +386,19 @@ const PolicyPage = () => {
                         {explanation && (
                           <section>
                             <h4>Explanation</h4>
-                            <p>{explanation}</p>
+                            <div
+                              className="llm-text"
+                              dangerouslySetInnerHTML={{ __html: toHtml(explanation) }}
+                            />
                           </section>
                         )}
                         {remediation && (
                           <section>
                             <h4>Recommended Action</h4>
-                            <p>{remediation}</p>
+                            <div
+                              className="llm-text"
+                              dangerouslySetInnerHTML={{ __html: toHtml(remediation) }}
+                            />
                           </section>
                         )}
                         {snippet && (

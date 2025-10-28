@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { fetchUploadStatus, uploadZip } from "../lib/api";
 import type { UploadResponse, UploadStatus } from "../lib/types";
 import { useActivityContext } from "../context/ActivityContext";
-import toast from "react-hot-toast";
+import { toast } from "react-hot-toast";
 
 const UploadPage = () => {
   const inputRef = useRef<HTMLInputElement | null>(null);
