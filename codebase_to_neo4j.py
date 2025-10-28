@@ -9,11 +9,8 @@ import javalang
 from neo4j import GraphDatabase
 from typing import List, Optional
 from pydantic import BaseModel
-from config import JAVA_ROOT_DIR, NEO4J_URI, NEO4J_USER, NEO4J_PASS
-from db import ensure_constraints
-
-
-# --- CONFIGURATION --- (centralized in config.py)
+from codegraph.config import JAVA_ROOT_DIR as _DEFAULT_JAVA_ROOT_DIR, NEO4J_URI, NEO4J_USER, NEO4J_PASS
+from codegraph.db import ensure_constraints
 
 
 class MethodEntity(BaseModel):
@@ -326,7 +323,9 @@ def main() -> None:
     """
     Main entry point: parses the Java project and ingests the extracted code structure into Neo4j.
     """
-    print(f"📦 Parsing Java project at: {JAVA_ROOT_DIR}")
+    # Resolve JAVA_ROOT_DIR at runtime to allow programmatic overrides (e.g., API /upload)
+    java_root_dir = os.getenv("JAVA_ROOT_DIR", _DEFAULT_JAVA_ROOT_DIR)
+    print(f"📦 Parsing Java project at: {java_root_dir}")
     # Preflight: check Neo4j connectivity early to fail fast with a clear message
     try:
         _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
@@ -348,10 +347,10 @@ def main() -> None:
         ensure_constraints()
     except Exception as e:
         print(f"[WARN] Could not ensure Neo4j constraints: {e}")
-    if not os.path.isdir(JAVA_ROOT_DIR):
-        print(f"[ERROR] JAVA_ROOT_DIR does not exist: {JAVA_ROOT_DIR}")
+    if not os.path.isdir(java_root_dir):
+        print(f"[ERROR] JAVA_ROOT_DIR does not exist: {java_root_dir}")
         return
-    all_data = collect_code_structure(JAVA_ROOT_DIR)
+    all_data = collect_code_structure(java_root_dir)
     print("✅ Ingesting into Neo4j...")
     ingest_to_neo4j(*all_data)
     print("🎉 Ingestion complete.")

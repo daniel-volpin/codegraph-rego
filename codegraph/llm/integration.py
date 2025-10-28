@@ -10,8 +10,8 @@ supported endpoint. If the LLM is unavailable, a fallback message is returned so
 
 from typing import Any, Dict, List
 
-from config import LLM_MODEL
-from llm_client import generate_chat_completion
+from codegraph.config import LLM_MODEL
+from codegraph.llm.client import generate_chat_completion
 
 
 def _read_code_snippet(file_path: str, needle: str, before: int = 8, after: int = 24) -> str:

@@ -6,9 +6,10 @@ import zipfile
 import shutil
 import subprocess
 import uvicorn
-from policy_integration import evaluate_policies, get_policy_catalog_entries
-from llm_integration import explain_policy_violations
-from config import (
+from codegraph.policy.service import evaluate as evaluate_policies
+from codegraph.policy.service import catalog as get_policy_catalog_entries
+from codegraph.llm.integration import explain_policy_violations
+from codegraph.config import (
     UPLOAD_DIR,
     FAISS_INDEX_PATH,
     SIGNATURE_MAP_PATH,
@@ -16,8 +17,18 @@ from config import (
     EMBEDDING_MODEL_NAME,
     LLM_MODEL,
 )
-from db import get_neo4j_driver
-import shutil as _shutil
+from codegraph.db import get_neo4j_driver
+from codegraph.api.models import (
+    SearchResponse,
+    EvaluateResponse,
+    EvaluateWithLLMResponse,
+    PolicyCatalogResponse,
+    PolicyViolation,
+    ControlMetadata,
+    LLMEnrichedItem,
+    Neighbor,
+    MethodContext,
+)
 
 app = FastAPI()
 
@@ -74,10 +85,15 @@ async def upload_zip(file: UploadFile = File(...)):
 
     java_root = find_java_root(UPLOAD_DIR)
 
-    # Run your parsing and embedding scripts (adjust paths as needed)
-    env = {**os.environ, "JAVA_ROOT_DIR": java_root}
-    subprocess.run(["python3", "codebase_to_neo4j.py"], check=True, env=env)
-    subprocess.run(["python3", "build_code_embeddings.py"], check=True)
+    # Run ingestion and embedding directly (no subprocess)
+    try:
+        from codegraph.ingestion.service import ingest
+        from codegraph.embedding.service import build_embeddings
+
+        ingest(java_root)
+        build_embeddings()
+    except Exception as e:
+        return JSONResponse({"error": f"processing_failed: {e}"}, status_code=500)
     return {"status": "Codebase processed!", "java_root": java_root}
 
 
@@ -85,19 +101,16 @@ async def upload_zip(file: UploadFile = File(...)):
 async def _preload_resources():
     """Warm caches for search to improve first-request latency."""
     try:
-        from hybrid_code_search import (
+        from codegraph.search.hybrid import (
             load_faiss_index,
             load_signature_map,
             load_embedding_model,
-            FAISS_INDEX_PATH,
-            SIGNATURE_MAP_PATH as _LEGACY_MAP_PATH,
-            EMBEDDING_MODEL_NAME,
         )
         # Try full-signature map first, then legacy map
         try:
             load_signature_map(SIGNATURE_MAP_PATH_FULL)
         except Exception:
-            load_signature_map(_LEGACY_MAP_PATH)
+            load_signature_map(SIGNATURE_MAP_PATH)
         load_faiss_index(FAISS_INDEX_PATH)
         load_embedding_model(EMBEDDING_MODEL_NAME)
     except Exception as e:
@@ -127,7 +140,7 @@ async def health():
         checks["details"]["neo4j"] = str(e)
     # Index + map + model
     try:
-        from hybrid_code_search import load_faiss_index, load_signature_map, load_embedding_model
+        from codegraph.search.hybrid import load_faiss_index, load_signature_map, load_embedding_model
         load_faiss_index(FAISS_INDEX_PATH)
         try:
             load_signature_map(SIGNATURE_MAP_PATH_FULL)
@@ -141,7 +154,7 @@ async def health():
         checks["details"]["search"] = str(e)
     # OPA presence
     try:
-        if _shutil.which("opa"):
+        if shutil.which("opa"):
             checks["opa"] = True
     except Exception:
         pass
@@ -149,40 +162,29 @@ async def health():
     return JSONResponse(checks, status_code=status)
 
 
-@app.post("/search")
+@app.post("/search", response_model=SearchResponse)
 async def search(query: str = Form(...)):
     # You should refactor your hybrid search script to expose a function, or call as subprocess
     # For demo, let's assume you have a function hybrid_search(query)
     try:
-        from hybrid_code_search import (
-            semantic_search,
-            load_faiss_index,
-            load_signature_map,
-            load_embedding_model,
-            get_neo4j_driver,
-            fetch_graph_context_for_method,
-            FAISS_INDEX_PATH,
-            SIGNATURE_MAP_PATH,
-            EMBEDDING_MODEL_NAME,
-            NEO4J_URI,
-            NEO4J_USER,
-            NEO4J_PASS,
-        )
-        index = load_faiss_index(FAISS_INDEX_PATH)
-        signature_map = load_signature_map(SIGNATURE_MAP_PATH)
-        model = load_embedding_model(EMBEDDING_MODEL_NAME)
-        neo4j_driver = get_neo4j_driver(NEO4J_URI, NEO4J_USER, NEO4J_PASS)
-        matched_signatures = semantic_search(query, model, index, signature_map, k=5)
-        graph_contexts = [fetch_graph_context_for_method(sig, neo4j_driver) for sig in matched_signatures]
-        neo4j_driver.close()
-        return {"matches": matched_signatures, "contexts": graph_contexts}
+        from codegraph.search.service import run_search
+        matched_signatures, graph_contexts = run_search(query, k=5)
+        # Convert to models explicitly
+        contexts_model = []
+        for ctx in graph_contexts:
+            ctx_entries = []
+            for entry in ctx:
+                neighbors = [Neighbor(**n) for n in entry.get("neighbors", [])]
+                ctx_entries.append(MethodContext(method=entry.get("method", ""), neighbors=neighbors))
+            contexts_model.append(ctx_entries)
+        return SearchResponse(matches=matched_signatures, contexts=contexts_model)
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception as e:
         return JSONResponse({"error": f"search_failed: {e}"}, status_code=500)
 
 
-@app.get("/policy/evaluate")
+@app.get("/policy/evaluate", response_model=EvaluateResponse)
 async def policy_evaluate():
     """
     Evaluate Rego policies against the current Neo4j code graph.
@@ -191,12 +193,20 @@ async def policy_evaluate():
     try:
         result = evaluate_policies()
         status = 200 if "violations" in result or "opa_output" in result else 500
-        return JSONResponse(result, status_code=status)
+        # Convert to models explicitly
+        violations = [PolicyViolation(**v) for v in result.get("violations", [])]
+        catalog_items = [ControlMetadata(**c) for c in result.get("catalog", [])]
+        modeled = EvaluateResponse(
+            violations=violations,
+            opa_output=result.get("opa_output"),
+            catalog=catalog_items,
+        )
+        return JSONResponse(modeled.dict(by_alias=True), status_code=status)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.post("/policy/evaluate_with_llm")
+@app.post("/policy/evaluate_with_llm", response_model=EvaluateWithLLMResponse)
 async def policy_evaluate_with_llm(limit: int = 10, model: str | None = None):
     """
     Evaluate Rego policies and have an LLM explain violations with remediation guidance.
@@ -207,11 +217,23 @@ async def policy_evaluate_with_llm(limit: int = 10, model: str | None = None):
     if "violations" not in res:
         return JSONResponse(res, status_code=500)
     vio = res.get("violations", [])[:limit]
-    enriched = explain_policy_violations(vio, max_items=limit, model=model or LLM_MODEL)
-    return {"violations": vio, "enriched": enriched}
+    enriched_raw = explain_policy_violations(vio, max_items=limit, model=model or LLM_MODEL)
+    violations_modeled = [PolicyViolation(**v) for v in vio]
+    enriched_modeled = []
+    for item in enriched_raw:
+        pv = PolicyViolation(**item.get("violation", {}))
+        enriched_modeled.append(
+            LLMEnrichedItem(
+                violation=pv,
+                snippet=item.get("snippet", ""),
+                explanation=item.get("explanation", ""),
+            )
+        )
+    modeled = EvaluateWithLLMResponse(violations=violations_modeled, enriched=enriched_modeled)
+    return JSONResponse(modeled.dict(by_alias=True), status_code=200)
 
 
-@app.get("/policy/catalog")
+@app.get("/policy/catalog", response_model=PolicyCatalogResponse)
 async def policy_catalog():
     """
     Return the policy catalog describing available controls, their evidence requirements, and Rego linkage.
@@ -220,7 +242,8 @@ async def policy_catalog():
         controls = get_policy_catalog_entries()
         # Ensure stable ordering by control identifier
         controls_sorted = sorted(controls, key=lambda item: item.get("control") or item.get("id") or "")
-        return {"controls": controls_sorted}
+        modeled = PolicyCatalogResponse(controls=[ControlMetadata(**c) for c in controls_sorted])
+        return JSONResponse(modeled.dict(by_alias=True), status_code=200)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 

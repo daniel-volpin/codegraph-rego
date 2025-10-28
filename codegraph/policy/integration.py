@@ -13,11 +13,14 @@ import tempfile
 from typing import Any, Dict, List
 
 from neo4j import GraphDatabase
-from config import NEO4J_URI, NEO4J_USER, NEO4J_PASS
+from codegraph.config import NEO4J_URI, NEO4J_USER, NEO4J_PASS
 
-POLICY_DIR = os.path.join(os.path.dirname(__file__), "policy")
+# Compute project root (two directories up from this file), then policy directory at root level
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.abspath(os.path.join(_THIS_DIR, os.pardir, os.pardir))
+POLICY_DIR = os.path.join(_PROJECT_ROOT, "policy")
 POLICY_QUERY = "data.iso27001.violations"
-CATALOG_PATH = os.path.join(os.path.dirname(__file__), "policy", "catalog.json")
+CATALOG_PATH = os.path.join(POLICY_DIR, "catalog.json")
 
 _CATALOG_CACHE: Dict[str, Dict[str, Any]] | None = None
 
