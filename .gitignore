@@ -2,6 +2,7 @@
 /.mypy_cache
 /__pycache__
 /uploaded_code/jhipster-sample-app
+/uploaded_code/__MACOSX/
 /copilot-context/
 /.github/
 .vscode/
