@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { fetchUploadStatus, uploadZip } from "../lib/api";
 import type { UploadResponse, UploadStatus } from "../lib/types";
 import { useActivityContext } from "../context/ActivityContext";
+import toast from "react-hot-toast";
 
 const UploadPage = () => {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -10,10 +11,6 @@ const UploadPage = () => {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResponse | null>(null);
   const [status, setStatus] = useState<UploadStatus | null>(null);
-  const [toast, setToast] = useState<{
-    message: string;
-    tone: "success" | "error";
-  } | null>(null);
   const { upsert: upsertActivity, clear: clearActivity } = useActivityContext();
 
   useEffect(() => {
@@ -32,10 +29,7 @@ const UploadPage = () => {
     mutationFn: uploadZip,
     onSuccess: (data) => {
       setResult(data);
-      setToast({
-        message: "Upload complete! Embeddings rebuilt.",
-        tone: "success"
-      });
+      toast.success("Upload complete! Embeddings rebuilt.");
       try {
         localStorage.setItem("codegraph:lastUpload", JSON.stringify(data));
       } catch {
@@ -45,7 +39,7 @@ const UploadPage = () => {
     onError: (error: Error) => {
       const payload: UploadResponse = { status: "error", error: error.message };
       setResult(payload);
-      setToast({ message: `Upload failed: ${error.message}`, tone: "error" });
+      toast.error(`Upload failed: ${error.message}`);
     },
     onSettled: () => {
       refetchStatusRef.current?.();
@@ -95,14 +89,6 @@ const UploadPage = () => {
     };
   }, [clearActivity]);
 
-  useEffect(() => {
-    if (!toast) {
-      return;
-    }
-    const timeout = window.setTimeout(() => setToast(null), 4000);
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
-
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const file = inputRef.current?.files?.[0];
@@ -112,7 +98,7 @@ const UploadPage = () => {
         error: "Please select a ZIP file."
       };
       setResult(feedback);
-      setToast({ message: feedback.error ?? "Please select a ZIP file.", tone: "error" });
+      toast.error(feedback.error ?? "Please select a ZIP file.");
       return;
     }
     const now = new Date().toISOString();
@@ -126,7 +112,6 @@ const UploadPage = () => {
       updated_at: now,
       started_at: now
     });
-    setToast(null);
     refetchStatusRef.current?.();
     uploadMutation.mutate(file);
   };
@@ -177,11 +162,20 @@ const UploadPage = () => {
           <p className="file-selected">Selected: {selectedName}</p>
         )}
         <button type="submit" disabled={isProcessing}>
-          {isProcessing ? "Processing…" : "Upload & Ingest"}
+          {isProcessing && <span className="btn-spinner" aria-hidden="true" />}
+          <span>{isProcessing ? "Processing…" : "Upload & Ingest"}</span>
         </button>
       </form>
       {showProgress && (
-        <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progressValue)}>
+        <div
+          className="progress-track"
+          role="progressbar"
+          aria-label="Upload progress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow={Math.round(progressValue)}
+          title="Upload progress"
+        >
           <div
             className="progress-bar"
             style={{ width: `${progressValue}%` }}
@@ -198,7 +192,21 @@ const UploadPage = () => {
           }`}
         >
           {result.error ? (
-            <p>Error: {result.error}</p>
+            <div>
+              <p>Error: {result.error}</p>
+              <button
+                type="button"
+                className="callout-action"
+                onClick={() => {
+                  uploadMutation.reset();
+                  setStatus(null);
+                  setResult(null);
+                  inputRef.current?.click();
+                }}
+              >
+                Retry upload
+              </button>
+            </div>
           ) : (
             <>
               <p>{result.status}</p>
@@ -220,17 +228,6 @@ const UploadPage = () => {
       <div aria-live="polite" className="sr-only">
         {status?.message}
       </div>
-      {toast && (
-        <div className="toast-container">
-          <div
-            className={`toast ${
-              toast.tone === "success" ? "toast-success" : "toast-error"
-            }`}
-          >
-            {toast.message}
-          </div>
-        </div>
-      )}
     </section>
   );
 };

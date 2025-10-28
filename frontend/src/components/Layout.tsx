@@ -2,12 +2,11 @@ import { PropsWithChildren } from "react";
 import SidebarNav from "./SidebarNav";
 import Breadcrumbs from "./Breadcrumbs";
 import ActivityTray from "./ActivityTray";
+import { Toaster } from "react-hot-toast";
 import { useActivityContext } from "../context/ActivityContext";
 
 const Layout = ({ children }: PropsWithChildren) => {
-  const { activities } = useActivityContext();
-  const bodyContentClass =
-    activities.length > 0 ? "app-body-content has-activity" : "app-body-content";
+  useActivityContext();
 
   return (
     <div className="app-shell">
@@ -16,11 +15,12 @@ const Layout = ({ children }: PropsWithChildren) => {
         <header className="app-header">
           <Breadcrumbs />
         </header>
-        <div className={bodyContentClass}>
+        <div className="app-body-content">
           <main className="app-content">{children}</main>
           <ActivityTray />
         </div>
       </div>
+      <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
     </div>
   );
 };

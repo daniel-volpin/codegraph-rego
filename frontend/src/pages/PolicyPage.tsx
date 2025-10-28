@@ -10,6 +10,16 @@ import type {
   PolicyEvaluateResponse
 } from "../lib/types";
 import { useActivityContext } from "../context/ActivityContext";
+import { toast } from "react-hot-toast";
+import CodeHighlight from "../components/CodeHighlight";
+
+interface ViolationSummary {
+  raw: Record<string, unknown>;
+  control: string;
+  severity: string;
+  resource: string;
+  description: string;
+}
 
 const PolicyPage = () => {
   const [limit, setLimit] = useState(5);
@@ -28,8 +38,19 @@ const PolicyPage = () => {
 
   const baseEvalMutation = useMutation({
     mutationFn: evaluatePolicies,
-    onSuccess: (data) => setEvaluation(data),
-    onError: (error: Error) => setEvaluation({ error: error.message })
+    onSuccess: (data) => {
+      setEvaluation(data);
+      const violationCount = data.violations?.length ?? 0;
+      toast.success(
+        violationCount > 0
+          ? `${violationCount} violation${violationCount === 1 ? "" : "s"} detected.`
+          : "No policy violations detected."
+      );
+    },
+    onError: (error: Error) => {
+      setEvaluation({ error: error.message });
+      toast.error(`Evaluation failed: ${error.message}`);
+    }
   });
 
   const llmEvalMutation = useMutation({
@@ -37,10 +58,13 @@ const PolicyPage = () => {
     onSuccess: (data) => {
       setLlmEvaluation(data);
       setLlmStatus("LLM explanations generated.");
+      toast.success("LLM explanations ready.");
     },
     onError: (error: Error) => {
       setLlmEvaluation({ error: error.message });
-      setLlmStatus(`LLM request failed: ${error.message}`);
+      const message = `LLM request failed: ${error.message}`;
+      setLlmStatus(message);
+      toast.error(message);
     }
   });
 
@@ -69,6 +93,31 @@ const PolicyPage = () => {
     }
     return llmEvaluation.enriched as Array<Record<string, unknown>>;
   }, [llmEvaluation]);
+
+  const violationSummaries = useMemo(() => {
+    if (!evaluation?.violations) {
+      return [] as ViolationSummary[];
+    }
+    return evaluation.violations.map((item) => {
+      const record = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+      const pickString = (keys: string[], fallback = "—") => {
+        for (const key of keys) {
+          const value = record[key];
+          if (typeof value === "string" && value.trim().length > 0) {
+            return value;
+          }
+        }
+        return fallback;
+      };
+      return {
+        raw: record,
+        control: pickString(["control", "id", "policy", "rule"], "—"),
+        severity: pickString(["severity", "level", "priority"], "—"),
+        resource: pickString(["resource", "node", "target", "entity", "asset"], "—"),
+        description: pickString(["description", "message", "detail", "reason"], "—")
+      } satisfies ViolationSummary;
+    });
+  }, [evaluation]);
 
   useEffect(() => {
     if (baseEvalMutation.isLoading) {
@@ -176,7 +225,8 @@ const PolicyPage = () => {
           onClick={() => baseEvalMutation.mutate()}
           disabled={baseEvalMutation.isLoading}
         >
-          {baseEvalMutation.isLoading ? "Checking…" : "Evaluate Policies"}
+          {baseEvalMutation.isLoading && <span className="btn-spinner" aria-hidden="true" />}
+          <span>{baseEvalMutation.isLoading ? "Checking…" : "Evaluate Policies"}</span>
         </button>
         <form className="policy-llm-form" onSubmit={handleLlmSubmit}>
           <label>
@@ -199,7 +249,8 @@ const PolicyPage = () => {
             />
           </label>
           <button type="submit" disabled={llmEvalMutation.isLoading}>
-            {llmEvalMutation.isLoading ? "Requesting…" : "Evaluate with LLM"}
+            {llmEvalMutation.isLoading && <span className="btn-spinner" aria-hidden="true" />}
+            <span>{llmEvalMutation.isLoading ? "Requesting…" : "Evaluate with LLM"}</span>
           </button>
         </form>
       </div>
@@ -209,7 +260,14 @@ const PolicyPage = () => {
           <h2>Evaluation Result</h2>
           {evaluation.error ? (
             <div className="callout callout-error">
-              Error: {evaluation.error}
+              <p>Error: {evaluation.error}</p>
+              <button
+                type="button"
+                className="callout-action"
+                onClick={() => baseEvalMutation.mutate()}
+              >
+                Retry evaluation
+              </button>
             </div>
           ) : (
             <>
@@ -218,14 +276,47 @@ const PolicyPage = () => {
                   ? `${evaluation.violations?.length ?? 0} potential violation(s) detected.`
                   : "No violations detected by OPA policies."}
               </p>
-              {hasViolations && (
-                <ul className="violation-list">
-                  {evaluation.violations?.map((violation, index) => (
-                    <li key={index}>
-                      <pre>{JSON.stringify(violation, null, 2)}</pre>
-                    </li>
-                  ))}
-                </ul>
+              {hasViolations && violationSummaries.length > 0 && (
+                <div className="violation-table-wrapper">
+                  <table className="violation-table">
+                    <thead>
+                      <tr>
+                        <th>Control</th>
+                        <th>Resource</th>
+                        <th>Severity</th>
+                        <th>Description</th>
+                        <th>Raw</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {violationSummaries.map((item, index) => (
+                        <tr key={`violation-${index}`}>
+                          <td>{item.control}</td>
+                          <td>{item.resource}</td>
+                          <td>
+                            <span
+                              className={`severity-chip severity-${item.severity
+                                .toLowerCase()
+                                .replace(/[^a-z0-9]+/g, "-")}`}
+                            >
+                              {item.severity}
+                            </span>
+                          </td>
+                          <td>{item.description}</td>
+                          <td>
+                            <details>
+                              <summary>View</summary>
+                              <CodeHighlight
+                                code={JSON.stringify(item.raw, null, 2)}
+                                language="json"
+                              />
+                            </details>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </>
           )}
@@ -237,7 +328,14 @@ const PolicyPage = () => {
           <h2>LLM Enriched Result</h2>
           {llmEvaluation.error ? (
             <div className="callout callout-error">
-              Error: {llmEvaluation.error}
+              <p>Error: {llmEvaluation.error}</p>
+              <button
+                type="button"
+                className="callout-action"
+                onClick={() => llmEvalMutation.mutate()}
+              >
+                Retry LLM request
+              </button>
             </div>
           ) : (
             <>
@@ -247,16 +345,56 @@ const PolicyPage = () => {
               {enrichedViolations.length === 0 ? (
                 <p>No enriched explanations returned.</p>
               ) : (
-                <ul className="violation-list">
-                  {enrichedViolations.map((item, index) => (
-                    <li key={index}>
-                      <details open>
-                        <summary>{item.title ?? `Violation ${index + 1}`}</summary>
-                        <pre>{JSON.stringify(item, null, 2)}</pre>
-                      </details>
-                    </li>
-                  ))}
-                </ul>
+                <div className="llm-results">
+                  {enrichedViolations.map((item, index) => {
+                    const title =
+                      (typeof item.title === "string" && item.title) ||
+                      (typeof item.control === "string" && item.control) ||
+                      `Violation ${index + 1}`;
+                    const explanation =
+                      (typeof item.explanation === "string" && item.explanation) ||
+                      (typeof item.summary === "string" && item.summary);
+                    const remediation =
+                      (typeof item.remediation === "string" && item.remediation) ||
+                      (typeof item.action === "string" && item.action);
+                    const snippet =
+                      (typeof item.snippet === "string" && item.snippet) ||
+                      (typeof item.code === "string" && item.code);
+
+                    return ( 
+                      <article className="llm-card" key={`llm-${index}`}>
+                        <header>
+                          <h3>{title}</h3>
+                        </header>
+                        {explanation && (
+                          <section>
+                            <h4>Explanation</h4>
+                            <p>{explanation}</p>
+                          </section>
+                        )}
+                        {remediation && (
+                          <section>
+                            <h4>Recommended Action</h4>
+                            <p>{remediation}</p>
+                          </section>
+                        )}
+                        {snippet && (
+                          <section>
+                            <h4>Snippet</h4>
+                            <CodeHighlight code={snippet} language="java" />
+                          </section>
+                        )}
+                        <details>
+                          <summary>Raw response</summary>
+                          <CodeHighlight
+                            code={JSON.stringify(item, null, 2)}
+                            language="json"
+                          />
+                        </details>
+                      </article>
+                    );
+                  })}
+                </div>
               )}
             </>
           )}

@@ -114,14 +114,10 @@
 
 .app-body-content {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 2rem;
   align-items: start;
   flex: 1;
-}
-
-.app-body-content.has-activity {
-  grid-template-columns: minmax(0, 1fr) 300px;
 }
 
 .app-content {
@@ -170,6 +166,10 @@
 .policy-actions button,
 .policy-llm-form button {
   align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
   padding: 0.6rem 1.5rem;
   border: none;
   border-radius: 999px;
@@ -193,6 +193,15 @@
 .policy-llm-form button:not(:disabled):hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
+}
+
+.btn-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  animation: spin 0.7s linear infinite;
 }
 
 .file-input {
@@ -234,6 +243,24 @@
   background: #dcfce7;
   color: #166534;
   border-color: rgba(34, 197, 94, 0.2);
+}
+
+.callout-action {
+  margin-top: 0.75rem;
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.35rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.callout-action:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .progress-track {
@@ -304,31 +331,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.toast-container {
-  position: fixed;
-  top: 1.5rem;
-  right: 1.5rem;
-  z-index: 999;
-}
-
-.toast {
-  padding: 0.85rem 1.25rem;
-  border-radius: 14px;
-  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.18);
-  color: #0f172a;
-  font-weight: 600;
-  background: #ffffff;
-  min-width: 220px;
-}
-
-.toast-success {
-  border-left: 4px solid #22c55e;
-}
-
-.toast-error {
-  border-left: 4px solid #ef4444;
 }
 
 .sr-only {
@@ -444,6 +446,7 @@
   gap: 0.5rem;
   font-size: 0.85rem;
   color: #475467;
+  align-items: start;
 }
 
 .neighbor-row dt {
@@ -454,6 +457,7 @@
 .neighbor-row dd {
   margin: 0;
   word-break: break-word;
+  display: block;
 }
 
 .neighbor-empty {
@@ -495,26 +499,115 @@
   overflow-x: auto;
 }
 
-.violation-list {
+
+.violation-table-wrapper {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.violation-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+}
+
+.violation-table th,
+.violation-table td {
+  text-align: left;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+
+.violation-table th {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475467;
+}
+
+.violation-table td details {
+  font-size: 0.8rem;
+  color: #2563eb;
+}
+
+.severity-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.severity-high,
+.severity-critical {
+  background: rgba(220, 38, 38, 0.15);
+  color: #b91c1c;
+}
+
+.severity-medium {
+  background: rgba(249, 115, 22, 0.15);
+  color: #c2410c;
+}
+
+.severity-low {
+  background: rgba(22, 163, 74, 0.15);
+  color: #15803d;
+}
+
+.llm-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.llm-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  background: #f8fafc;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 0;
+}
+
+.llm-card header h3 {
   margin: 0;
-  list-style: none;
+  font-size: 1rem;
+  color: #0f172a;
 }
 
-.violation-list li details {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 0.75rem 1rem;
+.llm-card section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-.violation-list li summary {
-  font-weight: 600;
+.llm-card h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #475467;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.llm-card p {
+  margin: 0;
+  font-size: 0.9rem;
   color: #1f2937;
+}
+
+.llm-card details summary {
   cursor: pointer;
+  color: #2563eb;
+  font-weight: 600;
 }
 
 .policy-overlay {
@@ -557,6 +650,19 @@ code {
   color: #1d4ed8;
 }
 
+.code-highlight {
+  margin: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #1f2937;
+}
+
+.code-highlight code {
+  display: block;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
 .activity-tray {
   background: #ffffff;
   border-radius: 16px;
@@ -565,10 +671,13 @@ code {
   position: sticky;
   top: 2rem;
   align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .activity-tray h3 {
-  margin: 0 0 1rem 0;
+  margin: 0;
   font-size: 1rem;
   color: #0f172a;
 }
@@ -643,6 +752,69 @@ code {
 
 .activity-idle {
   border-left: 4px solid #94a3b8;
+}
+
+.health-panel {
+  background: #f8fafc;
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  border: 1px solid #e2e8f0;
+}
+
+.health-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+
+.health-panel h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.health-panel button {
+  background: transparent;
+  border: 1px solid #2563eb;
+  color: #2563eb;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.health-panel button:hover {
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.health-panel ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.health-panel li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.health-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #22c55e;
+  display: inline-flex;
+}
+
+.health-fail .health-indicator {
+  background: #ef4444;
 }
 
 @media (max-width: 768px) {

@@ -1,7 +1,9 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, ReactNode, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { searchCode } from "../lib/api";
 import type { SearchResponse } from "../lib/types";
+import { toast } from "react-hot-toast";
+import CodeHighlight from "../components/CodeHighlight";
 
 const SearchPage = () => {
   const [query, setQuery] = useState("");
@@ -11,9 +13,16 @@ const SearchPage = () => {
     mutationFn: searchCode,
     onSuccess: (data) => {
       setResult(data);
+      const matchCount = data.matches.length;
+      toast.success(
+        matchCount > 0
+          ? `Found ${matchCount} match${matchCount === 1 ? "" : "es"}.`
+          : "Search completed."
+      );
     },
     onError: (error: Error) => {
       setResult({ matches: [], contexts: [], error: error.message });
+      toast.error(`Search failed: ${error.message}`);
     }
   });
 
@@ -22,7 +31,31 @@ const SearchPage = () => {
     if (!query.trim()) {
       return;
     }
+    setResult(null);
     searchMutation.mutate(query.trim());
+  };
+
+  const renderNeighborValue = (key: string, value: unknown): ReactNode => {
+    if (typeof value === "string") {
+      const normalized = key.toLowerCase();
+      const language =
+        normalized.includes("json") || value.trim().startsWith("{")
+          ? "json"
+          : normalized.includes("code") || normalized.includes("snippet")
+          ? "java"
+          : "text";
+      if (normalized.includes("code") || normalized.includes("snippet") || value.includes("\n")) {
+        return <CodeHighlight code={value} language={language as "java" | "json" | "text"} />;
+      }
+      return value;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    if (value && typeof value === "object") {
+      return <CodeHighlight code={JSON.stringify(value, null, 2)} language="json" />;
+    }
+    return "—";
   };
 
   return (
@@ -39,13 +72,26 @@ const SearchPage = () => {
           placeholder="Describe a method or control you are looking for…"
         />
         <button type="submit" disabled={searchMutation.isLoading}>
-          {searchMutation.isLoading ? "Searching…" : "Search"}
+          {searchMutation.isLoading && <span className="btn-spinner" aria-hidden="true" />}
+          <span>{searchMutation.isLoading ? "Searching…" : "Search"}</span>
         </button>
       </form>
       {result && (
         <div className="search-results">
           {result.error && (
-            <div className="callout callout-error">Error: {result.error}</div>
+            <div className="callout callout-error">
+              <p>Search failed: {result.error}</p>
+              <button
+                type="button"
+                className="callout-action"
+                onClick={() => {
+                  searchMutation.reset();
+                  setResult(null);
+                }}
+              >
+                Retry search
+              </button>
+            </div>
           )}
           {!result.error && result.matches.length === 0 && (
             <p>No matches yet. Try another query.</p>
@@ -79,7 +125,7 @@ const SearchPage = () => {
                                   {entries.map(([key, value]) => (
                                     <div key={key} className="neighbor-row">
                                       <dt>{key}</dt>
-                                      <dd>{String(value)}</dd>
+                                      <dd>{renderNeighborValue(key, value)}</dd>
                                     </div>
                                   ))}
                                 </dl>
