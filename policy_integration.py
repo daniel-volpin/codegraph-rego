@@ -50,6 +50,14 @@ def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
     return _CATALOG_CACHE or {}
 
 
+def get_policy_catalog_entries() -> List[Dict[str, Any]]:
+    """
+    Return the catalog entries as a list in source order for external consumers (API, UI).
+    """
+    catalog = load_policy_catalog()
+    return list(catalog.values())
+
+
 def build_policy_input() -> Dict[str, Any]:
     """
     Build OPA input from the current Neo4j code graph.
@@ -147,7 +155,7 @@ def evaluate_policies() -> Dict[str, Any]:
             if meta:
                 item["control_metadata"] = meta
             enriched.append(item)
-        return {"violations": enriched, "opa_output": out, "catalog": list(catalog.values())}
+        return {"violations": enriched, "opa_output": out, "catalog": get_policy_catalog_entries()}
 
 
 if __name__ == "__main__":

@@ -48,8 +48,9 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
    ```
 
    - `POST /search` (`query=...` form field) → semantic hits + graph neighbours  
-   - `GET /policy/evaluate` → raw ISO control violations (OPA)  
-   - `POST /policy/evaluate_with_llm?limit=5&model=...` → violations + LLM guidance  
+  - `GET /policy/evaluate` → raw ISO control violations (OPA)  
+  - `GET /policy/catalog` → catalog of controls, evidence requirements, and Rego rule mapping  
+  - `POST /policy/evaluate_with_llm?limit=5&model=...` → violations + LLM guidance  
    - `POST /upload` (zip file) → safe extraction, ingestion, embedding rebuild  
    - `GET /health` → readiness check for Neo4j, FAISS, signature map, model, OPA
 

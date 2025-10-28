@@ -6,7 +6,7 @@ import zipfile
 import shutil
 import subprocess
 import uvicorn
-from policy_integration import evaluate_policies
+from policy_integration import evaluate_policies, get_policy_catalog_entries
 from llm_integration import explain_policy_violations
 from config import (
     UPLOAD_DIR,
@@ -209,6 +209,20 @@ async def policy_evaluate_with_llm(limit: int = 10, model: str | None = None):
     vio = res.get("violations", [])[:limit]
     enriched = explain_policy_violations(vio, max_items=limit, model=model or LLM_MODEL)
     return {"violations": vio, "enriched": enriched}
+
+
+@app.get("/policy/catalog")
+async def policy_catalog():
+    """
+    Return the policy catalog describing available controls, their evidence requirements, and Rego linkage.
+    """
+    try:
+        controls = get_policy_catalog_entries()
+        # Ensure stable ordering by control identifier
+        controls_sorted = sorted(controls, key=lambda item: item.get("control") or item.get("id") or "")
+        return {"controls": controls_sorted}
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
