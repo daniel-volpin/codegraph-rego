@@ -19,6 +19,7 @@ from config import (
     NEO4J_URI,
     NEO4J_USER,
     NEO4J_PASS,
+    SIGNATURE_MAP_PATH_FULL,
 )
 
 # Simple in-process caches
@@ -42,16 +43,25 @@ def load_faiss_index(index_path: str):
 
 def load_signature_map(map_path: str):
     """
-    Load the signature map from disk, mapping FAISS indices to method signatures (cached).
+    Load the signature map from disk, mapping FAISS indices to method full-signatures (cached).
+    Tries the preferred full-signature map first, then falls back to provided path and the legacy path.
     """
     global _SIGMAP
     if _SIGMAP is not None:
         return _SIGMAP
-    if not os.path.isfile(map_path):
-        raise FileNotFoundError(f"Signature map not found at {map_path}. Build embeddings first.")
-    with open(map_path, "r") as f:
-        _SIGMAP = json.load(f)
-    return _SIGMAP
+    candidates = [SIGNATURE_MAP_PATH_FULL, map_path, SIGNATURE_MAP_PATH]
+    last_exc = None
+    for p in candidates:
+        try:
+            if os.path.isfile(p):
+                with open(p, "r") as f:
+                    _SIGMAP = json.load(f)
+                    return _SIGMAP
+        except Exception as e:
+            last_exc = e
+    raise FileNotFoundError(
+        f"Signature map not found. Tried: {', '.join(candidates)}" + (f". Last error: {last_exc}" if last_exc else "")
+    )
 
 
 def load_embedding_model(model_name: str):
@@ -73,7 +83,8 @@ def get_neo4j_driver(uri: str, user: str, password: str):
 
 def semantic_search(query: str, model, index, signature_map, k: int = 5):
     """
-    Perform semantic search over normalized embeddings using FAISS (IP) and return top-k method signatures.
+    Perform semantic search over normalized embeddings using FAISS (IP) and return top-k method identifiers.
+    The identifiers are `full_signature` values produced during embedding (or `signature` as fallback).
     """
     query_vector = model.encode([query], normalize_embeddings=True)
     D, indices = index.search(query_vector, k=k)

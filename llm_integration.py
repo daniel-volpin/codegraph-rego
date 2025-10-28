@@ -3,8 +3,8 @@ llm_integration.py
 
 Optional helper to enrich OPA/Rego violations with LLM-generated explanations and remediation advice.
 
-It will try to use OpenAI if `OPENAI_API_KEY` is present, otherwise it returns structured stubs so
-your pipeline still works without network.
+This uses the OpenAI Python SDK v0.28.x (requests-based; no httpx). If `OPENAI_API_KEY` is not set
+or the SDK is unavailable, it returns structured stubs so your pipeline still works without network.
 """
 
 import os
@@ -48,19 +48,16 @@ def _build_prompt(violation: Dict[str, Any], code_snippet: str) -> List[Dict[str
 
 
 def _call_openai(messages: List[Dict[str, str]], model: str = "gpt-4o-mini") -> str:
-    try:
-        from openai import OpenAI  # type: ignore
-    except Exception:
-        return "[LLM unavailable: openai package not installed]"
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return "[LLM unavailable: missing OPENAI_API_KEY]"
-    client = OpenAI(api_key=api_key)
     try:
-        resp = client.chat.completions.create(model=model, messages=messages, temperature=0.2)
-        return resp.choices[0].message.content or ""
+        import openai  # type: ignore
+        openai.api_key = api_key
+        resp = openai.ChatCompletion.create(model=model, messages=messages, temperature=0.2)
+        return (resp.get("choices", [{}])[0].get("message", {}).get("content") or "").strip()
     except Exception as e:
-        return f"[LLM call failed: {e}]"
+        return f"[LLM unavailable or failed: {e}]"
 
 
 def explain_policy_violations(

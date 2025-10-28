@@ -170,6 +170,7 @@ Follow these steps to set up the Python environment, ingest your Java code into 
   - `python3 build_code_embeddings.py`
   - Outputs: `index/code_embeddings.index`, `index/embedding_signature_map.json`
   - Uses cosine similarity (normalized embeddings) with `IndexFlatIP`.
+  - Signature map entries are overload-safe `full_signature` values (falls back to `signature` if absent).
 - Try hybrid search via CLI:
   - `python3 hybrid_code_search.py`
 
@@ -181,6 +182,8 @@ Follow these steps to set up the Python environment, ingest your Java code into 
   - Search: `POST /search` with form `query=...`
     - Example: `curl -X POST -F 'query=Where is access control enforced?' http://localhost:8000/search`
     - Returns typed neighbor items: `{type: 'Method'|'Class'|'Node', id: string}`
+  - Health: `GET /health`
+    - Checks Neo4j connectivity, FAISS index, signature map, model preload, and OPA CLI presence.
   - Policy evaluation: `GET /policy/evaluate`
     - Example: `curl http://localhost:8000/policy/evaluate`
   - Policy evaluation + LLM explanation: `POST /policy/evaluate_with_llm`
@@ -218,6 +221,16 @@ If duplicate `signature` values already exist (e.g., overloads), the unique cons
 - Neo4j auth/connectivity: prefer IPv4 `bolt://127.0.0.1:7687` to avoid IPv6 localhost issues. Variables can be set in `.env`.
 - OPA not found: install via Homebrew `brew install opa` or from OPA releases.
 - LLM disabled: export `OPENAI_API_KEY` to enable, e.g., `export OPENAI_API_KEY=sk-...` and ensure `pip install openai` is installed in your environment.
+  - This project pins `openai==0.28.1` (requests-based, no httpx). The API returns fallback explanations if the SDK/network is unavailable.
+
+### Embedding Metadata
+
+The embedding builder writes `index/embedding_metadata.json` with:
+
+- `model`, `dim`, `metric`, `count`, `built_at`
+- `index_path`, `signature_map.full`, `signature_map.legacy`
+
+The search loader tolerates either the new full-signature map or the legacy filename.
 
 ### Security Notes
 

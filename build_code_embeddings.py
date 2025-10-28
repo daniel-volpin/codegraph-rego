@@ -3,6 +3,7 @@ build_code_embeddings.py
 
 Extracts code snippets for each method (from file paths stored in Neo4j), generates embeddings using SentenceTransformer,
 and builds a FAISS index for semantic code search using cosine similarity (IP over normalized vectors).
+The signature map uses the overload-safe `full_signature` value (falls back to `signature` if missing).
 """
 
 from sentence_transformers import SentenceTransformer
@@ -11,11 +12,14 @@ import faiss
 import numpy as np
 import json
 import os
+from datetime import datetime, timezone
 from config import (
     NEO4J_URI,
     NEO4J_USER,
     NEO4J_PASS,
     EMBEDDING_MODEL_NAME,
+    INDEX_DIR,
+    EMBEDDING_METADATA_PATH,
 )
 
 # Number of lines to include before and after the method name for context in the extracted code snippet
@@ -63,7 +67,9 @@ def main():
 
     # Query Neo4j for all methods
     with driver.session() as session:
-        results = session.run("MATCH (m:Method) RETURN m.signature AS sig, m.name AS name, m.file_path AS path")
+        results = session.run(
+            "MATCH (m:Method) RETURN coalesce(m.full_signature, m.signature) AS sig, m.name AS name, m.file_path AS path"
+        )
         for record in results:
             # Extract a code snippet for each method
             code = extract_method_snippet(record["path"], record["name"])
@@ -78,20 +84,45 @@ def main():
 
 
     # Save index and signature map in a dedicated folder
-    INDEX_DIR = "index"
     os.makedirs(INDEX_DIR, exist_ok=True)
     index_path = os.path.join(INDEX_DIR, "code_embeddings.index")
-    sigmap_path = os.path.join(INDEX_DIR, "embedding_signature_map.json")
+    sigmap_legacy_path = os.path.join(INDEX_DIR, "embedding_signature_map.json")
+    sigmap_full_path = os.path.join(INDEX_DIR, "embedding_full_signature_map.json")
 
     # Build and save the FAISS index using IP on normalized vectors (cosine similarity)
     index = faiss.IndexFlatIP(vectors.shape[1])
     index.add(np.asarray(vectors, dtype="float32"))
 
-    # Save the mapping from FAISS index to method signatures
-    with open(sigmap_path, "w") as f:
+    # Save the mapping from FAISS index to method full-signatures (and legacy path for compatibility)
+    with open(sigmap_full_path, "w") as f:
         json.dump(signatures, f)
+    try:
+        with open(sigmap_legacy_path, "w") as f:
+            json.dump(signatures, f)
+    except Exception:
+        pass
     faiss.write_index(index, index_path)
-    print(f"Done. Saved FAISS index to {index_path} and signature map to {sigmap_path}.")
+    # Write metadata for validation/debug
+    metadata = {
+        "model": EMBEDDING_MODEL_NAME,
+        "dim": int(vectors.shape[1]),
+        "metric": "cosine",
+        "count": len(signatures),
+        "built_at": datetime.now(timezone.utc).isoformat(),
+        "index_path": index_path,
+        "signature_map": {
+            "full": sigmap_full_path,
+            "legacy": sigmap_legacy_path,
+        },
+    }
+    try:
+        with open(EMBEDDING_METADATA_PATH, "w") as f:
+            json.dump(metadata, f, indent=2)
+    except Exception:
+        pass
+    print(
+        f"Done. Saved FAISS index to {index_path} and signature map to {sigmap_full_path}."
+    )
 
 
 if __name__ == "__main__":

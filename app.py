@@ -8,7 +8,9 @@ import subprocess
 import uvicorn
 from policy_integration import evaluate_policies
 from llm_integration import explain_policy_violations
-from config import UPLOAD_DIR
+from config import UPLOAD_DIR, FAISS_INDEX_PATH, SIGNATURE_MAP_PATH, SIGNATURE_MAP_PATH_FULL, EMBEDDING_MODEL_NAME
+from db import get_neo4j_driver
+import shutil as _shutil
 
 app = FastAPI()
 
@@ -80,15 +82,63 @@ async def _preload_resources():
             load_signature_map,
             load_embedding_model,
             FAISS_INDEX_PATH,
-            SIGNATURE_MAP_PATH,
+            SIGNATURE_MAP_PATH as _LEGACY_MAP_PATH,
             EMBEDDING_MODEL_NAME,
         )
-        load_signature_map(SIGNATURE_MAP_PATH)
+        # Try full-signature map first, then legacy map
+        try:
+            load_signature_map(SIGNATURE_MAP_PATH_FULL)
+        except Exception:
+            load_signature_map(_LEGACY_MAP_PATH)
         load_faiss_index(FAISS_INDEX_PATH)
         load_embedding_model(EMBEDDING_MODEL_NAME)
     except Exception as e:
         # Non-fatal; index may not exist yet before first upload/build
         print(f"[startup] Skipping search preload: {e}")
+
+
+@app.get("/health")
+async def health():
+    """Readiness probe: checks Neo4j connectivity, FAISS index and signature map presence, model preload, and OPA CLI availability."""
+    checks = {
+        "neo4j": False,
+        "faiss_index": False,
+        "signature_map": False,
+        "embedding_model": False,
+        "opa": False,
+        "details": {},
+    }
+    # Neo4j
+    try:
+        drv = get_neo4j_driver()
+        with drv.session() as s:
+            s.run("RETURN 1").consume()
+        drv.close()
+        checks["neo4j"] = True
+    except Exception as e:
+        checks["details"]["neo4j"] = str(e)
+    # Index + map + model
+    try:
+        from hybrid_code_search import load_faiss_index, load_signature_map, load_embedding_model
+        load_faiss_index(FAISS_INDEX_PATH)
+        try:
+            load_signature_map(SIGNATURE_MAP_PATH_FULL)
+        except Exception:
+            load_signature_map(SIGNATURE_MAP_PATH)
+        checks["faiss_index"] = True
+        checks["signature_map"] = True
+        load_embedding_model(EMBEDDING_MODEL_NAME)
+        checks["embedding_model"] = True
+    except Exception as e:
+        checks["details"]["search"] = str(e)
+    # OPA presence
+    try:
+        if _shutil.which("opa"):
+            checks["opa"] = True
+    except Exception:
+        pass
+    status = 200 if all([checks["neo4j"], checks["faiss_index"], checks["signature_map"]]) else 503
+    return JSONResponse(checks, status_code=status)
 
 
 @app.post("/search")

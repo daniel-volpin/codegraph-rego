@@ -17,7 +17,11 @@ except Exception:
 # General paths
 INDEX_DIR = os.getenv("INDEX_DIR", "index")
 FAISS_INDEX_PATH = _p.join(INDEX_DIR, "code_embeddings.index")
+# Legacy name kept for backward compatibility
 SIGNATURE_MAP_PATH = _p.join(INDEX_DIR, "embedding_signature_map.json")
+# Preferred full-signature map
+SIGNATURE_MAP_PATH_FULL = _p.join(INDEX_DIR, "embedding_full_signature_map.json")
+EMBEDDING_METADATA_PATH = _p.join(INDEX_DIR, "embedding_metadata.json")
 
 # Model
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
