@@ -3,7 +3,7 @@
   "dim": 384,
   "metric": "cosine",
   "count": 345,
-  "built_at": "2025-10-28T20:57:05.468983+00:00",
+  "built_at": "2025-10-28T21:17:56.030044+00:00",
   "index_path": "index/code_embeddings.index",
   "signature_map": {
     "full": "index/embedding_full_signature_map.json",
