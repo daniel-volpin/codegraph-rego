@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from config import (
+from codegraph.config import (
     LLM_PROVIDER,
     LLM_MODEL,
     LLM_API_BASE,

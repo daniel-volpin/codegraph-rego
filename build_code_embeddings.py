@@ -13,7 +13,7 @@ import numpy as np
 import json
 import os
 from datetime import datetime, timezone
-from config import (
+from codegraph.config import (
     NEO4J_URI,
     NEO4J_USER,
     NEO4J_PASS,

@@ -62,4 +62,3 @@ class EvaluateWithLLMResponse(BaseModel):
 
 class PolicyCatalogResponse(BaseModel):
     controls: List[ControlMetadata]
-

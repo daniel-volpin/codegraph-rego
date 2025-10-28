@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-from config import (
+from codegraph.config import (
     FAISS_INDEX_PATH,
     SIGNATURE_MAP_PATH,
     SIGNATURE_MAP_PATH_FULL,
     EMBEDDING_MODEL_NAME,
 )
-from db import get_neo4j_driver
-from search.hybrid import (
+from codegraph.db import get_neo4j_driver
+from codegraph.search.hybrid import (
     load_faiss_index,
     load_signature_map,
     load_embedding_model,

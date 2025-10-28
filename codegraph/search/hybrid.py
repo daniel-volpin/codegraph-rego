@@ -14,7 +14,7 @@ import faiss  # type: ignore
 from sentence_transformers import SentenceTransformer
 from neo4j import Driver
 
-from config import (
+from codegraph.config import (
     FAISS_INDEX_PATH,
     SIGNATURE_MAP_PATH,
     SIGNATURE_MAP_PATH_FULL,
@@ -98,4 +98,3 @@ def fetch_graph_context_for_method(sig: str, neo4j_driver: Driver) -> List[Dict[
         )
         result = session.run(cypher, sig=sig)
         return [record.data() for record in result]
-

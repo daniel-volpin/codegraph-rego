@@ -6,10 +6,10 @@ import zipfile
 import shutil
 import subprocess
 import uvicorn
-from policy.service import evaluate as evaluate_policies
-from policy.service import catalog as get_policy_catalog_entries
-from llm_integration import explain_policy_violations
-from config import (
+from codegraph.policy.service import evaluate as evaluate_policies
+from codegraph.policy.service import catalog as get_policy_catalog_entries
+from codegraph.llm.integration import explain_policy_violations
+from codegraph.config import (
     UPLOAD_DIR,
     FAISS_INDEX_PATH,
     SIGNATURE_MAP_PATH,
@@ -17,8 +17,8 @@ from config import (
     EMBEDDING_MODEL_NAME,
     LLM_MODEL,
 )
-from db import get_neo4j_driver
-from api_models import (
+from codegraph.db import get_neo4j_driver
+from codegraph.api.models import (
     SearchResponse,
     EvaluateResponse,
     EvaluateWithLLMResponse,
@@ -26,6 +26,8 @@ from api_models import (
     PolicyViolation,
     ControlMetadata,
     LLMEnrichedItem,
+    Neighbor,
+    MethodContext,
 )
 
 app = FastAPI()
@@ -83,10 +85,15 @@ async def upload_zip(file: UploadFile = File(...)):
 
     java_root = find_java_root(UPLOAD_DIR)
 
-    # Run your parsing and embedding scripts (adjust paths as needed)
-    env = {**os.environ, "JAVA_ROOT_DIR": java_root}
-    subprocess.run(["python3", "codebase_to_neo4j.py"], check=True, env=env)
-    subprocess.run(["python3", "build_code_embeddings.py"], check=True)
+    # Run ingestion and embedding directly (no subprocess)
+    try:
+        from codegraph.ingestion.service import ingest
+        from codegraph.embedding.service import build_embeddings
+
+        ingest(java_root)
+        build_embeddings()
+    except Exception as e:
+        return JSONResponse({"error": f"processing_failed: {e}"}, status_code=500)
     return {"status": "Codebase processed!", "java_root": java_root}
 
 
@@ -94,7 +101,7 @@ async def upload_zip(file: UploadFile = File(...)):
 async def _preload_resources():
     """Warm caches for search to improve first-request latency."""
     try:
-        from search.hybrid import (
+        from codegraph.search.hybrid import (
             load_faiss_index,
             load_signature_map,
             load_embedding_model,
@@ -133,7 +140,7 @@ async def health():
         checks["details"]["neo4j"] = str(e)
     # Index + map + model
     try:
-        from search.hybrid import load_faiss_index, load_signature_map, load_embedding_model
+        from codegraph.search.hybrid import load_faiss_index, load_signature_map, load_embedding_model
         load_faiss_index(FAISS_INDEX_PATH)
         try:
             load_signature_map(SIGNATURE_MAP_PATH_FULL)
@@ -160,7 +167,7 @@ async def search(query: str = Form(...)):
     # You should refactor your hybrid search script to expose a function, or call as subprocess
     # For demo, let's assume you have a function hybrid_search(query)
     try:
-        from search.service import run_search
+        from codegraph.search.service import run_search
         matched_signatures, graph_contexts = run_search(query, k=5)
         # Convert to models explicitly
         contexts_model = []

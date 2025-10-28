@@ -8,7 +8,7 @@ coupling.
 
 from typing import List
 
-from search.service import run_search
+from codegraph.search.service import run_search
 
 
 def print_top_matches(matches: List[str]) -> None:
