@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   evaluatePolicies,
@@ -9,6 +9,7 @@ import type {
   PolicyCatalogResponse,
   PolicyEvaluateResponse
 } from "../lib/types";
+import { useActivityContext } from "../context/ActivityContext";
 
 const PolicyPage = () => {
   const [limit, setLimit] = useState(5);
@@ -18,6 +19,7 @@ const PolicyPage = () => {
   const [llmEvaluation, setLlmEvaluation] =
     useState<PolicyEvaluateResponse | null>(null);
   const [llmStatus, setLlmStatus] = useState<string | null>(null);
+  const { upsert: upsertActivity, clear: clearActivity } = useActivityContext();
 
   const catalogQuery = useQuery<PolicyCatalogResponse, Error>({
     queryKey: ["policyCatalog"],
@@ -46,6 +48,14 @@ const PolicyPage = () => {
     event.preventDefault();
     setLlmStatus("Requesting LLM explanations…");
     setLlmEvaluation(null);
+    upsertActivity({
+      key: "policy-llm",
+      label: "Policy LLM Explanations",
+      status: "running",
+      message: "Generating explanations…",
+      progress: undefined,
+      updatedAt: new Date().toISOString()
+    });
     llmEvalMutation.mutate();
   };
 
@@ -59,6 +69,100 @@ const PolicyPage = () => {
     }
     return llmEvaluation.enriched as Array<Record<string, unknown>>;
   }, [llmEvaluation]);
+
+  useEffect(() => {
+    if (baseEvalMutation.isLoading) {
+      upsertActivity({
+        key: "policy-base",
+        label: "Policy Evaluation",
+        status: "running",
+        message: "Evaluating policies…",
+        progress: undefined,
+        updatedAt: new Date().toISOString()
+      });
+    } else if (baseEvalMutation.isError) {
+      const message =
+        baseEvalMutation.error instanceof Error
+          ? baseEvalMutation.error.message
+          : "Policy evaluation failed.";
+      upsertActivity({
+        key: "policy-base",
+        label: "Policy Evaluation",
+        status: "error",
+        message,
+        progress: undefined,
+        updatedAt: new Date().toISOString()
+      });
+    } else if (baseEvalMutation.isSuccess) {
+      const message = hasViolations
+        ? `${evaluation?.violations?.length ?? 0} violation(s) detected.`
+        : "No violations detected.";
+      upsertActivity({
+        key: "policy-base",
+        label: "Policy Evaluation",
+        status: "success",
+        message,
+        progress: undefined,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  }, [
+    baseEvalMutation.isLoading,
+    baseEvalMutation.isError,
+    baseEvalMutation.isSuccess,
+    baseEvalMutation.error,
+    evaluation,
+    hasViolations,
+    upsertActivity
+  ]);
+
+  useEffect(() => {
+    if (llmEvalMutation.isLoading) {
+      upsertActivity({
+        key: "policy-llm",
+        label: "Policy LLM Explanations",
+        status: "running",
+        message: "Generating explanations…",
+        progress: undefined,
+        updatedAt: new Date().toISOString()
+      });
+    } else if (llmEvalMutation.isError) {
+      const message =
+        llmEvalMutation.error instanceof Error
+          ? llmEvalMutation.error.message
+          : "LLM enrichment failed.";
+      upsertActivity({
+        key: "policy-llm",
+        label: "Policy LLM Explanations",
+        status: "error",
+        message,
+        progress: undefined,
+        updatedAt: new Date().toISOString()
+      });
+    } else if (llmEvalMutation.isSuccess) {
+      upsertActivity({
+        key: "policy-llm",
+        label: "Policy LLM Explanations",
+        status: "success",
+        message: "Explanations ready.",
+        progress: undefined,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  }, [
+    llmEvalMutation.isLoading,
+    llmEvalMutation.isError,
+    llmEvalMutation.isSuccess,
+    llmEvalMutation.error,
+    upsertActivity
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearActivity("policy-base");
+      clearActivity("policy-llm");
+    };
+  }, [clearActivity]);
 
   return (
     <section className="card">

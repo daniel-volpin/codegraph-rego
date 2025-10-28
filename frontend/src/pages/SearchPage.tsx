@@ -57,18 +57,36 @@ const SearchPage = () => {
                 <ul className="context-list">
                   {result.contexts[index].map((ctx, ctxIndex) => (
                     <li key={`${signature}-${ctxIndex}`}>
-                      <p className="context-method">{ctx.method}</p>
+                      <div className="context-header">
+                        <p className="context-method">{ctx.method}</p>
+                        <span className="context-count">
+                          {ctx.neighbors.length} related
+                        </span>
+                      </div>
                       {ctx.neighbors.length > 0 && (
-                        <details>
-                          <summary>Graph neighbors</summary>
-                          <ul>
-                            {ctx.neighbors.map((neighbor, neighborIndex) => (
-                              <li key={neighborIndex}>
-                                {JSON.stringify(neighbor, null, 2)}
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
+                        <div className="neighbor-grid">
+                          {ctx.neighbors.map((neighbor, neighborIndex) => {
+                            const entries = Object.entries(neighbor ?? {});
+                            return (
+                              <section className="neighbor-card" key={neighborIndex}>
+                                <header>
+                                  <span>Neighbor {neighborIndex + 1}</span>
+                                </header>
+                                <dl>
+                                  {entries.length === 0 && (
+                                    <div className="neighbor-empty">No metadata</div>
+                                  )}
+                                  {entries.map(([key, value]) => (
+                                    <div key={key} className="neighbor-row">
+                                      <dt>{key}</dt>
+                                      <dd>{String(value)}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              </section>
+                            );
+                          })}
+                        </div>
                       )}
                     </li>
                   ))}

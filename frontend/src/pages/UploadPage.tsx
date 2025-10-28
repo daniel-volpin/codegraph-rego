@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { fetchUploadStatus, uploadZip } from "../lib/api";
 import type { UploadResponse, UploadStatus } from "../lib/types";
+import { useActivityContext } from "../context/ActivityContext";
 
 const UploadPage = () => {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -13,6 +14,7 @@ const UploadPage = () => {
     message: string;
     tone: "success" | "error";
   } | null>(null);
+  const { upsert: upsertActivity, clear: clearActivity } = useActivityContext();
 
   useEffect(() => {
     try {
@@ -67,6 +69,31 @@ const UploadPage = () => {
       setStatus(statusData);
     }
   }, [statusData]);
+
+  useEffect(() => {
+    if (!status) {
+      return;
+    }
+    const activityStatus = status.error
+      ? "error"
+      : status.complete
+      ? "success"
+      : "running";
+    upsertActivity({
+      key: "upload",
+      label: "Upload & Ingestion",
+      status: activityStatus,
+      message: status.message,
+      progress: status.progress,
+      updatedAt: status.updated_at
+    });
+  }, [status, upsertActivity]);
+
+  useEffect(() => {
+    return () => {
+      clearActivity("upload");
+    };
+  }, [clearActivity]);
 
   useEffect(() => {
     if (!toast) {
