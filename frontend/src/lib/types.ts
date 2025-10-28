@@ -4,6 +4,16 @@ export interface UploadResponse {
   error?: string | null;
 }
 
+export interface UploadStatus {
+  phase: string;
+  message: string;
+  progress: number;
+  complete: boolean;
+  error?: string | null;
+  updated_at: string;
+  started_at?: string | null;
+}
+
 export interface SearchMatch {
   method: string;
   neighbors: Record<string, unknown>[];

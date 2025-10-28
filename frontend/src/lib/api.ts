@@ -3,7 +3,8 @@ import {
   PolicyCatalogResponse,
   PolicyEvaluateResponse,
   SearchResponse,
-  UploadResponse
+  UploadResponse,
+  UploadStatus
 } from "./types";
 
 const API_BASE_URL =
@@ -96,4 +97,13 @@ export async function fetchHealth(): Promise<HealthCheckResponse> {
   });
 
   return handleResponse<HealthCheckResponse>(response);
+}
+
+export async function fetchUploadStatus(): Promise<UploadStatus> {
+  const response = await fetch(`${API_BASE_URL}/upload/status`, {
+    method: "GET",
+    headers: defaultHeaders
+  });
+
+  return handleResponse<UploadStatus>(response);
 }

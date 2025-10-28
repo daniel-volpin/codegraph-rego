@@ -3,7 +3,7 @@ import javalang
 from javalang.tree import ClassDeclaration, InterfaceDeclaration, MethodInvocation
 
 from neo4j import GraphDatabase
-from typing import List, Optional
+from typing import Callable, List, Optional
 from codegraph.ingestion.models.method import MethodEntity
 from codegraph.config import JAVA_ROOT_DIR as _DEFAULT_JAVA_ROOT_DIR, NEO4J_URI, NEO4J_USER, NEO4J_PASS
 from codegraph.db import ensure_constraints
@@ -189,7 +189,7 @@ def extract_entities_from_file(file_path: str):
     package_name = package.name if package and hasattr(package, "name") else "unknown"
     return walk_class_declarations(getattr(tree, "types", []), package_name, file_path)
 
-def collect_code_structure(root_dir: str):
+def collect_code_structure(root_dir: str, progress_callback: Optional[Callable[[str, str, float], None]] = None):
     """
     Walk the Java source tree and collect all methods, classes, and relationships.
     Returns lists of all entities and relationships found.
@@ -201,20 +201,30 @@ def collect_code_structure(root_dir: str):
     all_uses = []
     all_depends = []
     all_calls = []
-    file_count = 0
+    java_files: List[str] = []
     for root, _, files in os.walk(root_dir):
         for file in files:
             if file.endswith(".java"):
-                file_count += 1
-                file_path = os.path.join(root, file)
-                methods, nested, extends, implements, uses, depends, calls = extract_entities_from_file(file_path)
-                all_methods.extend(methods)
-                all_nested.extend(nested)
-                all_extends.extend(extends)
-                all_implements.extend(implements)
-                all_uses.extend(uses)
-                all_depends.extend(depends)
-                all_calls.extend(calls)
+                java_files.append(os.path.join(root, file))
+
+    file_count = len(java_files)
+    total_files = file_count or 1
+    base_progress = 20.0
+    span = 40.0
+
+    for index, file_path in enumerate(java_files, start=1):
+        rel_path = os.path.relpath(file_path, root_dir)
+        if progress_callback:
+            pct = min(base_progress + (span * index / total_files), 60.0)
+            progress_callback("parsing", f"Parsing {rel_path}", pct)
+        methods, nested, extends, implements, uses, depends, calls = extract_entities_from_file(file_path)
+        all_methods.extend(methods)
+        all_nested.extend(nested)
+        all_extends.extend(extends)
+        all_implements.extend(implements)
+        all_uses.extend(uses)
+        all_depends.extend(depends)
+        all_calls.extend(calls)
     print(f"📄 Parsed {file_count} Java files.")
     print(f"🔍 Found {len(all_methods)} methods/constructors.")
     print(f"🏗️ Found {len(all_nested)} nested class relations.")
@@ -223,6 +233,8 @@ def collect_code_structure(root_dir: str):
     print(f"🔗 Found {len(all_uses)} uses relations.")
     print(f"🔗 Found {len(all_depends)} depends_on relations.")
     print(f"🔗 Found {len(all_calls)} calls relations.")
+    if progress_callback:
+        progress_callback("parsing", f"Parsed {file_count} Java files.", 60.0)
     return all_methods, all_nested, all_extends, all_implements, all_uses, all_depends, all_calls
 
 
@@ -233,7 +245,8 @@ def ingest_to_neo4j(
     implements_relations: List[tuple],
     uses_relations: List[tuple],
     depends_on_relations: List[tuple],
-    calls_relations: List[tuple]
+    calls_relations: List[tuple],
+    progress_callback: Optional[Callable[[str, str, float], None]] = None
 ) -> None:
     # ...existing code from codebase_to_neo4j.py...
     pass
@@ -246,35 +259,67 @@ def ingest_to_neo4j(
 
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
     with driver.session() as session:
+        total_operations = (
+            len(methods)
+            + len(nested_relations)
+            + len(extends_relations)
+            + len(implements_relations)
+            + len(uses_relations)
+            + len(depends_on_relations)
+            + len(calls_relations)
+        ) or 1
+        processed = 0
+
+        def notify(label: str, index: int, total: int) -> None:
+            nonlocal processed
+            processed += 1
+            if progress_callback:
+                pct = min(60.0 + 20.0 * (processed / total_operations), 80.0)
+                progress_callback("ingesting", f"{label} ({index}/{total})", pct)
+
+        if progress_callback:
+            progress_callback("ingesting", "Persisting entities to Neo4j…", 60.0)
+
         print(f"🚀 Ingesting {len(methods)} methods/constructors...")
-        for m in methods:
+        for idx, m in enumerate(methods, start=1):
             safe_write(session, create_class_and_method, m)
+            notify("Methods", idx, len(methods) or 1)
         print(f"🔗 Ingesting {len(nested_relations)} nested class relations...")
-        for child, parent in nested_relations:
+        for idx, (child, parent) in enumerate(nested_relations, start=1):
             safe_write(session, link_nested_classes, child, parent)
+            notify("Nested relations", idx, len(nested_relations) or 1)
         print(f"🧬 Ingesting {len(extends_relations)} extends relations...")
-        for child, parent in extends_relations:
+        for idx, (child, parent) in enumerate(extends_relations, start=1):
             safe_write(session, link_extends_classes, child, parent)
+            notify("Extends relations", idx, len(extends_relations) or 1)
         print(f"🧬 Ingesting {len(implements_relations)} implements relations...")
-        for child, parent in implements_relations:
+        for idx, (child, parent) in enumerate(implements_relations, start=1):
             safe_write(session, link_implements_classes, child, parent)
+            notify("Implements relations", idx, len(implements_relations) or 1)
         print(f"🔗 Ingesting {len(uses_relations)} uses relations...")
-        for method_sig, class_fqn in uses_relations:
+        for idx, (method_sig, class_fqn) in enumerate(uses_relations, start=1):
             safe_write(session, link_uses, method_sig, class_fqn)
+            notify("Uses relations", idx, len(uses_relations) or 1)
         print(f"🔗 Ingesting {len(depends_on_relations)} depends_on relations...")
-        for class_fqn, dep_class_fqn in depends_on_relations:
+        for idx, (class_fqn, dep_class_fqn) in enumerate(depends_on_relations, start=1):
             safe_write(session, link_depends_on, class_fqn, dep_class_fqn)
+            notify("Depends_on relations", idx, len(depends_on_relations) or 1)
         print(f"🔗 Ingesting {len(calls_relations)} calls relations...")
-        for caller_sig, callee_sig in calls_relations:
+        for idx, (caller_sig, callee_sig) in enumerate(calls_relations, start=1):
             safe_write(session, link_calls, caller_sig, callee_sig)
+            notify("Calls relations", idx, len(calls_relations) or 1)
+        if progress_callback:
+            progress_callback("ingesting", "Neo4j ingestion complete.", 80.0)
     driver.close()
 
-def ingest(java_root_dir: str) -> None:
+def ingest(java_root_dir: str, progress_callback: Optional[Callable[[str, str, float], None]] = None) -> None:
     """
     Ingest a Java project into Neo4j.
     Parses the Java project and ingests the extracted code structure into Neo4j.
     """
     print(f"📦 Parsing Java project at: {java_root_dir}")
+    if progress_callback:
+        progress_callback("connecting", "Checking Neo4j availability…", 10.0)
     try:
         _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
         with _driver.session() as s:
@@ -289,16 +334,23 @@ def ingest(java_root_dir: str) -> None:
         print("          - If using Docker, map '-p 7687:7687' and use 'bolt://127.0.0.1:7687'.")
         print("          - You can override settings via env vars: NEO4J_URI/USER/PASS.")
         print(f"          - Original error: {e}")
+        if progress_callback:
+            progress_callback("error", f"Neo4j connection failed: {e}", 100.0)
         return
     try:
         ensure_constraints()
     except Exception as e:
         print(f"[WARN] Could not ensure Neo4j constraints: {e}")
+    if progress_callback:
+        progress_callback("parsing", "Scanning Java sources…", 15.0)
     if not os.path.isdir(java_root_dir):
         print(f"[ERROR] JAVA_ROOT_DIR does not exist: {java_root_dir}")
+        if progress_callback:
+            progress_callback("error", f"JAVA_ROOT_DIR does not exist: {java_root_dir}", 100.0)
         return
-    all_data = collect_code_structure(java_root_dir)
+    all_data = collect_code_structure(java_root_dir, progress_callback=progress_callback)
     print("✅ Ingesting into Neo4j...")
-    ingest_to_neo4j(*all_data)
+    ingest_to_neo4j(*all_data, progress_callback=progress_callback)
+    if progress_callback:
+        progress_callback("ingesting", "Ingestion complete.", 80.0)
     print("🎉 Ingestion complete.")
-

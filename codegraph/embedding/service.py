@@ -5,6 +5,8 @@ import numpy as np
 import json
 import os
 from datetime import datetime, timezone
+from typing import Callable
+
 from codegraph.config import (
     NEO4J_URI,
     NEO4J_USER,
@@ -28,7 +30,7 @@ class EmbeddingService:
         return extract_code_snippet(file_path, method_name, before=CONTEXT_LINES_BEFORE, after=CONTEXT_LINES_AFTER)
 
     @staticmethod
-    def build_embeddings() -> None:
+    def build_embeddings(progress_callback: Callable[[str, str, float], None] | None = None) -> None:
         """
         Main workflow:
         1. Query Neo4j for all methods, retrieving their signature, name, and file path.
@@ -39,6 +41,8 @@ class EmbeddingService:
         """
         method_texts = []
         signatures = []
+        if progress_callback:
+            progress_callback("embedding", "Fetching methods from Neo4j…", 82.0)
         model = SentenceTransformer(EMBEDDING_MODEL_NAME)
         with GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS)) as driver:
             with driver.session() as session:
@@ -51,6 +55,8 @@ class EmbeddingService:
                         method_texts.append(code)
                         signatures.append(record["sig"])
         print(f"Embedding {len(method_texts)} methods...")
+        if progress_callback:
+            progress_callback("embedding", f"Encoding {len(method_texts)} methods…", 86.0)
         vectors = model.encode(method_texts, normalize_embeddings=True)
         vectors_np = np.asarray(vectors, dtype="float32")
         print(f"vectors_np shape: {vectors_np.shape}, dtype: {vectors_np.dtype}")
@@ -65,6 +71,8 @@ class EmbeddingService:
             if vectors_np.ndim == 2 and vectors_np.shape[0] > 0:
                 index.add(vectors_np)
                 faiss.write_index(index, index_path)
+                if progress_callback:
+                    progress_callback("embedding", "FAISS index written to disk.", 92.0)
         else:
             # No vectors: do not create or save index
             index = None
@@ -76,6 +84,8 @@ class EmbeddingService:
                 json.dump(signatures, f)
         except Exception:
             pass
+        if progress_callback:
+            progress_callback("embedding", "Embedding metadata saved.", 95.0)
         metadata = {
             "model": EMBEDDING_MODEL_NAME,
             "dim": dim,
@@ -96,3 +106,5 @@ class EmbeddingService:
         print(
             f"Done. Saved FAISS index to {index_path} and signature map to {sigmap_full_path}."
         )
+        if progress_callback:
+            progress_callback("embedding", "Embedding build complete.", 98.0)

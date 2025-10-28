@@ -3,6 +3,7 @@ from fastapi import UploadFile
 import zipfile
 import shutil
 import os
+from typing import Callable, Optional
 from codegraph.ingestion.utils import safe_extract_zip, find_java_root
 from codegraph.embedding.service import EmbeddingService
 from codegraph.ingestion.service import ingest
@@ -17,13 +18,15 @@ class UploadResponse(BaseModel):
     java_root: str | None = None
     error: str | None = None
 
-def handle_upload(file: UploadFile) -> tuple[UploadResponse, int]:
+def handle_upload(file: UploadFile, progress_callback: Optional[Callable[[str, str, float], None]] = None) -> tuple[UploadResponse, int]:
     if not file.filename or not file.filename.endswith(".zip"):
         return UploadResponse(error="Only zip files allowed"), 400
     # Clean and extract
     if os.path.exists(UPLOAD_DIR):
         shutil.rmtree(UPLOAD_DIR)
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+    if progress_callback:
+        progress_callback("upload", "Saving archive…", 5.0)
     zip_path = os.path.join(UPLOAD_DIR, "code.zip")
     # Reset file pointer and write bytes to disk
     file.file.seek(0)
@@ -31,7 +34,7 @@ def handle_upload(file: UploadFile) -> tuple[UploadResponse, int]:
         f.write(file.file.read())
     try:
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            safe_extract_zip(zip_ref, UPLOAD_DIR)
+        safe_extract_zip(zip_ref, UPLOAD_DIR)
     except zipfile.BadZipFile:
         logger.error("Uploaded file is not a valid ZIP archive.")
         return UploadResponse(error="bad_zip_file"), 400
@@ -40,8 +43,8 @@ def handle_upload(file: UploadFile) -> tuple[UploadResponse, int]:
         logger.error("Java root directory not found in uploaded ZIP.")
         return UploadResponse(error="java_root_not_found"), 400
     try:
-        ingest(java_root)
-        EmbeddingService.build_embeddings()
+        ingest(java_root, progress_callback=progress_callback)
+        EmbeddingService.build_embeddings(progress_callback=progress_callback)
     except Exception as e:
         logger.error(f"Processing failed: {e}")
         return UploadResponse(error=f"processing_failed: {e}"), 500

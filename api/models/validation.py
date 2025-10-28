@@ -6,6 +6,15 @@ class UploadResponse(BaseModel):
     java_root: Optional[str] = None
     error: Optional[str] = None
 
+class UploadStatusResponse(BaseModel):
+    phase: str
+    message: str
+    progress: float
+    complete: bool
+    error: Optional[str] = None
+    updated_at: str
+    started_at: Optional[str] = None
+
 class HealthCheckResponse(BaseModel):
     neo4j: bool
     faiss_index: bool
