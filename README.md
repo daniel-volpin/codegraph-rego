@@ -1,6 +1,8 @@
-# Java Code Graph Neo4j Cypher Guide
+# Java Code Graph & Search
 
-This guide provides example Cypher queries for exploring the code graph created by the `parse_and_ingest.py` script.
+This project ingests a Java codebase into Neo4j, builds a semantic search index with Sentence Transformers + FAISS, exposes a FastAPI for hybrid search (semantic + graph context), and evaluates OPA/Rego policies (e.g., ISO 27001 A.9.1.1).
+
+The examples below use the code graph created by `codebase_to_neo4j.py`.
 
 ## List all classes
 
@@ -104,7 +106,7 @@ WHERE m.file_path CONTAINS "SomeFile.java"
 RETURN m.signature, m.file_path;
 ```
 
-## Step 8: Rego Policy Integration (Optional)
+## Policy: Rego/OPA (Optional)
 
 This project can evaluate ISO 27001 access control checks against the code graph using OPA/Rego.
 
@@ -131,35 +133,32 @@ Follow these steps to set up the Python environment, ingest your Java code into 
 
 ### Prerequisites
 
-- Python 3.10+ (Anaconda recommended)
-- Neo4j running locally at `bolt://localhost:7687`
+- Python 3.10+
+- Neo4j running locally (Bolt) — default `bolt://127.0.0.1:7687`
 - OPA (Rego) CLI installed and on PATH
-- Internet access for first model download by `sentence-transformers`
+- Internet access on first run to download models
 
-### Environment Setup (choose one)
+### Install dependencies
 
-- Conda
+- pip (recommended)
+  - `python3 -m venv .venv && source .venv/bin/activate`
+  - `pip install -r requirements.txt`
+
+- conda (alternative; helpful on macOS for FAISS/Torch)
   - `conda create -n codegraph python=3.10 -y`
   - `conda activate codegraph`
-  - `conda install -c conda-forge faiss-cpu sentence-transformers neo4j-python-driver uvicorn fastapi pydantic numpy -y`
-  - `pip install javalang`
-- venv (pip)
-  - `python3 -m venv .venv && source .venv/bin/activate`
-  - `pip install sentence-transformers neo4j faiss-cpu fastapi uvicorn pydantic javalang numpy`
+  - `pip install -r requirements.txt`
 
 ### Configure Neo4j and Java Source Path
 
-- Ensure Neo4j credentials match defaults or update the scripts:
-  - `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASS` in:
-    - `codebase_to_neo4j.py`
-    - `build_code_embeddings.py`
-    - `hybrid_code_search.py`
-    - `policy_integration.py`
+- Configuration is centralized in `config.py` and can be overridden via `.env` (auto-loaded if `python-dotenv` is installed) or environment variables.
+  - `NEO4J_URI` (default `bolt://127.0.0.1:7687`), `NEO4J_USER`, `NEO4J_PASS`
+  - `INDEX_DIR`, `EMBEDDING_MODEL_NAME`, `UPLOAD_DIR`
 - Point to your Java sources:
   - Preferred: set env var before running ingestion:
     - `export JAVA_ROOT_DIR=/absolute/path/to/your/project/src/main/java`
     - Then run: `python3 codebase_to_neo4j.py`
-  - The `/upload` API now auto-detects `src/main/java` in the uploaded zip and sets `JAVA_ROOT_DIR` for ingestion.
+  - The `/upload` API auto-detects `src/main/java` in the uploaded zip and sets `JAVA_ROOT_DIR` for ingestion.
   - Fallback: the constant default in `codebase_to_neo4j.py` is used if the env var is not set.
   - `build_code_embeddings.py` uses file paths stored in Neo4j; ensure paths are valid after ingestion.
 
@@ -170,6 +169,7 @@ Follow these steps to set up the Python environment, ingest your Java code into 
 - Build FAISS embeddings:
   - `python3 build_code_embeddings.py`
   - Outputs: `index/code_embeddings.index`, `index/embedding_signature_map.json`
+  - Uses cosine similarity (normalized embeddings) with `IndexFlatIP`.
 - Try hybrid search via CLI:
   - `python3 hybrid_code_search.py`
 
@@ -180,6 +180,7 @@ Follow these steps to set up the Python environment, ingest your Java code into 
 - Endpoints:
   - Search: `POST /search` with form `query=...`
     - Example: `curl -X POST -F 'query=Where is access control enforced?' http://localhost:8000/search`
+    - Returns typed neighbor items: `{type: 'Method'|'Class'|'Node', id: string}`
   - Policy evaluation: `GET /policy/evaluate`
     - Example: `curl http://localhost:8000/policy/evaluate`
   - Policy evaluation + LLM explanation: `POST /policy/evaluate_with_llm`
@@ -201,10 +202,24 @@ Follow these steps to set up the Python environment, ingest your Java code into 
 - What it checks now:
   - Public HTTP endpoints (`@GetMapping`, `@PostMapping`, etc.) missing security annotations (`@PreAuthorize`, `@Secured`, `@RolesAllowed`, etc.).
 
+### Neo4j Constraints
+
+On ingestion, the script attempts to create idempotent constraints (Neo4j 5.x):
+
+- Unique: `:Class(fqn)`, `:Method(signature)`
+- Index: `:Method(full_signature)`
+
+If duplicate `signature` values already exist (e.g., overloads), the unique constraint may conflict. The script will warn; you can clean duplicates or migrate to using `full_signature` end-to-end.
+
 ### Troubleshooting
 
 - FAISS issues on macOS: prefer conda `faiss-cpu` from `conda-forge`.
 - Model download failures: ensure internet access on first run.
-- Neo4j auth errors: verify Bolt URL and credentials across all scripts.
+- Neo4j auth/connectivity: prefer IPv4 `bolt://127.0.0.1:7687` to avoid IPv6 localhost issues. Variables can be set in `.env`.
 - OPA not found: install via Homebrew `brew install opa` or from OPA releases.
 - LLM disabled: export `OPENAI_API_KEY` to enable, e.g., `export OPENAI_API_KEY=sk-...` and ensure `pip install openai` is installed in your environment.
+
+### Security Notes
+
+- Upload ZIP extraction uses path traversal safeguards.
+- CORS is permissive for local dev; restrict in production.
