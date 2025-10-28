@@ -26,9 +26,6 @@ from config import (
 CONTEXT_LINES_BEFORE = 5
 CONTEXT_LINES_AFTER = 20
 
-model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
-
 
 def extract_method_snippet(file_path: str, method_name: str) -> str:
     """
@@ -65,23 +62,25 @@ def main():
     method_texts = []  # List of code snippets for embedding
     signatures = []    # Corresponding method signatures
 
+    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+
     # Query Neo4j for all methods
-    with driver.session() as session:
-        results = session.run(
-            "MATCH (m:Method) RETURN coalesce(m.full_signature, m.signature) AS sig, m.name AS name, m.file_path AS path"
-        )
-        for record in results:
-            # Extract a code snippet for each method
-            code = extract_method_snippet(record["path"], record["name"])
-            if code:
-                method_texts.append(code)
-                signatures.append(record["sig"])
+    with GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS)) as driver:
+        with driver.session() as session:
+            results = session.run(
+                "MATCH (m:Method) RETURN coalesce(m.full_signature, m.signature) AS sig, m.name AS name, m.file_path AS path"
+            )
+            for record in results:
+                # Extract a code snippet for each method
+                code = extract_method_snippet(record["path"], record["name"])
+                if code:
+                    method_texts.append(code)
+                    signatures.append(record["sig"])
 
     print(f"Embedding {len(method_texts)} methods...")
 
     # Generate embeddings for all code snippets
     vectors = model.encode(method_texts, normalize_embeddings=True)
-
 
     # Save index and signature map in a dedicated folder
     os.makedirs(INDEX_DIR, exist_ok=True)

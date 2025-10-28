@@ -33,7 +33,7 @@ UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploaded_code")
 # Can be set dynamically by API (/upload) via env for the ingestion subprocess.
 JAVA_ROOT_DIR = os.getenv(
     "JAVA_ROOT_DIR",
-    "/Users/pnl11e4o/Documents/Thesis Project/code/scripts/uploaded_code/jhipster-sample-app/src/main/java",
+    _p.join(os.getcwd(), "uploaded_code"),
 )
 
 # Neo4j

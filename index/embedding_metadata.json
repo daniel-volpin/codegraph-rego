@@ -1,0 +1,12 @@
+{
+  "model": "all-MiniLM-L6-v2",
+  "dim": 384,
+  "metric": "cosine",
+  "count": 345,
+  "built_at": "2025-10-28T16:59:45.867073+00:00",
+  "index_path": "index/code_embeddings.index",
+  "signature_map": {
+    "full": "index/embedding_full_signature_map.json",
+    "legacy": "index/embedding_signature_map.json"
+  }
+}

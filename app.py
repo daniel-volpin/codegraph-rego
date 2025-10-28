@@ -8,7 +8,14 @@ import subprocess
 import uvicorn
 from policy_integration import evaluate_policies
 from llm_integration import explain_policy_violations
-from config import UPLOAD_DIR, FAISS_INDEX_PATH, SIGNATURE_MAP_PATH, SIGNATURE_MAP_PATH_FULL, EMBEDDING_MODEL_NAME
+from config import (
+    UPLOAD_DIR,
+    FAISS_INDEX_PATH,
+    SIGNATURE_MAP_PATH,
+    SIGNATURE_MAP_PATH_FULL,
+    EMBEDDING_MODEL_NAME,
+    LLM_MODEL,
+)
 from db import get_neo4j_driver
 import shutil as _shutil
 
@@ -22,6 +29,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 def _safe_extract_zip(zip_file: zipfile.ZipFile, dest_dir: str) -> None:
     """
@@ -189,7 +197,7 @@ async def policy_evaluate():
 
 
 @app.post("/policy/evaluate_with_llm")
-async def policy_evaluate_with_llm(limit: int = 10, model: str = "gpt-4o-mini"):
+async def policy_evaluate_with_llm(limit: int = 10, model: str | None = None):
     """
     Evaluate Rego policies and have an LLM explain violations with remediation guidance.
     - Requires OPA CLI on PATH.
@@ -199,7 +207,7 @@ async def policy_evaluate_with_llm(limit: int = 10, model: str = "gpt-4o-mini"):
     if "violations" not in res:
         return JSONResponse(res, status_code=500)
     vio = res.get("violations", [])[:limit]
-    enriched = explain_policy_violations(vio, max_items=limit, model=model)
+    enriched = explain_policy_violations(vio, max_items=limit, model=model or LLM_MODEL)
     return {"violations": vio, "enriched": enriched}
 
 if __name__ == "__main__":

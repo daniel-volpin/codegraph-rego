@@ -24,41 +24,48 @@ from config import (
 
 # Simple in-process caches
 _INDEX = None
+_INDEX_MTIME = None
 _SIGMAP = None
+_SIGMAP_MTIME = None
 _MODEL = None
 
 
 def load_faiss_index(index_path: str):
     """
-    Load the FAISS index from disk for semantic code search (cached).
+    Load the FAISS index from disk for semantic code search (cached with staleness check).
     """
-    global _INDEX
-    if _INDEX is not None:
-        return _INDEX
+    global _INDEX, _INDEX_MTIME
     if not os.path.isfile(index_path):
         raise FileNotFoundError(f"FAISS index not found at {index_path}. Build embeddings first.")
+    mtime = os.path.getmtime(index_path)
+    if _INDEX is not None and _INDEX_MTIME == mtime:
+        return _INDEX
     _INDEX = faiss.read_index(index_path)
+    _INDEX_MTIME = mtime
     return _INDEX
 
 
 def load_signature_map(map_path: str):
     """
-    Load the signature map from disk, mapping FAISS indices to method full-signatures (cached).
+    Load the signature map from disk, mapping FAISS indices to method full-signatures (cached with staleness check).
     Tries the preferred full-signature map first, then falls back to provided path and the legacy path.
     """
-    global _SIGMAP
-    if _SIGMAP is not None:
-        return _SIGMAP
+    global _SIGMAP, _SIGMAP_MTIME
     candidates = [SIGNATURE_MAP_PATH_FULL, map_path, SIGNATURE_MAP_PATH]
     last_exc = None
-    for p in candidates:
+    for candidate in candidates:
+        if not os.path.isfile(candidate):
+            continue
+        mtime = os.path.getmtime(candidate)
+        if _SIGMAP is not None and _SIGMAP_MTIME == (candidate, mtime):
+            return _SIGMAP
         try:
-            if os.path.isfile(p):
-                with open(p, "r") as f:
-                    _SIGMAP = json.load(f)
-                    return _SIGMAP
-        except Exception as e:
-            last_exc = e
+            with open(candidate, "r") as f:
+                _SIGMAP = json.load(f)
+            _SIGMAP_MTIME = (candidate, mtime)
+            return _SIGMAP
+        except Exception as exc:
+            last_exc = exc
     raise FileNotFoundError(
         f"Signature map not found. Tried: {', '.join(candidates)}" + (f". Last error: {last_exc}" if last_exc else "")
     )
