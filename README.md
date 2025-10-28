@@ -69,7 +69,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 
 ## Policy Checks (OPA/Rego)
 
-`policy/iso_27001_access.rego` currently encodes three ISO 27001 controls using Neo4j method facts:
+`policy/iso_27001_access.rego` currently encodes three ISO 27001 controls using Neo4j method facts. Each control is described in `policy/catalog.json`, which records the normative reference, evidence fields, and the Rego rule that enforces it.
 
 - **A.9.1.1 – Access control policy**  
   Flags public HTTP endpoints missing security annotations such as `@PreAuthorize`, `@Secured`, `@RolesAllowed`, or `@DenyAll`.
@@ -88,14 +88,14 @@ python3 policy_integration.py                # CLI summary
 curl http://localhost:8000/policy/evaluate   # API endpoint
 ```
 
-Add or adjust rules by editing files under `policy/`; OPA automatically loads every `.rego` file in that directory.
+Add or adjust rules by editing files under `policy/`; OPA automatically loads every `.rego` file in that directory. Update `policy/catalog.json` alongside any new controls so evaluation responses and documentation stay traceable.
 
 ---
 
 ## LLM Enrichment
 
-- `llm_integration.py` reads nearby source lines for each violation and asks LiteLLM for concise remediation advice.
-- Works with OpenAI, LM Studio, Azure, Groq, etc. via environment variables defined in `config.py`.
+- `llm_integration.py` reads nearby source lines for each violation and asks an LLM model for concise remediation advice.
+- Works with OpenAI and LM Studio via environment variables defined in `config.py`.
 - Failures return a descriptive placeholder so API responses stay stable during misconfiguration or outages.
 
 ---
