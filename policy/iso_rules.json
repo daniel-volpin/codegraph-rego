@@ -1,0 +1,13 @@
+{
+  "rules": [
+    {
+      "standard": "ISO-27001",
+      "id": "A.9.1.1",
+      "subject": "User",
+      "action": "Access",
+      "object": "Service",
+      "conditions": ["isAuthenticated"],
+      "description": "Access to services must be controlled and require authentication"
+    }
+  ]
+}
