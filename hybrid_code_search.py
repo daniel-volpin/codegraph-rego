@@ -1,47 +1,67 @@
 """
-hybrid_query.py
+hybrid_code_search.py
 
 Performs a hybrid search over the codebase: first retrieves semantically similar methods using FAISS,
 then fetches their graph context from Neo4j for richer results.
+Now caches model/index/map in-process and uses cosine similarity (IP over normalized vectors).
 """
 
 
-import faiss
+import faiss  # type: ignore
 import json
 import os
 from sentence_transformers import SentenceTransformer
 from neo4j import GraphDatabase
+from config import (
+    FAISS_INDEX_PATH,
+    SIGNATURE_MAP_PATH,
+    EMBEDDING_MODEL_NAME,
+    NEO4J_URI,
+    NEO4J_USER,
+    NEO4J_PASS,
+)
 
-
-INDEX_DIR = "index"
-FAISS_INDEX_PATH = os.path.join(INDEX_DIR, "code_embeddings.index")
-SIGNATURE_MAP_PATH = os.path.join(INDEX_DIR, "embedding_signature_map.json")
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-NEO4J_URI = "bolt://localhost:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASS = "123456789"
+# Simple in-process caches
+_INDEX = None
+_SIGMAP = None
+_MODEL = None
 
 
 def load_faiss_index(index_path: str):
     """
-    Load the FAISS index from disk for semantic code search.
+    Load the FAISS index from disk for semantic code search (cached).
     """
-    return faiss.read_index(index_path)
+    global _INDEX
+    if _INDEX is not None:
+        return _INDEX
+    if not os.path.isfile(index_path):
+        raise FileNotFoundError(f"FAISS index not found at {index_path}. Build embeddings first.")
+    _INDEX = faiss.read_index(index_path)
+    return _INDEX
 
 
 def load_signature_map(map_path: str):
     """
-    Load the signature map from disk, mapping FAISS indices to method signatures.
+    Load the signature map from disk, mapping FAISS indices to method signatures (cached).
     """
+    global _SIGMAP
+    if _SIGMAP is not None:
+        return _SIGMAP
+    if not os.path.isfile(map_path):
+        raise FileNotFoundError(f"Signature map not found at {map_path}. Build embeddings first.")
     with open(map_path, "r") as f:
-        return json.load(f)
+        _SIGMAP = json.load(f)
+    return _SIGMAP
 
 
 def load_embedding_model(model_name: str):
     """
-    Load the sentence transformer model for generating code/query embeddings.
+    Load the sentence transformer model for generating code/query embeddings (cached).
     """
-    return SentenceTransformer(model_name)
+    global _MODEL
+    if _MODEL is None:
+        _MODEL = SentenceTransformer(model_name)
+    return _MODEL
 
 
 def get_neo4j_driver(uri: str, user: str, password: str):
@@ -53,23 +73,31 @@ def get_neo4j_driver(uri: str, user: str, password: str):
 
 def semantic_search(query: str, model, index, signature_map, k: int = 5):
     """
-    Perform semantic search using FAISS and return top-k method signatures.
+    Perform semantic search over normalized embeddings using FAISS (IP) and return top-k method signatures.
     """
-    query_vector = model.encode([query])
-    D, I = index.search(query_vector, k=k)
-    return [signature_map[i] for i in I[0]]
+    query_vector = model.encode([query], normalize_embeddings=True)
+    D, indices = index.search(query_vector, k=k)
+    return [signature_map[i] for i in indices[0]]
 
 
 def fetch_graph_context_for_method(sig: str, neo4j_driver):
     """
     Retrieve graph context (neighboring methods/classes) for a given method signature from Neo4j.
     Traverses CALLS, DECLARES, and NESTED_IN relationships up to 2 hops.
+    Returns typed neighbors to avoid None values for Classes.
     """
     with neo4j_driver.session() as session:
         cypher = (
             """
-            MATCH path=(m:Method {signature: $sig})-[:CALLS|DECLARES|NESTED_IN*1..2]-(n)
-            RETURN m.signature AS method, collect(DISTINCT n.signature) AS neighbors
+            MATCH (m:Method)
+            WHERE m.signature = $sig OR m.full_signature = $sig
+            MATCH path=(m)-[:CALLS|DECLARES|NESTED_IN*1..2]-(n)
+            RETURN coalesce(m.full_signature, m.signature) AS method,
+                   collect(DISTINCT CASE
+                     WHEN n:Method THEN {type: 'Method', id: coalesce(n.full_signature, n.signature)}
+                     WHEN n:Class  THEN {type: 'Class',  id: n.fqn}
+                     ELSE {type: 'Node', id: coalesce(n.signature, n.fqn, n.name)}
+                   END) AS neighbors
             """
         )
         result = session.run(cypher, sig=sig)
@@ -95,7 +123,7 @@ def print_graph_contexts(graph_contexts):
             print(f"  Method: {entry['method']}")
             print("    Neighbors: [")
             for neighbor in entry['neighbors']:
-                print(f"      {neighbor},")
+                print(f"      ({neighbor.get('type')}): {neighbor.get('id')},")
             print("    ]")
 
 

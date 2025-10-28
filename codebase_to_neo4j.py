@@ -9,17 +9,11 @@ import javalang
 from neo4j import GraphDatabase
 from typing import List, Optional
 from pydantic import BaseModel
+from config import JAVA_ROOT_DIR, NEO4J_URI, NEO4J_USER, NEO4J_PASS
+from db import ensure_constraints
 
 
-# --- CONFIGURATION ---
-# Set via env var `JAVA_ROOT_DIR` or fallback to default.
-JAVA_ROOT_DIR = os.getenv(
-    "JAVA_ROOT_DIR",
-    "/Users/pnl11e4o/Documents/Thesis Project/code/scripts/uploaded_code/jhipster-sample-app/src/main/java"
-)
-NEO4J_URI = "bolt://localhost:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASS = "123456789"
+# --- CONFIGURATION --- (centralized in config.py)
 
 
 class MethodEntity(BaseModel):
@@ -28,6 +22,7 @@ class MethodEntity(BaseModel):
     """
     class_fqn: str
     signature: str
+    full_signature: Optional[str] = None
     name: str
     params: List[str]
     annotations: List[str]
@@ -77,7 +72,14 @@ def walk_class_declarations(type_decls, package, file_path, parent_fqn=None):
                 depends_on_relations.append((class_fqn, f"{package}.{field_type}"))
             # METHODS: Extract method info and relationships
             for method in getattr(decl, "methods", []):
+                # Build signatures
+                param_types = [
+                    (p.type.name if hasattr(p.type, "name") else str(p.type))
+                    for p in getattr(method, "parameters", [])
+                    if getattr(p, "type", None) is not None
+                ]
                 method_sig = f"{class_fqn}.{method.name}()"
+                full_sig = f"{class_fqn}.{method.name}({','.join(param_types)})"
                 params = [f"{p.type.name} {p.name}" for p in getattr(method, "parameters", [])]
                 annotations = [ann.name for ann in getattr(method, "annotations", [])]
                 # USES: Parameter types
@@ -97,6 +99,7 @@ def walk_class_declarations(type_decls, package, file_path, parent_fqn=None):
                 results.append(MethodEntity(
                     class_fqn=class_fqn,
                     signature=method_sig,
+                    full_signature=full_sig,
                     name=method.name,
                     params=params,
                     annotations=annotations,
@@ -111,13 +114,20 @@ def walk_class_declarations(type_decls, package, file_path, parent_fqn=None):
                     uses_relations.append((method_sig, used_type))
             # CONSTRUCTORS: Extract constructor info and relationships
             for ctor in getattr(decl, "constructors", []):
+                ctor_param_types = [
+                    (p.type.name if hasattr(p.type, "name") else str(p.type))
+                    for p in getattr(ctor, "parameters", [])
+                    if getattr(p, "type", None) is not None
+                ]
                 ctor_sig = f"{class_fqn}.{decl.name}()"
+                ctor_full_sig = f"{class_fqn}.{decl.name}({','.join(ctor_param_types)})"
                 params = [f"{p.type.name} {p.name}" for p in getattr(ctor, "parameters", [])]
                 annotations = [ann.name for ann in getattr(ctor, "annotations", [])]
                 uses_types = [f"{package}.{p.type.name}" for p in getattr(ctor, "parameters", []) if hasattr(p.type, "name")]
                 results.append(MethodEntity(
                     class_fqn=class_fqn,
                     signature=ctor_sig,
+                    full_signature=ctor_full_sig,
                     name=decl.name,
                     params=params,
                     annotations=annotations,
@@ -289,11 +299,13 @@ def create_class_and_method(tx, m: MethodEntity) -> None:
             m.annotations = $annotations,
             m.return_type = $return_type,
             m.modifiers = $modifiers,
-            m.file_path = $file_path
+            m.file_path = $file_path,
+            m.full_signature = $full_signature
         MERGE (cls)-[:DECLARES]->(m)
         """,
         class_fqn=m.class_fqn,
         sig=m.signature,
+        full_signature=m.full_signature,
         name=m.name,
         params=m.params,
         annotations=m.annotations,
@@ -315,6 +327,27 @@ def main() -> None:
     Main entry point: parses the Java project and ingests the extracted code structure into Neo4j.
     """
     print(f"📦 Parsing Java project at: {JAVA_ROOT_DIR}")
+    # Preflight: check Neo4j connectivity early to fail fast with a clear message
+    try:
+        _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+        with _driver.session() as s:
+            s.run("RETURN 1 AS ok").consume()
+        _driver.close()
+    except Exception as e:
+        print("[ERROR] Could not connect to Neo4j.")
+        print(f"        URI   : {NEO4J_URI}")
+        print(f"        USER  : {NEO4J_USER}")
+        print("        HINTS :")
+        print("          - Ensure Neo4j is running and listening on the Bolt port.")
+        print("          - If using Docker, map '-p 7687:7687' and use 'bolt://127.0.0.1:7687'.")
+        print("          - You can override settings via env vars: NEO4J_URI/USER/PASS.")
+        print(f"          - Original error: {e}")
+        return
+    # Ensure constraints once (idempotent)
+    try:
+        ensure_constraints()
+    except Exception as e:
+        print(f"[WARN] Could not ensure Neo4j constraints: {e}")
     if not os.path.isdir(JAVA_ROOT_DIR):
         print(f"[ERROR] JAVA_ROOT_DIR does not exist: {JAVA_ROOT_DIR}")
         return

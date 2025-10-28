@@ -1,8 +1,8 @@
 """
-generate_embeddings.py
+build_code_embeddings.py
 
-Extracts code snippets for each method from the Java project, generates embeddings using SentenceTransformer,
-and builds a FAISS index for semantic code search.
+Extracts code snippets for each method (from file paths stored in Neo4j), generates embeddings using SentenceTransformer,
+and builds a FAISS index for semantic code search using cosine similarity (IP over normalized vectors).
 """
 
 from sentence_transformers import SentenceTransformer
@@ -11,18 +11,18 @@ import faiss
 import numpy as np
 import json
 import os
-
-
-JAVA_ROOT_DIR = "/Users/pnl11e4o/Documents/Thesis Project/code/scripts/uploaded_code/jhipster-sample-app/src/main/java"
-NEO4J_URI = "bolt://localhost:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASS = "123456789"
+from config import (
+    NEO4J_URI,
+    NEO4J_USER,
+    NEO4J_PASS,
+    EMBEDDING_MODEL_NAME,
+)
 
 # Number of lines to include before and after the method name for context in the extracted code snippet
 CONTEXT_LINES_BEFORE = 5
 CONTEXT_LINES_AFTER = 20
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+model = SentenceTransformer(EMBEDDING_MODEL_NAME)
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
 
 
@@ -74,7 +74,7 @@ def main():
     print(f"Embedding {len(method_texts)} methods...")
 
     # Generate embeddings for all code snippets
-    vectors = model.encode(method_texts)
+    vectors = model.encode(method_texts, normalize_embeddings=True)
 
 
     # Save index and signature map in a dedicated folder
@@ -83,9 +83,9 @@ def main():
     index_path = os.path.join(INDEX_DIR, "code_embeddings.index")
     sigmap_path = os.path.join(INDEX_DIR, "embedding_signature_map.json")
 
-    # Build and save the FAISS index (L2 distance is used for similarity search)
-    index = faiss.IndexFlatL2(vectors.shape[1])
-    index.add(np.array(vectors))
+    # Build and save the FAISS index using IP on normalized vectors (cosine similarity)
+    index = faiss.IndexFlatIP(vectors.shape[1])
+    index.add(np.asarray(vectors, dtype="float32"))
 
     # Save the mapping from FAISS index to method signatures
     with open(sigmap_path, "w") as f:

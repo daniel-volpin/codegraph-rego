@@ -8,6 +8,7 @@ import subprocess
 import uvicorn
 from policy_integration import evaluate_policies
 from llm_integration import explain_policy_violations
+from config import UPLOAD_DIR
 
 app = FastAPI()
 
@@ -20,7 +21,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "uploaded_code"
+def _safe_extract_zip(zip_file: zipfile.ZipFile, dest_dir: str) -> None:
+    """
+    Safely extract a ZIP to dest_dir, preventing Zip Slip path traversal.
+    """
+    dest_root = os.path.realpath(dest_dir)
+    for member in zip_file.infolist():
+        member_path = os.path.realpath(os.path.join(dest_dir, member.filename))
+        if not member_path.startswith(dest_root + os.sep) and member_path != dest_root:
+            # Skip suspicious entries
+            continue
+        if member.is_dir():
+            os.makedirs(member_path, exist_ok=True)
+        else:
+            os.makedirs(os.path.dirname(member_path), exist_ok=True)
+            with zip_file.open(member, "r") as src, open(member_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
 
 
 @app.post("/upload")
@@ -36,7 +52,7 @@ async def upload_zip(file: UploadFile = File(...)):
     with open(zip_path, "wb") as f:
         f.write(await file.read())
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        zip_ref.extractall(UPLOAD_DIR)
+        _safe_extract_zip(zip_ref, UPLOAD_DIR)
 
     # Try to locate a Java source root (src/main/java) within the uploaded folder
     def find_java_root(base: str) -> str:
@@ -55,19 +71,57 @@ async def upload_zip(file: UploadFile = File(...)):
     return {"status": "Codebase processed!", "java_root": java_root}
 
 
+@app.on_event("startup")
+async def _preload_resources():
+    """Warm caches for search to improve first-request latency."""
+    try:
+        from hybrid_code_search import (
+            load_faiss_index,
+            load_signature_map,
+            load_embedding_model,
+            FAISS_INDEX_PATH,
+            SIGNATURE_MAP_PATH,
+            EMBEDDING_MODEL_NAME,
+        )
+        load_signature_map(SIGNATURE_MAP_PATH)
+        load_faiss_index(FAISS_INDEX_PATH)
+        load_embedding_model(EMBEDDING_MODEL_NAME)
+    except Exception as e:
+        # Non-fatal; index may not exist yet before first upload/build
+        print(f"[startup] Skipping search preload: {e}")
+
+
 @app.post("/search")
 async def search(query: str = Form(...)):
     # You should refactor your hybrid search script to expose a function, or call as subprocess
     # For demo, let's assume you have a function hybrid_search(query)
-    from hybrid_code_search import semantic_search, load_faiss_index, load_signature_map, load_embedding_model, get_neo4j_driver, fetch_graph_context_for_method, FAISS_INDEX_PATH, SIGNATURE_MAP_PATH, EMBEDDING_MODEL_NAME, NEO4J_URI, NEO4J_USER, NEO4J_PASS
-    index = load_faiss_index(FAISS_INDEX_PATH)
-    signature_map = load_signature_map(SIGNATURE_MAP_PATH)
-    model = load_embedding_model(EMBEDDING_MODEL_NAME)
-    neo4j_driver = get_neo4j_driver(NEO4J_URI, NEO4J_USER, NEO4J_PASS)
-    matched_signatures = semantic_search(query, model, index, signature_map, k=5)
-    graph_contexts = [fetch_graph_context_for_method(sig, neo4j_driver) for sig in matched_signatures]
-    neo4j_driver.close()
-    return {"matches": matched_signatures, "contexts": graph_contexts}
+    try:
+        from hybrid_code_search import (
+            semantic_search,
+            load_faiss_index,
+            load_signature_map,
+            load_embedding_model,
+            get_neo4j_driver,
+            fetch_graph_context_for_method,
+            FAISS_INDEX_PATH,
+            SIGNATURE_MAP_PATH,
+            EMBEDDING_MODEL_NAME,
+            NEO4J_URI,
+            NEO4J_USER,
+            NEO4J_PASS,
+        )
+        index = load_faiss_index(FAISS_INDEX_PATH)
+        signature_map = load_signature_map(SIGNATURE_MAP_PATH)
+        model = load_embedding_model(EMBEDDING_MODEL_NAME)
+        neo4j_driver = get_neo4j_driver(NEO4J_URI, NEO4J_USER, NEO4J_PASS)
+        matched_signatures = semantic_search(query, model, index, signature_map, k=5)
+        graph_contexts = [fetch_graph_context_for_method(sig, neo4j_driver) for sig in matched_signatures]
+        neo4j_driver.close()
+        return {"matches": matched_signatures, "contexts": graph_contexts}
+    except FileNotFoundError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": f"search_failed: {e}"}, status_code=500)
 
 
 @app.get("/policy/evaluate")

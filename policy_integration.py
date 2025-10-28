@@ -13,11 +13,7 @@ import tempfile
 from typing import Any, Dict
 
 from neo4j import GraphDatabase
-
-# Reuse the same Neo4j settings used elsewhere in the project
-NEO4J_URI = "bolt://localhost:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASS = "123456789"
+from config import NEO4J_URI, NEO4J_USER, NEO4J_PASS
 
 POLICY_DIR = os.path.join(os.path.dirname(__file__), "policy")
 POLICY_QUERY = "data.iso27001.violations"
