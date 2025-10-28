@@ -8,6 +8,24 @@
       "object": "Service",
       "conditions": ["isAuthenticated"],
       "description": "Access to services must be controlled and require authentication"
+    },
+    {
+      "standard": "ISO-27001",
+      "id": "A.9.4.2",
+      "subject": "User",
+      "action": "Authenticate",
+      "object": "Application",
+      "conditions": ["strongAuthentication"],
+      "description": "Secure log-on procedures must enforce authentication controls"
+    },
+    {
+      "standard": "ISO-27001",
+      "id": "A.12.4.1",
+      "subject": "System",
+      "action": "Log",
+      "object": "SecurityEvent",
+      "conditions": ["auditTrail"],
+      "description": "Event logging should capture actions affecting information security"
     }
   ]
 }

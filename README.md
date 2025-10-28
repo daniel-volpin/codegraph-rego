@@ -1,253 +1,154 @@
 # Java Code Graph & Search
 
-This project ingests a Java codebase into Neo4j, builds a semantic search index with Sentence Transformers + FAISS, exposes a FastAPI for hybrid search (semantic + graph context), and evaluates OPA/Rego policies (e.g., ISO 27001 A.9.1.1).
+FastAPI service that turns a Java/Spring codebase into a queryable knowledge graph, semantic search index, and ISO 27001 compliance checker. It combines:
 
-The examples below use the code graph created by `codebase_to_neo4j.py`.
+- **Ingestion** – parses Java sources with `javalang`, stores classes/methods in Neo4j, and links `DECLARES`, `CALLS`, `USES`, `EXTENDS`, `IMPLEMENTS`, and `NESTED_IN` relationships.
+- **Semantic search** – embeds method snippets with Sentence Transformers, saves a FAISS index, and performs hybrid search that adds graph context.
+- **Policy evaluation** – exports Neo4j facts to OPA/Rego to enforce ISO controls, with optional LiteLLM-powered explanations.
+- **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, and `/health`.
 
-## List all classes
+---
 
-```cypher
-MATCH (c:Class)
-RETURN c.fqn
-LIMIT 20;
+## Quick Start
+
+1. **Prerequisites**
+   - Python 3.10+
+   - Neo4j 5.x reachable at `bolt://127.0.0.1:7687`
+   - OPA CLI on `PATH` (only needed for policy evaluation)
+   - Internet access on first run to download the embedding model
+
+2. **Install dependencies**
+
+   ```bash
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   # or use conda: conda create -n codegraph python=3.10 -y && conda activate codegraph
+   ```
+
+3. **Configure**
+   - Copy `.env.example` to `.env` (optional but recommended).
+   - Set overrides as needed:
+     - `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASS`
+     - `JAVA_ROOT_DIR` (defaults to `<repo>/uploaded_code`)
+     - `INDEX_DIR`, `EMBEDDING_MODEL_NAME`
+     - `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_API_BASE` for LiteLLM routing
+
+4. **Ingest & embed (one-time per codebase change)**
+
+   ```bash
+   export JAVA_ROOT_DIR=/abs/path/to/project/src/main/java  # optional if using defaults
+   python3 codebase_to_neo4j.py           # parses Java, writes graph to Neo4j
+   python3 build_code_embeddings.py       # builds FAISS index + signature maps
+   ```
+
+5. **Run the API**
+
+   ```bash
+   uvicorn app:app --reload --port 8000
+   ```
+
+   - `POST /search` (`query=...` form field) → semantic hits + graph neighbours  
+  - `GET /policy/evaluate` → raw ISO control violations (OPA)  
+  - `GET /policy/catalog` → catalog of controls, evidence requirements, and Rego rule mapping  
+  - `POST /policy/evaluate_with_llm?limit=5&model=...` → violations + LLM guidance  
+   - `POST /upload` (zip file) → safe extraction, ingestion, embedding rebuild  
+   - `GET /health` → readiness check for Neo4j, FAISS, signature map, model, OPA
+
+---
+
+## Configuration Reference
+
+- `config.py` centralises defaults and auto-loads `.env` when `python-dotenv` is available.
+- Output artifacts live in `INDEX_DIR` (default `index/`):
+  - `code_embeddings.index`, `embedding_full_signature_map.json`, `embedding_signature_map.json` (legacy), `embedding_metadata.json`.
+- Neo4j constraints (created idempotently in `db.ensure_constraints()`):
+  - `CONSTRAINT class_fqn_unique IF NOT EXISTS FOR (c:Class) REQUIRE c.fqn IS UNIQUE`
+  - `CONSTRAINT method_signature_unique IF NOT EXISTS FOR (m:Method) REQUIRE m.signature IS UNIQUE`
+  - `INDEX method_full_signature_index IF NOT EXISTS FOR (m:Method) ON (m.full_signature)`
+
+---
+
+## Policy Checks (OPA/Rego)
+
+`policy/iso_27001_access.rego` currently encodes three ISO 27001 controls using Neo4j method facts. Each control is described in `policy/catalog.json`, which records the normative reference, evidence fields, and the Rego rule that enforces it.
+
+- **A.9.1.1 – Access control policy**  
+  Flags public HTTP endpoints missing security annotations such as `@PreAuthorize`, `@Secured`, `@RolesAllowed`, or `@DenyAll`.
+
+- **A.9.4.2 – Secure log-on procedures**  
+  Flags authentication endpoints (`login`, `signin`, `authenticate`, etc.) that are public but still lack security annotations.
+
+- **A.12.4.1 – Event logging**  
+  Flags critical operations (mutation endpoints or verbs like `create`, `update`, `delete`) that show no evidence of logging (no logging/audit annotations and no calls to logger-style methods).
+
+Violations include the control id, method signature, file path, and a short reason.  
+Run locally with:
+
+```bash
+python3 policy_integration.py                # CLI summary
+curl http://localhost:8000/policy/evaluate   # API endpoint
 ```
 
-## List all methods and their parent class
+Add or adjust rules by editing files under `policy/`; OPA automatically loads every `.rego` file in that directory. Update `policy/catalog.json` alongside any new controls so evaluation responses and documentation stay traceable.
+
+---
+
+## LLM Enrichment
+
+- `llm_integration.py` reads nearby source lines for each violation and asks an LLM model for concise remediation advice.
+- Works with OpenAI and LM Studio via environment variables defined in `config.py`.
+- Failures return a descriptive placeholder so API responses stay stable during misconfiguration or outages.
+
+---
+
+## Hybrid Search Workflow
+
+1. `codebase_to_neo4j.py` discovers classes, methods, constructors, annotations, modifiers, file paths, and relationships.
+2. `build_code_embeddings.py` extracts method snippets, encodes them with `SentenceTransformer`, and builds a cosine FAISS index plus signature maps.
+3. `hybrid_code_search.py` lazily reloads the index/signature map on modification, embeds queries, retrieves semantic hits, and enriches results with two-hop Neo4j neighbourhoods.
+4. `app.py` exposes `/search`, reusing the cached loaders to keep latency low.
+
+Try it from the CLI:
+
+```bash
+python3 hybrid_code_search.py
+```
+
+---
+
+## Useful Cypher Queries
 
 ```cypher
+// Classes and declared methods
 MATCH (cls:Class)-[:DECLARES]->(m:Method)
 RETURN cls.fqn AS class, m.signature AS method
 LIMIT 20;
-```
 
-## List all nested class relationships
-
-```cypher
-MATCH (child:Class)-[:NESTED_IN]->(parent:Class)
-RETURN child.fqn AS child, parent.fqn AS parent
-LIMIT 20;
-```
-
-## List all EXTENDS relationships
-
-```cypher
-MATCH (child:Class)-[:EXTENDS]->(parent:Class)
-RETURN child.fqn AS child, parent.fqn AS parent
-LIMIT 20;
-```
-
-## List all IMPLEMENTS relationships
-
-```cypher
-MATCH (cls:Class)-[:IMPLEMENTS]->(iface:Class)
-RETURN cls.fqn AS class, iface.fqn AS interface
-LIMIT 20;
-```
-
-## List all USES relationships (method uses class as parameter)
-
-```cypher
-MATCH (m:Method)-[:USES]->(c:Class)
-RETURN m.signature AS method, c.fqn AS used_class
-LIMIT 20;
-```
-
-## List all DEPENDS_ON relationships (class has field of another class)
-
-```cypher
-MATCH (c1:Class)-[:DEPENDS_ON]->(c2:Class)
-RETURN c1.fqn AS class, c2.fqn AS depends_on
-LIMIT 20;
-```
-
-## List all CALLS relationships (method calls another method)
-
-```cypher
+// Call graph fan-out
 MATCH (caller:Method)-[:CALLS]->(callee:Method)
-RETURN caller.signature AS caller, callee.signature AS callee
+RETURN caller.signature AS caller, collect(callee.signature) AS callees
 LIMIT 20;
-```
 
-## Find all methods of a specific class
-
-```cypher
-MATCH (cls:Class {fqn: "your.package.YourClass"})-[:DECLARES]->(m:Method)
-RETURN m.signature, m.name;
-```
-
-## Find all classes nested in a specific class
-
-```cypher
-MATCH (child:Class)-[:NESTED_IN]->(parent:Class {fqn: "your.package.OuterClass"})
-RETURN child.fqn;
-```
-
-## Find all methods with a specific annotation
-
-```cypher
+// Public endpoints missing security annotations (matches policy rule)
 MATCH (m:Method)
-WHERE $annotation IN m.annotations
-RETURN m.signature, m.annotations;
-```
-
-## Find all methods with a specific modifier (e.g., 'public')
-
-```cypher
-MATCH (m:Method)
-WHERE 'public' IN m.modifiers
-RETURN m.signature, m.modifiers;
-```
-
-## Find all methods in a file
-
-```cypher
-MATCH (m:Method)
-WHERE m.file_path CONTAINS "SomeFile.java"
+WHERE 'public' IN m.modifiers AND any(ann IN m.annotations WHERE ann ENDS WITH 'Mapping')
+  AND none(ann IN m.annotations WHERE ann IN ['PreAuthorize','Secured','RolesAllowed','DenyAll'])
 RETURN m.signature, m.file_path;
 ```
 
-## Policy: Rego/OPA (Optional)
+---
 
-This project can evaluate ISO 27001 access control checks against the code graph using OPA/Rego.
+## Troubleshooting
 
-- ISO rule representation example: see `policy/iso_rules.json`.
-- Rego policy for A.9.1.1 (public endpoints must be secured): `policy/iso_27001_access.rego`.
-- Input facts are generated from Neo4j: method signature, annotations, modifiers, file path.
+- **FAISS / Torch on macOS** – prefer the `conda-forge` build (`conda install faiss-cpu -c conda-forge`) if pip wheels fail.
+- **Neo4j connectivity** – ensure the database is running, credentials match `.env`, and use `bolt://127.0.0.1:7687` to avoid IPv6 issues.
+- **OPA missing** – install via Homebrew (`brew install opa`) or download from the [OPA releases](https://www.openpolicyagent.org/docs/latest/#running-opa).
+- **LLM errors** – verify `LLM_PROVIDER`, `LLM_API_BASE`, and `LLM_API_KEY`; failures fall back to explanatory placeholders in responses.
+- **Cold start latency** – the API preloads the FAISS index and embedding model on startup; rebuild embeddings after any new ingestion to keep results fresh.
 
-Run locally with OPA CLI:
+---
 
-- Install OPA: <https://www.openpolicyagent.org/docs/latest/#running-opa>
-- Ensure Neo4j contains your code graph (run `codebase_to_neo4j.py` first).
-- From the repo root:
-  - `python3 policy_integration.py` — prints violations as JSON
-  - Or run via API: `GET /policy/evaluate` — returns violations and raw OPA output
+## Security Notes
 
-Notes:
-
-- The policy flags public HTTP endpoint methods (e.g., `@GetMapping`, `@PostMapping`, `@RequestMapping`) that lack security annotations (e.g., `@PreAuthorize`, `@Secured`, `@RolesAllowed`).
-- You can add more Rego rules under `policy/` and OPA will load them automatically during evaluation.
-
-## Setup & Run
-
-Follow these steps to set up the Python environment, ingest your Java code into Neo4j, build embeddings, run the API, and evaluate Rego policies.
-
-### Prerequisites
-
-- Python 3.10+
-- Neo4j running locally (Bolt) — default `bolt://127.0.0.1:7687`
-- OPA (Rego) CLI installed and on PATH
-- Internet access on first run to download models
-
-### Install dependencies
-
-- pip (recommended)
-  - `python3 -m venv .venv && source .venv/bin/activate`
-  - `pip install -r requirements.txt`
-
-- conda (alternative; helpful on macOS for FAISS/Torch)
-  - `conda create -n codegraph python=3.10 -y`
-  - `conda activate codegraph`
-  - `pip install -r requirements.txt`
-
-### Configure Neo4j and Java Source Path
-
-- Configuration is centralized in `config.py` and can be overridden via `.env` (auto-loaded if `python-dotenv` is installed) or environment variables.
-  - `NEO4J_URI` (default `bolt://127.0.0.1:7687`), `NEO4J_USER`, `NEO4J_PASS`
-  - `INDEX_DIR`, `EMBEDDING_MODEL_NAME`, `UPLOAD_DIR`
-- Point to your Java sources:
-  - Preferred: set env var before running ingestion:
-    - `export JAVA_ROOT_DIR=/absolute/path/to/your/project/src/main/java`
-    - Then run: `python3 codebase_to_neo4j.py`
-  - The `/upload` API auto-detects `src/main/java` in the uploaded zip and sets `JAVA_ROOT_DIR` for ingestion.
-  - Fallback: the constant default in `codebase_to_neo4j.py` is used if the env var is not set.
-  - `build_code_embeddings.py` uses file paths stored in Neo4j; ensure paths are valid after ingestion.
-
-### Ingest → Index → Search (CLI)
-
-- Ingest code graph into Neo4j:
-  - `python3 codebase_to_neo4j.py`
-- Build FAISS embeddings:
-  - `python3 build_code_embeddings.py`
-  - Outputs: `index/code_embeddings.index`, `index/embedding_signature_map.json`
-  - Uses cosine similarity (normalized embeddings) with `IndexFlatIP`.
-  - Signature map entries are overload-safe `full_signature` values (falls back to `signature` if absent).
-- Try hybrid search via CLI:
-  - `python3 hybrid_code_search.py`
-
-### Run the API
-
-- Start server:
-  - `uvicorn app:app --reload --port 8000`
-- Endpoints:
-  - Search: `POST /search` with form `query=...`
-    - Example: `curl -X POST -F 'query=Where is access control enforced?' http://localhost:8000/search`
-    - Returns typed neighbor items: `{type: 'Method'|'Class'|'Node', id: string}`
-  - Health: `GET /health`
-    - Checks Neo4j connectivity, FAISS index, signature map, model preload, and OPA CLI presence.
-  - Policy evaluation: `GET /policy/evaluate`
-    - Example: `curl http://localhost:8000/policy/evaluate`
-  - Policy evaluation + LLM explanation: `POST /policy/evaluate_with_llm`
-    - Configure via env vars (defaults target OpenAI):
-      - `LLM_PROVIDER` (e.g., `openai`, `lmstudio`, `azure`)
-      - `LLM_MODEL` (default `gpt-4o-mini`)
-      - `LLM_API_KEY` / `LLM_API_BASE`
-      - Example (LM Studio): `LLM_PROVIDER=lmstudio`, `LLM_API_BASE=http://localhost:1234/v1`, `LLM_API_KEY=lm-studio`
-    - Example: `curl -X POST 'http://localhost:8000/policy/evaluate_with_llm?limit=5&model=gpt-4o-mini'`
-  - Upload (optional): `POST /upload` with a `.zip` of a Java project
-    - Note: ingestion scripts currently use a hardcoded `JAVA_ROOT_DIR`. If using upload, adjust `JAVA_ROOT_DIR` to the extracted path to reflect the uploaded project.
-
-### Policy (Rego/OPA)
-
-- Files:
-  - Rules: `policy/iso_27001_access.rego` (ISO 27001 A.9.1.1)
-  - Rule example JSON: `policy/iso_rules.json`
-- Run via CLI:
-  - `python3 policy_integration.py`
-- Run via API:
-  - `GET /policy/evaluate`
-  - `POST /policy/evaluate_with_llm` (adds LLM explanations and remediation)
-- What it checks now:
-  - Public HTTP endpoints (`@GetMapping`, `@PostMapping`, etc.) missing security annotations (`@PreAuthorize`, `@Secured`, `@RolesAllowed`, etc.).
-
-### Neo4j Constraints
-
-On ingestion, the script attempts to create idempotent constraints (Neo4j 5.x):
-
-- Unique: `:Class(fqn)`, `:Method(signature)`
-- Index: `:Method(full_signature)`
-
-If duplicate `signature` values already exist (e.g., overloads), the unique constraint may conflict. The script will warn; you can clean duplicates or migrate to using `full_signature` end-to-end.
-
-### LLM Configuration
-
-- Dependencies use LiteLLM (`litellm==1.35.7`), which supports OpenAI, LM Studio (OpenAI-compatible), Azure OpenAI, Groq, etc.
-- Default behaviour targets OpenAI using `LLM_API_KEY` (falls back to `OPENAI_API_KEY` for backward compatibility).
-- Override via env vars:
-  - `LLM_PROVIDER` (LiteLLM provider name; `openai` by default)
-  - `LLM_MODEL` (model identifier)
-  - `LLM_API_BASE` (custom endpoint URL; required for LM Studio/local servers)
-  - `LLM_API_KEY` (token if needed; optional for LM Studio)
-- The API always returns a result: if the LLM call fails or is misconfigured, a fallback explanation string is provided.
-
-### Troubleshooting
-
-- FAISS issues on macOS: prefer conda `faiss-cpu` from `conda-forge`.
-- Model download failures: ensure internet access on first run.
-- Neo4j auth/connectivity: prefer IPv4 `bolt://127.0.0.1:7687` to avoid IPv6 localhost issues. Variables can be set in `.env`.
-- OPA not found: install via Homebrew `brew install opa` or from OPA releases.
-- LLM configuration issues: confirm environment variables match your provider. Example for LM Studio: `LLM_PROVIDER=lmstudio`, `LLM_API_BASE=http://localhost:1234/v1`, `LLM_API_KEY=lm-studio`. For OpenAI, set `LLM_API_KEY` (or legacy `OPENAI_API_KEY`).
-- LiteLLM errors: the API logs the error and returns a fallback explanation string so requests still succeed.
-
-### Embedding Metadata
-
-The embedding builder writes `index/embedding_metadata.json` with:
-
-- `model`, `dim`, `metric`, `count`, `built_at`
-- `index_path`, `signature_map.full`, `signature_map.legacy`
-
-The search loader tolerates either the new full-signature map or the legacy filename.
-
-### Security Notes
-
-- Upload ZIP extraction uses path traversal safeguards.
-- CORS is permissive for local dev; restrict in production.
+- ZIP uploads use path traversal guards during extraction.
+- CORS is wide open for local development; tighten `allow_origins` before deploying.

@@ -10,17 +10,52 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from neo4j import GraphDatabase
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASS
 
 POLICY_DIR = os.path.join(os.path.dirname(__file__), "policy")
 POLICY_QUERY = "data.iso27001.violations"
+CATALOG_PATH = os.path.join(os.path.dirname(__file__), "policy", "catalog.json")
+
+_CATALOG_CACHE: Dict[str, Dict[str, Any]] | None = None
 
 
 def _get_driver():
     return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+
+
+def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
+    """
+    Load the policy catalog describing each control, required evidence, and Rego linkage.
+    Returned as a dictionary keyed by the control code (e.g., 'A.9.1.1').
+    """
+    global _CATALOG_CACHE
+    if _CATALOG_CACHE is None:
+        try:
+            with open(CATALOG_PATH, "r") as f:
+                raw = json.load(f)
+        except FileNotFoundError:
+            raw = []
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Failed to parse policy catalog at {CATALOG_PATH}: {exc}") from exc
+        if isinstance(raw, dict):
+            entries = raw.get("controls", [])
+        elif isinstance(raw, list):
+            entries = raw
+        else:
+            entries = []
+        _CATALOG_CACHE = {entry.get("control") or entry.get("id"): entry for entry in entries}
+    return _CATALOG_CACHE or {}
+
+
+def get_policy_catalog_entries() -> List[Dict[str, Any]]:
+    """
+    Return the catalog entries as a list in source order for external consumers (API, UI).
+    """
+    catalog = load_policy_catalog()
+    return list(catalog.values())
 
 
 def build_policy_input() -> Dict[str, Any]:
@@ -33,17 +68,24 @@ def build_policy_input() -> Dict[str, Any]:
     with driver.session() as session:
         cypher = (
             "MATCH (m:Method) "
-            "RETURN m.signature AS signature, m.name AS name, m.annotations AS annotations, "
-            "m.modifiers AS modifiers, m.file_path AS file_path"
+            "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
+            "WITH m, collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS called_signatures "
+            "RETURN coalesce(m.full_signature, m.signature) AS sig, "
+            "       m.name AS name, "
+            "       m.annotations AS annotations, "
+            "       m.modifiers AS modifiers, "
+            "       m.file_path AS file_path, "
+            "       called_signatures"
         )
         for rec in session.run(cypher):
             items.append(
                 {
-                    "signature": rec["signature"],
+                    "signature": rec["sig"],
                     "name": rec.get("name"),
                     "annotations": rec.get("annotations") or [],
                     "modifiers": rec.get("modifiers") or [],
                     "file_path": rec.get("file_path"),
+                    "called_signatures": rec.get("called_signatures") or [],
                 }
             )
     driver.close()
@@ -97,12 +139,23 @@ def evaluate_policies() -> Dict[str, Any]:
 
         # Typical shape: {"result":[{"expressions":[{"value":[...]}]}]}
         result = out.get("result", [])
-        violations = []
+        violations: List[Dict[str, Any]] = []
         if result:
             exprs = result[0].get("expressions", [])
             if exprs:
                 violations = exprs[0].get("value", []) or []
-        return {"violations": violations, "opa_output": out}
+        catalog = load_policy_catalog()
+        enriched = []
+        for violation in violations:
+            item = dict(violation)
+            control_id = violation.get("id")
+            meta = catalog.get(control_id)
+            if not meta and control_id:
+                meta = catalog.get(f"ISO-27001-{control_id}")
+            if meta:
+                item["control_metadata"] = meta
+            enriched.append(item)
+        return {"violations": enriched, "opa_output": out, "catalog": get_policy_catalog_entries()}
 
 
 if __name__ == "__main__":
