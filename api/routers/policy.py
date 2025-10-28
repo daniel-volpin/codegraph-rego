@@ -1,6 +1,10 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from api.models.validation import PolicyEvaluateResponse, PolicyCatalogResponse
+from api.models.validation import (
+    PolicyEvaluateResponse,
+    PolicyCatalogResponse,
+    PolicyEvaluateWithLLMRequest,
+)
 from codegraph.policy.service import evaluate as evaluate_policies, catalog as get_policy_catalog_entries
 from codegraph.llm.integration import explain_policy_violations
 from codegraph.config import LLM_MODEL
@@ -20,12 +24,17 @@ async def policy_evaluate():
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @router.post("/policy/evaluate_with_llm", response_model=PolicyEvaluateResponse)
-async def policy_evaluate_with_llm(limit: int = 10, model: str | None = None):
+async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
     res = evaluate_policies()
     if "violations" not in res:
         return JSONResponse(res, status_code=500)
-    vio = res.get("violations", [])[:limit]
-    enriched = explain_policy_violations(vio, max_items=limit, model=model or LLM_MODEL)
+    safe_limit = max(1, payload.limit)
+    vio = res.get("violations", [])[:safe_limit]
+    enriched = explain_policy_violations(
+        vio,
+        max_items=safe_limit,
+        model=(payload.model or "").strip() or LLM_MODEL,
+    )
     return JSONResponse({"violations": vio, "enriched": enriched})
 
 @router.get("/policy/catalog", response_model=PolicyCatalogResponse)
