@@ -12,22 +12,10 @@ from typing import Any, Dict, List
 
 from codegraph.config import LLM_MODEL
 from codegraph.llm.client import generate_chat_completion
-
+from codegraph.common.snippet_utils import extract_code_snippet
 
 def _read_code_snippet(file_path: str, needle: str, before: int = 8, after: int = 24) -> str:
-    try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            lines = f.readlines()
-        # simple heuristic: find first occurrence of method name
-        idx_candidates = [i for i, line in enumerate(lines) if needle in line]
-        if not idx_candidates:
-            return ""
-        idx = idx_candidates[0]
-        start = max(0, idx - before)
-        end = min(len(lines), idx + after)
-        return "".join(lines[start:end])
-    except Exception:
-        return ""
+    return extract_code_snippet(file_path, needle, before=before, after=after)
 
 
 def _build_prompt(violation: Dict[str, Any], code_snippet: str) -> List[Dict[str, str]]:
