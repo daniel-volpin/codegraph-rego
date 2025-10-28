@@ -1,20 +1,13 @@
+import logging
 import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import zipfile
 import shutil
-import logging
 import uvicorn
-from typing import Any
-
-# Third-party
 from fastapi import FastAPI, File, UploadFile, Form, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Any
 
-# Local imports
-from codegraph.policy.service import evaluate as evaluate_policies
-from codegraph.policy.service import catalog as get_policy_catalog_entries
-from codegraph.llm.integration import explain_policy_violations
 from codegraph.config import (
     UPLOAD_DIR,
     FAISS_INDEX_PATH,
@@ -23,29 +16,28 @@ from codegraph.config import (
     EMBEDDING_MODEL_NAME,
     LLM_MODEL,
 )
-from typing import Any
-
 from codegraph.db import get_neo4j_driver
+from codegraph.ingestion.utils import safe_extract_zip, find_java_root
+from codegraph.ingestion.service import ingest
+from codegraph.embedding.service import EmbeddingService
 from codegraph.api.models import (
     SearchResponse,
-    EvaluateResponse,
-    EvaluateWithLLMResponse,
-    PolicyCatalogResponse,
-    PolicyViolation,
-    ControlMetadata,
-    LLMEnrichedItem,
-
     MethodContext,
+    Neighbor,
 )
-from codegraph.ingestion.utils import safe_extract_zip, find_java_root
+from codegraph.policy.service import evaluate as evaluate_policies, catalog as get_policy_catalog_entries
+from codegraph.llm.integration import explain_policy_violations
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger("codegraph.app")
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 
 app = FastAPI()
-
-# Allow CORS for local frontend development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -55,13 +47,7 @@ app.add_middleware(
 )
 
 
-from codegraph.api.services.upload_service import handle_upload
-from codegraph.api.services.policy_service import (
-    handle_policy_evaluate,
-    handle_policy_evaluate_with_llm,
-    handle_policy_catalog,
-)
-from codegraph.api.services.search_service import handle_search
+
 @app.post("/upload")
 async def upload_zip(file: UploadFile = File(...)) -> JSONResponse:
     """
@@ -81,22 +67,13 @@ async def upload_zip(file: UploadFile = File(...)) -> JSONResponse:
         safe_extract_zip(zip_ref, UPLOAD_DIR)
 
     java_root = find_java_root(UPLOAD_DIR)
+
+    # Run ingestion and embedding directly
     if java_root is None:
-        logger.error("Java root directory not found in uploaded ZIP.")
-        return JSONResponse({"error": "java_root_not_found"}, status_code=400)
-
-    # Run ingestion and embedding directly (no subprocess)
-    try:
-        from codegraph.ingestion.service import ingest
-        from codegraph.embedding.service import EmbeddingService
-
-        ingest(java_root)
-        EmbeddingService.build_embeddings()
-    except Exception as e:
-        logger.error(f"Processing failed: {e}")
-        return JSONResponse({"error": f"processing_failed: {e}"}, status_code=500)
-    result, status = handle_upload(file)
-    return JSONResponse(result, status_code=status)
+        return JSONResponse({"error": "Java root directory not found in uploaded ZIP."}, status_code=400)
+    ingest(java_root)
+    EmbeddingService.build_embeddings()
+    return JSONResponse({"status": "Codebase processed!", "java_root": java_root})
 
 
 @app.on_event("startup")
@@ -166,15 +143,13 @@ async def health() -> JSONResponse:
     return JSONResponse(checks, status_code=status)
 
 
-@app.post("/search", response_model=SearchResponse)
-async def search(query: str = Form(...)) -> SearchResponse | JSONResponse:
-    """
-    Search for code elements using hybrid semantic and graph-based search.
-    """
+@app.post("/search")
+async def search(query: str = Form(...)):
+    # You should refactor your hybrid search script to expose a function, or call as subprocess
+    # For demo, let's assume you have a function hybrid_search(query)
     try:
         from codegraph.search.service import run_search
         matched_signatures, graph_contexts = run_search(query, k=5)
-        # Convert to models explicitly
         contexts_model = []
         for ctx in graph_contexts:
             ctx_entries = []
@@ -190,45 +165,48 @@ async def search(query: str = Form(...)) -> SearchResponse | JSONResponse:
         logger.error(f"Search failed: {e}")
         return JSONResponse({"error": f"search_failed: {e}"}, status_code=500)
 
-@app.get("/policy/evaluate", response_model=EvaluateResponse)
-async def policy_evaluate() -> EvaluateResponse | JSONResponse:
+
+@app.get("/policy/evaluate")
+async def policy_evaluate():
     """
     Evaluate Rego policies against the current Neo4j code graph.
     Requires OPA CLI installed and available on PATH.
     """
     try:
-        modeled = handle_policy_evaluate()
-        status = 200 if modeled.violations or modeled.opa_output else 500
-        return JSONResponse(modeled.dict(by_alias=True), status_code=status)
+        result = evaluate_policies()
+        status = 200 if "violations" in result or "opa_output" in result else 500
+        return JSONResponse(result, status_code=status)
     except Exception as e:
         logger.error(f"Policy evaluation failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.post("/policy/evaluate_with_llm", response_model=EvaluateWithLLMResponse)
-async def policy_evaluate_with_llm(limit: int = 10, model: str | None = None) -> EvaluateWithLLMResponse | JSONResponse:
+@app.post("/policy/evaluate_with_llm")
+async def policy_evaluate_with_llm(limit: int = 10, model: str | None = None):
     """
     Evaluate Rego policies and have an LLM explain violations with remediation guidance.
     - Requires OPA CLI on PATH.
     - LLM is optional (uses OpenAI if OPENAI_API_KEY is set); otherwise returns snippets only.
     """
-    try:
-        modeled = handle_policy_evaluate_with_llm(limit=limit, model=model or LLM_MODEL)
-        return JSONResponse(modeled.dict(by_alias=True), status_code=200)
-    except Exception as e:
-        logger.error(f"LLM policy evaluation failed: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+    res = evaluate_policies()
+    if "violations" not in res:
+        return JSONResponse(res, status_code=500)
+    vio = res.get("violations", [])[:limit]
+    enriched = explain_policy_violations(vio, max_items=limit, model=model or LLM_MODEL)
+    return JSONResponse({"violations": vio, "enriched": enriched})
 
 
-@app.get("/policy/catalog", response_model=PolicyCatalogResponse)
-async def policy_catalog() -> PolicyCatalogResponse | JSONResponse:
+@app.get("/policy/catalog")
+async def policy_catalog():
     """
     Return the policy catalog describing available controls, their evidence requirements, and Rego linkage.
     """
     try:
-        modeled = handle_policy_catalog()
-        return JSONResponse(modeled.dict(by_alias=True), status_code=200)
-    except ValueError as exc:
+        controls = get_policy_catalog_entries()
+        # Ensure stable ordering by control identifier
+        controls_sorted = sorted(controls, key=lambda item: item.get("control") or item.get("id") or "")
+        return JSONResponse({"controls": controls_sorted})
+    except Exception as exc:
         logger.error(f"Policy catalog error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 

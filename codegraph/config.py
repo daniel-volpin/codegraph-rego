@@ -1,49 +1,61 @@
-"""
-Central configuration for the project. Values can be overridden via environment variables.
-If `python-dotenv` is installed and a `.env` file is present, it will be loaded automatically.
-"""
+from pydantic import BaseSettings, Field
 
-import os
-import os.path as _p
+class Settings(BaseSettings):
+    index_dir: str = Field("index", description="Index directory")
+    faiss_index_path: str = Field("index/code_embeddings.index", description="FAISS index path")
+    signature_map_path: str = Field("index/embedding_signature_map.json", description="Signature map path")
+    signature_map_path_full: str = Field("index/embedding_full_signature_map.json", description="Full signature map path")
+    embedding_metadata_path: str = Field("index/embedding_metadata.json", description="Embedding metadata path")
+    embedding_model_name: str = Field("all-MiniLM-L6-v2", description="Embedding model name")
+    upload_dir: str = Field("uploaded_code", description="Upload directory")
+    java_root_dir: str = Field("uploaded_code", description="Java root directory")
+    neo4j_uri: str = Field("bolt://localhost:7687", description="Neo4j URI")
+    neo4j_user: str = Field("neo4j", description="Neo4j user")
+    neo4j_pass: str = Field(..., description="Neo4j password")
+    llm_provider: str = Field("openai", description="LLM provider")
+    llm_model: str = Field("gpt-4o-mini", description="LLM model")
+    llm_api_base: str = Field(None, description="LLM API base")
+    llm_api_key: str = Field(None, description="LLM API key")
+    llm_temperature: float = Field(0.2, description="LLM temperature")
 
-try:
-    from dotenv import load_dotenv  # type: ignore
-    load_dotenv()
-except Exception:
-    # Optional dependency; ignore if not installed
-    pass
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        fields = {
+            "index_dir": {"env": "INDEX_DIR"},
+            "faiss_index_path": {"env": "FAISS_INDEX_PATH"},
+            "signature_map_path": {"env": "SIGNATURE_MAP_PATH"},
+            "signature_map_path_full": {"env": "SIGNATURE_MAP_PATH_FULL"},
+            "embedding_metadata_path": {"env": "EMBEDDING_METADATA_PATH"},
+            "embedding_model_name": {"env": "EMBEDDING_MODEL_NAME"},
+            "upload_dir": {"env": "UPLOAD_DIR"},
+            "java_root_dir": {"env": "JAVA_ROOT_DIR"},
+            "neo4j_uri": {"env": "NEO4J_URI"},
+            "neo4j_user": {"env": "NEO4J_USER"},
+            "neo4j_pass": {"env": "NEO4J_PASS"},
+            "llm_provider": {"env": "LLM_PROVIDER"},
+            "llm_model": {"env": "LLM_MODEL"},
+            "llm_api_base": {"env": "LLM_API_BASE"},
+            "llm_api_key": {"env": "LLM_API_KEY"},
+            "llm_temperature": {"env": "LLM_TEMPERATURE"},
+        }
 
+settings = Settings()
 
-# General paths
-INDEX_DIR = os.getenv("INDEX_DIR", "index")
-FAISS_INDEX_PATH = _p.join(INDEX_DIR, "code_embeddings.index")
-# Legacy name kept for backward compatibility
-SIGNATURE_MAP_PATH = _p.join(INDEX_DIR, "embedding_signature_map.json")
-# Preferred full-signature map
-SIGNATURE_MAP_PATH_FULL = _p.join(INDEX_DIR, "embedding_full_signature_map.json")
-EMBEDDING_METADATA_PATH = _p.join(INDEX_DIR, "embedding_metadata.json")
-
-# Model
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
-
-# Uploads
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploaded_code")
-
-# Java source root (used by code ingestion)
-# Can be set dynamically by API (/upload) via env for the ingestion subprocess.
-JAVA_ROOT_DIR = os.getenv(
-    "JAVA_ROOT_DIR",
-    _p.join(os.getcwd(), "uploaded_code"),
-)
-
-# Neo4j
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASS = os.getenv("NEO4J_PASS", "123456789")
-
-# LLM settings (LiteLLM-backed)
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", os.getenv("LITELLM_PROVIDER", "openai"))
-LLM_MODEL = os.getenv("LLM_MODEL", os.getenv("LITELLM_MODEL", "gpt-4o-mini"))
-LLM_API_BASE = os.getenv("LLM_API_BASE", os.getenv("LITELLM_API_BASE"))
-LLM_API_KEY = os.getenv("LLM_API_KEY", os.getenv("OPENAI_API_KEY"))
-LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
+# For backward compatibility, expose old variable names
+INDEX_DIR = settings.index_dir
+FAISS_INDEX_PATH = settings.faiss_index_path
+SIGNATURE_MAP_PATH = settings.signature_map_path
+SIGNATURE_MAP_PATH_FULL = settings.signature_map_path_full
+EMBEDDING_METADATA_PATH = settings.embedding_metadata_path
+EMBEDDING_MODEL_NAME = settings.embedding_model_name
+UPLOAD_DIR = settings.upload_dir
+JAVA_ROOT_DIR = settings.java_root_dir
+NEO4J_URI = settings.neo4j_uri
+NEO4J_USER = settings.neo4j_user
+NEO4J_PASS = settings.neo4j_pass
+LLM_PROVIDER = settings.llm_provider
+LLM_MODEL = settings.llm_model
+LLM_API_BASE = settings.llm_api_base
+LLM_API_KEY = settings.llm_api_key
+LLM_TEMPERATURE = settings.llm_temperature

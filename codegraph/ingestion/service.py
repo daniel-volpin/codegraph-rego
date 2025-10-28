@@ -1,7 +1,14 @@
 import os
 import javalang
+from javalang.tree import ClassDeclaration, InterfaceDeclaration, MethodInvocation
 
-# Relationship helpers
+from neo4j import GraphDatabase
+from typing import List, Optional
+from codegraph.ingestion.models.method import MethodEntity
+from codegraph.config import JAVA_ROOT_DIR as _DEFAULT_JAVA_ROOT_DIR, NEO4J_URI, NEO4J_USER, NEO4J_PASS
+from codegraph.db import ensure_constraints
+
+
 def link_extends_classes(tx, child_fqn: str, parent_fqn: str) -> None:
     tx.run("""
     MATCH (child:Class {fqn: $child_fqn}), (parent:Class {fqn: $parent_fqn})
@@ -62,28 +69,11 @@ def link_nested_classes(tx, child_fqn: str, parent_fqn: str) -> None:
     MATCH (child:Class {fqn: $child_fqn}), (parent:Class {fqn: $parent_fqn})
     MERGE (child)-[:NESTED_IN]->(parent)
     """, child_fqn=child_fqn, parent_fqn=parent_fqn)
-from neo4j import GraphDatabase
-from typing import List, Optional
-from pydantic import BaseModel
-from codegraph.config import JAVA_ROOT_DIR as _DEFAULT_JAVA_ROOT_DIR, NEO4J_URI, NEO4J_USER, NEO4J_PASS
-from codegraph.db import ensure_constraints
 
-class MethodEntity(BaseModel):
-    class_fqn: str
-    signature: str
-    full_signature: Optional[str] = None
-    name: str
-    params: List[str]
-    annotations: List[str]
-    return_type: Optional[str]
-    modifiers: List[str]
-    file_path: str
-    calls: List[str] = []
-    uses: List[str] = []
+
+    # moved to models/method.py
 
 def walk_class_declarations(type_decls, package, file_path, parent_fqn=None):
-    # ...existing code from codebase_to_neo4j.py...
-    # (copy the full walk_class_declarations implementation here)
     results = []
     nested_relations = []
     extends_relations = []
@@ -93,53 +83,56 @@ def walk_class_declarations(type_decls, package, file_path, parent_fqn=None):
     calls_relations = []
     class_fqn_map = {}
     for decl in type_decls:
-        if isinstance(decl, (javalang.tree.ClassDeclaration, javalang.tree.InterfaceDeclaration)):
-            class_fqn = f"{package}.{decl.name}" if not parent_fqn else f"{parent_fqn}${decl.name}"
-            class_fqn_map[decl.name] = class_fqn
+        if isinstance(decl, (ClassDeclaration, InterfaceDeclaration)):
+            class_fqn = f"{package}.{getattr(decl, 'name', 'UnknownClass')}" if not parent_fqn else f"{parent_fqn}${getattr(decl, 'name', 'UnknownClass')}"
+            class_fqn_map[getattr(decl, 'name', 'UnknownClass')] = class_fqn
             if parent_fqn:
                 nested_relations.append((class_fqn, parent_fqn))
-            if hasattr(decl, "extends") and decl.extends:
-                ext_name = decl.extends.name if hasattr(decl.extends, "name") else str(decl.extends)
+            if hasattr(decl, "extends") and getattr(decl, "extends", None):
+                ext = getattr(decl, "extends")
+                ext_name = getattr(ext, "name", str(ext))
                 extends_fqn = f"{package}.{ext_name}"
                 extends_relations.append((class_fqn, extends_fqn))
-            if hasattr(decl, "implements") and decl.implements:
-                for impl in decl.implements:
-                    impl_name = impl.name if hasattr(impl, "name") else str(impl)
+            if hasattr(decl, "implements") and getattr(decl, "implements", None):
+                for impl in getattr(decl, "implements"):
+                    impl_name = getattr(impl, "name", str(impl))
                     implements_fqn = f"{package}.{impl_name}"
                     implements_relations.append((class_fqn, implements_fqn))
             for field in getattr(decl, "fields", []):
-                field_type = field.type.name if hasattr(field.type, "name") else str(field.type)
+                field_type = getattr(field.type, "name", str(field.type))
                 depends_on_relations.append((class_fqn, f"{package}.{field_type}"))
             for method in getattr(decl, "methods", []):
                 param_types = [
-                    (p.type.name if hasattr(p.type, "name") else str(p.type))
+                    getattr(p.type, "name", str(p.type))
                     for p in getattr(method, "parameters", [])
                     if getattr(p, "type", None) is not None
                 ]
-                method_sig = f"{class_fqn}.{method.name}()"
-                full_sig = f"{class_fqn}.{method.name}({','.join(param_types)})"
-                params = [f"{p.type.name} {p.name}" for p in getattr(method, "parameters", [])]
-                annotations = [ann.name for ann in getattr(method, "annotations", [])]
-                uses_types = [f"{package}.{p.type.name}" for p in getattr(method, "parameters", []) if hasattr(p.type, "name")]
+                method_sig = f"{class_fqn}.{getattr(method, 'name', 'unknown_method')}()"
+                full_sig = f"{class_fqn}.{getattr(method, 'name', 'unknown_method')}({','.join(param_types)})"
+                params = [f"{getattr(p.type, 'name', str(p.type))} {p.name}" for p in getattr(method, "parameters", [])]
+                annotations = [getattr(ann, 'name', str(ann)) for ann in getattr(method, "annotations", [])]
+                uses_types = [f"{package}.{getattr(p.type, 'name', str(p.type))}" for p in getattr(method, "parameters", []) if hasattr(p.type, "name")]
                 calls = []
                 if getattr(method, "body", None):
                     for path, node in method:
-                        if isinstance(node, javalang.tree.MethodInvocation):
-                            if node.qualifier:
-                                called_fqn = f"{package}.{node.qualifier}.{node.member}()"
+                        if isinstance(node, MethodInvocation):
+                            qualifier = getattr(node, "qualifier", None)
+                            member = getattr(node, "member", None)
+                            if qualifier:
+                                called_fqn = f"{package}.{qualifier}.{member}()"
                             else:
-                                called_fqn = f"{class_fqn}.{node.member}()"
+                                called_fqn = f"{class_fqn}.{member}()"
                             calls.append(called_fqn)
                             calls_relations.append((method_sig, called_fqn))
                 results.append(MethodEntity(
                     class_fqn=class_fqn,
                     signature=method_sig,
                     full_signature=full_sig,
-                    name=method.name,
+                    name=getattr(method, 'name', 'unknown_method'),
                     params=params,
                     annotations=annotations,
-                    return_type=method.return_type.name if method.return_type else None,
-                    modifiers=list(method.modifiers) if method.modifiers else [],
+                    return_type=getattr(getattr(method, 'return_type', None), 'name', None),
+                    modifiers=list(getattr(method, 'modifiers', [])),
                     file_path=file_path,
                     calls=calls,
                     uses=uses_types
@@ -148,31 +141,31 @@ def walk_class_declarations(type_decls, package, file_path, parent_fqn=None):
                     uses_relations.append((method_sig, used_type))
             for ctor in getattr(decl, "constructors", []):
                 ctor_param_types = [
-                    (p.type.name if hasattr(p.type, "name") else str(p.type))
+                    getattr(p.type, "name", str(p.type))
                     for p in getattr(ctor, "parameters", [])
                     if getattr(p, "type", None) is not None
                 ]
-                ctor_sig = f"{class_fqn}.{decl.name}()"
-                ctor_full_sig = f"{class_fqn}.{decl.name}({','.join(ctor_param_types)})"
-                params = [f"{p.type.name} {p.name}" for p in getattr(ctor, "parameters", [])]
-                annotations = [ann.name for ann in getattr(ctor, "annotations", [])]
-                uses_types = [f"{package}.{p.type.name}" for p in getattr(ctor, "parameters", []) if hasattr(p.type, "name")]
+                ctor_sig = f"{class_fqn}.{getattr(decl, 'name', 'UnknownClass')}()"
+                ctor_full_sig = f"{class_fqn}.{getattr(decl, 'name', 'UnknownClass')}({','.join(ctor_param_types)})"
+                params = [f"{getattr(p.type, 'name', str(p.type))} {p.name}" for p in getattr(ctor, "parameters", [])]
+                annotations = [getattr(ann, 'name', str(ann)) for ann in getattr(ctor, "annotations", [])]
+                uses_types = [f"{package}.{getattr(p.type, 'name', str(p.type))}" for p in getattr(ctor, "parameters", []) if hasattr(p.type, "name")]
                 results.append(MethodEntity(
                     class_fqn=class_fqn,
                     signature=ctor_sig,
                     full_signature=ctor_full_sig,
-                    name=decl.name,
+                    name=getattr(decl, 'name', 'UnknownClass'),
                     params=params,
                     annotations=annotations,
                     return_type=None,
-                    modifiers=list(ctor.modifiers) if ctor.modifiers else [],
+                    modifiers=list(getattr(ctor, 'modifiers', [])),
                     file_path=file_path,
                     calls=[],
                     uses=uses_types
                 ))
                 for used_type in uses_types:
                     uses_relations.append((ctor_sig, used_type))
-            body_types = [node for node in getattr(decl, "body", []) if isinstance(node, (javalang.tree.ClassDeclaration, javalang.tree.InterfaceDeclaration))]
+            body_types = [node for node in getattr(decl, "body", []) if isinstance(node, (ClassDeclaration, InterfaceDeclaration))]
             inner_methods, inner_nested, inner_extends, inner_implements, inner_uses, inner_depends, inner_calls = walk_class_declarations(body_types, package, file_path, class_fqn)
             results += inner_methods
             nested_relations += inner_nested
@@ -192,10 +185,15 @@ def extract_entities_from_file(file_path: str):
         print(f"[WARN] Could not parse {file_path}: {e}")
         return [], [], [], [], [], [], []
 
-    package = tree.package.name if getattr(tree, "package", None) else "unknown"
-    return walk_class_declarations(getattr(tree, "types", []), package, file_path)
+    package = getattr(tree, "package", None)
+    package_name = package.name if package and hasattr(package, "name") else "unknown"
+    return walk_class_declarations(getattr(tree, "types", []), package_name, file_path)
 
 def collect_code_structure(root_dir: str):
+    """
+    Walk the Java source tree and collect all methods, classes, and relationships.
+    Returns lists of all entities and relationships found.
+    """
     all_methods = []
     all_nested = []
     all_extends = []
@@ -226,6 +224,7 @@ def collect_code_structure(root_dir: str):
     print(f"🔗 Found {len(all_depends)} depends_on relations.")
     print(f"🔗 Found {len(all_calls)} calls relations.")
     return all_methods, all_nested, all_extends, all_implements, all_uses, all_depends, all_calls
+
 
 def ingest_to_neo4j(
     methods: List[MethodEntity],
@@ -269,9 +268,6 @@ def ingest_to_neo4j(
         for caller_sig, callee_sig in calls_relations:
             safe_write(session, link_calls, caller_sig, callee_sig)
     driver.close()
-
-# Relationship helpers (link_extends_classes, link_implements_classes, etc.)
-# ...copy all helper functions from codebase_to_neo4j.py...
 
 def ingest(java_root_dir: str) -> None:
     """
