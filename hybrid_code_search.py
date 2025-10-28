@@ -50,6 +50,7 @@ def get_neo4j_driver(uri: str, user: str, password: str):
     """
     return GraphDatabase.driver(uri, auth=(user, password))
 
+
 def semantic_search(query: str, model, index, signature_map, k: int = 5):
     """
     Perform semantic search using FAISS and return top-k method signatures.
@@ -98,8 +99,6 @@ def print_graph_contexts(graph_contexts):
             print("    ]")
 
 
-
-# Expose a function for FastAPI or other scripts
 def hybrid_search(query: str, k: int = 5):
     """
     Perform hybrid semantic/graph search for a user query.

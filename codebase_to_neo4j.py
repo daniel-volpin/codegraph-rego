@@ -5,7 +5,6 @@ Parses a Java project, extracts classes, methods, and relationships, and ingests
 """
 
 import os
-import json
 import javalang
 from neo4j import GraphDatabase
 from typing import List, Optional

@@ -112,4 +112,3 @@ def evaluate_policies() -> Dict[str, Any]:
 if __name__ == "__main__":
     res = evaluate_policies()
     print(json.dumps(res, indent=2))
-

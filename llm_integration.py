@@ -11,6 +11,9 @@ import os
 from typing import Any, Dict, List
 
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+
 def _read_code_snippet(file_path: str, needle: str, before: int = 8, after: int = 24) -> str:
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -82,4 +85,3 @@ def explain_policy_violations(
             "explanation": explanation,
         })
     return results
-

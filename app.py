@@ -6,7 +6,6 @@ import zipfile
 import shutil
 import subprocess
 import uvicorn
-from typing import List
 from policy_integration import evaluate_policies
 from llm_integration import explain_policy_violations
 
@@ -22,6 +21,7 @@ app.add_middleware(
 )
 
 UPLOAD_DIR = "uploaded_code"
+
 
 @app.post("/upload")
 async def upload_zip(file: UploadFile = File(...)):
@@ -54,6 +54,7 @@ async def upload_zip(file: UploadFile = File(...)):
     subprocess.run(["python3", "build_code_embeddings.py"], check=True)
     return {"status": "Codebase processed!", "java_root": java_root}
 
+
 @app.post("/search")
 async def search(query: str = Form(...)):
     # You should refactor your hybrid search script to expose a function, or call as subprocess
@@ -68,6 +69,7 @@ async def search(query: str = Form(...)):
     neo4j_driver.close()
     return {"matches": matched_signatures, "contexts": graph_contexts}
 
+
 @app.get("/policy/evaluate")
 async def policy_evaluate():
     """
@@ -80,6 +82,7 @@ async def policy_evaluate():
         return JSONResponse(result, status_code=status)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
 
 @app.post("/policy/evaluate_with_llm")
 async def policy_evaluate_with_llm(limit: int = 10, model: str = "gpt-4o-mini"):

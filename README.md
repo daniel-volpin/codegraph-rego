@@ -113,13 +113,15 @@ This project can evaluate ISO 27001 access control checks against the code graph
 - Input facts are generated from Neo4j: method signature, annotations, modifiers, file path.
 
 Run locally with OPA CLI:
-- Install OPA: https://www.openpolicyagent.org/docs/latest/#running-opa
+
+- Install OPA: <https://www.openpolicyagent.org/docs/latest/#running-opa>
 - Ensure Neo4j contains your code graph (run `codebase_to_neo4j.py` first).
 - From the repo root:
   - `python3 policy_integration.py` — prints violations as JSON
   - Or run via API: `GET /policy/evaluate` — returns violations and raw OPA output
 
 Notes:
+
 - The policy flags public HTTP endpoint methods (e.g., `@GetMapping`, `@PostMapping`, `@RequestMapping`) that lack security annotations (e.g., `@PreAuthorize`, `@Secured`, `@RolesAllowed`).
 - You can add more Rego rules under `policy/` and OPA will load them automatically during evaluation.
 
@@ -128,12 +130,14 @@ Notes:
 Follow these steps to set up the Python environment, ingest your Java code into Neo4j, build embeddings, run the API, and evaluate Rego policies.
 
 ### Prerequisites
+
 - Python 3.10+ (Anaconda recommended)
 - Neo4j running locally at `bolt://localhost:7687`
 - OPA (Rego) CLI installed and on PATH
 - Internet access for first model download by `sentence-transformers`
 
 ### Environment Setup (choose one)
+
 - Conda
   - `conda create -n codegraph python=3.10 -y`
   - `conda activate codegraph`
@@ -144,6 +148,7 @@ Follow these steps to set up the Python environment, ingest your Java code into 
   - `pip install sentence-transformers neo4j faiss-cpu fastapi uvicorn pydantic javalang numpy`
 
 ### Configure Neo4j and Java Source Path
+
 - Ensure Neo4j credentials match defaults or update the scripts:
   - `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASS` in:
     - `codebase_to_neo4j.py`
@@ -159,6 +164,7 @@ Follow these steps to set up the Python environment, ingest your Java code into 
   - `build_code_embeddings.py` uses file paths stored in Neo4j; ensure paths are valid after ingestion.
 
 ### Ingest → Index → Search (CLI)
+
 - Ingest code graph into Neo4j:
   - `python3 codebase_to_neo4j.py`
 - Build FAISS embeddings:
@@ -168,6 +174,7 @@ Follow these steps to set up the Python environment, ingest your Java code into 
   - `python3 hybrid_code_search.py`
 
 ### Run the API
+
 - Start server:
   - `uvicorn app:app --reload --port 8000`
 - Endpoints:
@@ -182,6 +189,7 @@ Follow these steps to set up the Python environment, ingest your Java code into 
     - Note: ingestion scripts currently use a hardcoded `JAVA_ROOT_DIR`. If using upload, adjust `JAVA_ROOT_DIR` to the extracted path to reflect the uploaded project.
 
 ### Policy (Rego/OPA)
+
 - Files:
   - Rules: `policy/iso_27001_access.rego` (ISO 27001 A.9.1.1)
   - Rule example JSON: `policy/iso_rules.json`
@@ -194,6 +202,7 @@ Follow these steps to set up the Python environment, ingest your Java code into 
   - Public HTTP endpoints (`@GetMapping`, `@PostMapping`, etc.) missing security annotations (`@PreAuthorize`, `@Secured`, `@RolesAllowed`, etc.).
 
 ### Troubleshooting
+
 - FAISS issues on macOS: prefer conda `faiss-cpu` from `conda-forge`.
 - Model download failures: ensure internet access on first run.
 - Neo4j auth errors: verify Bolt URL and credentials across all scripts.

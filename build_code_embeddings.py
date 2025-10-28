@@ -13,7 +13,7 @@ import json
 import os
 
 
-JAVA_ROOT_DIR = "/Users/pnl11e4o/Documents/Thesis/code/jhipster-sample-app/src/main/java"
+JAVA_ROOT_DIR = "/Users/pnl11e4o/Documents/Thesis Project/code/scripts/uploaded_code/jhipster-sample-app/src/main/java"
 NEO4J_URI = "bolt://localhost:7687"
 NEO4J_USER = "neo4j"
 NEO4J_PASS = "123456789"
