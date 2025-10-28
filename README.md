@@ -187,7 +187,11 @@ Follow these steps to set up the Python environment, ingest your Java code into 
   - Policy evaluation: `GET /policy/evaluate`
     - Example: `curl http://localhost:8000/policy/evaluate`
   - Policy evaluation + LLM explanation: `POST /policy/evaluate_with_llm`
-    - Optional env: set `OPENAI_API_KEY` to enable OpenAI; otherwise returns snippet-only stubs.
+    - Configure via env vars (defaults target OpenAI):
+      - `LLM_PROVIDER` (e.g., `openai`, `lmstudio`, `azure`)
+      - `LLM_MODEL` (default `gpt-4o-mini`)
+      - `LLM_API_KEY` / `LLM_API_BASE`
+      - Example (LM Studio): `LLM_PROVIDER=lmstudio`, `LLM_API_BASE=http://localhost:1234/v1`, `LLM_API_KEY=lm-studio`
     - Example: `curl -X POST 'http://localhost:8000/policy/evaluate_with_llm?limit=5&model=gpt-4o-mini'`
   - Upload (optional): `POST /upload` with a `.zip` of a Java project
     - Note: ingestion scripts currently use a hardcoded `JAVA_ROOT_DIR`. If using upload, adjust `JAVA_ROOT_DIR` to the extracted path to reflect the uploaded project.
@@ -214,14 +218,25 @@ On ingestion, the script attempts to create idempotent constraints (Neo4j 5.x):
 
 If duplicate `signature` values already exist (e.g., overloads), the unique constraint may conflict. The script will warn; you can clean duplicates or migrate to using `full_signature` end-to-end.
 
+### LLM Configuration
+
+- Dependencies use LiteLLM (`litellm==1.35.7`), which supports OpenAI, LM Studio (OpenAI-compatible), Azure OpenAI, Groq, etc.
+- Default behaviour targets OpenAI using `LLM_API_KEY` (falls back to `OPENAI_API_KEY` for backward compatibility).
+- Override via env vars:
+  - `LLM_PROVIDER` (LiteLLM provider name; `openai` by default)
+  - `LLM_MODEL` (model identifier)
+  - `LLM_API_BASE` (custom endpoint URL; required for LM Studio/local servers)
+  - `LLM_API_KEY` (token if needed; optional for LM Studio)
+- The API always returns a result: if the LLM call fails or is misconfigured, a fallback explanation string is provided.
+
 ### Troubleshooting
 
 - FAISS issues on macOS: prefer conda `faiss-cpu` from `conda-forge`.
 - Model download failures: ensure internet access on first run.
 - Neo4j auth/connectivity: prefer IPv4 `bolt://127.0.0.1:7687` to avoid IPv6 localhost issues. Variables can be set in `.env`.
 - OPA not found: install via Homebrew `brew install opa` or from OPA releases.
-- LLM disabled: export `OPENAI_API_KEY` to enable, e.g., `export OPENAI_API_KEY=sk-...` and ensure `pip install openai` is installed in your environment.
-  - This project pins `openai==0.28.1` (requests-based, no httpx). The API returns fallback explanations if the SDK/network is unavailable.
+- LLM configuration issues: confirm environment variables match your provider. Example for LM Studio: `LLM_PROVIDER=lmstudio`, `LLM_API_BASE=http://localhost:1234/v1`, `LLM_API_KEY=lm-studio`. For OpenAI, set `LLM_API_KEY` (or legacy `OPENAI_API_KEY`).
+- LiteLLM errors: the API logs the error and returns a fallback explanation string so requests still succeed.
 
 ### Embedding Metadata
 

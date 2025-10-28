@@ -40,3 +40,10 @@ JAVA_ROOT_DIR = os.getenv(
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASS = os.getenv("NEO4J_PASS", "123456789")
+
+# LLM settings (LiteLLM-backed)
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", os.getenv("LITELLM_PROVIDER", "openai"))
+LLM_MODEL = os.getenv("LLM_MODEL", os.getenv("LITELLM_MODEL", "gpt-4o-mini"))
+LLM_API_BASE = os.getenv("LLM_API_BASE", os.getenv("LITELLM_API_BASE"))
+LLM_API_KEY = os.getenv("LLM_API_KEY", os.getenv("OPENAI_API_KEY"))
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
