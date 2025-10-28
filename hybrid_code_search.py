@@ -10,24 +10,23 @@ Now caches model/index/map in-process and uses cosine similarity (IP over normal
 import faiss  # type: ignore
 import json
 import os
+from typing import Any, Dict, List, Tuple
 from sentence_transformers import SentenceTransformer
-from neo4j import GraphDatabase
+from neo4j import Driver
 from config import (
     FAISS_INDEX_PATH,
     SIGNATURE_MAP_PATH,
     EMBEDDING_MODEL_NAME,
-    NEO4J_URI,
-    NEO4J_USER,
-    NEO4J_PASS,
     SIGNATURE_MAP_PATH_FULL,
 )
+from db import get_neo4j_driver
 
 # Simple in-process caches
-_INDEX = None
-_INDEX_MTIME = None
-_SIGMAP = None
-_SIGMAP_MTIME = None
-_MODEL = None
+_INDEX: Any | None = None
+_INDEX_MTIME: float | None = None
+_SIGMAP: List[str] | None = None
+_SIGMAP_MTIME: Tuple[str, float] | None = None
+_MODEL: SentenceTransformer | None = None
 
 
 def load_faiss_index(index_path: str):
@@ -45,7 +44,7 @@ def load_faiss_index(index_path: str):
     return _INDEX
 
 
-def load_signature_map(map_path: str):
+def load_signature_map(map_path: str) -> List[str]:
     """
     Load the signature map from disk, mapping FAISS indices to method full-signatures (cached with staleness check).
     Tries the preferred full-signature map first, then falls back to provided path and the legacy path.
@@ -71,7 +70,7 @@ def load_signature_map(map_path: str):
     )
 
 
-def load_embedding_model(model_name: str):
+def load_embedding_model(model_name: str) -> SentenceTransformer:
     """
     Load the sentence transformer model for generating code/query embeddings (cached).
     """
@@ -81,14 +80,7 @@ def load_embedding_model(model_name: str):
     return _MODEL
 
 
-def get_neo4j_driver(uri: str, user: str, password: str):
-    """
-    Create a Neo4j driver instance for database access.
-    """
-    return GraphDatabase.driver(uri, auth=(user, password))
-
-
-def semantic_search(query: str, model, index, signature_map, k: int = 5):
+def semantic_search(query: str, model: SentenceTransformer, index, signature_map: List[str], k: int = 5) -> List[str]:
     """
     Perform semantic search over normalized embeddings using FAISS (IP) and return top-k method identifiers.
     The identifiers are `full_signature` values produced during embedding (or `signature` as fallback).
@@ -98,7 +90,7 @@ def semantic_search(query: str, model, index, signature_map, k: int = 5):
     return [signature_map[i] for i in indices[0]]
 
 
-def fetch_graph_context_for_method(sig: str, neo4j_driver):
+def fetch_graph_context_for_method(sig: str, neo4j_driver: Driver) -> List[Dict[str, Any]]:
     """
     Retrieve graph context (neighboring methods/classes) for a given method signature from Neo4j.
     Traverses CALLS, DECLARES, and NESTED_IN relationships up to 2 hops.
@@ -122,7 +114,7 @@ def fetch_graph_context_for_method(sig: str, neo4j_driver):
         return [record.data() for record in result]
 
 
-def print_top_matches(matches):
+def print_top_matches(matches: List[str]) -> None:
     """
     Print the top matched method signatures from semantic search.
     """
@@ -131,7 +123,7 @@ def print_top_matches(matches):
         print(f"  - {sig}")
 
 
-def print_graph_contexts(graph_contexts):
+def print_graph_contexts(graph_contexts: List[List[Dict[str, Any]]]) -> None:
     """
     Print the graph context (neighbors) for each matched method.
     """
@@ -145,7 +137,7 @@ def print_graph_contexts(graph_contexts):
             print("    ]")
 
 
-def hybrid_search(query: str, k: int = 5):
+def hybrid_search(query: str, k: int = 5) -> Tuple[List[str], List[List[Dict[str, Any]]]]:
     """
     Perform hybrid semantic/graph search for a user query.
     Returns a tuple: (matched_signatures, graph_contexts)
@@ -153,7 +145,7 @@ def hybrid_search(query: str, k: int = 5):
     index = load_faiss_index(FAISS_INDEX_PATH)
     signature_map = load_signature_map(SIGNATURE_MAP_PATH)
     model = load_embedding_model(EMBEDDING_MODEL_NAME)
-    neo4j_driver = get_neo4j_driver(NEO4J_URI, NEO4J_USER, NEO4J_PASS)
+    neo4j_driver = get_neo4j_driver()
     matched_signatures = semantic_search(query, model, index, signature_map, k=k)
     graph_contexts = [fetch_graph_context_for_method(sig, neo4j_driver) for sig in matched_signatures]
     neo4j_driver.close()

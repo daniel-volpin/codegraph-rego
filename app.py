@@ -6,7 +6,8 @@ import zipfile
 import shutil
 import subprocess
 import uvicorn
-from policy_integration import evaluate_policies, get_policy_catalog_entries
+from policy.service import evaluate as evaluate_policies
+from policy.service import catalog as get_policy_catalog_entries
 from llm_integration import explain_policy_violations
 from config import (
     UPLOAD_DIR,
@@ -17,7 +18,15 @@ from config import (
     LLM_MODEL,
 )
 from db import get_neo4j_driver
-import shutil as _shutil
+from api_models import (
+    SearchResponse,
+    EvaluateResponse,
+    EvaluateWithLLMResponse,
+    PolicyCatalogResponse,
+    PolicyViolation,
+    ControlMetadata,
+    LLMEnrichedItem,
+)
 
 app = FastAPI()
 
@@ -89,15 +98,12 @@ async def _preload_resources():
             load_faiss_index,
             load_signature_map,
             load_embedding_model,
-            FAISS_INDEX_PATH,
-            SIGNATURE_MAP_PATH as _LEGACY_MAP_PATH,
-            EMBEDDING_MODEL_NAME,
         )
         # Try full-signature map first, then legacy map
         try:
             load_signature_map(SIGNATURE_MAP_PATH_FULL)
         except Exception:
-            load_signature_map(_LEGACY_MAP_PATH)
+            load_signature_map(SIGNATURE_MAP_PATH)
         load_faiss_index(FAISS_INDEX_PATH)
         load_embedding_model(EMBEDDING_MODEL_NAME)
     except Exception as e:
@@ -141,7 +147,7 @@ async def health():
         checks["details"]["search"] = str(e)
     # OPA presence
     try:
-        if _shutil.which("opa"):
+        if shutil.which("opa"):
             checks["opa"] = True
     except Exception:
         pass
@@ -149,32 +155,13 @@ async def health():
     return JSONResponse(checks, status_code=status)
 
 
-@app.post("/search")
+@app.post("/search", response_model=SearchResponse)
 async def search(query: str = Form(...)):
     # You should refactor your hybrid search script to expose a function, or call as subprocess
     # For demo, let's assume you have a function hybrid_search(query)
     try:
-        from hybrid_code_search import (
-            semantic_search,
-            load_faiss_index,
-            load_signature_map,
-            load_embedding_model,
-            get_neo4j_driver,
-            fetch_graph_context_for_method,
-            FAISS_INDEX_PATH,
-            SIGNATURE_MAP_PATH,
-            EMBEDDING_MODEL_NAME,
-            NEO4J_URI,
-            NEO4J_USER,
-            NEO4J_PASS,
-        )
-        index = load_faiss_index(FAISS_INDEX_PATH)
-        signature_map = load_signature_map(SIGNATURE_MAP_PATH)
-        model = load_embedding_model(EMBEDDING_MODEL_NAME)
-        neo4j_driver = get_neo4j_driver(NEO4J_URI, NEO4J_USER, NEO4J_PASS)
-        matched_signatures = semantic_search(query, model, index, signature_map, k=5)
-        graph_contexts = [fetch_graph_context_for_method(sig, neo4j_driver) for sig in matched_signatures]
-        neo4j_driver.close()
+        from search.service import run_search
+        matched_signatures, graph_contexts = run_search(query, k=5)
         return {"matches": matched_signatures, "contexts": graph_contexts}
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -182,7 +169,7 @@ async def search(query: str = Form(...)):
         return JSONResponse({"error": f"search_failed: {e}"}, status_code=500)
 
 
-@app.get("/policy/evaluate")
+@app.get("/policy/evaluate", response_model=EvaluateResponse)
 async def policy_evaluate():
     """
     Evaluate Rego policies against the current Neo4j code graph.
@@ -196,7 +183,7 @@ async def policy_evaluate():
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.post("/policy/evaluate_with_llm")
+@app.post("/policy/evaluate_with_llm", response_model=EvaluateWithLLMResponse)
 async def policy_evaluate_with_llm(limit: int = 10, model: str | None = None):
     """
     Evaluate Rego policies and have an LLM explain violations with remediation guidance.
@@ -211,7 +198,7 @@ async def policy_evaluate_with_llm(limit: int = 10, model: str | None = None):
     return {"violations": vio, "enriched": enriched}
 
 
-@app.get("/policy/catalog")
+@app.get("/policy/catalog", response_model=PolicyCatalogResponse)
 async def policy_catalog():
     """
     Return the policy catalog describing available controls, their evidence requirements, and Rego linkage.
