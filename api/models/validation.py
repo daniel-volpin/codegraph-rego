@@ -42,3 +42,7 @@ class PolicyEvaluateResponse(BaseModel):
 class PolicyCatalogResponse(BaseModel):
     controls: list
     error: Optional[str] = None
+
+class PolicyEvaluateWithLLMRequest(BaseModel):
+    limit: int = 10
+    model: Optional[str] = None

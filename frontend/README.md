@@ -36,7 +36,7 @@ echo 'VITE_API_BASE_URL=http://localhost:9000' > .env
 
 ## Project Structure
 
-```
+```init
 frontend/
   src/
     pages/        # Upload/search/policy views

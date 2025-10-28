@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   evaluatePolicies,
@@ -17,6 +17,7 @@ const PolicyPage = () => {
     useState<PolicyEvaluateResponse | null>(null);
   const [llmEvaluation, setLlmEvaluation] =
     useState<PolicyEvaluateResponse | null>(null);
+  const [llmStatus, setLlmStatus] = useState<string | null>(null);
 
   const catalogQuery = useQuery<PolicyCatalogResponse, Error>({
     queryKey: ["policyCatalog"],
@@ -31,14 +32,33 @@ const PolicyPage = () => {
 
   const llmEvalMutation = useMutation({
     mutationFn: () => evaluatePoliciesWithLLM(limit, model || undefined),
-    onSuccess: (data) => setLlmEvaluation(data),
-    onError: (error: Error) => setLlmEvaluation({ error: error.message })
+    onSuccess: (data) => {
+      setLlmEvaluation(data);
+      setLlmStatus("LLM explanations generated.");
+    },
+    onError: (error: Error) => {
+      setLlmEvaluation({ error: error.message });
+      setLlmStatus(`LLM request failed: ${error.message}`);
+    }
   });
 
   const handleLlmSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setLlmStatus("Requesting LLM explanations…");
+    setLlmEvaluation(null);
     llmEvalMutation.mutate();
   };
+
+  const hasViolations = useMemo(() => {
+    return Boolean(evaluation?.violations && evaluation.violations.length > 0);
+  }, [evaluation]);
+
+  const enrichedViolations = useMemo(() => {
+    if (!llmEvaluation || !llmEvaluation.enriched) {
+      return [];
+    }
+    return llmEvaluation.enriched as Array<Record<string, unknown>>;
+  }, [llmEvaluation]);
 
   return (
     <section className="card">
@@ -88,7 +108,22 @@ const PolicyPage = () => {
               Error: {evaluation.error}
             </div>
           ) : (
-            <pre>{JSON.stringify(evaluation, null, 2)}</pre>
+            <>
+              <p className="muted">
+                {hasViolations
+                  ? `${evaluation.violations?.length ?? 0} potential violation(s) detected.`
+                  : "No violations detected by OPA policies."}
+              </p>
+              {hasViolations && (
+                <ul className="violation-list">
+                  {evaluation.violations?.map((violation, index) => (
+                    <li key={index}>
+                      <pre>{JSON.stringify(violation, null, 2)}</pre>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
       )}
@@ -101,8 +136,39 @@ const PolicyPage = () => {
               Error: {llmEvaluation.error}
             </div>
           ) : (
-            <pre>{JSON.stringify(llmEvaluation, null, 2)}</pre>
+            <>
+              <p className="muted">
+                Showing explanations for up to {limit} violation(s).
+              </p>
+              {enrichedViolations.length === 0 ? (
+                <p>No enriched explanations returned.</p>
+              ) : (
+                <ul className="violation-list">
+                  {enrichedViolations.map((item, index) => (
+                    <li key={index}>
+                      <details open>
+                        <summary>{item.title ?? `Violation ${index + 1}`}</summary>
+                        <pre>{JSON.stringify(item, null, 2)}</pre>
+                      </details>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
+        </div>
+      )}
+
+      {llmStatus && (
+        <div className={`status-banner ${llmEvalMutation.isError ? "status-error" : llmEvalMutation.isSuccess ? "status-success" : "status-info"}`}>
+          {llmStatus}
+        </div>
+      )}
+
+      {llmEvalMutation.isLoading && (
+        <div className="policy-overlay" aria-live="polite">
+          <div className="spinner" role="status" aria-label="Requesting LLM" />
+          <p>Asking the LLM to enrich policy violations…</p>
         </div>
       )}
 
