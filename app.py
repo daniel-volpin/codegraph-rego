@@ -94,7 +94,7 @@ async def upload_zip(file: UploadFile = File(...)):
 async def _preload_resources():
     """Warm caches for search to improve first-request latency."""
     try:
-        from hybrid_code_search import (
+        from search.hybrid import (
             load_faiss_index,
             load_signature_map,
             load_embedding_model,
@@ -133,7 +133,7 @@ async def health():
         checks["details"]["neo4j"] = str(e)
     # Index + map + model
     try:
-        from hybrid_code_search import load_faiss_index, load_signature_map, load_embedding_model
+        from search.hybrid import load_faiss_index, load_signature_map, load_embedding_model
         load_faiss_index(FAISS_INDEX_PATH)
         try:
             load_signature_map(SIGNATURE_MAP_PATH_FULL)
@@ -162,7 +162,15 @@ async def search(query: str = Form(...)):
     try:
         from search.service import run_search
         matched_signatures, graph_contexts = run_search(query, k=5)
-        return {"matches": matched_signatures, "contexts": graph_contexts}
+        # Convert to models explicitly
+        contexts_model = []
+        for ctx in graph_contexts:
+            ctx_entries = []
+            for entry in ctx:
+                neighbors = [Neighbor(**n) for n in entry.get("neighbors", [])]
+                ctx_entries.append(MethodContext(method=entry.get("method", ""), neighbors=neighbors))
+            contexts_model.append(ctx_entries)
+        return SearchResponse(matches=matched_signatures, contexts=contexts_model)
     except FileNotFoundError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception as e:
@@ -178,7 +186,15 @@ async def policy_evaluate():
     try:
         result = evaluate_policies()
         status = 200 if "violations" in result or "opa_output" in result else 500
-        return JSONResponse(result, status_code=status)
+        # Convert to models explicitly
+        violations = [PolicyViolation(**v) for v in result.get("violations", [])]
+        catalog_items = [ControlMetadata(**c) for c in result.get("catalog", [])]
+        modeled = EvaluateResponse(
+            violations=violations,
+            opa_output=result.get("opa_output"),
+            catalog=catalog_items,
+        )
+        return JSONResponse(modeled.dict(by_alias=True), status_code=status)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -194,8 +210,20 @@ async def policy_evaluate_with_llm(limit: int = 10, model: str | None = None):
     if "violations" not in res:
         return JSONResponse(res, status_code=500)
     vio = res.get("violations", [])[:limit]
-    enriched = explain_policy_violations(vio, max_items=limit, model=model or LLM_MODEL)
-    return {"violations": vio, "enriched": enriched}
+    enriched_raw = explain_policy_violations(vio, max_items=limit, model=model or LLM_MODEL)
+    violations_modeled = [PolicyViolation(**v) for v in vio]
+    enriched_modeled = []
+    for item in enriched_raw:
+        pv = PolicyViolation(**item.get("violation", {}))
+        enriched_modeled.append(
+            LLMEnrichedItem(
+                violation=pv,
+                snippet=item.get("snippet", ""),
+                explanation=item.get("explanation", ""),
+            )
+        )
+    modeled = EvaluateWithLLMResponse(violations=violations_modeled, enriched=enriched_modeled)
+    return JSONResponse(modeled.dict(by_alias=True), status_code=200)
 
 
 @app.get("/policy/catalog", response_model=PolicyCatalogResponse)
@@ -207,7 +235,8 @@ async def policy_catalog():
         controls = get_policy_catalog_entries()
         # Ensure stable ordering by control identifier
         controls_sorted = sorted(controls, key=lambda item: item.get("control") or item.get("id") or "")
-        return {"controls": controls_sorted}
+        modeled = PolicyCatalogResponse(controls=[ControlMetadata(**c) for c in controls_sorted])
+        return JSONResponse(modeled.dict(by_alias=True), status_code=200)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 

@@ -9,7 +9,7 @@ from config import (
     EMBEDDING_MODEL_NAME,
 )
 from db import get_neo4j_driver
-from hybrid_code_search import (
+from search.hybrid import (
     load_faiss_index,
     load_signature_map,
     load_embedding_model,
@@ -37,4 +37,3 @@ def run_search(query: str, k: int = 5) -> Tuple[List[str], List[List[Dict[str, A
     finally:
         driver.close()
     return matches, contexts
-
