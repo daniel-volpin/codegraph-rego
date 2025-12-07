@@ -46,3 +46,16 @@ class PolicyCatalogResponse(BaseModel):
 class PolicyEvaluateWithLLMRequest(BaseModel):
     limit: int = 10
     model: Optional[str] = None
+
+
+class RemediationRequest(BaseModel):
+    violation_id: str
+
+
+class RemediationResponse(BaseModel):
+    status: str
+    original_file: Optional[str] = None
+    patched_file: Optional[str] = None
+    diff: Optional[str] = None
+    verification: Optional[dict] = None
+    error: Optional[str] = None

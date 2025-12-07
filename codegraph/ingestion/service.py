@@ -656,3 +656,60 @@ def ingest(
     if progress_callback:
         progress_callback("ingesting", "Ingestion complete.", 80.0)
     print("🎉 Ingestion complete.")
+
+
+def _purge_file_entities(file_path: str) -> None:
+    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+    try:
+        with driver.session() as session:
+            session.run(
+                "MATCH (m:Method {file_path: $path}) DETACH DELETE m",
+                path=file_path,
+            ).consume()
+            session.run(
+                "MATCH (f:Field {file_path: $path}) DETACH DELETE f",
+                path=file_path,
+            ).consume()
+    finally:
+        driver.close()
+
+
+def process_single_file(
+    file_path: str, progress_callback: Optional[Callable[[str, str, float], None]] = None
+) -> None:
+    """Re-ingest a single Java source file without touching the rest of the graph."""
+
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"Java source file not found: {file_path}")
+    if progress_callback:
+        progress_callback("parsing", f"Parsing single file: {os.path.basename(file_path)}", 20.0)
+
+    (
+        methods,
+        nested_relations,
+        extends_relations,
+        implements_relations,
+        uses_relations,
+        depends_on_relations,
+        calls_relations,
+        field_entities,
+        method_field_relations,
+    ) = extract_entities_from_file(file_path)
+
+    _purge_file_entities(file_path)
+
+    ingest_to_neo4j(
+        methods,
+        nested_relations,
+        extends_relations,
+        implements_relations,
+        uses_relations,
+        depends_on_relations,
+        calls_relations,
+        field_entities,
+        method_field_relations,
+        progress_callback=progress_callback,
+    )
+
+    if progress_callback:
+        progress_callback("ingesting", "Single file ingestion complete", 80.0)

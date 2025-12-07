@@ -153,6 +153,62 @@ def _fetch_methods_with_context(driver) -> List[Dict[str, Any]]:
     return snapshots
 
 
+def _fetch_method_snapshot(driver, method_signature: str) -> Dict[str, Any] | None:
+    cypher = (
+        "MATCH (m:Method) "
+        "WHERE coalesce(m.full_signature, m.signature) = $method_signature "
+        "   OR m.signature = $method_signature "
+        "   OR m.full_signature = $method_signature "
+        "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
+        "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
+        "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
+        "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
+        "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
+        "RETURN coalesce(m.full_signature, m.signature) AS signature, "
+        "       m.name AS name, "
+        "       m.file_path AS file_path, "
+        "       m.start_line AS start_line, "
+        "       m.end_line AS end_line, "
+        "       m.modifiers AS modifiers, "
+        "       m.annotations AS property_annotations, "
+        "       cls.fqn AS class_fqn, "
+        "       collect(DISTINCT ann.name) AS annotation_nodes, "
+        "       collect(DISTINCT CASE WHEN usedField IS NULL "
+        "                             THEN NULL "
+        "                             ELSE {"
+        "                                 name: usedField.name, "
+        "                                 type: usedField.type, "
+        "                                 class_fqn: usedField.class_fqn"
+        "                             } END) AS uses_fields, "
+        "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
+        "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
+        "LIMIT 1"
+    )
+    with driver.session() as session:
+        record = session.run(cypher, method_signature=method_signature).single()
+        if not record:
+            return None
+        uses_fields = [
+            field for field in (record.get("uses_fields") or []) if field and field.get("name")
+        ]
+        annotations = record.get("property_annotations") or []
+        annotation_nodes = record.get("annotation_nodes") or []
+        combined_annotations = sorted({a for a in annotations + annotation_nodes if a})
+        return {
+            "signature": record.get("signature"),
+            "name": record.get("name"),
+            "class_fqn": record.get("class_fqn"),
+            "file_path": record.get("file_path"),
+            "start_line": record.get("start_line"),
+            "end_line": record.get("end_line"),
+            "modifiers": record.get("modifiers") or [],
+            "annotations": combined_annotations,
+            "uses_fields": uses_fields,
+            "calls": record.get("calls") or [],
+            "callers": record.get("callers") or [],
+        }
+
+
 def _resolve_source_path(file_path: Optional[str]) -> Optional[Path]:
     if not file_path:
         return None
@@ -291,6 +347,64 @@ def _evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not expressions:
             return []
         return expressions[0].get("value") or []
+
+
+class PolicyEvaluator:
+    """Evaluate policies against a single method signature."""
+
+    def __init__(self) -> None:
+        self._catalog = load_policy_catalog()
+        self._rules = load_iso_rules()
+
+    def evaluate(self, method_signature: str) -> Dict[str, Any]:
+        driver = get_neo4j_driver()
+        try:
+            snapshot = _fetch_method_snapshot(driver, method_signature)
+        finally:
+            driver.close()
+        if not snapshot:
+            return {
+                "target_method": method_signature,
+                "violations": [],
+                "error": "method_not_found",
+            }
+        bundle = build_evidence_bundle(snapshot, _load_hybrid_search())
+        try:
+            opa_output = _evaluate_bundle(bundle)
+        except RuntimeError as exc:
+            return {
+                "target_method": method_signature,
+                "violations": [],
+                "error": str(exc),
+            }
+        catalog = self._catalog
+        violations: List[Dict[str, Any]] = []
+        for violation in opa_output:
+            if not isinstance(violation, dict):
+                continue
+            violation_id = violation.get("violation_id") or violation.get("id")
+            control_meta = catalog.get(violation_id) if violation_id else None
+            violations.append(
+                {
+                    "violation_id": violation_id,
+                    "target_method": bundle.get("target_method"),
+                    "file_path": bundle.get("file_path"),
+                    "reason": violation.get("reason"),
+                    "severity": violation.get("severity") or "high",
+                    "control_metadata": control_meta,
+                    "evidence": {
+                        "source_code": bundle.get("source_code", ""),
+                        "graph_context": bundle.get("graph_context", {}),
+                        "vector_context": bundle.get("vector_context", []),
+                    },
+                }
+            )
+        return {
+            "target_method": method_signature,
+            "violations": violations,
+            "rules_catalog": self._rules,
+            "catalog": get_policy_catalog_entries(),
+        }
 
 
 if __name__ == "__main__":
