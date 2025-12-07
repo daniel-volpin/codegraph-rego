@@ -26,6 +26,8 @@ const SearchPage = () => {
     }
   });
 
+  const searchPending = searchMutation.status === "pending";
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!query.trim()) {
@@ -71,9 +73,9 @@ const SearchPage = () => {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Describe a method or control you are looking for…"
         />
-        <button type="submit" disabled={searchMutation.isLoading}>
-          {searchMutation.isLoading && <span className="btn-spinner" aria-hidden="true" />}
-          <span>{searchMutation.isLoading ? "Searching…" : "Search"}</span>
+        <button type="submit" disabled={searchPending}>
+          {searchPending && <span className="btn-spinner" aria-hidden="true" />}
+          <span>{searchPending ? "Searching…" : "Search"}</span>
         </button>
       </form>
       {result && (

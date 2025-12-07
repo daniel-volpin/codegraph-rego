@@ -264,6 +264,23 @@ def build_evidence_bundle(
     }
 
 
+def _normalize_violation_payload(payload: Any) -> Optional[Dict[str, Any]]:
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str):
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            LOGGER.warning("Skipping non-JSON violation payload: %s", payload)
+            return None
+        if isinstance(parsed, dict):
+            return parsed
+        LOGGER.warning("Skipping violation payload (unexpected type): %s", payload)
+        return None
+    LOGGER.warning("Skipping unexpected OPA violation payload: %r", payload)
+    return None
+
+
 def evaluate_policies() -> Dict[str, Any]:
     if not shutil.which("opa"):
         return {
@@ -284,12 +301,12 @@ def evaluate_policies() -> Dict[str, Any]:
         except RuntimeError as exc:
             return {"error": str(exc), "bundle": bundle.get("target_method")}
         for violation in opa_result:
-            if not isinstance(violation, dict):
-                LOGGER.warning("Skipping unexpected OPA violation payload: %r", violation)
+            normalized = _normalize_violation_payload(violation)
+            if normalized is None:
                 continue
-            violation_id = violation.get("violation_id") or violation.get("id")
-            reason = violation.get("reason")
-            severity = violation.get("severity")
+            violation_id = normalized.get("violation_id") or normalized.get("id")
+            reason = normalized.get("reason")
+            severity = normalized.get("severity")
             control_meta = catalog.get(violation_id) if violation_id else None
             violations.append(
                 {
@@ -380,17 +397,18 @@ class PolicyEvaluator:
         catalog = self._catalog
         violations: List[Dict[str, Any]] = []
         for violation in opa_output:
-            if not isinstance(violation, dict):
+            normalized = _normalize_violation_payload(violation)
+            if normalized is None:
                 continue
-            violation_id = violation.get("violation_id") or violation.get("id")
+            violation_id = normalized.get("violation_id") or normalized.get("id")
             control_meta = catalog.get(violation_id) if violation_id else None
             violations.append(
                 {
                     "violation_id": violation_id,
                     "target_method": bundle.get("target_method"),
                     "file_path": bundle.get("file_path"),
-                    "reason": violation.get("reason"),
-                    "severity": violation.get("severity") or "high",
+                    "reason": normalized.get("reason"),
+                    "severity": normalized.get("severity") or "high",
                     "control_metadata": control_meta,
                     "evidence": {
                         "source_code": bundle.get("source_code", ""),

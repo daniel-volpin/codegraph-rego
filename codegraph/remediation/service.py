@@ -5,6 +5,7 @@ import json
 import logging
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -70,7 +71,8 @@ class RemediationService:
         path = Path(file_path)
         if not path.is_file():
             raise FileNotFoundError(f"Target file not found: {file_path}")
-        temp_path = path.with_suffix(path.suffix + ".temp")
+        temp_dir = Path(tempfile.mkdtemp(prefix="remediation_"))
+        temp_path = temp_dir / path.name
         shutil.copy2(path, temp_path)
         metadata = self._context.get("method_metadata") or {}
         updated_contents = self._rewrite_file(temp_path, metadata, new_code)

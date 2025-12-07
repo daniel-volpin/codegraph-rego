@@ -45,6 +45,15 @@ export interface PolicyCatalogResponse {
   error?: string;
 }
 
+export interface RemediationResponse {
+  status: string;
+  original_file?: string;
+  patched_file?: string;
+  diff?: string;
+  verification?: Record<string, unknown>;
+  error?: string;
+}
+
 export interface HealthCheckResponse {
   neo4j: boolean;
   faiss_index: boolean;
