@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   evaluatePolicies,
@@ -22,6 +22,8 @@ interface ViolationSummary {
   resource: string;
   description: string;
   violationId?: string;
+  method?: string;
+  filePath?: string;
 }
 
 const PolicyPage = () => {
@@ -126,7 +128,11 @@ const PolicyPage = () => {
     return llmEvaluation.enriched as Array<Record<string, unknown>>;
   }, [llmEvaluation]);
 
-  const handleRemediation = (violationId?: string) => {
+  const handleRemediation = (
+    violationId?: string,
+    event?: MouseEvent<HTMLButtonElement>
+  ) => {
+    event?.stopPropagation();
     if (!violationId) {
       toast.error("Selected violation is missing an identifier.");
       return;
@@ -167,13 +173,17 @@ const PolicyPage = () => {
       const resource = pickString(["resource", "node", "target", "entity", "asset"], "—");
       const description = pickString(["description", "message", "detail", "reason"], "—");
       const violationId = pickString(["violation_id", "id", "control", "rule"], "");
+      const method = pickString(["target_method", "method", "signature"], undefined);
+      const filePath = pickString(["file_path", "file"], undefined);
       return {
         raw: record,
         control,
         severity,
         resource,
         description,
-        violationId
+        violationId,
+        method,
+        filePath
       } satisfies ViolationSummary;
     });
   }, [evaluation]);
@@ -336,96 +346,133 @@ const PolicyPage = () => {
                   : "No violations detected by OPA policies."}
               </p>
               {hasViolations && violationSummaries.length > 0 && (
-                <div className="violation-table-wrapper">
-                    <table className="violation-table">
-                      <thead>
-                        <tr>
-                          <th>Control</th>
-                          <th>Resource</th>
-                          <th>Severity</th>
-                          <th>Description</th>
-                          <th>Raw</th>
-                          <th>Remediation</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {violationSummaries.map((item, index) => (
-                          <tr key={`violation-${index}`}>
-                          <td>{item.control}</td>
-                          <td>{item.resource}</td>
-                          <td>
-                            <span
-                              className={`severity-chip severity-${item.severity
-                                .toLowerCase()
-                                .replace(/[^a-z0-9]+/g, "-")}`}
-                            >
-                              {item.severity}
-                            </span>
-                          </td>
-                          <td>{item.description}</td>
-                            <td>
-                              <details>
-                                <summary>View</summary>
-                                <CodeHighlight
-                                  code={JSON.stringify(item.raw, null, 2)}
-                                  language="json"
-                                />
-                              </details>
-                            </td>
-                            <td>
-                              <div className="remediation-cell">
-                                <button
-                                  type="button"
-                                  disabled={
-                                    !item.violationId ||
-                                    (remediationPending &&
-                                      activeRemediationId === item.violationId)
-                                  }
-                                  onClick={() => handleRemediation(item.violationId)}
-                                >
-                                  {remediationPending &&
-                                  activeRemediationId === item.violationId ? (
-                                    <>
-                                      <span className="btn-spinner" aria-hidden="true" />
-                                      <span>Remediating…</span>
-                                    </>
-                                  ) : (
-                                    <span>Fix &amp; Verify</span>
-                                  )}
-                                </button>
-                                {item.violationId && remediationResults[item.violationId] && (
-                                  <details>
-                                    <summary>
-                                      Status: {remediationResults[item.violationId].status}
-                                    </summary>
-                                    {remediationResults[item.violationId].error && (
-                                      <p className="muted">
-                                        {remediationResults[item.violationId].error}
-                                      </p>
-                                    )}
-                                    {remediationResults[item.violationId].diff ? (
-                                      <CodeHighlight
-                                        code={remediationResults[item.violationId].diff ?? ""}
-                                        language="text"
-                                      />
-                                    ) : (
-                                      <CodeHighlight
-                                        code={JSON.stringify(
-                                          remediationResults[item.violationId],
-                                          null,
-                                          2
-                                        )}
-                                        language="json"
-                                      />
-                                    )}
-                                  </details>
+                <div className="violation-deck">
+                  {violationSummaries.map((item, index) => {
+                    const remediationOutcome = item.violationId
+                      ? remediationResults[item.violationId]
+                      : undefined;
+                    return (
+                      <details
+                        className="violation-card"
+                        key={`violation-${index}`}
+                        open={index === 0}
+                      >
+                        <summary>
+                          <div className="violation-summary">
+                            <div className="violation-summary-text">
+                              <span className="violation-control">
+                                {item.control || "Unmapped control"}
+                              </span>
+                              <strong>{item.description}</strong>
+                              {item.method && (
+                                <span className="violation-method">{item.method}</span>
+                              )}
+                              {item.filePath && (
+                                <span className="violation-path">{item.filePath}</span>
+                              )}
+                            </div>
+                            <div className="violation-summary-meta">
+                              <span
+                                className={`severity-chip severity-${item.severity
+                                  .toLowerCase()
+                                  .replace(/[^a-z0-9]+/g, "-")}`}
+                              >
+                                {item.severity}
+                              </span>
+                              <button
+                                type="button"
+                                className="remediation-button"
+                                disabled={
+                                  !item.violationId ||
+                                  (remediationPending &&
+                                    activeRemediationId === item.violationId)
+                                }
+                                onClick={(event) => handleRemediation(item.violationId, event)}
+                              >
+                                {remediationPending &&
+                                activeRemediationId === item.violationId ? (
+                                  <>
+                                    <span className="btn-spinner" aria-hidden="true" />
+                                    <span>Remediating…</span>
+                                  </>
+                                ) : (
+                                  <span>Fix &amp; Verify</span>
                                 )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                              </button>
+                            </div>
+                          </div>
+                        </summary>
+                        <div className="violation-body">
+                          <dl className="violation-meta-grid">
+                            <div>
+                              <dt>Violation ID</dt>
+                              <dd>{item.violationId ?? "—"}</dd>
+                            </div>
+                            <div>
+                              <dt>Resource</dt>
+                              <dd>{item.resource}</dd>
+                            </div>
+                            <div>
+                              <dt>Severity</dt>
+                              <dd>{item.severity}</dd>
+                            </div>
+                          </dl>
+                          <div className="violation-detail-grid">
+                            <section>
+                              <header>
+                                <h4>Raw evidence</h4>
+                              </header>
+                              <CodeHighlight
+                                code={JSON.stringify(item.raw, null, 2)}
+                                language="json"
+                              />
+                            </section>
+                            <section>
+                              <header>
+                                <h4>Remediation</h4>
+                              </header>
+                              {!item.violationId ? (
+                                <p className="muted">
+                                  This violation is missing an identifier required for remediation.
+                                </p>
+                              ) : remediationOutcome ? (
+                                <div className="remediation-panel">
+                                  <p className="remediation-status">
+                                    Status: {remediationOutcome.status}
+                                  </p>
+                                  {typeof remediationOutcome.verification?.message === "string" && (
+                                    <p className="remediation-note">
+                                      {remediationOutcome.verification.message}
+                                    </p>
+                                  )}
+                                  {remediationOutcome.error && (
+                                    <p className="callout callout-error">
+                                      {remediationOutcome.error}
+                                    </p>
+                                  )}
+                                  {remediationOutcome.diff ? (
+                                    <CodeHighlight
+                                      code={remediationOutcome.diff}
+                                      language="text"
+                                    />
+                                  ) : (
+                                    <CodeHighlight
+                                      code={JSON.stringify(remediationOutcome, null, 2)}
+                                      language="json"
+                                    />
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="muted">
+                                  Run “Fix &amp; Verify” to propose and validate a patch.
+                                </p>
+                              )}
+                            </section>
+                          </div>
+                        </div>
+                      </details>
+                    );
+                  })}
                 </div>
               )}
             </>
@@ -470,44 +517,72 @@ const PolicyPage = () => {
                     const snippet =
                       (typeof item.snippet === "string" && item.snippet) ||
                       (typeof item.code === "string" && item.code);
+                    const severity =
+                      (typeof item.severity === "string" && item.severity) || undefined;
+                    const violationRecord =
+                      item?.violation && typeof item.violation === "object"
+                        ? (item.violation as Record<string, unknown>)
+                        : null;
+                    const methodCandidate =
+                      violationRecord && typeof violationRecord.target_method === "string"
+                        ? violationRecord.target_method
+                        : undefined;
+                    const method =
+                      methodCandidate ||
+                      (typeof item.method === "string" ? item.method : undefined);
 
-                    return ( 
-                      <article className="llm-card" key={`llm-${index}`}>
-                        <header>
-                          <h3>{title}</h3>
-                        </header>
-                        {explanation && (
+                    return (
+                      <details className="llm-card" key={`llm-${index}`} open={index === 0}>
+                        <summary>
+                          <div className="llm-card-summary">
+                            <div className="llm-card-summary-text">
+                              <strong>{title}</strong>
+                              {method && <span className="llm-card-method">{method}</span>}
+                            </div>
+                            {severity && (
+                              <span
+                                className={`severity-chip severity-${severity
+                                  .toLowerCase()
+                                  .replace(/[^a-z0-9]+/g, "-")}`}
+                              >
+                                {severity}
+                              </span>
+                            )}
+                          </div>
+                        </summary>
+                        <div className="llm-card-body">
+                          {explanation && (
+                            <section>
+                              <h4>Explanation</h4>
+                              <div
+                                className="llm-text"
+                                dangerouslySetInnerHTML={{ __html: toHtml(explanation) }}
+                              />
+                            </section>
+                          )}
+                          {remediation && (
+                            <section>
+                              <h4>Recommended Action</h4>
+                              <div
+                                className="llm-text"
+                                dangerouslySetInnerHTML={{ __html: toHtml(remediation) }}
+                              />
+                            </section>
+                          )}
+                          {snippet && (
+                            <section>
+                              <h4>Snippet</h4>
+                              <CodeHighlight code={snippet} language="java" />
+                            </section>
+                          )}
                           <section>
-                            <h4>Explanation</h4>
-                            <div
-                              className="llm-text"
-                              dangerouslySetInnerHTML={{ __html: toHtml(explanation) }}
-                            />
+                            <details>
+                              <summary>Raw response</summary>
+                              <CodeHighlight code={JSON.stringify(item, null, 2)} language="json" />
+                            </details>
                           </section>
-                        )}
-                        {remediation && (
-                          <section>
-                            <h4>Recommended Action</h4>
-                            <div
-                              className="llm-text"
-                              dangerouslySetInnerHTML={{ __html: toHtml(remediation) }}
-                            />
-                          </section>
-                        )}
-                        {snippet && (
-                          <section>
-                            <h4>Snippet</h4>
-                            <CodeHighlight code={snippet} language="java" />
-                          </section>
-                        )}
-                        <details>
-                          <summary>Raw response</summary>
-                          <CodeHighlight
-                            code={JSON.stringify(item, null, 2)}
-                            language="json"
-                          />
-                        </details>
-                      </article>
+                        </div>
+                      </details>
                     );
                   })}
                 </div>
