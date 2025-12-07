@@ -28,6 +28,12 @@ def ensure_constraints(driver=None):
             session.run(
                 "CREATE INDEX method_full_signature_index IF NOT EXISTS FOR (m:Method) ON (m.full_signature)"
             ).consume()
+            session.run(
+                "CREATE CONSTRAINT field_unique IF NOT EXISTS FOR (f:Field) REQUIRE (f.class_fqn, f.name) IS UNIQUE"
+            ).consume()
+            session.run(
+                "CREATE CONSTRAINT annotation_unique IF NOT EXISTS FOR (a:Annotation) REQUIRE a.name IS UNIQUE"
+            ).consume()
     finally:
         if close_driver:
             driver.close()

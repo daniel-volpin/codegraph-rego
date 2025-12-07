@@ -1,12 +1,30 @@
-/.env
-/.mypy_cache
-/__pycache__
-/uploaded_code/jhipster-sample-app
-/uploaded_code/__MACOSX/
-/copilot-context/
-/.github/
+.env
+.env.*
+.venv/
+.python-version
+
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+.mypy_cache/
+
+# Uploaded corpora / ZIPs
+uploaded_code/*
+!uploaded_code/.gitkeep
+
+# Generated embedding indexes
+index/*
+!index/.gitkeep
+
+# Tooling / editor noise
+copilot-context/
+.github/
 .vscode/
+.DS_Store
+
+# Frontend builds
 frontend/node_modules
 frontend/dist
 frontend/.vite
 frontend/.env
+frontend/.env.*
