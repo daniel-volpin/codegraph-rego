@@ -1,142 +1,94 @@
 package iso27001
 
-# ISO 27001 controls enforced:
-#   - A.9.1.1 Access control policy (public endpoints missing security annotations)
-#   - A.9.4.2 Secure log-on procedures (authentication endpoints lack protection)
-#   - A.12.4.1 Event logging (critical operations without evidence of logging)
-#
-# Expected input shape (from policy_integration.py):
-# {
-#   "methods": [
-#     {
-#       "signature": "com.example.Controller.getUsers()",
-#       "name": "getUsers",
+# Evidence bundle schema (per Method):
+# input = {
+#   "target_method": "com.example.Controller.deleteUser",
+#   "method_name": "deleteUser",
+#   "graph_context": {
 #       "annotations": ["GetMapping", "PreAuthorize"],
-#       "modifiers": ["public"],
-#       "file_path": "/path/to/Controller.java"
-#     }, ...
-#   ]
+#       "uses_fields": [{"name": "auditLogger", "type": "Logger"}],
+#       "calls": ["MessageDigest.getInstance(\"MD5\")"],
+#       "callers": ["..."]
+#   },
+#   "source_code": "..."
 # }
 
-endpoint_annotations := {"RequestMapping", "GetMapping", "PostMapping", "PutMapping", "DeleteMapping", "PatchMapping"}
-mutation_annotations := {"PostMapping", "PutMapping", "DeleteMapping", "PatchMapping"}
-security_annotations := {"PreAuthorize", "Secured", "RolesAllowed", "DenyAll"}
-authentication_keywords := {"login", "signin", "authenticate", "auth", "resetpassword", "forgotpassword"}
-logging_annotations := {"Audit", "Audited", "Loggable", "AuditLog", "Traceable"}
-logging_call_keywords := {".info()", ".warn()", ".error()", ".debug()", ".trace()", "logger.", "log.", "audit"}
-critical_operation_keywords := {"create", "update", "delete", "remove", "submit", "register", "approve", "transfer"}
+endpoint_annotations := {"requestmapping", "getmapping", "postmapping", "putmapping", "deletemapping", "patchmapping"}
+security_annotations := {"preauthorize", "secured", "rolesallowed", "denyall", "authorize"}
+sensitive_keywords := {"delete", "remove", "destroy", "update", "modify", "drop"}
+logger_indicators := {"logger", "audit", "tracer"}
+md5_pattern := "messagedigest.getinstance(\"md5\")"
 
-public(m) if {
-  m.modifiers[_] == "public"
+normalized_annotations := {normalized |
+  annotations := input.graph_context.annotations
+  annotations != null
+  ann := annotations[_]
+  normalized := lower(replace(ann, "@", ""))
 }
 
-is_endpoint(m) if {
-  ann := m.annotations[_]
+has_endpoint_annotation if {
+  ann := normalized_annotations[_]
   ann in endpoint_annotations
 }
 
-is_secured(m) if {
-  ann := m.annotations[_]
+has_security_annotation if {
+  ann := normalized_annotations[_]
   ann in security_annotations
 }
 
-is_authentication_endpoint(m) if {
-  is_endpoint(m)
-  m.name != null
-  lower_name := lower(m.name)
-  kw := authentication_keywords[_]
-  contains(lower_name, kw)
+method_name := lower(input.method_name) if {
+  input.method_name != null
 }
 
-is_mutation_endpoint(m) if {
-  ann := m.annotations[_]
-  ann in mutation_annotations
+method_name := lower(input.target_method) if {
+  input.method_name == null
+  input.target_method != null
 }
 
-requires_logging(m) if {
-  is_endpoint(m)
-  public(m)
-  is_mutation_endpoint(m)
+sensitive_method if {
+  method_name != ""
+  kw := sensitive_keywords[_]
+  contains(method_name, kw)
 }
 
-requires_logging(m) if {
-  is_endpoint(m)
-  public(m)
-  method_name_matches_keyword(m)
+uses_logger_field if {
+  fields := input.graph_context.uses_fields
+  fields != null
+  field := fields[_]
+  field.type != null
+  type := lower(field.type)
+  indicator := logger_indicators[_]
+  contains(type, indicator)
 }
 
-method_name_matches_keyword(m) if {
-  name := m.name
-  name != null
-  kw := critical_operation_keywords[_]
-  contains(lower(name), kw)
+calls_md5 if {
+  calls := input.graph_context.calls
+  calls != null
+  call := calls[_]
+  call != null
+  contains(lower(call), md5_pattern)
 }
 
-has_logging_annotation(m) if {
-  ann := m.annotations[_]
-  ann in logging_annotations
+violations[v] if {
+  has_endpoint_annotation
+  not has_security_annotation
+  v := violation_record("ISO-A.9.4.1", "Public HTTP endpoint missing security annotations")
 }
 
-has_logging_call(m) if {
-  cs := m.called_signatures
-  sig := cs[_]
-  call_has_logging(sig)
+violations[v] if {
+  sensitive_method
+  not uses_logger_field
+  v := violation_record("ISO-A.12.4.1", "Sensitive mutation lacks logger usage")
 }
 
-call_has_logging(sig) if {
-  sig != null
-  k := logging_call_keywords[_]
-  contains(lower(sig), lower(k))
+violations[v] if {
+  calls_md5
+  v := violation_record("ISO-A.10", "Insecure MD5 digest usage detected")
 }
 
-has_logging_control(m) if {
-  has_logging_annotation(m)
+violation_record(id, reason) := {
+  "violation_id": id,
+  "target_method": input.target_method,
+  "reason": reason,
+  "severity": "high",
 }
-
-has_logging_control(m) if {
-  has_logging_call(m)
-}
-
-# Individual control helpers that emit violation arrays
-access_control_violations := [v |
-  m := input.methods[_];
-  is_endpoint(m);
-  public(m);
-  not is_secured(m);
-  v := {
-    "standard": "ISO-27001",
-    "id": "A.9.1.1",
-    "method": m.signature,
-    "file_path": m.file_path,
-    "reason": "Public HTTP endpoint missing security annotation"
-  }
-]
-
-secure_logon_violations := [v |
-  m := input.methods[_];
-  is_authentication_endpoint(m);
-  public(m);
-  not is_secured(m);
-  v := {
-    "standard": "ISO-27001",
-    "id": "A.9.4.2",
-    "method": m.signature,
-    "file_path": m.file_path,
-    "reason": "Authentication endpoint lacks enforced authentication control"
-  }
-]
-
-logging_control_violations := [v |
-  m := input.methods[_];
-  requires_logging(m);
-  not has_logging_control(m);
-  v := {
-    "standard": "ISO-27001",
-    "id": "A.12.4.1",
-    "method": m.signature,
-    "file_path": m.file_path,
-    "reason": "Critical operation endpoint has no evidence of security logging"
-  }
-]
-
-violations := array.concat(access_control_violations, array.concat(secure_logon_violations, logging_control_violations))

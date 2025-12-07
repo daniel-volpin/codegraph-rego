@@ -2,8 +2,8 @@
   "model": "all-MiniLM-L6-v2",
   "dim": 384,
   "metric": "cosine",
-  "count": 345,
-  "built_at": "2025-10-28T21:57:32.600975+00:00",
+  "count": 733,
+  "built_at": "2025-12-07T21:11:25.182034+00:00",
   "index_path": "index/code_embeddings.index",
   "signature_map": {
     "full": "index/embedding_full_signature_map.json",

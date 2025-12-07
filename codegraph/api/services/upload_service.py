@@ -34,7 +34,7 @@ def handle_upload(file: UploadFile, progress_callback: Optional[Callable[[str, s
         f.write(file.file.read())
     try:
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        safe_extract_zip(zip_ref, UPLOAD_DIR)
+            safe_extract_zip(zip_ref, UPLOAD_DIR)
     except zipfile.BadZipFile:
         logger.error("Uploaded file is not a valid ZIP archive.")
         return UploadResponse(error="bad_zip_file"), 400

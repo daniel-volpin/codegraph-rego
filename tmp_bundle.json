@@ -1,0 +1,27 @@
+{
+  "target_method": "io.github.jhipster.sample.service.dto.AdminUserDTO.setAuthorities(Set)",
+  "method_name": "setAuthorities",
+  "class_fqn": "io.github.jhipster.sample.service.dto.AdminUserDTO",
+  "file_path": "uploaded_code/jhipster-sample-app/src/main/java/io/github/jhipster/sample/service/dto/AdminUserDTO.java",
+  "modifiers": [
+    "public"
+  ],
+  "source_code": "    }\n\n    public void setAuthorities(Set<String> authorities) {\n        this.authorities = authorities;\n    }\n\n    // prettier-ignore\n",
+  "graph_context": {
+    "annotations": [],
+    "uses_fields": [
+      {
+        "class_fqn": "io.github.jhipster.sample.service.dto.AdminUserDTO",
+        "name": "authorities",
+        "type": "Set"
+      }
+    ],
+    "calls": [],
+    "callers": []
+  },
+  "vector_context": [
+    "io.github.jhipster.sample.service.UsernameAlreadyUsedException.UsernameAlreadyUsedException()",
+    "io.github.jhipster.sample.service.InvalidPasswordException.InvalidPasswordException()",
+    "io.github.jhipster.sample.config.SecurityConfiguration.SecurityConfiguration(Environment,JHipsterProperties)"
+  ]
+}
