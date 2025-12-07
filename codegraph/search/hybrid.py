@@ -21,6 +21,8 @@ from codegraph.config import (
     EMBEDDING_MODEL_NAME,
 )
 
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 # In-process caches
 _INDEX: Any | None = None
 _INDEX_MTIME: float | None = None

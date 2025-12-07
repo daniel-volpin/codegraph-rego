@@ -32,8 +32,8 @@ def _print_summary(result: dict, limit: int | None) -> None:
     shown = violations if limit is None else violations[:limit]
     print(f"Found {total} violation(s).")
     for idx, violation in enumerate(shown, start=1):
-        ident = violation.get("id")
-        method = violation.get("method")
+        ident = violation.get("violation_id") or violation.get("id")
+        method = violation.get("target_method") or violation.get("method")
         reason = violation.get("reason")
         print(f"[{idx}] {ident} :: {method}")
         if reason:
