@@ -84,8 +84,29 @@ class RemediationService:
         self._lock = Lock()
 
     # --- Public API -----------------------------------------------------------------
-    def start_run(self, violation_id: str, max_attempts: int = 3) -> RemediationRun:
-        context = self.get_violation_context(violation_id)
+    def start_run(
+        self,
+        violation_id: str,
+        max_attempts: int = 3,
+        target_method: Optional[str] = None,
+        file_path: Optional[str] = None,
+    ) -> RemediationRun:
+        return self.start_run_with_context(
+            violation_id,
+            max_attempts=max_attempts,
+            target_method=target_method,
+            file_path=file_path,
+        )
+
+    def start_run_with_context(
+        self,
+        violation_id: str,
+        *,
+        max_attempts: int = 3,
+        target_method: Optional[str] = None,
+        file_path: Optional[str] = None,
+    ) -> RemediationRun:
+        context = self.get_violation_context(violation_id, target_method, file_path)
         if context is None:
             raise ValueError(f"Violation {violation_id} not found")
         run = RemediationRun(
@@ -165,7 +186,9 @@ class RemediationService:
         return self.get_run(run.id)  # type: ignore
 
     # --- Context gathering -----------------------------------------------------------
-    def get_violation_context(self, violation_id: str) -> Optional[Dict[str, Any]]:
+    def get_violation_context(
+        self, violation_id: str, target_method: Optional[str] = None, file_path: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         result = evaluate_policies()
         if result.get("error"):
             LOGGER.error("Policy evaluation failed while gathering context: %s", result["error"])
@@ -175,6 +198,12 @@ class RemediationService:
         for violation in violations:
             current_id = violation.get("violation_id") or violation.get("id")
             if not current_id or str(current_id) != str(violation_id):
+                continue
+            method = violation.get("target_method") or violation.get("method")
+            path = violation.get("file_path")
+            if target_method and method and target_method != method:
+                continue
+            if file_path and path and file_path != path:
                 continue
             target_method = violation.get("target_method") or violation.get("method")
             file_path = violation.get("file_path")

@@ -64,6 +64,8 @@ class RemediationResponse(BaseModel):
 class RemediationRunRequest(BaseModel):
     violation_id: str
     max_attempts: int | None = 3
+    target_method: Optional[str] = None
+    file_path: Optional[str] = None
 
 
 class RemediationRunResponse(BaseModel):

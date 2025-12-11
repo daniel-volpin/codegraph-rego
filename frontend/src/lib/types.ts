@@ -76,6 +76,13 @@ export interface RemediationRun {
   status?: string | null;
 }
 
+export interface RemediationRunRequest {
+  violation_id: string;
+  target_method?: string;
+  file_path?: string;
+  max_attempts?: number;
+}
+
 export interface RemediationResponse {
   status: string;
   original_file?: string;

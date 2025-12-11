@@ -81,21 +81,23 @@ const PolicyPage = () => {
   });
 
   const remediationRunMutation = useMutation({
-    mutationFn: (violationId: string) => startRemediationRun(violationId),
-    onSuccess: (data, violationId) => {
+    mutationFn: (args: { violationId: string; targetMethod?: string; filePath?: string; key: string }) =>
+      startRemediationRun(args.violationId, args.targetMethod, args.filePath),
+    onSuccess: (data, variables) => {
+      const key = variables.key;
       setRemediationRunIds((prev) => ({
         ...prev,
-        [violationId]: data.id
+        [key]: data.id
       }));
       setRemediationResults((prev) => ({
         ...prev,
-        [violationId]: data
+        [key]: data
       }));
-      toast.success(`Started remediation run for ${violationId}.`);
+      toast.success(`Started remediation run for ${variables.violationId}.`);
     },
-    onError: (error: Error, violationId) => {
+    onError: (error: Error, variables) => {
       toast.error(
-        `Failed to start remediation for ${violationId}: ${error.message}`
+        `Failed to start remediation for ${variables.violationId}: ${error.message}`
       );
     }
   });
@@ -103,8 +105,9 @@ const PolicyPage = () => {
   const baseEvalPending = baseEvalMutation.status === "pending";
   const llmEvalPending = llmEvalMutation.status === "pending";
   const remediationPending = remediationRunMutation.status === "pending";
-  const activeRemediationId = remediationPending
-    ? ((remediationRunMutation.variables as string | undefined) ?? undefined)
+  const activeRemediationKey = remediationPending
+    ? ((remediationRunMutation.variables as { key?: string } | undefined)?.key ??
+      undefined)
     : undefined;
 
   const handleLlmSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -135,14 +138,22 @@ const PolicyPage = () => {
 
   const handleRemediation = (
     violationId?: string,
+    targetMethod?: string,
+    filePath?: string,
+    key?: string,
     event?: MouseEvent<HTMLButtonElement>
   ) => {
     event?.stopPropagation();
-    if (!violationId) {
+    if (!violationId || !key) {
       toast.error("Selected violation is missing an identifier.");
       return;
     }
-    remediationRunMutation.mutate(violationId);
+    remediationRunMutation.mutate({
+      violationId,
+      targetMethod,
+      filePath,
+      key
+    });
   };
   const toHtml = (value?: string | null) => {
     if (!value) {
@@ -301,22 +312,29 @@ const PolicyPage = () => {
     runId?: string;
     violationId: string;
   }) => {
-    useQuery<RemediationRun, Error, RemediationRun, [string, string | undefined]>({
-      queryKey: ["remediation-run", runId],
+    const query = useQuery<RemediationRun, Error>({
+      queryKey: ["remediation-run", runId ?? ""],
       queryFn: () => getRemediationRun(runId ?? ""),
       enabled: Boolean(runId),
-      refetchInterval: (data) => {
-        const state = data?.state;
+      refetchInterval: (query) => {
+        const state = query.state.data?.state;
         if (!state) return false;
         return state === "SUCCESS" || state === "FAILED" ? false : 1500;
-      },
-      onSuccess: (data: RemediationRun) => {
-        updateRunResult(violationId, data);
-      },
-      onError: (error: Error) => {
-        toast.error(`Failed to fetch remediation status: ${error.message}`);
       }
     });
+
+    useEffect(() => {
+      if (query.isSuccess && query.data) {
+        updateRunResult(violationId, query.data);
+      }
+    }, [query.isSuccess, query.data, violationId]);
+
+    useEffect(() => {
+      if (query.isError && query.error) {
+        toast.error(`Failed to fetch remediation status: ${query.error.message}`);
+      }
+    }, [query.isError, query.error]);
+
     return null;
   };
 
@@ -386,12 +404,11 @@ const PolicyPage = () => {
               {hasViolations && violationSummaries.length > 0 && (
                 <div className="violation-deck">
                   {violationSummaries.map((item, index) => {
-                    const runId = item.violationId
-                      ? remediationRunIds[item.violationId]
-                      : undefined;
-                    const remediationOutcome = item.violationId
-                      ? remediationResults[item.violationId]
-                      : undefined;
+                    const violationKey = `${item.violationId || "unknown"}::${
+                      item.method || ""
+                    }::${item.filePath || ""}`;
+                    const runId = remediationRunIds[violationKey];
+                    const remediationOutcome = remediationResults[violationKey];
                     const verificationMessage =
                       remediationOutcome?.verification &&
                       typeof remediationOutcome.verification === "object"
@@ -403,7 +420,7 @@ const PolicyPage = () => {
                       remediationOutcome.state !== "SUCCESS" &&
                       remediationOutcome.state !== "FAILED";
                     const isStarting =
-                      remediationPending && activeRemediationId === item.violationId;
+                      remediationPending && activeRemediationKey === violationKey;
                     return (
                       <details
                         className="violation-card"
@@ -440,7 +457,15 @@ const PolicyPage = () => {
                                   isStarting ||
                                   isRunActive
                                 }
-                                onClick={(event) => handleRemediation(item.violationId, event)}
+                                onClick={(event) =>
+                                  handleRemediation(
+                                    item.violationId,
+                                    item.method,
+                                    item.filePath,
+                                    violationKey,
+                                    event
+                                  )
+                                }
                               >
                                 {isStarting ? (
                                   <>
@@ -544,7 +569,7 @@ const PolicyPage = () => {
                           {runId && item.violationId && (
                             <RemediationRunPoller
                               runId={runId}
-                              violationId={item.violationId}
+                              violationId={violationKey}
                             />
                           )}
                         </div>

@@ -40,7 +40,12 @@ async def remediation_fix(payload: RemediationRequest):
 
 @router.post("/remediation/run", response_model=RemediationRunResponse)
 async def remediation_run(payload: RemediationRunRequest):
-    result = start_remediation_run(payload.violation_id, max_attempts=payload.max_attempts or 3)
+    result = start_remediation_run(
+        payload.violation_id,
+        max_attempts=payload.max_attempts or 3,
+        target_method=payload.target_method,
+        file_path=payload.file_path,
+    )
     if result.get("status") == "INVALID":
         return JSONResponse(result, status_code=400)
     if result.get("status") == "ERROR":

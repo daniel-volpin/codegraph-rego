@@ -33,7 +33,13 @@ def orchestrate_remediation(violation_id: str) -> Dict[str, Any]:
     return result
 
 
-def start_remediation_run(violation_id: str, max_attempts: int = 3) -> Dict[str, Any]:
+def start_remediation_run(
+    violation_id: str,
+    *,
+    max_attempts: int = 3,
+    target_method: str | None = None,
+    file_path: str | None = None,
+) -> Dict[str, Any]:
     if not violation_id:
         return {
             "status": "INVALID",
@@ -41,7 +47,12 @@ def start_remediation_run(violation_id: str, max_attempts: int = 3) -> Dict[str,
         }
     service = _get_service()
     try:
-        run = service.start_run(violation_id, max_attempts=max_attempts)
+        run = service.start_run(
+            violation_id,
+            max_attempts=max_attempts,
+            target_method=target_method,
+            file_path=file_path,
+        )
         return run.to_dict()
     except Exception as exc:
         LOGGER.exception("Failed to start remediation run for %s: %s", violation_id, exc)

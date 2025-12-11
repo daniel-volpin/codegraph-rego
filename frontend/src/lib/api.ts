@@ -126,6 +126,8 @@ export async function remediateViolation(
 
 export async function startRemediationRun(
   violationId: string,
+  targetMethod?: string,
+  filePath?: string,
   maxAttempts?: number
 ): Promise<RemediationRun> {
   const response = await fetch(`${API_BASE_URL}/remediation/run`, {
@@ -136,6 +138,8 @@ export async function startRemediationRun(
     },
     body: JSON.stringify({
       violation_id: violationId,
+      target_method: targetMethod,
+      file_path: filePath,
       max_attempts: maxAttempts ?? 3
     })
   });
