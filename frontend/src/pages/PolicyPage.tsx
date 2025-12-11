@@ -317,8 +317,8 @@ const PolicyPage = () => {
       queryFn: () => getRemediationRun(runId ?? ""),
       enabled: Boolean(runId),
       refetchInterval: (query) => {
-        const state = query.state.data?.state;
-        if (!state) return false;
+        const state = (query.state.data as RemediationRun | undefined)?.state;
+        if (!state) return 1500;
         return state === "SUCCESS" || state === "FAILED" ? false : 1500;
       }
     });
