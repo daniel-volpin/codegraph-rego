@@ -45,47 +45,6 @@ export interface PolicyCatalogResponse {
   error?: string;
 }
 
-export type RemediationState =
-  | "INIT"
-  | "GATHER_CONTEXT"
-  | "PROPOSE_PATCH"
-  | "APPLY_PATCH"
-  | "COMPILE"
-  | "POLICY_CHECK"
-  | "SUCCESS"
-  | "FAILED";
-
-export interface RemediationRun {
-  id: string;
-  violation_id: string;
-  state: RemediationState;
-  file_path?: string | null;
-  rule_id?: string | null;
-  target_method?: string | null;
-  skip_compile?: boolean | null;
-  attempts: number;
-  max_attempts: number;
-  patch?: string | null;
-  explanation?: string | null;
-  raw_llm_output?: string | null;
-  compile_error?: string | null;
-  compile_warning?: string | null;
-  policy_error?: string | null;
-  verification?: Record<string, unknown> | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  errors?: string[] | null;
-  status?: string | null;
-}
-
-export interface RemediationRunRequest {
-  violation_id: string;
-  target_method?: string;
-  file_path?: string;
-  max_attempts?: number;
-  skip_compile?: boolean;
-}
-
 export interface RemediationPreviewResponse {
   status: string;
   violation_id: string;
@@ -97,15 +56,6 @@ export interface RemediationPreviewResponse {
   opa_status?: string | null;
   opa_details?: unknown;
   error?: string | null;
-}
-
-export interface RemediationResponse {
-  status: string;
-  original_file?: string;
-  patched_file?: string;
-  diff?: string;
-  verification?: Record<string, unknown>;
-  error?: string;
 }
 
 export interface HealthCheckResponse {

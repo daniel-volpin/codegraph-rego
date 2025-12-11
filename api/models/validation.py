@@ -48,48 +48,6 @@ class PolicyEvaluateWithLLMRequest(BaseModel):
     model: Optional[str] = None
 
 
-class RemediationRequest(BaseModel):
-    violation_id: str
-
-
-class RemediationResponse(BaseModel):
-    status: str
-    original_file: Optional[str] = None
-    patched_file: Optional[str] = None
-    diff: Optional[str] = None
-    verification: Optional[dict] = None
-    error: Optional[str] = None
-
-
-class RemediationRunRequest(BaseModel):
-    violation_id: str
-    max_attempts: int | None = 3
-    target_method: Optional[str] = None
-    file_path: Optional[str] = None
-    skip_compile: bool | None = True
-
-
-class RemediationRunResponse(BaseModel):
-    id: str
-    violation_id: str
-    state: str
-    file_path: Optional[str] = None
-    rule_id: Optional[str] = None
-    target_method: Optional[str] = None
-    attempts: int
-    max_attempts: int
-    patch: Optional[str] = None
-    raw_llm_output: Optional[str] = None
-    explanation: Optional[str] = None
-    compile_error: Optional[str] = None
-    policy_error: Optional[str] = None
-    verification: Optional[dict] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-    errors: Optional[list[str]] = None
-    status: Optional[str] = None
-
-
 class RemediationPreviewRequest(BaseModel):
     violation_id: str
     target_method: Optional[str] = None

@@ -117,14 +117,16 @@ python3 hybrid_code_search.py
 
 ---
 
-## Remediation (Fix & Verify)
+## Remediation Preview (Virtual Fix)
 
-- API endpoints:
-  - `POST /remediation/run` with `{"violation_id": "ISO-A.9.4.1"}` → starts an agent run; returns `id`.
-  - `GET /remediation/run/{id}` → poll state (`INIT` → `SUCCESS`/`FAILED`), patch diff, explanation, verification payload.
-  - Legacy: `POST /remediation/fix` performs a single attempt.
-- Flow: gather violation context → LLM proposes unified diff → patch applied in temp workspace → `javac` compile → single-file re-ingest → OPA re-check for the same rule.
-- Requires `opa` on `PATH`, `javac`, LiteLLM-configured LLM access, and Neo4j reachable.
+- API endpoint:
+  - `POST /remediation/preview` with `{"violation_id": "ISO-A.9.4.1"}` → returns a preview-only remediation:
+    - LLM-proposed full replacement method (`updated_source_code`)
+    - Short explanation
+    - OPA verdict for the same rule (`opa_status`: `PASS`/`FAIL`)
+- Flow: gather violation context → LLM proposes full method → build virtual graph context in memory → re-run OPA on the virtual bundle.
+- No filesystem edits, compilation, or Neo4j mutations; the suggestion is for human review/copy‑paste.
+- Requires `opa` on `PATH`, LiteLLM-configured LLM access, and Neo4j reachable for the initial evidence.
 
 ---
 
@@ -139,7 +141,7 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
 Verify:
 - `curl http://localhost:8000/health` → all subsystems should be `true` (OPA requires binary on PATH).
 - `curl http://localhost:8000/policy/evaluate` → returns violations or empty list.
-- `curl -X POST http://localhost:8000/remediation/run -H "Content-Type: application/json" -d '{"violation_id":"<ID>"}'` → returns run `id`; poll `/remediation/run/{id}` until `SUCCESS`/`FAILED`.
+- `curl -X POST http://localhost:8000/remediation/preview -H "Content-Type: application/json" -d '{"violation_id":"<ID>"}'` → returns a virtual fix preview with OPA PASS/FAIL.
 
 2) **Frontend**
 ```bash

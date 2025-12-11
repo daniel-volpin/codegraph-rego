@@ -2,8 +2,6 @@ import {
   HealthCheckResponse,
   PolicyCatalogResponse,
   PolicyEvaluateResponse,
-  RemediationResponse,
-  RemediationRun,
   RemediationPreviewResponse,
   SearchResponse,
   UploadResponse,
@@ -109,52 +107,6 @@ export async function fetchUploadStatus(): Promise<UploadStatus> {
   });
 
   return handleResponse<UploadStatus>(response);
-}
-
-export async function remediateViolation(
-  violationId: string
-): Promise<RemediationResponse> {
-  const response = await fetch(`${API_BASE_URL}/remediation/fix`, {
-    method: "POST",
-    headers: {
-      ...defaultHeaders,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ violation_id: violationId })
-  });
-  return handleResponse<RemediationResponse>(response);
-}
-
-export async function startRemediationRun(
-  violationId: string,
-  targetMethod?: string,
-  filePath?: string,
-  maxAttempts?: number,
-  skipCompile: boolean = true
-): Promise<RemediationRun> {
-  const response = await fetch(`${API_BASE_URL}/remediation/run`, {
-    method: "POST",
-    headers: {
-      ...defaultHeaders,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      violation_id: violationId,
-      target_method: targetMethod,
-      file_path: filePath,
-      max_attempts: maxAttempts ?? 3,
-      skip_compile: skipCompile
-    })
-  });
-  return handleResponse<RemediationRun>(response);
-}
-
-export async function getRemediationRun(runId: string): Promise<RemediationRun> {
-  const response = await fetch(`${API_BASE_URL}/remediation/run/${runId}`, {
-    method: "GET",
-    headers: defaultHeaders
-  });
-  return handleResponse<RemediationRun>(response);
 }
 
 export async function previewRemediation(
