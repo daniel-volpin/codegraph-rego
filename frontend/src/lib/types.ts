@@ -62,12 +62,14 @@ export interface RemediationRun {
   file_path?: string | null;
   rule_id?: string | null;
   target_method?: string | null;
+  skip_compile?: boolean | null;
   attempts: number;
   max_attempts: number;
   patch?: string | null;
   explanation?: string | null;
   raw_llm_output?: string | null;
   compile_error?: string | null;
+  compile_warning?: string | null;
   policy_error?: string | null;
   verification?: Record<string, unknown> | null;
   created_at?: string | null;
@@ -81,6 +83,7 @@ export interface RemediationRunRequest {
   target_method?: string;
   file_path?: string;
   max_attempts?: number;
+  skip_compile?: boolean;
 }
 
 export interface RemediationResponse {

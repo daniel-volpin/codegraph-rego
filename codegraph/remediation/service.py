@@ -61,6 +61,7 @@ class RemediationRun:
     created_at: str = field(default_factory=_iso_now)
     updated_at: str = field(default_factory=_iso_now)
     errors: List[str] = field(default_factory=list)
+    skip_compile: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)
@@ -90,12 +91,14 @@ class RemediationService:
         max_attempts: int = 3,
         target_method: Optional[str] = None,
         file_path: Optional[str] = None,
+        skip_compile: bool = True,
     ) -> RemediationRun:
         return self.start_run_with_context(
             violation_id,
             max_attempts=max_attempts,
             target_method=target_method,
             file_path=file_path,
+            skip_compile=skip_compile,
         )
 
     def start_run_with_context(
@@ -105,6 +108,7 @@ class RemediationService:
         max_attempts: int = 3,
         target_method: Optional[str] = None,
         file_path: Optional[str] = None,
+        skip_compile: bool = True,
     ) -> RemediationRun:
         context = self.get_violation_context(violation_id, target_method, file_path)
         if context is None:
@@ -116,6 +120,7 @@ class RemediationService:
             rule_id=context.get("rule_id"),
             target_method=context.get("target_method"),
             max_attempts=max(1, max_attempts),
+            skip_compile=skip_compile,
         )
         self._save_run(run)
         return self._execute_run(run, context)
@@ -161,15 +166,21 @@ class RemediationService:
 
             changed_files = self._extract_files_from_patch(patch_text)
             self._update_run(run.id, state=RemediationState.COMPILE)
-            compile_ok, compile_output = self._compile_workspace(workspace, changed_files)
-            if not compile_ok:
-                previous_errors.append(compile_output or "Compilation failed.")
+            compile_ok = True
+            compile_output = ""
+            if not run.skip_compile:
+                compile_ok, compile_output = self._compile_workspace(workspace, changed_files)
+                if not compile_ok:
+                    previous_errors.append(self._bounded_error(compile_output or "Compilation failed."))
                 self._update_run(
-                    run.id, compile_error=compile_output, errors=list(previous_errors)
+                    run.id, compile_error=compile_output or None, errors=list(previous_errors)
                 )
-                continue
+            else:
+                compile_output = "Compile skipped (skip_compile=true)."
+                self._update_run(run.id, compile_error=compile_output)
 
             self._update_run(run.id, state=RemediationState.POLICY_CHECK)
+            context["skip_compile"] = run.skip_compile
             verification = self._verify_policy(context, workspace, changed_files)
             self._update_run(run.id, verification=verification)
             status = (verification.get("status") or "").upper()
@@ -388,6 +399,7 @@ class RemediationService:
             "status": "VERIFIED",
             "message": "Result: Verified Fix",
             "details": policy_result,
+            "compile_warning": "Compile skipped" if context.get("skip_compile") else None,
         }
 
     # --- Helpers --------------------------------------------------------------------
@@ -428,6 +440,12 @@ class RemediationService:
             except ValueError:
                 return candidate
         return Path(workspace) / candidate
+
+    @staticmethod
+    def _bounded_error(message: str, limit: int = 3000) -> str:
+        if len(message) <= limit:
+            return message
+        return f"{message[:limit]}... [truncated]"
 
 
 def orchestrate_remediation(violation_id: str) -> Dict[str, Any]:

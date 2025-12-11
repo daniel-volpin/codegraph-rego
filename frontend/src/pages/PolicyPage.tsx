@@ -82,7 +82,7 @@ const PolicyPage = () => {
 
   const remediationRunMutation = useMutation({
     mutationFn: (args: { violationId: string; targetMethod?: string; filePath?: string; key: string }) =>
-      startRemediationRun(args.violationId, args.targetMethod, args.filePath),
+      startRemediationRun(args.violationId, args.targetMethod, args.filePath, undefined, true),
     onSuccess: (data, variables) => {
       const key = variables.key;
       setRemediationRunIds((prev) => ({

@@ -39,6 +39,7 @@ def start_remediation_run(
     max_attempts: int = 3,
     target_method: str | None = None,
     file_path: str | None = None,
+    skip_compile: bool | None = True,
 ) -> Dict[str, Any]:
     if not violation_id:
         return {
@@ -52,6 +53,7 @@ def start_remediation_run(
             max_attempts=max_attempts,
             target_method=target_method,
             file_path=file_path,
+            skip_compile=bool(skip_compile),
         )
         return run.to_dict()
     except Exception as exc:

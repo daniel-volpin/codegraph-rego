@@ -128,7 +128,8 @@ export async function startRemediationRun(
   violationId: string,
   targetMethod?: string,
   filePath?: string,
-  maxAttempts?: number
+  maxAttempts?: number,
+  skipCompile: boolean = true
 ): Promise<RemediationRun> {
   const response = await fetch(`${API_BASE_URL}/remediation/run`, {
     method: "POST",
@@ -140,7 +141,8 @@ export async function startRemediationRun(
       violation_id: violationId,
       target_method: targetMethod,
       file_path: filePath,
-      max_attempts: maxAttempts ?? 3
+      max_attempts: maxAttempts ?? 3,
+      skip_compile: skipCompile
     })
   });
   return handleResponse<RemediationRun>(response);

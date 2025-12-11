@@ -66,6 +66,7 @@ class RemediationRunRequest(BaseModel):
     max_attempts: int | None = 3
     target_method: Optional[str] = None
     file_path: Optional[str] = None
+    skip_compile: bool | None = True
 
 
 class RemediationRunResponse(BaseModel):

@@ -45,6 +45,7 @@ async def remediation_run(payload: RemediationRunRequest):
         max_attempts=payload.max_attempts or 3,
         target_method=payload.target_method,
         file_path=payload.file_path,
+        skip_compile=payload.skip_compile,
     )
     if result.get("status") == "INVALID":
         return JSONResponse(result, status_code=400)
