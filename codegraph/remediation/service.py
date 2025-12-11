@@ -1,24 +1,76 @@
 from __future__ import annotations
 
-import difflib
 import json
 import logging
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional
+from threading import Lock
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
 
 from codegraph.db import get_neo4j_driver
 from codegraph.ingestion.service import process_single_file
 from codegraph.llm.client import generate_chat_completion
-from codegraph.policy.integration import PolicyEvaluator, evaluate_policies
+from codegraph.policy.integration import (
+    PolicyEvaluator,
+    evaluate_policies,
+    load_policy_catalog,
+)
 
 LOGGER = logging.getLogger(__name__)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class RemediationState(str, Enum):
+    INIT = "INIT"
+    GATHER_CONTEXT = "GATHER_CONTEXT"
+    PROPOSE_PATCH = "PROPOSE_PATCH"
+    APPLY_PATCH = "APPLY_PATCH"
+    COMPILE = "COMPILE"
+    POLICY_CHECK = "POLICY_CHECK"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+
+
+@dataclass
+class RemediationRun:
+    id: str
+    violation_id: str
+    file_path: Optional[str]
+    rule_id: Optional[str]
+    target_method: Optional[str]
+    state: RemediationState = RemediationState.INIT
+    attempts: int = 0
+    max_attempts: int = 3
+    patch: Optional[str] = None
+    raw_llm_output: Optional[str] = None
+    explanation: Optional[str] = None
+    compile_error: Optional[str] = None
+    policy_error: Optional[str] = None
+    verification: Optional[Dict[str, Any]] = None
+    workspace: Optional[str] = None
+    created_at: str = field(default_factory=_iso_now)
+    updated_at: str = field(default_factory=_iso_now)
+    errors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        payload = asdict(self)
+        payload["state"] = self.state.value
+        payload.pop("workspace", None)
+        return payload
 
 
 class RemediationService:
-    """Agentic fix-verify loop orchestrator."""
+    """Agentic remediation loop with retries and policy verification."""
 
     def __init__(
         self,
@@ -28,80 +80,279 @@ class RemediationService:
     ) -> None:
         self._llm_client = llm_client
         self._policy = policy_evaluator or PolicyEvaluator()
-        self._context: Dict[str, Any] = {}
+        self._runs: Dict[str, RemediationRun] = {}
+        self._lock = Lock()
 
-    def generate_fix(self, violation: Dict[str, Any]) -> str:
-        evidence = violation.get("evidence") or violation
+    # --- Public API -----------------------------------------------------------------
+    def start_run(self, violation_id: str, max_attempts: int = 3) -> RemediationRun:
+        context = self.get_violation_context(violation_id)
+        if context is None:
+            raise ValueError(f"Violation {violation_id} not found")
+        run = RemediationRun(
+            id=str(uuid4()),
+            violation_id=violation_id,
+            file_path=context.get("file_path"),
+            rule_id=context.get("rule_id"),
+            target_method=context.get("target_method"),
+            max_attempts=max(1, max_attempts),
+        )
+        self._save_run(run)
+        return self._execute_run(run, context)
+
+    def orchestrate_fix(self, violation_id: str) -> Dict[str, Any]:
+        run = self.start_run(violation_id, max_attempts=1)
+        return run.to_dict()
+
+    def get_run(self, run_id: str) -> Optional[RemediationRun]:
+        with self._lock:
+            return self._runs.get(run_id)
+
+    # --- Core loop ------------------------------------------------------------------
+    def _execute_run(self, run: RemediationRun, context: Dict[str, Any]) -> RemediationRun:
+        workspace = self.create_workspace_for_run(run.id)
+        self._update_run(run.id, workspace=workspace, state=RemediationState.GATHER_CONTEXT)
+        previous_errors: List[str] = []
+        changed_files: List[str] = []
+
+        for attempt in range(run.max_attempts):
+            self._update_run(run.id, attempts=attempt + 1, state=RemediationState.PROPOSE_PATCH)
+            proposed = self.propose_patch(context, previous_errors)
+            raw_output = proposed.get("raw_output")
+            patch_text = proposed.get("patch")
+            explanation = proposed.get("explanation")
+            self._update_run(
+                run.id,
+                raw_llm_output=raw_output,
+                patch=patch_text,
+                explanation=explanation,
+            )
+            if not patch_text:
+                previous_errors.append("LLM returned no patch.")
+                self._update_run(run.id, errors=list(previous_errors))
+                continue
+
+            self._update_run(run.id, state=RemediationState.APPLY_PATCH)
+            apply_ok, apply_err = self.apply_patch_to_workspace(workspace, patch_text)
+            if not apply_ok:
+                previous_errors.append(apply_err)
+                self._update_run(run.id, compile_error=apply_err, errors=list(previous_errors))
+                continue
+
+            changed_files = self._extract_files_from_patch(patch_text)
+            self._update_run(run.id, state=RemediationState.COMPILE)
+            compile_ok, compile_output = self._compile_workspace(workspace, changed_files)
+            if not compile_ok:
+                previous_errors.append(compile_output or "Compilation failed.")
+                self._update_run(
+                    run.id, compile_error=compile_output, errors=list(previous_errors)
+                )
+                continue
+
+            self._update_run(run.id, state=RemediationState.POLICY_CHECK)
+            verification = self._verify_policy(context, workspace, changed_files)
+            self._update_run(run.id, verification=verification)
+            status = (verification.get("status") or "").upper()
+            if status == "VERIFIED":
+                self._update_run(run.id, state=RemediationState.SUCCESS, policy_error=None)
+                return self.get_run(run.id)  # type: ignore
+
+            policy_error = verification.get("details") or verification.get("message")
+            if policy_error:
+                previous_errors.append(str(policy_error))
+            self._update_run(run.id, policy_error=str(policy_error), errors=list(previous_errors))
+
+        self._update_run(run.id, state=RemediationState.FAILED)
+        return self.get_run(run.id)  # type: ignore
+
+    # --- Context gathering -----------------------------------------------------------
+    def get_violation_context(self, violation_id: str) -> Optional[Dict[str, Any]]:
+        result = evaluate_policies()
+        if result.get("error"):
+            LOGGER.error("Policy evaluation failed while gathering context: %s", result["error"])
+            return None
+        violations = result.get("violations") or []
+        catalog = load_policy_catalog()
+        for violation in violations:
+            current_id = violation.get("violation_id") or violation.get("id")
+            if not current_id or str(current_id) != str(violation_id):
+                continue
+            target_method = violation.get("target_method") or violation.get("method")
+            file_path = violation.get("file_path")
+            evidence = violation.get("evidence") or {}
+            catalog_entry = catalog.get(current_id) if isinstance(catalog, dict) else None
+            return {
+                "violation": violation,
+                "target_method": target_method,
+                "file_path": file_path,
+                "rule_id": current_id,
+                "evidence": evidence,
+                "catalog_entry": catalog_entry,
+            }
+        return None
+
+    # --- LLM interaction -------------------------------------------------------------
+    def propose_patch(
+        self, context: Dict[str, Any], previous_errors: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        violation = context.get("violation") or {}
+        evidence = context.get("evidence") or {}
+        catalog_entry = context.get("catalog_entry") or {}
         source_code = (evidence.get("source_code") or "").strip()
         graph_context = evidence.get("graph_context") or {}
-        violation_id = violation.get("violation_id") or violation.get("id") or "reported issue"
+        vector_context = evidence.get("vector_context") or []
+        file_path = context.get("file_path") or "<unknown>"
+        policy_reason = violation.get("reason") or violation.get("description") or ""
+        policy_title = catalog_entry.get("title") if isinstance(catalog_entry, dict) else ""
+        errors_note = "\n".join(previous_errors or [])
+
         system_prompt = (
-            f"You are a security expert. Fix the {violation_id} in the provided Java code. "
-            "Return ONLY the corrected method code. Do not refactor unrelated parts."
+            "You are a senior application security engineer. "
+            "Generate a minimal unified diff to fix the policy violation. "
+            "Output STRICT JSON with keys: patch_type ('unified_diff'), patch, explanation. "
+            f"The diff must apply to the repository root path and target the file {file_path}. "
+            "Preserve existing behavior and imports."
         )
-        if str(violation_id).upper() == "ISO-A.10":
-            system_prompt += " Replace MD5 with SHA-256 or BCrypt where applicable."
-        user_payload = [
-            "Java source snippet:",
+        if errors_note:
+            system_prompt += " Adjust the patch to address previous errors."
+
+        user_sections = [
+            f"Violation: {violation}",
+            f"Policy: {policy_title or ''} — {policy_reason}",
+            f"File path: {file_path}",
+            f"Target method: {context.get('target_method') or 'unknown'}",
+            "Source snippet:",
             "```java",
             source_code,
             "```",
+            "Graph context:",
+            json.dumps(graph_context, indent=2),
+            "Similar methods:",
+            json.dumps(vector_context, indent=2),
         ]
-        if graph_context:
-            user_payload.extend(
-                [
-                    "Graph annotations:",
-                    "```json",
-                    json.dumps(graph_context, indent=2),
-                    "```",
-                ]
-            )
+        if errors_note:
+            user_sections.append(f"Previous errors:\n{errors_note}")
+
         response = self._llm_client(
             [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "\n".join(user_payload)},
+                {"role": "user", "content": "\n".join(user_sections)},
             ]
         )
-        return response.strip()
+        parsed = self._parse_llm_json(response)
+        parsed["raw_output"] = response
+        return parsed
 
-    def apply_provisional_patch(self, file_path: str, new_code: str) -> str:
-        new_code = new_code.strip()
-        if not new_code:
-            raise ValueError("LLM returned an empty fix.")
-        path = Path(file_path)
-        if not path.is_file():
-            raise FileNotFoundError(f"Target file not found: {file_path}")
-        temp_dir = Path(tempfile.mkdtemp(prefix="remediation_"))
-        temp_path = temp_dir / path.name
-        shutil.copy2(path, temp_path)
-        metadata = self._context.get("method_metadata") or {}
-        updated_contents = self._rewrite_file(temp_path, metadata, new_code)
-        temp_path.write_text(updated_contents, encoding="utf-8")
-        return temp_path.as_posix()
-
-    def verify_fix(self, temp_file_path: str, method_signature: str) -> Dict[str, Any]:
-        build_ok, build_output = self._run_javac(temp_file_path)
-        if not build_ok:
-            return {
-                "status": "BUILD_FAILED",
-                "message": "Result: Build Failed",
-                "details": build_output,
-            }
+    @staticmethod
+    def _parse_llm_json(text: str) -> Dict[str, Any]:
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            parts = cleaned.split("\n", 1)
+            if len(parts) == 2:
+                cleaned = parts[1]
         try:
-            process_single_file(temp_file_path)
-        except Exception as exc:
-            LOGGER.exception("Single-file ingestion failed for %s", temp_file_path)
+            data = json.loads(cleaned)
+            if isinstance(data, dict):
+                patch = data.get("patch") or data.get("diff")
+                explanation = data.get("explanation") or data.get("summary")
+                return {"patch": patch, "explanation": explanation}
+        except json.JSONDecodeError:
+            LOGGER.warning("LLM output was not valid JSON: %s", cleaned[:200])
+        return {"patch": None, "explanation": None}
+
+    # --- Workspace + tooling ---------------------------------------------------------
+    def create_workspace_for_run(self, run_id: str) -> str:
+        base = _PROJECT_ROOT
+        temp_dir = Path(tempfile.mkdtemp(prefix=f"remediation_{run_id}_"))
+        workspace = temp_dir / "workspace"
+        shutil.copytree(
+            base,
+            workspace,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns(
+                "__pycache__",
+                ".pytest_cache",
+                "node_modules",
+                "index",
+                "*.index",
+                "*.faiss",
+                "*.bin",
+                "*.lock",
+            ),
+        )
+        return workspace.as_posix()
+
+    def apply_patch_to_workspace(self, workspace: str, patch_text: str) -> Tuple[bool, str]:
+        patch_file = Path(workspace) / "remediation.patch"
+        patch_file.write_text(patch_text, encoding="utf-8")
+        for strip in ("0", "1"):
+            cmd = ["patch", f"-p{strip}", "-i", patch_file.name]
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=workspace,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            except FileNotFoundError:
+                return False, "patch command not found"
+            if proc.returncode == 0:
+                return True, ""
+        error = proc.stderr.strip() or proc.stdout.strip() or "patch apply failed"
+        return False, error
+
+    def _compile_workspace(self, workspace: str, files: List[str]) -> Tuple[bool, str]:
+        if not files:
+            return True, "No files to compile."
+        paths = [str(self._workspace_path(workspace, f)) for f in files]
+        try:
+            proc = subprocess.run(
+                ["javac", *paths],
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=workspace,
+            )
+        except FileNotFoundError:
+            return False, "javac not found on PATH"
+        output = f"{proc.stdout}\n{proc.stderr}".strip()
+        return proc.returncode == 0, output
+
+    # --- Verification ---------------------------------------------------------------
+    def _verify_policy(
+        self, context: Dict[str, Any], workspace: str, changed_files: List[str]
+    ) -> Dict[str, Any]:
+        target_method = context.get("target_method")
+        workspace_files = [self._workspace_path(workspace, f) for f in changed_files]
+        if not workspace_files and context.get("file_path"):
+            workspace_files = [self._workspace_path(workspace, str(context["file_path"]))]
+        for file_path in workspace_files:
+            if not file_path.is_file():
+                continue
+            try:
+                process_single_file(file_path.as_posix())
+            except Exception as exc:  # pragma: no cover - runtime guard
+                LOGGER.exception("Single-file ingestion failed for %s", file_path)
+                return {
+                    "status": "INGEST_FAILED",
+                    "message": "Graph ingest failed",
+                    "details": str(exc),
+                }
+        if not target_method:
             return {
-                "status": "INGEST_FAILED",
-                "message": "Result: Fix Failed (Graph ingest error)",
-                "details": str(exc),
+                "status": "FAILED",
+                "message": "Missing method signature for policy verification",
             }
-        policy_result = self._policy.evaluate(method_signature)
+        policy_result = self._policy.evaluate(target_method)
         violations = policy_result.get("violations") or []
-        if violations:
+        still_failing = [
+            v for v in violations if (v.get("violation_id") or v.get("id")) == context.get("rule_id")
+        ]
+        if still_failing:
             return {
                 "status": "POLICY_FAILED",
-                "message": "Result: Fix Failed (Still Vulnerable)",
+                "message": "Policy still failing",
                 "details": policy_result,
             }
         return {
@@ -110,129 +361,57 @@ class RemediationService:
             "details": policy_result,
         }
 
-    def orchestrate_fix(self, violation_id: str) -> Dict[str, Any]:
-        violation = self._resolve_violation(violation_id)
-        if violation is None:
-            return {
-                "status": "NOT_FOUND",
-                "error": f"No violation found for {violation_id}",
-            }
-        evidence = violation.get("evidence") or {}
-        file_path = violation.get("file_path")
-        method_signature = violation.get("target_method")
-        if not file_path or not method_signature:
-            return {
-                "status": "INVALID",
-                "error": "Violation missing file_path or target_method.",
-            }
-        metadata = self._fetch_method_metadata(method_signature, file_path)
-        self._context = {
-            "source_code": evidence.get("source_code", ""),
-            "method_metadata": metadata,
-            "method_signature": method_signature,
-        }
-        fix = self.generate_fix(violation)
-        temp_path = self.apply_provisional_patch(metadata.get("file_path") or file_path, fix)
-        verification = self.verify_fix(temp_path, method_signature)
-        diff_text = self._build_diff(file_path, temp_path)
-        status = "VERIFIED" if verification.get("status") == "VERIFIED" else "FAILED"
-        self._context = {}
-        return {
-            "status": status,
-            "original_file": file_path,
-            "patched_file": temp_path,
-            "diff": diff_text,
-            "verification": verification,
-        }
+    # --- Helpers --------------------------------------------------------------------
+    @staticmethod
+    def _extract_files_from_patch(patch_text: str) -> List[str]:
+        files: List[str] = []
+        for line in patch_text.splitlines():
+            if line.startswith("+++ "):
+                candidate = line[4:].strip()
+                if candidate.startswith("b/"):
+                    candidate = candidate[2:]
+                if candidate and candidate != "/dev/null":
+                    files.append(candidate)
+        return files
 
-    def _resolve_violation(self, violation_id: str) -> Optional[Dict[str, Any]]:
-        result = evaluate_policies()
-        violations = result.get("violations") or []
-        for violation in violations:
-            current_id = violation.get("violation_id") or violation.get("id")
-            if current_id and str(current_id) == str(violation_id):
-                return violation
-        return None
+    def _save_run(self, run: RemediationRun) -> None:
+        with self._lock:
+            self._runs[run.id] = run
 
-    def _fetch_method_metadata(
-        self, method_signature: str, fallback_file: str
-    ) -> Dict[str, Any]:
-        driver = get_neo4j_driver()
-        try:
-            with driver.session() as session:
-                record = session.run(
-                    """
-                    MATCH (m:Method)
-                    WHERE coalesce(m.full_signature, m.signature) = $sig
-                       OR m.signature = $sig
-                       OR m.full_signature = $sig
-                    RETURN coalesce(m.full_signature, m.signature) AS signature,
-                           m.file_path AS file_path,
-                           m.start_line AS start_line,
-                           m.end_line AS end_line
-                    LIMIT 1
-                    """,
-                    sig=method_signature,
-                ).single()
-        finally:
-            driver.close()
-        if not record:
-            return {"file_path": fallback_file}
-        return {
-            "file_path": record.get("file_path") or fallback_file,
-            "start_line": record.get("start_line"),
-            "end_line": record.get("end_line"),
-        }
-
-    def _rewrite_file(self, temp_path: Path, metadata: Dict[str, Any], new_code: str) -> str:
-        original = temp_path.read_text(encoding="utf-8")
-        start_line = metadata.get("start_line")
-        end_line = metadata.get("end_line")
-        if start_line and end_line:
-            lines = original.splitlines(keepends=True)
-            start_idx = max(start_line - 1, 0)
-            end_idx = max(end_line - 1, start_idx)
-            normalized = self._normalize_new_code(new_code)
-            updated_lines = lines[:start_idx] + normalized + lines[end_idx + 1 :]
-            return "".join(updated_lines)
-        snippet = (self._context.get("source_code") or "").strip()
-        normalized_text = "".join(self._normalize_new_code(new_code))
-        if snippet and snippet in original:
-            return original.replace(snippet, normalized_text, 1)
-        LOGGER.warning(
-            "Could not locate snippet for %s; appending fix at end.", metadata.get("file_path")
-        )
-        return f"{original.rstrip()}\n\n{normalized_text}"
+    def _update_run(self, run_id: str, **kwargs: Any) -> None:
+        with self._lock:
+            run = self._runs.get(run_id)
+            if not run:
+                return
+            for key, value in kwargs.items():
+                if hasattr(run, key):
+                    setattr(run, key, value)
+            run.updated_at = _iso_now()
+            self._runs[run_id] = run
 
     @staticmethod
-    def _normalize_new_code(new_code: str) -> list[str]:
-        snippet = new_code.strip("\n")
-        if not snippet:
-            return ["\n"]
-        lines = snippet.splitlines()
-        return [f"{line}\n" for line in lines]
+    def _workspace_path(workspace: str, file_path: str) -> Path:
+        candidate = Path(file_path)
+        if candidate.is_absolute():
+            try:
+                rel = candidate.relative_to(_PROJECT_ROOT)
+                return Path(workspace) / rel
+            except ValueError:
+                return candidate
+        return Path(workspace) / candidate
 
-    def _run_javac(self, file_path: str) -> tuple[bool, str]:
-        try:
-            proc = subprocess.run(
-                ["javac", file_path], capture_output=True, check=False, text=True
-            )
-        except FileNotFoundError:
-            return False, "javac not found on PATH"
-        output = f"{proc.stdout}\n{proc.stderr}".strip()
-        return proc.returncode == 0, output
 
-    def _build_diff(self, original_path: str, temp_path: str) -> str:
-        try:
-            original = Path(original_path).read_text(encoding="utf-8").splitlines()
-        except FileNotFoundError:
-            original = []
-        patched = Path(temp_path).read_text(encoding="utf-8").splitlines()
-        diff = difflib.unified_diff(
-            original,
-            patched,
-            fromfile=original_path,
-            tofile=temp_path,
-            lineterm="",
-        )
-        return "\n".join(diff)
+def orchestrate_remediation(violation_id: str) -> Dict[str, Any]:
+    """
+    Legacy wrapper for synchronous remediation. Runs a single remediation attempt.
+    """
+    service = RemediationService()
+    try:
+        run = service.start_run(violation_id, max_attempts=1)
+        payload = run.to_dict()
+        status = payload.get("state")
+        payload["status"] = "VERIFIED" if status == RemediationState.SUCCESS.value else "FAILED"
+        return payload
+    except Exception as exc:  # pragma: no cover - runtime guard
+        LOGGER.exception("Remediation orchestration failed: %s", exc)
+        return {"status": "ERROR", "error": str(exc)}

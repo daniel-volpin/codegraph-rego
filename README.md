@@ -5,6 +5,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 - **Ingestion** – parses Java sources with `javalang`, stores classes/methods in Neo4j, and links `DECLARES`, `CALLS`, `USES`, `EXTENDS`, `IMPLEMENTS`, and `NESTED_IN` relationships.
 - **Semantic search** – embeds method snippets with Sentence Transformers, saves a FAISS index, and performs hybrid search that adds graph context.
 - **Policy evaluation** – exports Neo4j facts to OPA/Rego to enforce ISO controls, with optional LiteLLM-powered explanations.
+- **Remediation** – agentic “Fix & Verify” loop that proposes patches (LLM), applies them in a temp workspace, compiles, re-ingests, and re-runs OPA to validate fixes.
 - **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, and `/health`.
 
 ---
@@ -44,7 +45,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 5. **Run the API**
 
    ```bash
-   uvicorn app:app --reload --port 8000
+   uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
    ```
 
 - `POST /search` (`query=...` form field) → semantic hits + graph neighbours
@@ -113,6 +114,43 @@ Try it from the CLI:
 ```bash
 python3 hybrid_code_search.py
 ```
+
+---
+
+## Remediation (Fix & Verify)
+
+- API endpoints:
+  - `POST /remediation/run` with `{"violation_id": "ISO-A.9.4.1"}` → starts an agent run; returns `id`.
+  - `GET /remediation/run/{id}` → poll state (`INIT` → `SUCCESS`/`FAILED`), patch diff, explanation, verification payload.
+  - Legacy: `POST /remediation/fix` performs a single attempt.
+- Flow: gather violation context → LLM proposes unified diff → patch applied in temp workspace → `javac` compile → single-file re-ingest → OPA re-check for the same rule.
+- Requires `opa` on `PATH`, `javac`, LiteLLM-configured LLM access, and Neo4j reachable.
+
+---
+
+## Run & Verify Locally
+
+1) **Backend**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
+```
+Verify:
+- `curl http://localhost:8000/health` → all subsystems should be `true` (OPA requires binary on PATH).
+- `curl http://localhost:8000/policy/evaluate` → returns violations or empty list.
+- `curl -X POST http://localhost:8000/remediation/run -H "Content-Type: application/json" -d '{"violation_id":"<ID>"}'` → returns run `id`; poll `/remediation/run/{id}` until `SUCCESS`/`FAILED`.
+
+2) **Frontend**
+```bash
+cd frontend
+npm install
+npm run build
+npm run preview -- --host --port 4173
+```
+Verify:
+- Open `http://localhost:4173` (or the preview host) → navigate to Policy page.
+- Run “Evaluate Policies”, then click “Fix & Verify” on a violation; the card should update with agent state, diff, and verification result.
 
 ---
 

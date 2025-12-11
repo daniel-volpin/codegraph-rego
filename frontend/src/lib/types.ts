@@ -45,6 +45,37 @@ export interface PolicyCatalogResponse {
   error?: string;
 }
 
+export type RemediationState =
+  | "INIT"
+  | "GATHER_CONTEXT"
+  | "PROPOSE_PATCH"
+  | "APPLY_PATCH"
+  | "COMPILE"
+  | "POLICY_CHECK"
+  | "SUCCESS"
+  | "FAILED";
+
+export interface RemediationRun {
+  id: string;
+  violation_id: string;
+  state: RemediationState;
+  file_path?: string | null;
+  rule_id?: string | null;
+  target_method?: string | null;
+  attempts: number;
+  max_attempts: number;
+  patch?: string | null;
+  explanation?: string | null;
+  raw_llm_output?: string | null;
+  compile_error?: string | null;
+  policy_error?: string | null;
+  verification?: Record<string, unknown> | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  errors?: string[] | null;
+  status?: string | null;
+}
+
 export interface RemediationResponse {
   status: string;
   original_file?: string;

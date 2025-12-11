@@ -31,3 +31,34 @@ def orchestrate_remediation(violation_id: str) -> Dict[str, Any]:
         result.get("status"),
     )
     return result
+
+
+def start_remediation_run(violation_id: str, max_attempts: int = 3) -> Dict[str, Any]:
+    if not violation_id:
+        return {
+            "status": "INVALID",
+            "error": "violation_id is required",
+        }
+    service = _get_service()
+    try:
+        run = service.start_run(violation_id, max_attempts=max_attempts)
+        return run.to_dict()
+    except Exception as exc:
+        LOGGER.exception("Failed to start remediation run for %s: %s", violation_id, exc)
+        return {"status": "ERROR", "error": str(exc)}
+
+
+def get_remediation_run(run_id: str) -> Dict[str, Any]:
+    if not run_id:
+        return {
+            "status": "INVALID",
+            "error": "run_id is required",
+        }
+    service = _get_service()
+    run = service.get_run(run_id)
+    if run is None:
+        return {
+            "status": "NOT_FOUND",
+            "error": f"Remediation run {run_id} not found",
+        }
+    return run.to_dict()

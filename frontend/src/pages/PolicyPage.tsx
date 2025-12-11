@@ -4,12 +4,13 @@ import {
   evaluatePolicies,
   evaluatePoliciesWithLLM,
   fetchPolicyCatalog,
-  remediateViolation
+  getRemediationRun,
+  startRemediationRun
 } from "../lib/api";
 import type {
   PolicyCatalogResponse,
   PolicyEvaluateResponse,
-  RemediationResponse
+  RemediationRun
 } from "../lib/types";
 import { useActivityContext } from "../context/ActivityContext";
 import { toast } from "react-hot-toast";
@@ -35,7 +36,10 @@ const PolicyPage = () => {
     useState<PolicyEvaluateResponse | null>(null);
   const [llmStatus, setLlmStatus] = useState<string | null>(null);
   const [remediationResults, setRemediationResults] = useState<
-    Record<string, RemediationResponse>
+    Record<string, RemediationRun>
+  >({});
+  const [remediationRunIds, setRemediationRunIds] = useState<
+    Record<string, string>
   >({});
   const { upsert: upsertActivity, clear: clearActivity } = useActivityContext();
 
@@ -76,30 +80,31 @@ const PolicyPage = () => {
     }
   });
 
-  const remediationMutation = useMutation({
-    mutationFn: (violationId: string) => remediateViolation(violationId),
+  const remediationRunMutation = useMutation({
+    mutationFn: (violationId: string) => startRemediationRun(violationId),
     onSuccess: (data, violationId) => {
+      setRemediationRunIds((prev) => ({
+        ...prev,
+        [violationId]: data.id
+      }));
       setRemediationResults((prev) => ({
         ...prev,
         [violationId]: data
       }));
-      const status = data.status?.toUpperCase();
-      if (status === "VERIFIED") {
-        toast.success(`Remediation verified for ${violationId}.`);
-      } else {
-        toast.error(`Remediation failed for ${violationId}.`);
-      }
+      toast.success(`Started remediation run for ${violationId}.`);
     },
     onError: (error: Error, violationId) => {
-      toast.error(`Remediation failed for ${violationId}: ${error.message}`);
+      toast.error(
+        `Failed to start remediation for ${violationId}: ${error.message}`
+      );
     }
   });
 
   const baseEvalPending = baseEvalMutation.status === "pending";
   const llmEvalPending = llmEvalMutation.status === "pending";
-  const remediationPending = remediationMutation.status === "pending";
+  const remediationPending = remediationRunMutation.status === "pending";
   const activeRemediationId = remediationPending
-    ? ((remediationMutation.variables as string | undefined) ?? undefined)
+    ? ((remediationRunMutation.variables as string | undefined) ?? undefined)
     : undefined;
 
   const handleLlmSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -137,7 +142,7 @@ const PolicyPage = () => {
       toast.error("Selected violation is missing an identifier.");
       return;
     }
-    remediationMutation.mutate(violationId);
+    remediationRunMutation.mutate(violationId);
   };
   const toHtml = (value?: string | null) => {
     if (!value) {
@@ -282,6 +287,39 @@ const PolicyPage = () => {
     };
   }, [clearActivity]);
 
+  const updateRunResult = (violationId: string, run: RemediationRun) => {
+    setRemediationResults((prev) => ({
+      ...prev,
+      [violationId]: run
+    }));
+  };
+
+  const RemediationRunPoller = ({
+    runId,
+    violationId
+  }: {
+    runId?: string;
+    violationId: string;
+  }) => {
+    useQuery<RemediationRun, Error, RemediationRun, [string, string | undefined]>({
+      queryKey: ["remediation-run", runId],
+      queryFn: () => getRemediationRun(runId ?? ""),
+      enabled: Boolean(runId),
+      refetchInterval: (data) => {
+        const state = data?.state;
+        if (!state) return false;
+        return state === "SUCCESS" || state === "FAILED" ? false : 1500;
+      },
+      onSuccess: (data: RemediationRun) => {
+        updateRunResult(violationId, data);
+      },
+      onError: (error: Error) => {
+        toast.error(`Failed to fetch remediation status: ${error.message}`);
+      }
+    });
+    return null;
+  };
+
   return (
     <section className="card">
       <h1>Policy Evaluation</h1>
@@ -348,9 +386,24 @@ const PolicyPage = () => {
               {hasViolations && violationSummaries.length > 0 && (
                 <div className="violation-deck">
                   {violationSummaries.map((item, index) => {
+                    const runId = item.violationId
+                      ? remediationRunIds[item.violationId]
+                      : undefined;
                     const remediationOutcome = item.violationId
                       ? remediationResults[item.violationId]
                       : undefined;
+                    const verificationMessage =
+                      remediationOutcome?.verification &&
+                      typeof remediationOutcome.verification === "object"
+                        ? remediationOutcome.verification.message
+                        : undefined;
+                    const isRunActive =
+                      remediationOutcome &&
+                      remediationOutcome.state &&
+                      remediationOutcome.state !== "SUCCESS" &&
+                      remediationOutcome.state !== "FAILED";
+                    const isStarting =
+                      remediationPending && activeRemediationId === item.violationId;
                     return (
                       <details
                         className="violation-card"
@@ -384,16 +437,20 @@ const PolicyPage = () => {
                                 className="remediation-button"
                                 disabled={
                                   !item.violationId ||
-                                  (remediationPending &&
-                                    activeRemediationId === item.violationId)
+                                  isStarting ||
+                                  isRunActive
                                 }
                                 onClick={(event) => handleRemediation(item.violationId, event)}
                               >
-                                {remediationPending &&
-                                activeRemediationId === item.violationId ? (
+                                {isStarting ? (
                                   <>
                                     <span className="btn-spinner" aria-hidden="true" />
                                     <span>Remediating…</span>
+                                  </>
+                                ) : isRunActive ? (
+                                  <>
+                                    <span className="btn-spinner" aria-hidden="true" />
+                                    <span>Running agent…</span>
                                   </>
                                 ) : (
                                   <span>Fix &amp; Verify</span>
@@ -438,21 +495,36 @@ const PolicyPage = () => {
                               ) : remediationOutcome ? (
                                 <div className="remediation-panel">
                                   <p className="remediation-status">
-                                    Status: {remediationOutcome.status}
+                                    State: {remediationOutcome.state} (
+                                    {remediationOutcome.attempts}/
+                                    {remediationOutcome.max_attempts})
                                   </p>
-                                  {typeof remediationOutcome.verification?.message === "string" && (
+                                  {runId && (
+                                    <p className="muted">Run ID: {runId}</p>
+                                  )}
+                                  {remediationOutcome.explanation && (
                                     <p className="remediation-note">
-                                      {remediationOutcome.verification.message}
+                                      {remediationOutcome.explanation}
                                     </p>
                                   )}
-                                  {remediationOutcome.error && (
+                                  {remediationOutcome.compile_error && (
                                     <p className="callout callout-error">
-                                      {remediationOutcome.error}
+                                      {remediationOutcome.compile_error}
                                     </p>
                                   )}
-                                  {remediationOutcome.diff ? (
+                                  {remediationOutcome.policy_error && (
+                                    <p className="callout callout-error">
+                                      {remediationOutcome.policy_error}
+                                    </p>
+                                  )}
+                                  {typeof verificationMessage === "string" && (
+                                    <p className="remediation-note">
+                                      {verificationMessage}
+                                    </p>
+                                  )}
+                                  {remediationOutcome.patch ? (
                                     <CodeHighlight
-                                      code={remediationOutcome.diff}
+                                      code={remediationOutcome.patch}
                                       language="text"
                                     />
                                   ) : (
@@ -469,6 +541,12 @@ const PolicyPage = () => {
                               )}
                             </section>
                           </div>
+                          {runId && item.violationId && (
+                            <RemediationRunPoller
+                              runId={runId}
+                              violationId={item.violationId}
+                            />
+                          )}
                         </div>
                       </details>
                     );

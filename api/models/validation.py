@@ -59,3 +59,29 @@ class RemediationResponse(BaseModel):
     diff: Optional[str] = None
     verification: Optional[dict] = None
     error: Optional[str] = None
+
+
+class RemediationRunRequest(BaseModel):
+    violation_id: str
+    max_attempts: int | None = 3
+
+
+class RemediationRunResponse(BaseModel):
+    id: str
+    violation_id: str
+    state: str
+    file_path: Optional[str] = None
+    rule_id: Optional[str] = None
+    target_method: Optional[str] = None
+    attempts: int
+    max_attempts: int
+    patch: Optional[str] = None
+    raw_llm_output: Optional[str] = None
+    explanation: Optional[str] = None
+    compile_error: Optional[str] = None
+    policy_error: Optional[str] = None
+    verification: Optional[dict] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    errors: Optional[list[str]] = None
+    status: Optional[str] = None
