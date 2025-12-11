@@ -86,6 +86,19 @@ export interface RemediationRunRequest {
   skip_compile?: boolean;
 }
 
+export interface RemediationPreviewResponse {
+  status: string;
+  violation_id: string;
+  rule_id?: string | null;
+  target_method?: string | null;
+  file_path?: string | null;
+  updated_source_code?: string | null;
+  explanation?: string | null;
+  opa_status?: string | null;
+  opa_details?: unknown;
+  error?: string | null;
+}
+
 export interface RemediationResponse {
   status: string;
   original_file?: string;

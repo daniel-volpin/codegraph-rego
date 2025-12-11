@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, List, Optional
 
 class UploadResponse(BaseModel):
     status: str
@@ -88,3 +88,22 @@ class RemediationRunResponse(BaseModel):
     updated_at: Optional[str] = None
     errors: Optional[list[str]] = None
     status: Optional[str] = None
+
+
+class RemediationPreviewRequest(BaseModel):
+    violation_id: str
+    target_method: Optional[str] = None
+    file_path: Optional[str] = None
+
+
+class RemediationPreviewResponse(BaseModel):
+    status: str
+    violation_id: str
+    rule_id: Optional[str] = None
+    target_method: Optional[str] = None
+    file_path: Optional[str] = None
+    updated_source_code: Optional[str] = None
+    explanation: Optional[str] = None
+    opa_status: Optional[str] = None
+    opa_details: Optional[Any] = None
+    error: Optional[str] = None

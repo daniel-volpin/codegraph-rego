@@ -4,6 +4,7 @@ import {
   PolicyEvaluateResponse,
   RemediationResponse,
   RemediationRun,
+  RemediationPreviewResponse,
   SearchResponse,
   UploadResponse,
   UploadStatus
@@ -154,4 +155,24 @@ export async function getRemediationRun(runId: string): Promise<RemediationRun> 
     headers: defaultHeaders
   });
   return handleResponse<RemediationRun>(response);
+}
+
+export async function previewRemediation(
+  violationId: string,
+  targetMethod?: string,
+  filePath?: string
+): Promise<RemediationPreviewResponse> {
+  const response = await fetch(`${API_BASE_URL}/remediation/preview`, {
+    method: "POST",
+    headers: {
+      ...defaultHeaders,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      violation_id: violationId,
+      target_method: targetMethod,
+      file_path: filePath
+    })
+  });
+  return handleResponse<RemediationPreviewResponse>(response);
 }

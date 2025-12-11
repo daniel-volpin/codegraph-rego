@@ -5,6 +5,7 @@ import logging
 import shutil
 import subprocess
 import tempfile
+import javalang
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from enum import Enum
@@ -12,6 +13,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
+from javalang.tree import MemberReference, MethodInvocation, MethodDeclaration
 
 from codegraph.db import get_neo4j_driver
 from codegraph.ingestion.service import process_single_file
@@ -19,6 +21,8 @@ from codegraph.llm.client import generate_chat_completion
 from codegraph.policy.integration import (
     PolicyEvaluator,
     evaluate_policies,
+    evaluate_bundle,
+    normalize_violation_payload,
     load_policy_catalog,
 )
 
@@ -133,6 +137,75 @@ class RemediationService:
         with self._lock:
             return self._runs.get(run_id)
 
+    # --- Virtual remediation preview (no workspace mutations) -----------------------
+    def preview_virtual_fix(
+        self,
+        violation_id: str,
+        target_method: Optional[str] = None,
+        file_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        context = self.get_violation_context(violation_id, target_method, file_path)
+        if context is None:
+            return {
+                "status": "NOT_FOUND",
+                "error": f"Violation {violation_id} not found",
+                "violation_id": violation_id,
+            }
+
+        llm_output = self.propose_full_method(context)
+        updated_source = llm_output.get("updated_source_code")
+        explanation = llm_output.get("explanation")
+        if not updated_source:
+            return {
+                "status": "ERROR",
+                "error": "LLM did not return updated_source_code",
+                "violation_id": violation_id,
+                "target_method": context.get("target_method"),
+                "file_path": context.get("file_path"),
+            }
+
+        virtual_graph = self.build_virtual_graph_context(updated_source)
+        base_graph = (context.get("evidence") or {}).get("graph_context") or {}
+        # Preserve caller information from the original bundle if available.
+        virtual_graph["callers"] = base_graph.get("callers") or []
+
+        bundle = self._build_virtual_bundle(context, updated_source, virtual_graph)
+        try:
+            opa_output = evaluate_bundle(bundle)
+        except Exception as exc:  # pragma: no cover - runtime guard
+            LOGGER.exception("OPA evaluation failed for virtual fix: %s", exc)
+            return {
+                "status": "ERROR",
+                "error": str(exc),
+                "violation_id": violation_id,
+                "target_method": context.get("target_method"),
+                "file_path": context.get("file_path"),
+                "rule_id": context.get("rule_id"),
+                "updated_source_code": updated_source,
+                "explanation": explanation,
+            }
+
+        failing = []
+        normalized_output: List[Dict[str, Any]] = []
+        for raw in opa_output:
+            normalized = normalize_violation_payload(raw)
+            if normalized:
+                normalized_output.append(normalized)
+                if (normalized.get("violation_id") or normalized.get("id")) == context.get("rule_id"):
+                    failing.append(normalized)
+        opa_status = "PASS" if not failing else "FAIL"
+        return {
+            "status": "OK",
+            "violation_id": violation_id,
+            "rule_id": context.get("rule_id"),
+            "target_method": context.get("target_method"),
+            "file_path": context.get("file_path"),
+            "updated_source_code": updated_source,
+            "explanation": explanation,
+            "opa_status": opa_status,
+            "opa_details": normalized_output or opa_output,
+        }
+
     # --- Core loop ------------------------------------------------------------------
     def _execute_run(self, run: RemediationRun, context: Dict[str, Any]) -> RemediationRun:
         workspace = self.create_workspace_for_run(run.id)
@@ -231,6 +304,55 @@ class RemediationService:
         return None
 
     # --- LLM interaction -------------------------------------------------------------
+    def propose_full_method(
+        self, context: Dict[str, Any], previous_errors: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        violation = context.get("violation") or {}
+        evidence = context.get("evidence") or {}
+        catalog_entry = context.get("catalog_entry") or {}
+        source_code = (evidence.get("source_code") or "").strip()
+        graph_context = evidence.get("graph_context") or {}
+        vector_context = evidence.get("vector_context") or []
+        file_path = context.get("file_path") or "<unknown>"
+        policy_reason = violation.get("reason") or violation.get("description") or ""
+        policy_title = catalog_entry.get("title") if isinstance(catalog_entry, dict) else ""
+        errors_note = "\n".join(previous_errors or [])
+
+        system_prompt = (
+            "You are a senior Java engineer improving code for ISO 27001 policy compliance. "
+            "Return STRICT JSON with keys: updated_source_code (a full replacement method with the SAME signature) "
+            "and explanation (one or two sentences). Do not include markdown fences."
+        )
+        if errors_note:
+            system_prompt += " Adjust the method to address previous errors."
+
+        user_sections = [
+            f"Violation: {violation}",
+            f"Policy: {policy_title or ''} — {policy_reason}",
+            f"File path: {file_path}",
+            f"Target method: {context.get('target_method') or 'unknown'}",
+            "Source snippet:",
+            "```java",
+            source_code,
+            "```",
+            "Graph context:",
+            json.dumps(graph_context, indent=2),
+            "Similar methods:",
+            json.dumps(vector_context, indent=2),
+        ]
+        if errors_note:
+            user_sections.append(f"Previous errors:\n{errors_note}")
+
+        response = self._llm_client(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": "\n".join(user_sections)},
+            ]
+        )
+        parsed = self._parse_llm_virtual_json(response)
+        parsed["raw_output"] = response
+        return parsed
+
     def propose_patch(
         self, context: Dict[str, Any], previous_errors: Optional[List[str]] = None
     ) -> Dict[str, Any]:
@@ -299,6 +421,25 @@ class RemediationService:
         except json.JSONDecodeError:
             LOGGER.warning("LLM output was not valid JSON: %s", cleaned[:200])
         return {"patch": None, "explanation": None}
+
+    @staticmethod
+    def _parse_llm_virtual_json(text: str) -> Dict[str, Any]:
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            parts = cleaned.split("\n", 1)
+            if len(parts) == 2:
+                cleaned = parts[1]
+        try:
+            data = json.loads(cleaned)
+            if isinstance(data, dict):
+                return {
+                    "updated_source_code": data.get("updated_source_code") or data.get("source"),
+                    "explanation": data.get("explanation") or data.get("summary"),
+                }
+        except json.JSONDecodeError:
+            LOGGER.warning("LLM output was not valid JSON for virtual fix: %s", cleaned[:200])
+        return {"updated_source_code": None, "explanation": None}
 
     # --- Workspace + tooling ---------------------------------------------------------
     def create_workspace_for_run(self, run_id: str) -> str:
@@ -402,6 +543,69 @@ class RemediationService:
             "compile_warning": "Compile skipped" if context.get("skip_compile") else None,
         }
 
+    def build_virtual_graph_context(self, source_code: str) -> Dict[str, Any]:
+        context: Dict[str, Any] = {
+            "annotations": [],
+            "uses_fields": [],
+            "calls": [],
+            "callers": [],
+        }
+        if not source_code:
+            return context
+        wrapped = f"class VirtualPreview {{\n{source_code}\n}}"
+        try:
+            tree = javalang.parse.parse(wrapped)
+        except Exception as exc:  # pragma: no cover - parser guard
+            LOGGER.warning("Failed to parse virtual method snippet: %s", exc)
+            return context
+        if not getattr(tree, "types", None):
+            return context
+        type_decl = tree.types[0]
+        methods = getattr(type_decl, "methods", None) or []
+        if not methods:
+            return context
+        method: MethodDeclaration = methods[0]
+        context["annotations"] = [
+            ann.name for ann in (method.annotations or []) if getattr(ann, "name", None)
+        ]
+        calls: set[str] = set()
+        uses_fields: List[Dict[str, Any]] = []
+        for _, node in method:
+            if isinstance(node, MethodInvocation):
+                parts = [p for p in (node.qualifier, node.member) if p]
+                call = ".".join(parts) if parts else node.member
+                if call:
+                    calls.add(call)
+            elif isinstance(node, MemberReference):
+                member = node.member
+                if member:
+                    uses_fields.append({"name": member, "type": None, "class_fqn": None})
+        context["calls"] = sorted(calls)
+        context["uses_fields"] = uses_fields
+        return context
+
+    def _build_virtual_bundle(
+        self, context: Dict[str, Any], updated_source: str, virtual_graph: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        graph_context = {
+            "annotations": virtual_graph.get("annotations") or [],
+            "uses_fields": virtual_graph.get("uses_fields") or [],
+            "calls": virtual_graph.get("calls") or [],
+            "callers": virtual_graph.get("callers") or [],
+        }
+        evidence = context.get("evidence") or {}
+        target_method = context.get("target_method")
+        return {
+            "target_method": target_method,
+            "method_name": self._method_name_from_signature(target_method),
+            "class_fqn": context.get("violation", {}).get("class_fqn"),
+            "file_path": context.get("file_path"),
+            "modifiers": context.get("violation", {}).get("modifiers") or [],
+            "source_code": updated_source,
+            "graph_context": graph_context,
+            "vector_context": evidence.get("vector_context") or [],
+        }
+
     # --- Helpers --------------------------------------------------------------------
     @staticmethod
     def _extract_files_from_patch(patch_text: str) -> List[str]:
@@ -446,6 +650,15 @@ class RemediationService:
         if len(message) <= limit:
             return message
         return f"{message[:limit]}... [truncated]"
+
+    @staticmethod
+    def _method_name_from_signature(signature: Optional[str]) -> Optional[str]:
+        if not signature:
+            return None
+        base = signature.split("(")[0]
+        if not base:
+            return None
+        return base.split(".")[-1] or None
 
 
 def orchestrate_remediation(violation_id: str) -> Dict[str, Any]:

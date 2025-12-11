@@ -75,3 +75,25 @@ def get_remediation_run(run_id: str) -> Dict[str, Any]:
             "error": f"Remediation run {run_id} not found",
         }
     return run.to_dict()
+
+
+def preview_virtual_remediation(
+    violation_id: str,
+    *,
+    target_method: str | None = None,
+    file_path: str | None = None,
+) -> Dict[str, Any]:
+    if not violation_id:
+        return {
+            "status": "INVALID",
+            "error": "violation_id is required",
+            "violation_id": violation_id,
+        }
+    service = _get_service()
+    try:
+        return service.preview_virtual_fix(
+            violation_id, target_method=target_method, file_path=file_path
+        )
+    except Exception as exc:  # pragma: no cover - runtime guard
+        LOGGER.exception("Virtual remediation preview failed: %s", exc)
+        return {"status": "ERROR", "error": str(exc), "violation_id": violation_id}

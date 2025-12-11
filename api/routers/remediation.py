@@ -10,11 +10,14 @@ from api.models.validation import (
     RemediationResponse,
     RemediationRunRequest,
     RemediationRunResponse,
+    RemediationPreviewRequest,
+    RemediationPreviewResponse,
 )
 from codegraph.api.services.remediation_service import (
     orchestrate_remediation,
     start_remediation_run,
     get_remediation_run,
+    preview_virtual_remediation,
 )
 
 router = APIRouter()
@@ -61,4 +64,21 @@ async def remediation_run_status(run_id: str):
         return JSONResponse(result, status_code=404)
     if result.get("status") == "INVALID":
         return JSONResponse(result, status_code=400)
+    return JSONResponse(result, status_code=200)
+
+
+@router.post("/remediation/preview", response_model=RemediationPreviewResponse)
+async def remediation_preview(payload: RemediationPreviewRequest):
+    result = preview_virtual_remediation(
+        payload.violation_id,
+        target_method=payload.target_method,
+        file_path=payload.file_path,
+    )
+    status = (result.get("status") or "").upper()
+    if status in {"INVALID"}:
+        return JSONResponse(result, status_code=400)
+    if status in {"NOT_FOUND"}:
+        return JSONResponse(result, status_code=404)
+    if status in {"ERROR"}:
+        return JSONResponse(result, status_code=500)
     return JSONResponse(result, status_code=200)

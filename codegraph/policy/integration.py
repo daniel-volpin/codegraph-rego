@@ -332,6 +332,20 @@ def evaluate_policies() -> Dict[str, Any]:
     }
 
 
+def evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Public wrapper to evaluate a single method bundle with OPA. This reuses the
+    same query and policy directory as the main evaluation path, but accepts an
+    in-memory bundle (e.g., for virtual remediation previews).
+    """
+    return _evaluate_bundle(bundle)
+
+
+def normalize_violation_payload(payload: Any) -> Optional[Dict[str, Any]]:
+    """Public helper to coerce OPA outputs into a dict or return None."""
+    return _normalize_violation_payload(payload)
+
+
 def _evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
     with tempfile.TemporaryDirectory() as tmp:
         input_path = os.path.join(tmp, "input.json")
