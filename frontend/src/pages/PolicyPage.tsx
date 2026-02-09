@@ -360,11 +360,24 @@ const PolicyPage = () => {
                       item.method || ""
                     }::${item.filePath || ""}`;
                     const remediationOutcome = remediationPreviews[violationKey];
-                    const verificationMessage =
-                      remediationOutcome?.opa_status === "PASS"
-                        ? "OPA check: PASS"
-                        : remediationOutcome?.opa_status === "FAIL"
-                        ? "OPA check: FAIL"
+                    const verification = remediationOutcome?.verification as
+                      | Record<string, unknown>
+                      | undefined;
+                    const targetRuleStatus =
+                      typeof verification?.target_rule_status === "string"
+                        ? verification.target_rule_status
+                        : remediationOutcome?.opa_status;
+                    const overallStatus =
+                      typeof verification?.overall_status === "string"
+                        ? verification.overall_status
+                        : undefined;
+                    const newViolations =
+                      Array.isArray(verification?.new_violations)
+                        ? verification?.new_violations?.length
+                        : undefined;
+                    const remainingViolations =
+                      Array.isArray(verification?.remaining_violations)
+                        ? verification?.remaining_violations?.length
                         : undefined;
                     const isStarting =
                       remediationPending && activeRemediationKey === violationKey;
@@ -479,9 +492,24 @@ const PolicyPage = () => {
                                       {remediationOutcome.error}
                                     </p>
                                   )}
-                                  {typeof verificationMessage === "string" && (
+                                  {targetRuleStatus && (
                                     <p className="remediation-note">
-                                      {verificationMessage}
+                                      Target rule status: {targetRuleStatus}
+                                    </p>
+                                  )}
+                                  {overallStatus && (
+                                    <p className="remediation-note">
+                                      Overall status: {overallStatus}
+                                    </p>
+                                  )}
+                                  {typeof newViolations === "number" && (
+                                    <p className="remediation-note">
+                                      New violations: {newViolations}
+                                    </p>
+                                  )}
+                                  {typeof remainingViolations === "number" && (
+                                    <p className="remediation-note">
+                                      Remaining violations: {remainingViolations}
                                     </p>
                                   )}
                                   {remediationOutcome.updated_source_code ? (
@@ -493,6 +521,12 @@ const PolicyPage = () => {
                                     <CodeHighlight
                                       code={JSON.stringify(remediationOutcome, null, 2)}
                                       language="json"
+                                    />
+                                  )}
+                                  {remediationOutcome.diff && (
+                                    <CodeHighlight
+                                      code={remediationOutcome.diff}
+                                      language="text"
                                     />
                                   )}
                                 </div>

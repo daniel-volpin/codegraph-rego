@@ -55,6 +55,8 @@ export interface RemediationPreviewResponse {
   explanation?: string | null;
   opa_status?: string | null;
   opa_details?: unknown;
+  diff?: string | null;
+  verification?: Record<string, unknown> | null;
   error?: string | null;
 }
 
