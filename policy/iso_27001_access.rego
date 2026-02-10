@@ -18,6 +18,9 @@ security_annotations := {"preauthorize", "secured", "rolesallowed", "denyall", "
 sensitive_keywords := {"delete", "remove", "destroy", "update", "modify", "drop"}
 logger_indicators := {"logger", "audit", "tracer"}
 md5_pattern := "messagedigest.getinstance(\"md5\")"
+des_pattern := "cipher.getinstance(\"des"
+rc4_pattern := "cipher.getinstance(\"rc4"
+ecb_pattern := "cipher.getinstance(\"aes/ecb"
 
 normalized_annotations := {normalized |
   annotations := input.graph_context.annotations
@@ -69,6 +72,39 @@ calls_md5 if {
   contains(lower(call), md5_pattern)
 }
 
+source_md5 if {
+  input.source_code != null
+  contains(lower(input.source_code), md5_pattern)
+}
+
+analysis_md5 if {
+  flags := input.analysis_flags
+  flags.md5_detected == true
+}
+
+analysis_weak_cipher if {
+  flags := input.analysis_flags
+  flags.weak_cipher_detected == true
+}
+
+source_weak_cipher if {
+  input.source_code != null
+  src := lower(input.source_code)
+  contains(src, des_pattern)
+}
+
+source_weak_cipher if {
+  input.source_code != null
+  src := lower(input.source_code)
+  contains(src, rc4_pattern)
+}
+
+source_weak_cipher if {
+  input.source_code != null
+  src := lower(input.source_code)
+  contains(src, ecb_pattern)
+}
+
 violations[v] if {
   has_endpoint_annotation
   not has_security_annotation
@@ -84,6 +120,26 @@ violations[v] if {
 violations[v] if {
   calls_md5
   v := violation_record("ISO-A.10", "Insecure MD5 digest usage detected")
+}
+
+violations[v] if {
+  source_md5
+  v := violation_record("ISO-A.10", "Insecure MD5 digest usage detected")
+}
+
+violations[v] if {
+  analysis_md5
+  v := violation_record("ISO-A.10", "Insecure MD5 digest usage detected")
+}
+
+violations[v] if {
+  analysis_weak_cipher
+  v := violation_record("ISO-A.10", "Weak cipher usage detected")
+}
+
+violations[v] if {
+  source_weak_cipher
+  v := violation_record("ISO-A.10", "Weak cipher usage detected")
 }
 
 violation_record(id, reason) := {

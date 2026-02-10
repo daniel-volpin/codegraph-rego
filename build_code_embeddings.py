@@ -27,6 +27,11 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         help="SentenceTransformer model id (default: %(default)s)",
     )
     parser.add_argument(
+        "--rebuild-index",
+        action="store_true",
+        help="Force a full embedding rebuild (ignore cached vectors)",
+    )
+    parser.add_argument(
         "--quiet",
         action="store_true",
         help="Suppress progress callbacks (only log essentials)",
@@ -45,7 +50,10 @@ def main(argv: List[str] | None = None) -> int:
     embedding_module.EMBEDDING_MODEL_NAME = args.model
 
     callback = None if args.quiet else _progress
-    embedding_module.EmbeddingService.build_embeddings(progress_callback=callback)
+    embedding_module.EmbeddingService.build_embeddings(
+        progress_callback=callback,
+        rebuild_index=args.rebuild_index,
+    )
     return 0
 
 

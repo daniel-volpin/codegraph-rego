@@ -9,6 +9,7 @@ supported endpoint. If the LLM is unavailable, a fallback message is returned so
 """
 
 from typing import Any, Dict, List
+import json
 
 from codegraph.config import LLM_MODEL
 from codegraph.llm.client import generate_chat_completion
@@ -21,7 +22,7 @@ def _read_code_snippet(file_path: str, needle: str, before: int = 8, after: int 
 def _build_prompt(violation: Dict[str, Any], code_snippet: str) -> List[Dict[str, str]]:
     system = (
         "You are a senior application security engineer. "
-        "Explain why the finding violates ISO 27001 A.9.1.1 and how to fix it. "
+        "Explain why the finding violates the applicable ISO 27001 control and how to fix it. "
         "Be concise and actionable."
     )
     user = (
@@ -61,3 +62,55 @@ def explain_policy_violations(
             "explanation": explanation,
         })
     return results
+
+
+def generate_policy_explanation(
+    violation: Dict[str, Any],
+    *,
+    include_graph_context: bool = True,
+    model: str = LLM_MODEL,
+) -> str:
+    """
+    Generate a single explanation with optional graph context for evaluation runners.
+    """
+    evidence = violation.get("evidence") or {}
+    file_path = evidence.get("file_path") or violation.get("file_path")
+    target_method = evidence.get("target_method") or violation.get("target_method")
+    start_line = evidence.get("start_line")
+    end_line = evidence.get("end_line")
+    source_code = evidence.get("source_code") or ""
+    graph_context = evidence.get("graph_context") or {}
+    vector_context = evidence.get("vector_context") or []
+
+    system = (
+        "You are a senior application security engineer. "
+        "Provide a concise explanation and remediation guidance. "
+        "When evidence is provided, cite it explicitly (file path or line range)."
+    )
+
+    user_lines = [f"Violation: {json.dumps(violation, indent=2)}"]
+    if include_graph_context:
+        user_lines.append("Evidence bundle:")
+        if file_path:
+            user_lines.append(f"- file_path: {file_path}")
+        if target_method:
+            user_lines.append(f"- target_method: {target_method}")
+        if start_line is not None and end_line is not None:
+            user_lines.append(f"- lines: {start_line}-{end_line}")
+        if source_code:
+            user_lines.append("Source snippet:")
+            user_lines.append("```java")
+            user_lines.append(source_code)
+            user_lines.append("```")
+        if graph_context:
+            user_lines.append("Graph context:")
+            user_lines.append(json.dumps(graph_context, indent=2))
+        if vector_context:
+            user_lines.append("Similar methods:")
+            user_lines.append(json.dumps(vector_context, indent=2))
+        user_lines.append("Cite file paths or line ranges in your response.")
+    else:
+        user_lines.append("Only the violation text is provided. Do not invent file paths or line numbers.")
+
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(user_lines)}]
+    return generate_chat_completion(messages, model=model or LLM_MODEL)

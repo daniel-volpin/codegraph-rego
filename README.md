@@ -73,14 +73,14 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 
 `policy/iso_27001_access.rego` currently encodes three ISO 27001 controls using Neo4j method facts. Each control is described in `policy/catalog.json`, which records the normative reference, evidence fields, and the Rego rule that enforces it.
 
-- **A.9.1.1 – Access control policy**  
+- **A.9.4.1 – Access control for applications**  
   Flags public HTTP endpoints missing security annotations such as `@PreAuthorize`, `@Secured`, `@RolesAllowed`, or `@DenyAll`.
-
-- **A.9.4.2 – Secure log-on procedures**  
-  Flags authentication endpoints (`login`, `signin`, `authenticate`, etc.) that are public but still lack security annotations.
 
 - **A.12.4.1 – Event logging**  
   Flags critical operations (mutation endpoints or verbs like `create`, `update`, `delete`) that show no evidence of logging (no logging/audit annotations and no calls to logger-style methods).
+
+- **A.10 – Cryptography**  
+  Flags insecure digest usage such as `MessageDigest.getInstance("MD5")`.
 
 Violations include the control id, method signature, file path, and a short reason.  
 Run locally with:
@@ -167,6 +167,20 @@ npm run preview -- --host --port 4173
 Verify:
 - Open `http://localhost:4173` (or the preview host) → navigate to Policy page.
 - Run “Evaluate Policies”, then click “Fix & Verify” on a violation; the card should update with agent state, diff, and verification result.
+
+---
+
+## Benchmark Evaluation Pipeline
+
+For thesis metrics (Precision/Recall/F1, citation success, remediation success), use the CLI runners:
+
+```bash
+python run_benchmark_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval --reset-neo4j
+python run_explanation_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval --reset-neo4j
+python run_remediation_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/remediation_eval --sample-size 10 --reset-neo4j
+```
+
+See `REPRODUCIBILITY.md` for full prerequisites, configuration, and output formats.
 
 ---
 

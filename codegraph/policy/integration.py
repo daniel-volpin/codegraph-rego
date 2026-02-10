@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
+from codegraph.policy.source_analysis import analyze_crypto_indicators
 from codegraph.db import get_neo4j_driver
 from codegraph.search.service import HybridSearchService
 
@@ -244,6 +245,7 @@ def build_evidence_bundle(
         "calls": method_snapshot.get("calls") or [],
         "callers": method_snapshot.get("callers") or [],
     }
+    analysis_flags = analyze_crypto_indicators(source_code)
     vector_context: List[str] = []
     if search_service is not None:
         try:
@@ -257,10 +259,13 @@ def build_evidence_bundle(
         "method_name": method_snapshot.get("name"),
         "class_fqn": method_snapshot.get("class_fqn"),
         "file_path": resolved_path.as_posix() if resolved_path else file_path,
+        "start_line": method_snapshot.get("start_line"),
+        "end_line": method_snapshot.get("end_line"),
         "modifiers": method_snapshot.get("modifiers") or [],
         "source_code": source_code,
         "graph_context": graph_context,
         "vector_context": vector_context,
+        "analysis_flags": analysis_flags,
     }
 
 
@@ -320,6 +325,11 @@ def evaluate_policies() -> Dict[str, Any]:
                         "source_code": bundle.get("source_code", ""),
                         "graph_context": bundle.get("graph_context", {}),
                         "vector_context": bundle.get("vector_context", []),
+                        "file_path": bundle.get("file_path"),
+                        "target_method": bundle.get("target_method"),
+                        "start_line": bundle.get("start_line"),
+                        "end_line": bundle.get("end_line"),
+                        "analysis_flags": bundle.get("analysis_flags", {}),
                     },
                 }
             )
@@ -428,6 +438,11 @@ class PolicyEvaluator:
                         "source_code": bundle.get("source_code", ""),
                         "graph_context": bundle.get("graph_context", {}),
                         "vector_context": bundle.get("vector_context", []),
+                        "file_path": bundle.get("file_path"),
+                        "target_method": bundle.get("target_method"),
+                        "start_line": bundle.get("start_line"),
+                        "end_line": bundle.get("end_line"),
+                        "analysis_flags": bundle.get("analysis_flags", {}),
                     },
                 }
             )

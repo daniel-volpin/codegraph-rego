@@ -5,7 +5,9 @@ import numpy as np
 import json
 import os
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Callable, Dict, List, Tuple
+import hashlib
+import logging
 
 from codegraph.config import (
     NEO4J_URI,
@@ -14,10 +16,51 @@ from codegraph.config import (
     EMBEDDING_MODEL_NAME,
     INDEX_DIR,
     EMBEDDING_METADATA_PATH,
+    EMBEDDING_CACHE_PATH,
 )
 
 CONTEXT_LINES_BEFORE = 5
 CONTEXT_LINES_AFTER = 20
+LOGGER = logging.getLogger(__name__)
+
+
+def _hash_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _load_embedding_cache(cache_path: str, model_name: str) -> Dict[str, Dict[str, object]]:
+    if not os.path.isfile(cache_path):
+        return {}
+    try:
+        with open(cache_path, "r") as handle:
+            payload = json.load(handle) or {}
+    except json.JSONDecodeError:
+        LOGGER.warning("Embedding cache at %s is invalid JSON; ignoring.", cache_path)
+        return {}
+    if payload.get("model") != model_name:
+        LOGGER.info("Embedding cache model mismatch; ignoring cached vectors.")
+        return {}
+    entries = payload.get("entries")
+    if isinstance(entries, dict):
+        return entries
+    return {}
+
+
+def _persist_embedding_cache(
+    cache_path: str,
+    model_name: str,
+    dim: int | None,
+    entries: Dict[str, Dict[str, object]],
+) -> None:
+    payload = {
+        "model": model_name,
+        "dim": dim,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "entries": entries,
+    }
+    os.makedirs(os.path.dirname(cache_path) or ".", exist_ok=True)
+    with open(cache_path, "w") as handle:
+        json.dump(payload, handle)
 
 class EmbeddingService:
     """
@@ -30,7 +73,11 @@ class EmbeddingService:
         return extract_code_snippet(file_path, method_name, before=CONTEXT_LINES_BEFORE, after=CONTEXT_LINES_AFTER)
 
     @staticmethod
-    def build_embeddings(progress_callback: Callable[[str, str, float], None] | None = None) -> None:
+    def build_embeddings(
+        progress_callback: Callable[[str, str, float], None] | None = None,
+        *,
+        rebuild_index: bool = False,
+    ) -> None:
         """
         Main workflow:
         1. Query Neo4j for all methods, retrieving their signature, name, and file path.
@@ -39,8 +86,7 @@ class EmbeddingService:
         4. Build a FAISS index for fast vector search and save it to disk.
         5. Save the mapping from FAISS index to method signatures as a JSON file.
         """
-        method_texts = []
-        signatures = []
+        method_records: List[Tuple[str, str]] = []
         if progress_callback:
             progress_callback("embedding", "Fetching methods from Neo4j…", 82.0)
         model = SentenceTransformer(EMBEDDING_MODEL_NAME)
@@ -52,13 +98,62 @@ class EmbeddingService:
                 for record in results:
                     code = EmbeddingService.extract_method_snippet(record["path"], record["name"])
                     if code:
-                        method_texts.append(code)
-                        signatures.append(record["sig"])
-        print(f"Embedding {len(method_texts)} methods...")
+                        method_records.append((record["sig"], code))
+        signatures = [sig for sig, _ in method_records]
+        if rebuild_index:
+            cache_entries: Dict[str, Dict[str, object]] = {}
+        else:
+            cache_entries = _load_embedding_cache(EMBEDDING_CACHE_PATH, EMBEDDING_MODEL_NAME)
+        if not signatures:
+            LOGGER.warning("No method snippets found; skipping embedding build.")
+            return
         if progress_callback:
-            progress_callback("embedding", f"Encoding {len(method_texts)} methods…", 86.0)
-        vectors = model.encode(method_texts, normalize_embeddings=True)
-        vectors_np = np.asarray(vectors, dtype="float32")
+            progress_callback("embedding", f"Preparing {len(signatures)} methods…", 84.0)
+        cached_hits = 0
+        to_encode: List[str] = []
+        to_encode_sigs: List[str] = []
+        to_encode_hashes: List[str] = []
+        vectors_by_sig: Dict[str, List[float]] = {}
+        cache_dim = None
+        if cache_entries:
+            sample = next(iter(cache_entries.values()), None)
+            if isinstance(sample, dict):
+                cached_vector = sample.get("vector")
+                if isinstance(cached_vector, list):
+                    cache_dim = len(cached_vector)
+        for sig, code in method_records:
+            code_hash = _hash_text(code)
+            cached = cache_entries.get(sig) if cache_entries else None
+            vector = cached.get("vector") if isinstance(cached, dict) else None
+            cached_hash = cached.get("hash") if isinstance(cached, dict) else None
+            if (
+                not rebuild_index
+                and isinstance(vector, list)
+                and cached_hash == code_hash
+                and (cache_dim is None or len(vector) == cache_dim)
+            ):
+                vectors_by_sig[sig] = vector
+                cached_hits += 1
+                continue
+            to_encode.append(code)
+            to_encode_sigs.append(sig)
+            to_encode_hashes.append(code_hash)
+        if to_encode:
+            if progress_callback:
+                progress_callback("embedding", f"Encoding {len(to_encode)} methods…", 86.0)
+            encoded = model.encode(to_encode, normalize_embeddings=True)
+            for idx, sig in enumerate(to_encode_sigs):
+                vec = encoded[idx].tolist()
+                vectors_by_sig[sig] = vec
+                cache_entries[sig] = {"hash": to_encode_hashes[idx], "vector": vec}
+        else:
+            if progress_callback:
+                progress_callback("embedding", "All embeddings reused from cache.", 86.0)
+        vectors_list = [vectors_by_sig[sig] for sig in signatures if sig in vectors_by_sig]
+        vectors_np = np.asarray(vectors_list, dtype="float32")
+        print(f"Embedding {len(signatures)} methods...")
+        if progress_callback:
+            progress_callback("embedding", f"Cache hits: {cached_hits}; encoded: {len(to_encode)}", 88.0)
         print(f"vectors_np shape: {vectors_np.shape}, dtype: {vectors_np.dtype}")
         os.makedirs(INDEX_DIR, exist_ok=True)
         index_path = os.path.join(INDEX_DIR, "code_embeddings.index")
@@ -96,13 +191,20 @@ class EmbeddingService:
             "signature_map": {
                 "full": sigmap_full_path,
                 "legacy": sigmap_legacy_path
-            }
+            },
+            "cache_path": EMBEDDING_CACHE_PATH,
+            "cache_hits": cached_hits,
+            "cache_misses": len(to_encode),
         }
         try:
             with open(EMBEDDING_METADATA_PATH, "w") as f:
                 json.dump(metadata, f, indent=2)
         except Exception:
             pass
+        try:
+            _persist_embedding_cache(EMBEDDING_CACHE_PATH, EMBEDDING_MODEL_NAME, dim, cache_entries)
+        except Exception as exc:
+            LOGGER.warning("Failed to persist embedding cache: %s", exc)
         print(
             f"Done. Saved FAISS index to {index_path} and signature map to {sigmap_full_path}."
         )

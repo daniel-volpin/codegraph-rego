@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     signature_map_path: str = Field("index/embedding_signature_map.json", description="Signature map path")
     signature_map_path_full: str = Field("index/embedding_full_signature_map.json", description="Full signature map path")
     embedding_metadata_path: str = Field("index/embedding_metadata.json", description="Embedding metadata path")
+    embedding_cache_path: str = Field("index/embedding_cache.json", description="Embedding cache path")
     embedding_model_name: str = Field("all-MiniLM-L6-v2", description="Embedding model name")
     upload_dir: str = Field("uploaded_code", description="Upload directory")
     java_root_dir: str = Field("uploaded_code", description="Java root directory")
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
             "signature_map_path": {"env": "SIGNATURE_MAP_PATH"},
             "signature_map_path_full": {"env": "SIGNATURE_MAP_PATH_FULL"},
             "embedding_metadata_path": {"env": "EMBEDDING_METADATA_PATH"},
+            "embedding_cache_path": {"env": "EMBEDDING_CACHE_PATH"},
             "embedding_model_name": {"env": "EMBEDDING_MODEL_NAME"},
             "upload_dir": {"env": "UPLOAD_DIR"},
             "java_root_dir": {"env": "JAVA_ROOT_DIR"},
@@ -48,6 +50,7 @@ FAISS_INDEX_PATH = settings.faiss_index_path
 SIGNATURE_MAP_PATH = settings.signature_map_path
 SIGNATURE_MAP_PATH_FULL = settings.signature_map_path_full
 EMBEDDING_METADATA_PATH = settings.embedding_metadata_path
+EMBEDDING_CACHE_PATH = settings.embedding_cache_path
 EMBEDDING_MODEL_NAME = settings.embedding_model_name
 UPLOAD_DIR = settings.upload_dir
 JAVA_ROOT_DIR = settings.java_root_dir
