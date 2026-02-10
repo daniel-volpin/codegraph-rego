@@ -18,19 +18,24 @@ pip install -r requirements.txt
 export NEO4J_URI=bolt://127.0.0.1:7687
 export NEO4J_USER=neo4j
 export NEO4J_PASS=your_password
+export OWASP_BENCHMARK_ROOT=/abs/path/to/BenchmarkJava
 ```
 
 ## Configure the Benchmark
-Edit these files:
+Use `configs/benchmark_selection.example.json` as the starting template:
+```bash
+cp configs/benchmark_selection.example.json configs/benchmark_selection.json
+```
+
+Edit these files as needed:
 - `configs/benchmark_selection.json`
-  - `benchmark_root`: absolute path to OWASP Benchmark
-  - For the `BenchmarkJava` repo, set `ground_truth_path` to `expectedresults-1.2.csv`
+  - `benchmark_root`: defaults to `${OWASP_BENCHMARK_ROOT}`
+  - For the `BenchmarkJava` repo, `ground_truth_path` should point to `expectedresults-1.2.csv`
   - `categories`: subset of category ids to evaluate
   - `max_cases_per_category`: keep scope small (2–4 categories recommended)
-  - `build_command`: command for remediation build checks
 - `configs/control_mapping.json`
-  - map ISO/ASVS controls → CWE → Rego rule ids
-  - for OWASP BenchmarkJava, consider `crypto` (CWE-327) and `hash` (CWE-328)
+  - maps ISO controls → CWE → Rego rule ids
+  - includes split A.10 rule ids (`ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-CRYPTO`)
 - `debug_fn_analysis` (in selection config)
   - when true, writes `fn_analysis.jsonl` with per-testcase context
 
@@ -76,6 +81,10 @@ python run_remediation_eval.py --config configs/benchmark_selection.json \
   --sample-size 10 \
   --reset-neo4j
 ```
+
+Notes:
+- This runner reuses the same remediation apply/verify service flow as `/remediation/apply`.
+- Default mode is `dry_run` (no persistent source changes).
 
 Outputs:
 - `outputs/remediation_eval/remediation_metrics.json`
