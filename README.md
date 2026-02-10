@@ -5,7 +5,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 - **Ingestion** – parses Java sources with `javalang`, stores classes/methods in Neo4j, and links `DECLARES`, `CALLS`, `USES`, `EXTENDS`, `IMPLEMENTS`, and `NESTED_IN` relationships.
 - **Semantic search** – embeds method snippets with Sentence Transformers, saves a FAISS index, and performs hybrid search that adds graph context.
 - **Policy evaluation** – exports Neo4j facts to OPA/Rego to enforce ISO controls, with optional LiteLLM-powered explanations.
-- **Remediation** – agentic “Fix & Verify” loop that proposes patches (LLM), applies them in a temp workspace, compiles, re-ingests, and re-runs OPA to validate fixes.
+- **Remediation** – “Fix & Verify” loop that proposes patches (LLM), applies them in a temp workspace, compiles, re-ingests, and re-runs OPA to validate fixes.
 - **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, and `/health`.
 
 ---
@@ -123,10 +123,23 @@ python3 hybrid_code_search.py
   - `POST /remediation/preview` with `{"violation_id": "ISO-A.9.4.1"}` → returns a preview-only remediation:
     - LLM-proposed full replacement method (`updated_source_code`)
     - Short explanation
-    - OPA verdict for the same rule (`opa_status`: `PASS`/`FAIL`)
+    - OPA verdict for the same rule (`opa_status`: `PASS`/`FAIL`) plus verification breakdown + diff
 - Flow: gather violation context → LLM proposes full method → build virtual graph context in memory → re-run OPA on the virtual bundle.
 - No filesystem edits, compilation, or Neo4j mutations; the suggestion is for human review/copy‑paste.
 - Requires `opa` on `PATH`, LiteLLM-configured LLM access, and Neo4j reachable for the initial evidence.
+
+## Remediation Apply & Verify (Temp Workspace)
+
+- API endpoint:
+  - `POST /remediation/apply` with `{"violation_id": "ISO-A.9.4.1", "mode": "dry_run"}` → runs a temp workspace fix loop:
+    1. Baseline method-level OPA evaluation (before).
+    2. LLM proposes a replacement method grounded in evidence.
+    3. Apply the replacement in a temp workspace and (best effort) compile.
+    4. Re-ingest the modified file into Neo4j and re-run OPA for verification.
+    5. Return a structured response including diff, updated source, and verification summary.
+- `mode` controls persistence:
+  - `dry_run` (default) restores the original file on disk and reverts the graph after verification.
+  - `apply` persists the change back to the original file only when verification passes.
 
 ---
 
@@ -142,6 +155,7 @@ Verify:
 - `curl http://localhost:8000/health` → all subsystems should be `true` (OPA requires binary on PATH).
 - `curl http://localhost:8000/policy/evaluate` → returns violations or empty list.
 - `curl -X POST http://localhost:8000/remediation/preview -H "Content-Type: application/json" -d '{"violation_id":"<ID>"}'` → returns a virtual fix preview with OPA PASS/FAIL.
+- `curl -X POST http://localhost:8000/remediation/apply -H "Content-Type: application/json" -d '{"violation_id":"<ID>","mode":"dry_run"}'` → runs apply & verify in a temp workspace (dry-run by default).
 
 2) **Frontend**
 ```bash

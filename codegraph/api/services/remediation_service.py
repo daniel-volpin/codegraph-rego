@@ -37,3 +37,32 @@ def preview_virtual_remediation(
     except Exception as exc:  # pragma: no cover - runtime guard
         LOGGER.exception("Virtual remediation preview failed: %s", exc)
         return {"status": "ERROR", "error": str(exc), "violation_id": violation_id}
+
+
+def apply_remediation(
+    violation_id: str,
+    *,
+    target_method: str | None = None,
+    file_path: str | None = None,
+    mode: str = "dry_run",
+    max_attempts: int = 2,
+) -> Dict[str, Any]:
+    """Apply remediation in a temp workspace and verify via OPA."""
+    if not violation_id:
+        return {
+            "status": "INVALID",
+            "error": "violation_id is required",
+            "violation_id": violation_id,
+        }
+    service = _get_service()
+    try:
+        return service.apply_fix(
+            violation_id,
+            target_method=target_method,
+            file_path=file_path,
+            mode=mode,
+            max_attempts=max_attempts,
+        )
+    except Exception as exc:  # pragma: no cover - runtime guard
+        LOGGER.exception("Remediation apply failed: %s", exc)
+        return {"status": "ERROR", "error": str(exc), "violation_id": violation_id}
