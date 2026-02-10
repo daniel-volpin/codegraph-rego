@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 import random
 import re
 import shutil
@@ -78,6 +79,12 @@ def _parse_truth(value: str | None) -> Optional[bool]:
     return None
 
 
+def _expand_env_path(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return os.path.expandvars(value)
+
+
 def load_mapping_config(path: Path) -> List[CategorySpec]:
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
@@ -106,14 +113,15 @@ def load_selection_config(path: Path) -> Dict[str, Any]:
     if not isinstance(payload, dict) or "benchmark_root" not in payload:
         raise ValueError("Selection config must include 'benchmark_root'.")
     return {
-        "benchmark_root": payload["benchmark_root"],
+        "benchmark_root": _expand_env_path(str(payload["benchmark_root"])),
         "java_relative_root": payload.get("java_relative_root", "src/main/java"),
-        "ground_truth_path": payload.get("ground_truth_path"),
+        "ground_truth_path": _expand_env_path(payload.get("ground_truth_path")),
         "categories": payload.get("categories") or [],
         "testcase_ids": payload.get("testcase_ids") or [],
         "max_cases_per_category": payload.get("max_cases_per_category"),
         "seed": payload.get("seed", 7),
         "debug_fn_analysis": bool(payload.get("debug_fn_analysis", False)),
+        "build_command": payload.get("build_command"),
     }
 
 
