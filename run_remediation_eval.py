@@ -1,21 +1,18 @@
 """
-Run remediation success evaluation on a small subset of violations.
+Run remediation success evaluation using the same apply/verify flow as the API.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import random
-import shutil
-import subprocess
 import tempfile
-import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
+from codegraph.api.services.remediation_service import apply_remediation
 from codegraph.db import get_neo4j_driver
 from codegraph.evaluation.benchmark import (
     extract_testcase_id,
@@ -28,9 +25,8 @@ from codegraph.evaluation.benchmark import (
     stage_benchmark_subset,
 )
 from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
-from codegraph.ingestion.service import ingest, process_single_file
-from codegraph.policy.integration import PolicyEvaluator, evaluate_policies
-from codegraph.remediation.service import RemediationService
+from codegraph.ingestion.service import ingest
+from codegraph.policy.integration import evaluate_policies
 
 LOGGER = logging.getLogger("codegraph.eval.remediation")
 
@@ -61,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--build-command",
         default=None,
-        help="Build/compile command to run in each case directory",
+        help="Legacy option kept for compatibility (compile behavior comes from apply flow).",
     )
     parser.add_argument(
         "--table-format",
@@ -81,9 +77,21 @@ def parse_args() -> argparse.Namespace:
         help="Optional working directory to stage benchmark subset",
     )
     parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=2,
+        help="Maximum remediation attempts per violation (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["dry_run", "apply"],
+        default="dry_run",
+        help="Remediation execution mode (default: %(default)s)",
+    )
+    parser.add_argument(
         "--reset-neo4j",
         action="store_true",
-        help="Clear Neo4j before each ingestion (recommended for deterministic results)",
+        help="Clear Neo4j before ingesting benchmark subset",
     )
     return parser.parse_args()
 
@@ -97,33 +105,48 @@ def clear_graph() -> None:
         driver.close()
 
 
-def apply_method_replacement(
-    file_path: Path,
-    updated_source: str,
-    start_line: Optional[int],
-    end_line: Optional[int],
-    fallback_snippet: str,
-) -> bool:
-    if not file_path.is_file():
-        return False
-    lines = file_path.read_text(encoding="utf-8").splitlines()
-    dedented = textwrap.dedent(updated_source).strip("\n")
-    replacement_lines = dedented.splitlines()
-    if start_line and end_line and 1 <= start_line <= end_line <= len(lines):
-        lines[start_line - 1 : end_line] = replacement_lines
-        file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return True
-    if fallback_snippet and fallback_snippet in "\n".join(lines):
-        updated = "\n".join(lines).replace(fallback_snippet, dedented, 1)
-        file_path.write_text(updated, encoding="utf-8")
-        return True
-    return False
+def _build_candidate_violations(
+    violations: List[Dict[str, Any]],
+    selection_cfg: Dict[str, Any],
+    categories: List[Any],
+    selection: Any,
+) -> List[Dict[str, Any]]:
+    categories_by_id = {spec.id: spec for spec in categories}
+    selected_category_ids = selection_cfg.get("categories") or [spec.id for spec in categories]
 
+    violations_by_testcase: Dict[str, List[Dict[str, Any]]] = {}
+    for violation in violations:
+        testcase_id = extract_testcase_id(
+            violation.get("target_method") or violation.get("file_path")
+        )
+        if not testcase_id:
+            continue
+        violations_by_testcase.setdefault(testcase_id, []).append(violation)
 
-def evaluate_fix(policy_evaluator: PolicyEvaluator, target_method: str, violation_id: str) -> bool:
-    result = policy_evaluator.evaluate(target_method)
-    violations = result.get("violations") or []
-    return not any(v.get("violation_id") == violation_id for v in violations)
+    candidates: List[Dict[str, Any]] = []
+    seen_keys: set[tuple[str, str, str]] = set()
+    for category_id in selected_category_ids:
+        spec = categories_by_id.get(category_id)
+        if not spec:
+            continue
+        records = selection.selected_by_category.get(category_id, [])
+        positive_testcases = {rec.testcase_id for rec in records if rec.label}
+        for testcase_id in positive_testcases:
+            for violation in violations_by_testcase.get(testcase_id, []):
+                if violation.get("violation_id") not in spec.rego_rules:
+                    continue
+                key = (
+                    str(violation.get("violation_id")),
+                    str(violation.get("target_method")),
+                    str(violation.get("file_path")),
+                )
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                candidate = dict(violation)
+                candidate["category"] = spec.label
+                candidates.append(candidate)
+    return candidates
 
 
 def main() -> int:
@@ -152,23 +175,20 @@ def main() -> int:
         temp_context = tempfile.TemporaryDirectory()
         work_root = Path(temp_context.name)
 
-    base_subset_root = work_root / "base_subset"
-    base_subset_root.mkdir(parents=True, exist_ok=True)
-
     try:
         stage_benchmark_subset(
             benchmark_root,
             selection_cfg["java_relative_root"],
             selected_ids,
-            base_subset_root,
+            work_root,
         )
-        base_java_root = base_subset_root / selection_cfg["java_relative_root"]
+        java_root = work_root / selection_cfg["java_relative_root"]
 
         if args.reset_neo4j:
             clear_graph()
 
-        LOGGER.info("Ingesting base subset from %s", base_java_root)
-        ingest(base_java_root.as_posix())
+        LOGGER.info("Ingesting benchmark subset from %s", java_root)
+        ingest(java_root.as_posix())
 
         eval_result = evaluate_policies()
         if eval_result.get("error"):
@@ -176,138 +196,68 @@ def main() -> int:
             return 1
         violations = eval_result.get("violations") or []
 
-        violations_by_testcase: Dict[str, List[Dict[str, Any]]] = {}
-        for violation in violations:
-            testcase_id = extract_testcase_id(
-                violation.get("target_method") or violation.get("file_path")
-            )
-            if not testcase_id:
-                continue
-            violations_by_testcase.setdefault(testcase_id, []).append(violation)
-
-        categories_by_id = {spec.id: spec for spec in categories}
-        selected_category_ids = selection_cfg.get("categories") or [spec.id for spec in categories]
-
-        candidate_violations: List[Dict[str, Any]] = []
-        for category_id in selected_category_ids:
-            spec = categories_by_id.get(category_id)
-            if not spec:
-                continue
-            records = selection.selected_by_category.get(category_id, [])
-            positive_testcases = {rec.testcase_id for rec in records if rec.label}
-            for testcase_id in positive_testcases:
-                for violation in violations_by_testcase.get(testcase_id, []):
-                    if violation.get("violation_id") not in spec.rego_rules:
-                        continue
-                    candidate = dict(violation)
-                    candidate["category"] = spec.label
-                    candidate_violations.append(candidate)
-
-        if not candidate_violations:
+        candidates = _build_candidate_violations(violations, selection_cfg, categories, selection)
+        if not candidates:
             LOGGER.warning("No candidate violations found for remediation evaluation.")
             return 1
 
         rng = random.Random(args.seed)
-        if len(candidate_violations) > args.sample_size:
-            candidate_violations = rng.sample(candidate_violations, k=args.sample_size)
+        if len(candidates) > args.sample_size:
+            candidates = rng.sample(candidates, k=args.sample_size)
 
         results: List[Dict[str, Any]] = []
-        policy_evaluator = PolicyEvaluator()
-        remediation_service = RemediationService()
-        build_command = args.build_command or selection_cfg.get("build_command")
-
-        for idx, violation in enumerate(candidate_violations, start=1):
-            case_dir = output_dir / f"case_{idx:03d}"
-            if case_dir.exists():
-                shutil.rmtree(case_dir)
-            shutil.copytree(base_subset_root, case_dir)
-            case_java_root = case_dir / selection_cfg["java_relative_root"]
-
-            if args.reset_neo4j:
-                clear_graph()
-
-            LOGGER.info("Ingesting case %d from %s", idx, case_java_root)
-            ingest(case_java_root.as_posix())
-
-            target_method = violation.get("target_method")
+        for violation in candidates:
             violation_id = violation.get("violation_id")
+            target_method = violation.get("target_method")
             evidence = violation.get("evidence") or {}
             file_path = evidence.get("file_path") or violation.get("file_path")
-            start_line = evidence.get("start_line")
-            end_line = evidence.get("end_line")
-            source_code = evidence.get("source_code") or ""
 
-            if not target_method or not file_path or not violation_id:
+            if not violation_id or not target_method or not file_path:
                 results.append(
                     {
                         "violation_id": violation_id,
                         "target_method": target_method,
                         "file_path": file_path,
-                        "status": "skipped",
-                        "error": "missing_target_method_or_file_path",
+                        "status": "SKIPPED",
+                        "error": "missing_violation_fields",
+                        "category": violation.get("category"),
                     }
                 )
                 continue
 
-            try:
-                rel_path = Path(file_path).relative_to(base_java_root)
-            except ValueError:
-                rel_path = Path(file_path).name
-            case_file_path = case_java_root / rel_path
-
-            preview = remediation_service.preview_virtual_fix(
-                violation_id,
-                target_method=target_method,
-                file_path=case_file_path.as_posix(),
+            apply_result = apply_remediation(
+                str(violation_id),
+                target_method=str(target_method),
+                file_path=str(file_path),
+                mode=args.mode,
+                max_attempts=args.max_attempts,
             )
-            if preview.get("status") != "OK":
-                results.append(
-                    {
-                        "violation_id": violation_id,
-                        "target_method": target_method,
-                        "file_path": case_file_path.as_posix(),
-                        "status": "preview_failed",
-                        "error": preview.get("error"),
-                    }
-                )
-                continue
-
-            updated_source = preview.get("updated_source_code") or ""
-            patch_applied = apply_method_replacement(
-                case_file_path, updated_source, start_line, end_line, source_code
+            verification = apply_result.get("verification") or {}
+            compilation = apply_result.get("compilation") or {}
+            target_rule_status = verification.get("target_rule_status")
+            policy_pass = (
+                apply_result.get("status") == "OK"
+                and target_rule_status == "PASS"
             )
-
-            policy_pass = False
-            if patch_applied:
-                try:
-                    process_single_file(case_file_path.as_posix())
-                    policy_pass = evaluate_fix(policy_evaluator, target_method, violation_id)
-                except Exception as exc:
-                    LOGGER.error("Policy evaluation failed after patch: %s", exc)
-
-            build_pass = None
-            build_output = None
-            if build_command:
-                proc = subprocess.run(
-                    build_command,
-                    shell=True,
-                    cwd=case_dir.as_posix(),
-                    capture_output=True,
-                    text=True,
-                )
-                build_pass = proc.returncode == 0
-                build_output = (proc.stdout or "") + (proc.stderr or "")
-
+            build_pass = (
+                compilation.get("success")
+                if compilation.get("attempted")
+                else None
+            )
             results.append(
                 {
                     "violation_id": violation_id,
                     "target_method": target_method,
-                    "file_path": case_file_path.as_posix(),
-                    "patch_applied": patch_applied,
+                    "file_path": file_path,
+                    "status": apply_result.get("status"),
+                    "error": apply_result.get("error"),
+                    "patch_applied": bool(apply_result.get("updated_source_code")),
                     "policy_pass": policy_pass,
                     "build_pass": build_pass,
-                    "build_output": build_output,
                     "category": violation.get("category"),
+                    "verification": verification,
+                    "compilation": compilation,
+                    "diff": apply_result.get("diff"),
                 }
             )
     finally:
@@ -315,10 +265,16 @@ def main() -> int:
             temp_context.cleanup()
 
     attempted = len(results)
-    fix_success = sum(1 for item in results if item.get("policy_pass"))
+    fix_success = sum(1 for item in results if item.get("policy_pass") is True)
+    build_attempted = sum(
+        1
+        for item in results
+        if isinstance(item.get("compilation"), dict)
+        and item["compilation"].get("attempted") is True
+    )
     build_success = sum(1 for item in results if item.get("build_pass") is True)
     fix_rate = fix_success / attempted if attempted else 0.0
-    build_rate = build_success / attempted if attempted else 0.0
+    build_rate = build_success / build_attempted if build_attempted else 0.0
 
     metrics = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -326,12 +282,15 @@ def main() -> int:
         "ground_truth_file": truth_path.as_posix(),
         "ground_truth_schema": truth_schema,
         "selection": selection_cfg,
+        "mode": args.mode,
+        "max_attempts": args.max_attempts,
         "attempted": attempted,
         "fix_success": fix_success,
+        "build_attempted": build_attempted,
         "build_success": build_success,
         "fix_success_rate": round(fix_rate, 4),
         "build_success_rate": round(build_rate, 4),
-        "build_command": build_command,
+        "legacy_build_command_arg": args.build_command,
         "results": results,
     }
 
@@ -342,20 +301,24 @@ def main() -> int:
             {
                 "violation_id": item.get("violation_id"),
                 "target_method": item.get("target_method"),
+                "status": item.get("status"),
                 "patch_applied": item.get("patch_applied"),
                 "policy_pass": item.get("policy_pass"),
                 "build_pass": item.get("build_pass"),
                 "category": item.get("category"),
+                "error": item.get("error"),
             }
             for item in results
         ],
         fieldnames=[
             "violation_id",
             "target_method",
+            "status",
             "patch_applied",
             "policy_pass",
             "build_pass",
             "category",
+            "error",
         ],
     )
 
@@ -363,6 +326,7 @@ def main() -> int:
     table_rows = [
         ["Fix Success Rate", round(fix_rate, 4)],
         ["Build Success Rate", round(build_rate, 4)],
+        ["Build Attempts", build_attempted],
         ["Attempted", attempted],
     ]
     if args.table_format == "tex":
