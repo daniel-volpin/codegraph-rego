@@ -29,6 +29,7 @@ ISO_RULES_PATH = os.path.join(POLICY_DIR, "iso_rules.json")
 LOGGER = logging.getLogger(__name__)
 
 _CATALOG_CACHE: Dict[str, Dict[str, Any]] | None = None
+_CATALOG_ENTRIES_CACHE: List[Dict[str, Any]] | None = None
 _ISO_RULES_CACHE: Dict[str, Any] | None = None
 _HYBRID_SEARCH: Optional[HybridSearchService] = None
 
@@ -46,8 +47,8 @@ def _load_hybrid_search() -> Optional[HybridSearchService]:
 
 
 def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
-    global _CATALOG_CACHE, raw
-    if _CATALOG_CACHE is None:
+    global _CATALOG_CACHE, _CATALOG_ENTRIES_CACHE, raw
+    if _CATALOG_CACHE is None or _CATALOG_ENTRIES_CACHE is None:
         try:
             with open(CATALOG_PATH, "r") as file:
                 raw = json.load(file)
@@ -61,12 +62,58 @@ def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
             entries = raw
         else:
             entries = []
-        _CATALOG_CACHE = {entry.get("control") or entry.get("id"): entry for entry in entries}
+        catalog_lookup: Dict[str, Dict[str, Any]] = {}
+        catalog_entries: List[Dict[str, Any]] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            entry_id = entry.get("id")
+            if not isinstance(entry_id, str) or not entry_id.strip():
+                continue
+            catalog_entries.append(entry)
+            catalog_lookup[entry_id] = entry
+            aliases = entry.get("alias_ids") or []
+            if isinstance(aliases, list):
+                for alias in aliases:
+                    if isinstance(alias, str) and alias.strip():
+                        catalog_lookup[alias] = entry
+        _CATALOG_CACHE = catalog_lookup
+        _CATALOG_ENTRIES_CACHE = catalog_entries
     return _CATALOG_CACHE or {}
 
 
 def get_policy_catalog_entries() -> List[Dict[str, Any]]:
-    return list(load_policy_catalog().values())
+    load_policy_catalog()
+    return list(_CATALOG_ENTRIES_CACHE or [])
+
+
+def _violation_id_variants(violation_id: str) -> List[str]:
+    text = str(violation_id).strip()
+    if not text:
+        return []
+    variants = [text]
+    if text.startswith("ISO-27001-"):
+        base = text[len("ISO-27001-") :]
+    elif text.startswith("ISO-"):
+        base = text[len("ISO-") :]
+    else:
+        base = text
+    for candidate in (base, f"ISO-{base}", f"ISO-27001-{base}"):
+        if candidate and candidate not in variants:
+            variants.append(candidate)
+    return variants
+
+
+def _resolve_catalog_entry(
+    violation_id: Any, catalog: Dict[str, Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    if not violation_id:
+        return None
+    for candidate in _violation_id_variants(str(violation_id)):
+        entry = catalog.get(candidate)
+        if entry is not None:
+            return entry
+    return None
 
 
 def load_iso_rules() -> Dict[str, Any]:
@@ -312,7 +359,7 @@ def evaluate_policies() -> Dict[str, Any]:
             violation_id = normalized.get("violation_id") or normalized.get("id")
             reason = normalized.get("reason")
             severity = normalized.get("severity")
-            control_meta = catalog.get(violation_id) if violation_id else None
+            control_meta = _resolve_catalog_entry(violation_id, catalog)
             violations.append(
                 {
                     "violation_id": violation_id,
@@ -425,7 +472,7 @@ class PolicyEvaluator:
             if normalized is None:
                 continue
             violation_id = normalized.get("violation_id") or normalized.get("id")
-            control_meta = catalog.get(violation_id) if violation_id else None
+            control_meta = _resolve_catalog_entry(violation_id, catalog)
             violations.append(
                 {
                     "violation_id": violation_id,

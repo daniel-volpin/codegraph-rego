@@ -1,6 +1,53 @@
 {
   "controls": [
     {
+      "id": "ISO-27001-A.9.1.1",
+      "control": "A.9.1.1",
+      "title": "Access Control Policy",
+      "reference": "ISO/IEC 27001:2022 A.9.1.1",
+      "summary": "Access to networked services must be restricted in accordance with an established access control policy.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "annotations",
+        "modifiers",
+        "file_path"
+      ]
+    },
+    {
+      "id": "ISO-27001-A.9.4.2",
+      "control": "A.9.4.2",
+      "title": "Secure Log-on Procedures",
+      "reference": "ISO/IEC 27001:2022 A.9.4.2",
+      "summary": "Systems should enforce strong log-on mechanisms so that only authorized users can access protected functionality.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "name",
+        "annotations",
+        "modifiers",
+        "file_path"
+      ]
+    },
+    {
+      "id": "ISO-27001-A.12.4.1",
+      "control": "A.12.4.1",
+      "title": "Event Logging",
+      "reference": "ISO/IEC 27001:2022 A.12.4.1",
+      "summary": "Security events should be logged to record actions that could affect information security.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "annotations",
+        "modifiers",
+        "file_path",
+        "called_signatures"
+      ]
+    },
+    {
       "id": "ISO-A.9.4.1",
       "control": "A.9.4.1",
       "title": "Access Control for Applications",
