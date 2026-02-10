@@ -68,6 +68,54 @@ def _extract_json_block(text: str) -> Optional[str]:
     return text[start : end + 1]
 
 
+def _extract_assistant_content(response: Any) -> str:
+    if isinstance(response, str):
+        return response
+    if isinstance(response, dict):
+        try:
+            choices = response.get("choices") or []
+            if choices and isinstance(choices[0], dict):
+                message = choices[0].get("message") or {}
+                content = message.get("content")
+                if isinstance(content, str):
+                    return content
+        except Exception:  # pragma: no cover - defensive guard
+            pass
+    return str(response or "")
+
+
+def _parse_json_object_from_text(text: str) -> Optional[Dict[str, Any]]:
+    raw = text.strip()
+    if not raw:
+        return None
+
+    try:
+        loaded = json.loads(raw)
+        return loaded if isinstance(loaded, dict) else None
+    except json.JSONDecodeError:
+        pass
+
+    extracted = _extract_json_block(raw)
+    if extracted:
+        try:
+            loaded = json.loads(extracted)
+            return loaded if isinstance(loaded, dict) else None
+        except json.JSONDecodeError:
+            pass
+
+    decoder = json.JSONDecoder()
+    for idx, char in enumerate(raw):
+        if char != "{":
+            continue
+        try:
+            loaded, _ = decoder.raw_decode(raw[idx:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(loaded, dict):
+            return loaded
+    return None
+
+
 def _cached_policy_evaluation() -> Dict[str, Any]:
     now = time.monotonic()
     cached = _POLICY_CACHE.get("data")
@@ -250,7 +298,11 @@ class RemediationService:
             updated_source = llm_output.get("updated_source_code")
             raw_output = llm_output.get("raw_output")
             if not updated_source:
-                attempt_errors.append("LLM did not return updated_source_code")
+                parse_error = llm_output.get("parse_error")
+                if parse_error:
+                    attempt_errors.append(str(parse_error))
+                else:
+                    attempt_errors.append("schema mismatch: missing updated_source_code")
                 continue
             try:
                 updated_content, original_method, updated_method = self._replace_method_in_source(
@@ -484,23 +536,47 @@ class RemediationService:
         return parsed
 
     @staticmethod
-    def _parse_llm_virtual_json(text: str) -> Dict[str, Any]:
-        raw = text.strip()
-        extracted = _extract_json_block(raw)
-        if extracted is None:
-            LOGGER.warning("LLM output did not contain JSON object: %s", raw[:200])
-            return {"updated_source_code": None, "explanation": None}
-        try:
-            data = json.loads(extracted)
-        except json.JSONDecodeError:
+    def _parse_llm_virtual_json(response: Any) -> Dict[str, Any]:
+        content = _extract_assistant_content(response).strip()
+        data = _parse_json_object_from_text(content)
+        if data is None:
+            extracted = _extract_json_block(content or "")
+            if extracted is None:
+                LOGGER.warning("LLM output did not contain JSON object: %s", (content or "")[:200])
+                return {
+                    "updated_source_code": None,
+                    "explanation": None,
+                    "parse_error": "invalid_json: no JSON object found",
+                }
             LOGGER.warning("LLM output was not valid JSON for virtual fix: %s", extracted[:200])
-            return {"updated_source_code": None, "explanation": None}
-        if isinstance(data, dict):
             return {
-                "updated_source_code": data.get("updated_source_code") or data.get("source"),
-                "explanation": data.get("explanation") or data.get("summary"),
+                "updated_source_code": None,
+                "explanation": None,
+                "parse_error": "invalid_json: malformed JSON payload",
             }
-        return {"updated_source_code": None, "explanation": None}
+
+        updated_source_code = (
+            data.get("updated_source_code")
+            or data.get("replacement_method_code")
+            or data.get("source")
+        )
+        explanation = data.get("explanation") or data.get("summary")
+        if not isinstance(updated_source_code, str) or not updated_source_code.strip():
+            LOGGER.warning(
+                "LLM output schema mismatch for virtual fix. Expected one of "
+                "updated_source_code/replacement_method_code/source; got keys: %s",
+                sorted(data.keys()),
+            )
+            return {
+                "updated_source_code": None,
+                "explanation": explanation if isinstance(explanation, str) else None,
+                "parse_error": "schema mismatch: missing replacement code key",
+            }
+        return {
+            "updated_source_code": updated_source_code,
+            "explanation": explanation if isinstance(explanation, str) else None,
+            "parse_error": None,
+        }
 
     # --- Virtual graph extraction ---------------------------------------------------
     def build_virtual_graph_context(
