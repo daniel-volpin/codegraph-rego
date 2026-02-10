@@ -119,27 +119,27 @@ violations[v] if {
 
 violations[v] if {
   calls_md5
-  v := violation_record("ISO-A.10", "Insecure MD5 digest usage detected")
+  v := violation_record("ISO-A.10-WEAK-HASH", "Insecure MD5 digest usage detected")
 }
 
 violations[v] if {
   source_md5
-  v := violation_record("ISO-A.10", "Insecure MD5 digest usage detected")
+  v := violation_record("ISO-A.10-WEAK-HASH", "Insecure MD5 digest usage detected")
 }
 
 violations[v] if {
   analysis_md5
-  v := violation_record("ISO-A.10", "Insecure MD5 digest usage detected")
+  v := violation_record("ISO-A.10-WEAK-HASH", "Insecure MD5 digest usage detected")
 }
 
 violations[v] if {
   analysis_weak_cipher
-  v := violation_record("ISO-A.10", "Weak cipher usage detected")
+  v := violation_record("ISO-A.10-WEAK-CRYPTO", "Weak cipher usage detected")
 }
 
 violations[v] if {
   source_weak_cipher
-  v := violation_record("ISO-A.10", "Weak cipher usage detected")
+  v := violation_record("ISO-A.10-WEAK-CRYPTO", "Weak cipher usage detected")
 }
 
 violation_record(id, reason) := {

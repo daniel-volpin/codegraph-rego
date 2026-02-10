@@ -5,14 +5,14 @@
       "label": "Crypto (CWE-327)",
       "iso_controls": ["A.10"],
       "cwes": ["CWE-327"],
-      "rego_rules": ["ISO-A.10"]
+      "rego_rules": ["ISO-A.10-WEAK-CRYPTO"]
     },
     {
       "id": "hash-md5",
       "label": "Hash (CWE-328)",
       "iso_controls": ["A.10"],
       "cwes": ["CWE-328"],
-      "rego_rules": ["ISO-A.10"]
+      "rego_rules": ["ISO-A.10-WEAK-HASH"]
     }
   ]
 }

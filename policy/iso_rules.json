@@ -20,12 +20,21 @@
     },
     {
       "standard": "ISO-27001",
-      "id": "A.10",
+      "id": "A.10-WEAK-HASH",
       "subject": "System",
       "action": "Protect",
-      "object": "Cryptography",
-      "conditions": ["strongAlgorithms"],
-      "description": "Cryptographic controls should avoid weak or deprecated algorithms"
+      "object": "HashAlgorithm",
+      "conditions": ["strongHash"],
+      "description": "Cryptographic controls should avoid weak hash algorithms such as MD5"
+    },
+    {
+      "standard": "ISO-27001",
+      "id": "A.10-WEAK-CRYPTO",
+      "subject": "System",
+      "action": "Protect",
+      "object": "CipherAlgorithm",
+      "conditions": ["strongCipher"],
+      "description": "Cryptographic controls should avoid weak ciphers and insecure modes"
     }
   ]
 }
