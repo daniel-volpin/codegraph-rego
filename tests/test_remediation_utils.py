@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 try:
     import javalang  # noqa: F401
@@ -36,6 +38,29 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertIsNone(parsed.get("parse_error"))
         self.assertGreater(len(parsed["updated_source_code"]), 0)
         self.assertEqual(parsed["explanation"], "Switched weak hash to SHA-256.")
+
+    def test_parse_llm_virtual_json_replacement_method_code(self):
+        raw = (
+            '{"file_path":"Example.java","target_method_signature":"example.Foo.doPost(HttpServletRequest,HttpServletResponse)",'
+            '"replacement_method_code":"public void doPost(HttpServletRequest request, HttpServletResponse response) {\\n'
+            'java.security.MessageDigest md = java.security.MessageDigest.getInstance(\\"SHA-256\\");\\n}",'
+            '"explanation":"Structured output patch."}'
+        )
+        parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
+        self.assertIsNone(parsed.get("parse_error"))
+        self.assertIn("SHA-256", parsed["updated_source_code"])
+
+    def test_capture_raw_llm_output_on_invalid_json(self):
+        invalid_raw = '{"updated_source_code":"public void foo() {}"'
+        parsed = self.service.RemediationService._parse_llm_virtual_json(invalid_raw)
+        self.assertTrue((parsed.get("parse_error") or "").startswith("invalid_json"))
+        with TemporaryDirectory() as tmp:
+            out = self.service._capture_raw_llm_output(
+                tmp, "BenchmarkTest99999", 1, invalid_raw
+            )
+            self.assertIsNotNone(out)
+            self.assertTrue(Path(out).is_file())
+            self.assertEqual(Path(out).read_text(encoding="utf-8"), invalid_raw)
 
     def test_unified_diff(self):
         diff = self.service._unified_diff("a\nb", "a\nc", label="method")

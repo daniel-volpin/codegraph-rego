@@ -231,6 +231,7 @@ def main() -> int:
                 file_path=str(file_path),
                 mode=args.mode,
                 max_attempts=args.max_attempts,
+                raw_capture_dir=output_dir.as_posix(),
             )
             verification = apply_result.get("verification") or {}
             compilation = apply_result.get("compilation") or {}

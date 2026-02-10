@@ -104,9 +104,29 @@ def _parse_json_object_from_text(text: str) -> Optional[Dict[str, Any]]:
             pass
 
     decoder = json.JSONDecoder()
+    in_string = False
+    quote_char = ""
+    escaped = False
     for idx, char in enumerate(raw):
+        if in_string:
+            if escaped:
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == quote_char:
+                in_string = False
+            continue
+
+        if char in ('"', "'"):
+            in_string = True
+            quote_char = char
+            continue
+
         if char != "{":
             continue
+
         try:
             loaded, _ = decoder.raw_decode(raw[idx:])
         except json.JSONDecodeError:
@@ -114,6 +134,30 @@ def _parse_json_object_from_text(text: str) -> Optional[Dict[str, Any]]:
         if isinstance(loaded, dict):
             return loaded
     return None
+
+
+def _extract_testcase_id(value: Optional[str]) -> str:
+    match = re.search(r"(BenchmarkTest\d+)", value or "")
+    return match.group(1) if match else "unknown"
+
+
+def _capture_raw_llm_output(
+    output_dir: Optional[str],
+    testcase_id: str,
+    attempt: int,
+    content: str,
+) -> Optional[str]:
+    if not output_dir or not content:
+        return None
+    safe_testcase = re.sub(r"[^A-Za-z0-9_.-]+", "_", testcase_id or "unknown")
+    out_path = Path(output_dir) / f"raw_llm_{safe_testcase}_attempt{attempt}.txt"
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content, encoding="utf-8")
+        return out_path.as_posix()
+    except Exception as exc:  # pragma: no cover - filesystem guard
+        LOGGER.warning("Failed to capture raw LLM output to %s: %s", out_path, exc)
+        return None
 
 
 def _cached_policy_evaluation() -> Dict[str, Any]:
@@ -252,6 +296,7 @@ class RemediationService:
         file_path: Optional[str] = None,
         mode: str = "dry_run",
         max_attempts: int = 2,
+        raw_capture_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
         max_attempts = max(1, max_attempts)
         context = self.get_violation_context(violation_id, target_method, file_path)
@@ -292,6 +337,7 @@ class RemediationService:
         original_method = None
         updated_method = None
         raw_output = None
+        raw_capture_files: List[str] = []
 
         for attempt in range(max_attempts):
             llm_output = self.propose_full_method(context, previous_errors=attempt_errors)
@@ -303,6 +349,15 @@ class RemediationService:
                     attempt_errors.append(str(parse_error))
                 else:
                     attempt_errors.append("schema mismatch: missing updated_source_code")
+                if isinstance(parse_error, str) and parse_error.startswith("invalid_json"):
+                    capture_path = _capture_raw_llm_output(
+                        raw_capture_dir,
+                        _extract_testcase_id(target_method),
+                        attempt + 1,
+                        _extract_assistant_content(raw_output),
+                    )
+                    if capture_path:
+                        raw_capture_files.append(capture_path)
                 continue
             try:
                 updated_content, original_method, updated_method = self._replace_method_in_source(
@@ -324,6 +379,7 @@ class RemediationService:
                 "attempt_count": min(max_attempts, len(attempt_errors)),
                 "llm_output": raw_output,
                 "errors": attempt_errors,
+                "raw_capture_files": raw_capture_files,
             }
 
         diff = _unified_diff(original_method, updated_method, label=target_method)
@@ -498,12 +554,12 @@ class RemediationService:
         system_prompt = (
             "You are a senior Java engineer improving code for ISO 27001 policy compliance. "
             "Use ONLY the provided evidence (source snippet, graph context, vector context, control metadata). "
-            "Return STRICT JSON with keys: updated_source_code (a full replacement method with the SAME signature) "
-            "and explanation (one or two sentences). Return only the method declaration and body "
-            "(no leading/trailing braces or surrounding class). "
-            "Preserve the method signature exactly, apply the minimal necessary change to satisfy the control, "
-            "do not remove security checks, do not introduce new dependencies, and keep behavior stable. "
-            "Output JSON only, no markdown fences or extra text."
+            "Output STRICT JSON only. "
+            "Use keys file_path, target_method_signature, replacement_method_code, and optional explanation. "
+            "The replacement_method_code must contain exactly one full method (signature + body braces), "
+            "not a class or full file. Preserve behavior and method signature. "
+            "Do not change unrelated strings or logic; only replace weak hash usage (MD5 -> SHA-256) and "
+            "make only minimal edits needed for that goal."
         )
         if errors_note:
             system_prompt += " Adjust the method to address previous errors."
@@ -556,8 +612,8 @@ class RemediationService:
             }
 
         updated_source_code = (
-            data.get("updated_source_code")
-            or data.get("replacement_method_code")
+            data.get("replacement_method_code")
+            or data.get("updated_source_code")
             or data.get("source")
         )
         explanation = data.get("explanation") or data.get("summary")

@@ -46,6 +46,7 @@ def apply_remediation(
     file_path: str | None = None,
     mode: str = "dry_run",
     max_attempts: int = 2,
+    raw_capture_dir: str | None = None,
 ) -> Dict[str, Any]:
     """Apply remediation in a temp workspace and verify via OPA."""
     if not violation_id:
@@ -62,6 +63,7 @@ def apply_remediation(
             file_path=file_path,
             mode=mode,
             max_attempts=max_attempts,
+            raw_capture_dir=raw_capture_dir,
         )
     except Exception as exc:  # pragma: no cover - runtime guard
         LOGGER.exception("Remediation apply failed: %s", exc)
