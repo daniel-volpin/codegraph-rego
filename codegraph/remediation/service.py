@@ -440,8 +440,11 @@ class RemediationService:
                     # source snippets/analysis flags from the file_path on disk.
                     #
                     # In dry_run, we restore the file at the end.
-                    resolved_path.write_text(updated_content, encoding="utf-8")
+                    #
+                    # Set disk_modified before writing so we attempt restoration even if the
+                    # write fails after truncating the file.
                     disk_modified = True
+                    resolved_path.write_text(updated_content, encoding="utf-8")
                     process_single_file_content(file_path, updated_content)
                 except Exception as exc:  # pragma: no cover - runtime guard
                     LOGGER.exception("Failed to re-ingest updated file: %s", exc)
