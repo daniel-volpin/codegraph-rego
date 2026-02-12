@@ -352,7 +352,7 @@ class RemediationService:
             if not updated_source:
                 parse_error = llm_output.get("parse_error")
                 if parse_error:
-                attempt_errors.append(str(parse_error))
+                    attempt_errors.append(str(parse_error))
                 else:
                     attempt_errors.append("schema mismatch: missing updated_source_code")
                 if (
