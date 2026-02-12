@@ -163,36 +163,6 @@ def _capture_raw_llm_output(
         return None
 
 
-def _virtual_fix_json_schema_response_format() -> Dict[str, Any]:
-    """
-    LM Studio (OpenAI-compatible) supports Structured Output via `response_format` with JSON Schema.
-    Using this prevents common "looks like JSON" failures caused by unescaped quotes/newlines in
-    large code strings.
-    """
-    return {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "virtual_fix",
-            "strict": True,
-            "schema": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "file_path": {"type": "string", "minLength": 1},
-                    "target_method_signature": {"type": "string", "minLength": 1},
-                    "replacement_method_code": {"type": "string", "minLength": 1},
-                    "explanation": {"type": "string"},
-                },
-                "required": [
-                    "file_path",
-                    "target_method_signature",
-                    "replacement_method_code",
-                ],
-            },
-        },
-    }
-
-
 def _cached_policy_evaluation() -> Dict[str, Any]:
     now = time.monotonic()
     cached = _POLICY_CACHE.get("data")
@@ -282,7 +252,10 @@ class RemediationService:
         try:
             opa_raw = evaluate_bundle(bundle)
         except Exception as exc:  # pragma: no cover - runtime guard
-            LOGGER.exception("OPA evaluation failed for virtual fix: %s", exc)
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                LOGGER.exception("OPA evaluation failed for virtual fix: %s", exc)
+            else:
+                LOGGER.error("OPA evaluation failed for virtual fix: %s", exc)
             return {
                 "status": "ERROR",
                 "error": str(exc),
@@ -379,10 +352,14 @@ class RemediationService:
             if not updated_source:
                 parse_error = llm_output.get("parse_error")
                 if parse_error:
-                    attempt_errors.append(str(parse_error))
+                attempt_errors.append(str(parse_error))
                 else:
                     attempt_errors.append("schema mismatch: missing updated_source_code")
-                if isinstance(parse_error, str) and parse_error.startswith("invalid_json"):
+                if (
+                    settings.remediation_raw_capture_enabled
+                    and isinstance(parse_error, str)
+                    and parse_error.startswith("invalid_json")
+                ):
                     capture_path = _capture_raw_llm_output(
                         raw_capture_dir,
                         _extract_testcase_id(target_method),
@@ -447,7 +424,10 @@ class RemediationService:
                     resolved_path.write_text(updated_content, encoding="utf-8")
                     process_single_file_content(file_path, updated_content)
                 except Exception as exc:  # pragma: no cover - runtime guard
-                    LOGGER.exception("Failed to re-ingest updated file: %s", exc)
+                    if LOGGER.isEnabledFor(logging.DEBUG):
+                        LOGGER.exception("Failed to re-ingest updated file: %s", exc)
+                    else:
+                        LOGGER.error("Failed to re-ingest updated file: %s", exc)
                     return {
                         "status": "ERROR",
                         "error": str(exc),
@@ -485,7 +465,10 @@ class RemediationService:
                 if not apply_successful:
                     process_single_file_content(file_path, original_content)
         except Exception as exc:  # pragma: no cover - runtime guard
-            LOGGER.exception("Apply remediation failed: %s", exc)
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                LOGGER.exception("Apply remediation failed: %s", exc)
+            else:
+                LOGGER.error("Apply remediation failed: %s", exc)
             return {
                 "status": "ERROR",
                 "error": str(exc),
@@ -666,30 +649,35 @@ class RemediationService:
                     "explanation": None,
                     "parse_error": None,
                 }
-            LOGGER.warning("LLM output did not contain a method replacement: %s", (content or "")[:200])
+            LOGGER.debug(
+                "LLM output did not contain a method replacement: %s", (content or "")[:200]
+            )
             return {
                 "updated_source_code": None,
                 "explanation": None,
                 "parse_error": "invalid_method: no method replacement found",
             }
 
+        json_block = _extract_json_block(content or "")
         data = _parse_json_object_from_text(content)
         if data is None:
-            extracted = _extract_json_block(content or "")
-            if extracted is None:
-                LOGGER.warning("LLM output did not contain JSON object: %s", (content or "")[:200])
+            if json_block is None:
+                LOGGER.debug("LLM output did not contain JSON object: %s", (content or "")[:200])
                 return {
                     "updated_source_code": None,
                     "explanation": None,
                     "parse_error": "invalid_json: no JSON object found",
                 }
-            head = extracted[:200]
-            tail = extracted[-200:] if len(extracted) > 200 else extracted
-            LOGGER.warning(
-                "LLM output was not valid JSON for virtual fix. head=%s tail=%s",
-                head,
-                tail,
-            )
+            if LOGGER.isEnabledFor(logging.DEBUG):
+                head = json_block[:200]
+                tail = json_block[-200:] if len(json_block) > 200 else json_block
+                LOGGER.debug(
+                    "LLM output was not valid JSON for virtual fix. head=%s tail=%s",
+                    head,
+                    tail,
+                )
+            else:
+                LOGGER.debug("LLM output was not valid JSON for virtual fix.")
             return {
                 "updated_source_code": None,
                 "explanation": None,
@@ -703,7 +691,7 @@ class RemediationService:
         )
         explanation = data.get("explanation") or data.get("summary")
         if not isinstance(updated_source_code, str) or not updated_source_code.strip():
-            LOGGER.warning(
+            LOGGER.debug(
                 "LLM output schema mismatch for virtual fix. Expected one of "
                 "updated_source_code/replacement_method_code/source; got keys: %s",
                 sorted(data.keys()),
@@ -800,8 +788,6 @@ class RemediationService:
 
     @staticmethod
     def _apply_fallback_graph_heuristics(snippet: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        import re
-
         calls = set(context.get("calls") or [])
         uses_fields = list(context.get("uses_fields") or [])
         for match in re.findall(r"\b(?:logger|log)\.([A-Za-z_][A-Za-z0-9_]*)\s*\(", snippet):
@@ -817,8 +803,6 @@ class RemediationService:
 
     @staticmethod
     def _apply_logger_heuristic(snippet: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        import re
-
         calls = set(context.get("calls") or [])
         uses_fields = list(context.get("uses_fields") or [])
         for match in re.findall(r"\b(?:logger|log)\.([A-Za-z_][A-Za-z0-9_]*)\s*\(", snippet):
@@ -831,8 +815,6 @@ class RemediationService:
 
     @staticmethod
     def _apply_annotation_heuristic(snippet: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        import re
-
         annotations = set(context.get("annotations") or [])
         for match in re.findall(r"@([A-Za-z_][A-Za-z0-9_$.]*)", snippet):
             simple = match.split(".")[-1].lstrip("@")

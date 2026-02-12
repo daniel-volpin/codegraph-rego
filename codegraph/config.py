@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     llm_api_base: str = Field(None, description="LLM API base")
     llm_api_key: str = Field(None, description="LLM API key")
     llm_temperature: float = Field(0.2, description="LLM temperature")
+    remediation_raw_capture_enabled: bool = Field(
+        False,
+        description=(
+            "When true, remediation runs may write raw LLM outputs to disk for debugging "
+            "(only on JSON parse failures)."
+        ),
+    )
 
     class Config:
         env_file = ".env"
@@ -40,6 +47,7 @@ class Settings(BaseSettings):
             "llm_api_base": {"env": "LLM_API_BASE"},
             "llm_api_key": {"env": "LLM_API_KEY"},
             "llm_temperature": {"env": "LLM_TEMPERATURE"},
+            "remediation_raw_capture_enabled": {"env": "REMEDIATION_RAW_CAPTURE_ENABLED"},
         }
 
 settings = Settings()
@@ -62,3 +70,4 @@ LLM_MODEL = settings.llm_model
 LLM_API_BASE = settings.llm_api_base
 LLM_API_KEY = settings.llm_api_key
 LLM_TEMPERATURE = settings.llm_temperature
+REMEDIATION_RAW_CAPTURE_ENABLED = settings.remediation_raw_capture_enabled
