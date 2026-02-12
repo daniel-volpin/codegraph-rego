@@ -150,14 +150,47 @@ def _capture_raw_llm_output(
     if not output_dir or not content:
         return None
     safe_testcase = re.sub(r"[^A-Za-z0-9_.-]+", "_", testcase_id or "unknown")
+    # Keep a stable filename for quick lookup, and an attempt-specific one for debugging.
+    stable_path = Path(output_dir) / f"raw_llm_{safe_testcase}.txt"
     out_path = Path(output_dir) / f"raw_llm_{safe_testcase}_attempt{attempt}.txt"
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)
+        stable_path.write_text(content, encoding="utf-8")
         out_path.write_text(content, encoding="utf-8")
         return out_path.as_posix()
     except Exception as exc:  # pragma: no cover - filesystem guard
         LOGGER.warning("Failed to capture raw LLM output to %s: %s", out_path, exc)
         return None
+
+
+def _virtual_fix_json_schema_response_format() -> Dict[str, Any]:
+    """
+    LM Studio (OpenAI-compatible) supports Structured Output via `response_format` with JSON Schema.
+    Using this prevents common "looks like JSON" failures caused by unescaped quotes/newlines in
+    large code strings.
+    """
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "virtual_fix",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "file_path": {"type": "string", "minLength": 1},
+                    "target_method_signature": {"type": "string", "minLength": 1},
+                    "replacement_method_code": {"type": "string", "minLength": 1},
+                    "explanation": {"type": "string"},
+                },
+                "required": [
+                    "file_path",
+                    "target_method_signature",
+                    "replacement_method_code",
+                ],
+            },
+        },
+    }
 
 
 def _cached_policy_evaluation() -> Dict[str, Any]:
@@ -392,6 +425,7 @@ class RemediationService:
         verification: Dict[str, Any] = {}
         apply_successful = False
         attempt_count = min(max_attempts, max(1, len(attempt_errors) + 1))
+        disk_modified = False
 
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -402,6 +436,12 @@ class RemediationService:
                 compilation = self._compile_project(temp_build_root)
 
                 try:
+                    # Keep filesystem + graph in sync for verification. Policy evaluation derives
+                    # source snippets/analysis flags from the file_path on disk.
+                    #
+                    # In dry_run, we restore the file at the end.
+                    resolved_path.write_text(updated_content, encoding="utf-8")
+                    disk_modified = True
                     process_single_file_content(file_path, updated_content)
                 except Exception as exc:  # pragma: no cover - runtime guard
                     LOGGER.exception("Failed to re-ingest updated file: %s", exc)
@@ -438,9 +478,7 @@ class RemediationService:
                     and verification.get("overall_status") == "PASS"
                     and (not compilation.get("attempted") or compilation.get("success"))
                 )
-                if can_apply:
-                    resolved_path.write_text(updated_content, encoding="utf-8")
-                    apply_successful = True
+                apply_successful = bool(can_apply)
                 if not apply_successful:
                     process_single_file_content(file_path, original_content)
         except Exception as exc:  # pragma: no cover - runtime guard
@@ -456,6 +494,15 @@ class RemediationService:
                 "diff": diff,
                 "compilation": compilation,
             }
+        finally:
+            # Ensure dry_run never leaves the user's workspace modified.
+            if disk_modified and (mode != "apply" or not apply_successful):
+                try:
+                    resolved_path.write_text(original_content, encoding="utf-8")
+                except Exception as exc:  # pragma: no cover - filesystem guard
+                    LOGGER.warning(
+                        "Failed to restore original content for %s: %s", resolved_path, exc
+                    )
 
         status = "OK"
         if verification.get("error"):
@@ -554,10 +601,9 @@ class RemediationService:
         system_prompt = (
             "You are a senior Java engineer improving code for ISO 27001 policy compliance. "
             "Use ONLY the provided evidence (source snippet, graph context, vector context, control metadata). "
-            "Output STRICT JSON only. "
-            "Use keys file_path, target_method_signature, replacement_method_code, and optional explanation. "
-            "The replacement_method_code must contain exactly one full method (signature + body braces), "
-            "not a class or full file. Preserve behavior and method signature. "
+            "Output ONLY the full replacement method (signature + body braces). "
+            "Do not output JSON, markdown, or any extra commentary. "
+            "Preserve behavior and method signature. "
             "Do not change unrelated strings or logic; only replace weak hash usage (MD5 -> SHA-256) and "
             "make only minimal edits needed for that goal."
         )
@@ -581,12 +627,15 @@ class RemediationService:
         if errors_note:
             user_sections.append(f"Previous errors:\n{errors_note}")
 
-        response = self._llm_client(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "\n".join(user_sections)},
-            ]
-        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "\n".join(user_sections)},
+        ]
+
+        try:
+            response = self._llm_client(messages, max_tokens=1500)
+        except TypeError:
+            response = self._llm_client(messages)
         parsed = self._parse_llm_virtual_json(response)
         parsed["raw_output"] = response
         return parsed
@@ -594,6 +643,33 @@ class RemediationService:
     @staticmethod
     def _parse_llm_virtual_json(response: Any) -> Dict[str, Any]:
         content = _extract_assistant_content(response).strip()
+        json_hint = bool(
+            (content.lstrip().startswith("{"))
+            or ('"replacement_method_code"' in content)
+            or ('"updated_source_code"' in content)
+        )
+        if not json_hint:
+            # Code-only output mode: accept a fenced block or raw method text.
+            method = content
+            fence = re.search(r"```(?:java)?\s*(.*?)```", content, flags=re.DOTALL | re.IGNORECASE)
+            if fence:
+                method = fence.group(1).strip()
+            method = (method or "").strip()
+            if method and "{" in method and "}" in method and re.search(
+                r"\b(public|private|protected)\b", method
+            ):
+                return {
+                    "updated_source_code": method,
+                    "explanation": None,
+                    "parse_error": None,
+                }
+            LOGGER.warning("LLM output did not contain a method replacement: %s", (content or "")[:200])
+            return {
+                "updated_source_code": None,
+                "explanation": None,
+                "parse_error": "invalid_method: no method replacement found",
+            }
+
         data = _parse_json_object_from_text(content)
         if data is None:
             extracted = _extract_json_block(content or "")
@@ -604,7 +680,13 @@ class RemediationService:
                     "explanation": None,
                     "parse_error": "invalid_json: no JSON object found",
                 }
-            LOGGER.warning("LLM output was not valid JSON for virtual fix: %s", extracted[:200])
+            head = extracted[:200]
+            tail = extracted[-200:] if len(extracted) > 200 else extracted
+            LOGGER.warning(
+                "LLM output was not valid JSON for virtual fix. head=%s tail=%s",
+                head,
+                tail,
+            )
             return {
                 "updated_source_code": None,
                 "explanation": None,

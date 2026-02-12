@@ -62,6 +62,28 @@ class RemediationUtilsTests(unittest.TestCase):
             self.assertTrue(Path(out).is_file())
             self.assertEqual(Path(out).read_text(encoding="utf-8"), invalid_raw)
 
+    def test_parse_llm_virtual_json_rejects_unescaped_quotes_in_code(self):
+        # This mimics the real failure mode in remediation_eval: the model returns JSON-like text,
+        # but embeds raw `"` from Java string literals inside a JSON string field.
+        raw = (
+            '{"file_path":"Example.java","target_method_signature":"x.y.Foo.doPost(A,B)",'
+            '"replacement_method_code":"public void doPost(A a, B b) { System.out.println("hi"); }"}'
+        )
+        parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
+        self.assertTrue((parsed.get("parse_error") or "").startswith("invalid_json"))
+
+    def test_parse_llm_virtual_json_accepts_code_only_output(self):
+        raw = "public void doPost(A a, B b) { return; }"
+        parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
+        self.assertIsNone(parsed.get("parse_error"))
+        self.assertEqual(parsed["updated_source_code"], raw)
+
+    def test_parse_llm_virtual_json_accepts_fenced_code_block(self):
+        raw = "```java\npublic void doPost(A a, B b) { return; }\n```"
+        parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
+        self.assertIsNone(parsed.get("parse_error"))
+        self.assertIn("public void doPost", parsed["updated_source_code"])
+
     def test_unified_diff(self):
         diff = self.service._unified_diff("a\nb", "a\nc", label="method")
         self.assertIn("-b", diff)
