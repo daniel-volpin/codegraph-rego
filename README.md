@@ -188,7 +188,7 @@ python run_remediation_eval.py --config configs/benchmark_selection.json --mappi
 Set `OWASP_BENCHMARK_ROOT` before running (or edit the template config):
 
 ```bash
-export OWASP_BENCHMARK_ROOT=/abs/path/to/BenchmarkJava
+export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
 cp configs/benchmark_selection.example.json configs/benchmark_selection.json  # optional
 ```
 

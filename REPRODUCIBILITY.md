@@ -18,7 +18,11 @@ pip install -r requirements.txt
 export NEO4J_URI=bolt://127.0.0.1:7687
 export NEO4J_USER=neo4j
 export NEO4J_PASS=your_password
-export OWASP_BENCHMARK_ROOT=/abs/path/to/BenchmarkJava
+export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
+
+# Optional diagnostics: write raw LLM outputs (only on JSON parse failures) into the remediation eval output dir.
+# Default is OFF.
+export REMEDIATION_RAW_CAPTURE_ENABLED=0
 ```
 
 ## Configure the Benchmark
