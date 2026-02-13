@@ -4,9 +4,7 @@
   "ground_truth_path": "${OWASP_BENCHMARK_ROOT}/expectedresults-1.2.csv",
   "categories": [
     "crypto-md5",
-    "hash-md5",
-    "rng-insecure",
-    "sql-injection"
+    "hash-md5"
   ],
   "testcase_ids": [],
   "max_cases_per_category": 50,

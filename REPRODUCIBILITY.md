@@ -31,6 +31,9 @@ Use `configs/benchmark_selection.example.json` as the starting template:
 cp configs/benchmark_selection.example.json configs/benchmark_selection.json
 ```
 
+To evaluate multiple CWE categories (detection + explanation), you can use `configs/benchmark_selection.multicat.json`
+directly (or copy it and pin `testcase_ids` for smaller smoke runs).
+
 Edit these files as needed:
 - `configs/benchmark_selection.json`
   - `benchmark_root`: defaults to `${OWASP_BENCHMARK_ROOT}`

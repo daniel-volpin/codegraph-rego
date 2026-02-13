@@ -183,6 +183,12 @@ python run_explanation_eval.py --config configs/benchmark_selection.json --mappi
 python run_remediation_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/remediation_eval --sample-size 10 --reset-neo4j
 ```
 
+To run detection/explanation evaluation across multiple CWE categories (incl. `CWE-330` and `CWE-89`), use:
+```bash
+python run_benchmark_eval.py --config configs/benchmark_selection.multicat.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval_multicat --reset-neo4j
+python run_explanation_eval.py --config configs/benchmark_selection.multicat.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval_multicat --reset-neo4j
+```
+
 `run_remediation_eval.py` reuses the same apply/verify remediation service flow used by `/remediation/apply` (default `dry_run` mode) so evaluation behavior tracks production remediation logic.
 
 Set `OWASP_BENCHMARK_ROOT` before running (or edit the template config):
