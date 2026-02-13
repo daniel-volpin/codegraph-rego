@@ -10,7 +10,11 @@ interface CodeHighlightProps {
   className?: string;
 }
 
-const CodeHighlight = ({ code, language = "text", className }: CodeHighlightProps) => {
+const CodeHighlight = ({
+  code,
+  language = "text",
+  className,
+}: CodeHighlightProps) => {
   const ref = useRef<HTMLElement | null>(null);
 
   useEffect(() => {

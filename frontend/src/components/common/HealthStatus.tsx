@@ -9,37 +9,56 @@ const HEALTH_LABELS: Record<keyof HealthCheckResponse, string> = {
   signature_map: "Signature Map",
   embedding_model: "Embedding Model",
   opa: "OPA / Rego",
-  details: "Details"
+  details: "Details",
 };
 
-const keys = ["neo4j", "faiss_index", "signature_map", "embedding_model", "opa"] as const;
+const keys = [
+  "neo4j",
+  "faiss_index",
+  "signature_map",
+  "embedding_model",
+  "opa",
+] as const;
 
 interface HealthStatusProps {
   variant?: "panel" | "header";
 }
 
 const HealthStatus = ({ variant = "panel" }: HealthStatusProps) => {
-  const { data, isLoading, isError, refetch } = useQuery<HealthCheckResponse, Error>({
+  const { data, isLoading, isError, refetch } = useQuery<
+    HealthCheckResponse,
+    Error
+  >({
     queryKey: ["health"],
     queryFn: fetchHealth,
     refetchInterval: 15000,
-    staleTime: 10000
+    staleTime: 10000,
   });
 
   if (variant === "header") {
-    if (isLoading) return <div className="health-header-item muted">Checking health...</div>;
-    if (isError || !data) return (
-      <button onClick={() => refetch()} className="health-header-item error" title="System health check failed. Click to retry.">
-        <span className="health-indicator" /> System Error
-      </button>
-    );
+    if (isLoading)
+      return <div className="health-header-item muted">Checking health...</div>;
+    if (isError || !data)
+      return (
+        <button
+          onClick={() => refetch()}
+          className="health-header-item error"
+          title="System health check failed. Click to retry."
+        >
+          <span className="health-indicator" /> System Error
+        </button>
+      );
 
     return (
       <div className="health-header-list">
         {keys.map((key) => {
           const healthy = Boolean(data[key]);
           return (
-            <div key={key} className={`health-header-item ${healthy ? "ok" : "fail"}`} title={HEALTH_LABELS[key]}>
+            <div
+              key={key}
+              className={`health-header-item ${healthy ? "ok" : "fail"}`}
+              title={HEALTH_LABELS[key]}
+            >
               <span className="health-indicator" />
               <span className="health-label">{HEALTH_LABELS[key]}</span>
             </div>
@@ -53,7 +72,11 @@ const HealthStatus = ({ variant = "panel" }: HealthStatusProps) => {
     <section className="health-panel">
       <header>
         <h3>System Health</h3>
-        <button type="button" onClick={() => refetch()} aria-label="Refresh health status">
+        <button
+          type="button"
+          onClick={() => refetch()}
+          aria-label="Refresh health status"
+        >
           Refresh
         </button>
       </header>

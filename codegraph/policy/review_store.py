@@ -58,7 +58,7 @@ def resolve_review_store_path(store_path: str) -> Tuple[Optional[Path], Optional
 
 
 def derive_violation_key(violation: Dict[str, Any]) -> str:
-    violation_id = (violation.get("violation_id") or violation.get("id") or "unknown")
+    violation_id = violation.get("violation_id") or violation.get("id") or "unknown"
     target_method = violation.get("target_method") or violation.get("method") or ""
     file_path = violation.get("file_path") or ""
     return f"{violation_id}::{target_method}::{file_path}"
@@ -181,7 +181,11 @@ def _drop_ladder(record: Dict[str, Any], warnings: List[str]) -> Tuple[Optional[
             if current_size() <= MAX_RECORD_BYTES:
                 return record, warnings
 
-        gc = evidence.get("graph_context") if isinstance(evidence, dict) and isinstance(evidence.get("graph_context"), dict) else None
+        gc = (
+            evidence.get("graph_context")
+            if isinstance(evidence, dict) and isinstance(evidence.get("graph_context"), dict)
+            else None
+        )
         if isinstance(gc, dict):
             for k in ("calls", "callers", "uses_fields"):
                 if k in gc:
@@ -338,4 +342,3 @@ def append_review_jsonl(
         store_path=resolved.as_posix(),
         scrub_warnings=warnings,
     )
-

@@ -62,15 +62,7 @@ def _normalize_cwe(value: str | None) -> str:
 
 
 def _normalize_key(key: str) -> str:
-    return (
-        key.strip()
-        .lstrip("#")
-        .strip()
-        .lower()
-        .replace(" ", "")
-        .replace("_", "")
-        .replace("-", "")
-    )
+    return key.strip().lstrip("#").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
 
 
 def _first_value(row: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
@@ -164,9 +156,7 @@ def find_ground_truth_file(benchmark_root: Path, override: Optional[str]) -> Pat
             return candidate
     for candidate in benchmark_root.rglob("expectedresults*.csv"):
         return candidate
-    raise FileNotFoundError(
-        "Could not locate benchmark ground truth (benchmarkdata.csv/xml or expectedresults*.csv)."
-    )
+    raise FileNotFoundError("Could not locate benchmark ground truth (benchmarkdata.csv/xml or expectedresults*.csv).")
 
 
 def inspect_ground_truth_schema(path: Path) -> Dict[str, Any]:
@@ -178,9 +168,7 @@ def inspect_ground_truth_schema(path: Path) -> Dict[str, Any]:
             return {
                 "format": "csv",
                 "fieldnames": reader.fieldnames or [],
-                "normalized_fieldnames": [
-                    _normalize_key(name) for name in (reader.fieldnames or [])
-                ],
+                "normalized_fieldnames": [_normalize_key(name) for name in (reader.fieldnames or [])],
             }
     tree = ET.parse(path)
     root = tree.getroot()
@@ -308,9 +296,7 @@ def select_testcases(
     )
 
 
-def coverage_report(
-    selection: SelectionResult, selected_category_ids: List[str]
-) -> Dict[str, Dict[str, Any]]:
+def coverage_report(selection: SelectionResult, selected_category_ids: List[str]) -> Dict[str, Dict[str, Any]]:
     """Return JSON-serializable coverage stats for the selected category ids."""
     report: Dict[str, Dict[str, Any]] = {}
     for category_id in selected_category_ids:

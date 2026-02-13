@@ -21,9 +21,8 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 2. **Install dependencies**
 
    ```bash
-   python3 -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt
-   # or use conda: conda create -n codegraph python=3.10 -y && conda activate codegraph
+   make install
+   # This installs backend dependencies with uv and frontend dependencies with npm.
    ```
 
 3. **Configure**
@@ -46,7 +45,8 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 5. **Run the API**
 
    ```bash
-   uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
+   make dev
+   # Runs both backend (port 8000) and frontend (port 5173) in parallel.
    ```
 
 - `POST /search` (`query=...` form field) → semantic hits + graph neighbours

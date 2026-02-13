@@ -50,7 +50,7 @@ def render_latex_table(
     lines.append("\\hline")
     lines.append("\\end{tabular}")
     if caption:
-        lines = [f"\\begin{{table}}[h]", "\\centering", *lines]
+        lines = [r"\begin{table}[h]", r"\centering", *lines]
         lines.append(f"\\caption{{{caption}}}")
         if label:
             lines.append(f"\\label{{{label}}}")

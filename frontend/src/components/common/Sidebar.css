@@ -1,71 +1,71 @@
 /* --- Sidebar --- */
 .sidebar-nav {
-    background-color: var(--bg-sidebar);
-    color: var(--color-slate-200);
-    display: flex;
-    flex-direction: column;
-    padding: 2rem 1.5rem;
-    border-right: 1px solid var(--color-slate-800);
-    position: sticky;
-    top: 0;
-    height: 100vh;
+  background-color: var(--bg-sidebar);
+  color: var(--color-slate-200);
+  display: flex;
+  flex-direction: column;
+  padding: 2rem 1.5rem;
+  border-right: 1px solid var(--color-slate-800);
+  position: sticky;
+  top: 0;
+  height: 100vh;
 }
 
 .sidebar-brand {
-    margin-bottom: 3rem;
-    padding-left: 0.5rem;
+  margin-bottom: 3rem;
+  padding-left: 0.5rem;
 }
 
 .nav-logo {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--text-inverse);
-    letter-spacing: -0.02em;
-    display: block;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-inverse);
+  letter-spacing: -0.02em;
+  display: block;
 }
 
 .nav-subtitle {
-    font-size: 0.75rem;
-    color: var(--color-slate-500);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-top: 0.25rem;
-    display: block;
+  font-size: 0.75rem;
+  color: var(--color-slate-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+  display: block;
 }
 
 .sidebar-nav ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .sidebar-link {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    border-radius: var(--radius-md);
-    color: var(--color-slate-400);
-    font-weight: 500;
-    transition: all var(--transition-fast);
-    text-decoration: none;
-    /* Cross-browser fix: ensure flex alignment works consistently */
-    line-height: 1.5;
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  color: var(--color-slate-400);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  /* Cross-browser fix: ensure flex alignment works consistently */
+  line-height: 1.5;
 }
 
 .sidebar-link:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-    color: var(--color-slate-100);
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--color-slate-100);
 }
 
 .sidebar-link-active {
-    background-color: var(--color-primary-600);
-    color: var(--text-inverse);
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  background-color: var(--color-primary-600);
+  color: var(--text-inverse);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 
 .sidebar-link-active:hover {
-    background-color: var(--color-primary-500);
+  background-color: var(--color-primary-500);
 }

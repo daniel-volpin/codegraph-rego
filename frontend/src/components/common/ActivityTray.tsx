@@ -4,7 +4,7 @@ const statusClassMap: Record<string, string> = {
   running: "activity-running",
   success: "activity-success",
   error: "activity-error",
-  idle: "activity-idle"
+  idle: "activity-idle",
 };
 
 const ActivityTray = () => {
@@ -18,7 +18,10 @@ const ActivityTray = () => {
           <h3>Activity</h3>
           <ul>
             {activities.map((activity) => (
-              <li key={activity.key} className={statusClassMap[activity.status] ?? ""}>
+              <li
+                key={activity.key}
+                className={statusClassMap[activity.status] ?? ""}
+              >
                 <div className="activity-header">
                   <span className="activity-label">{activity.label}</span>
                   <span className="activity-status">{activity.status}</span>
@@ -26,14 +29,17 @@ const ActivityTray = () => {
                 {activity.message && (
                   <p className="activity-message">{activity.message}</p>
                 )}
-                {typeof activity.progress === "number" && !Number.isNaN(activity.progress) && (
-                  <div className="activity-progress">
-                    <div
-                      className="activity-progress-bar"
-                      style={{ width: `${Math.min(Math.max(activity.progress, 0), 100)}%` }}
-                    />
-                  </div>
-                )}
+                {typeof activity.progress === "number" &&
+                  !Number.isNaN(activity.progress) && (
+                    <div className="activity-progress">
+                      <div
+                        className="activity-progress-bar"
+                        style={{
+                          width: `${Math.min(Math.max(activity.progress, 0), 100)}%`,
+                        }}
+                      />
+                    </div>
+                  )}
               </li>
             ))}
           </ul>

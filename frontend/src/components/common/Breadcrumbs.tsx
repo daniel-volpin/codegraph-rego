@@ -4,7 +4,7 @@ const routeLabels: Record<string, string> = {
   "/": "Overview",
   "/upload": "Upload",
   "/search": "Search",
-  "/policy": "Policy"
+  "/policy": "Policy",
 };
 
 const Breadcrumbs = () => {

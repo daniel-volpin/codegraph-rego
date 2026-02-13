@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useState } from "react";
+import { FormEvent, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { searchCode } from "../lib/api";
 import type { SearchResponse } from "../lib/types";
@@ -17,13 +17,13 @@ const SearchPage = () => {
       toast.success(
         matchCount > 0
           ? `Found ${matchCount} match${matchCount === 1 ? "" : "es"}.`
-          : "Search completed."
+          : "Search completed.",
       );
     },
     onError: (error: Error) => {
       setResult({ matches: [], contexts: [], error: error.message });
       toast.error(`Search failed: ${error.message}`);
-    }
+    },
   });
 
   const searchPending = searchMutation.status === "pending";
@@ -42,8 +42,8 @@ const SearchPage = () => {
       <header className="page-header">
         <h1>Semantic Search</h1>
         <p>
-          Find relevant code snippets using natural language. Results combine vector-based semantic similarity
-          with graph-based structural context.
+          Find relevant code snippets using natural language. Results combine
+          vector-based semantic similarity with graph-based structural context.
         </p>
       </header>
       <form className="search-form" onSubmit={handleSubmit}>
@@ -54,7 +54,11 @@ const SearchPage = () => {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Describe a method or control..."
           />
-          <button type="submit" className="btn-primary" disabled={searchPending || !query.trim()}>
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={searchPending || !query.trim()}
+          >
             {searchPending ? "Searching..." : "Search"}
           </button>
         </div>

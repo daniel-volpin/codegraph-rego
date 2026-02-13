@@ -30,11 +30,7 @@ def _run(cmd: List[str]) -> None:
 
 
 def _git_sha(repo_root: Path) -> str:
-    return (
-        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo_root)
-        .decode("utf-8")
-        .strip()
-    )
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo_root).decode("utf-8").strip()
 
 
 def _load_json(path: Path) -> Any:
@@ -44,7 +40,9 @@ def _load_json(path: Path) -> Any:
 
 def _supported_remediation_rule_ids() -> List[str]:
     # Internal source-of-truth for "what can we remediate today".
-    from codegraph.remediation.service import RemediationService  # local import (avoid import cost for non-remediation runs)
+    from codegraph.remediation.service import (
+        RemediationService,
+    )  # local import (avoid import cost for non-remediation runs)
 
     return sorted([str(key) for key in RemediationService._FIX_STRATEGIES.keys()])  # pylint: disable=protected-access
 
@@ -143,7 +141,9 @@ def main() -> int:
     selection_path = (repo_root / args.config).resolve() if not os.path.isabs(args.config) else Path(args.config)
     mapping_path = (repo_root / args.mapping).resolve() if not os.path.isabs(args.mapping) else Path(args.mapping)
 
-    output_root = (repo_root / args.output_root).resolve() if not os.path.isabs(args.output_root) else Path(args.output_root)
+    output_root = (
+        (repo_root / args.output_root).resolve() if not os.path.isabs(args.output_root) else Path(args.output_root)
+    )
     output_root.mkdir(parents=True, exist_ok=True)
 
     config_stem = selection_path.stem.replace(".", "_")
@@ -265,4 +265,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

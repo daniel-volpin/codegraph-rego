@@ -62,6 +62,7 @@ def _persist_embedding_cache(
     with open(cache_path, "w") as handle:
         json.dump(payload, handle)
 
+
 class EmbeddingService:
     """
     Service for building code embeddings and FAISS index for semantic code search.
@@ -70,6 +71,7 @@ class EmbeddingService:
     @staticmethod
     def extract_method_snippet(file_path: str, method_name: str) -> str:
         from codegraph.common.snippet_utils import extract_code_snippet
+
         return extract_code_snippet(file_path, method_name, before=CONTEXT_LINES_BEFORE, after=CONTEXT_LINES_AFTER)
 
     @staticmethod
@@ -188,10 +190,7 @@ class EmbeddingService:
             "count": len(signatures),
             "built_at": datetime.now(timezone.utc).isoformat(),
             "index_path": index_path,
-            "signature_map": {
-                "full": sigmap_full_path,
-                "legacy": sigmap_legacy_path
-            },
+            "signature_map": {"full": sigmap_full_path, "legacy": sigmap_legacy_path},
             "cache_path": EMBEDDING_CACHE_PATH,
             "cache_hits": cached_hits,
             "cache_misses": len(to_encode),
@@ -205,8 +204,6 @@ class EmbeddingService:
             _persist_embedding_cache(EMBEDDING_CACHE_PATH, EMBEDDING_MODEL_NAME, dim, cache_entries)
         except Exception as exc:
             LOGGER.warning("Failed to persist embedding cache: %s", exc)
-        print(
-            f"Done. Saved FAISS index to {index_path} and signature map to {sigmap_full_path}."
-        )
+        print(f"Done. Saved FAISS index to {index_path} and signature map to {sigmap_full_path}.")
         if progress_callback:
             progress_callback("embedding", "Embedding build complete.", 98.0)

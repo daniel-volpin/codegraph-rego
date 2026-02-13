@@ -15,6 +15,7 @@ from codegraph.config import LLM_MODEL
 from codegraph.llm.client import generate_chat_completion
 from codegraph.common.snippet_utils import extract_code_snippet
 
+
 def _read_code_snippet(file_path: str, needle: str, before: int = 8, after: int = 24) -> str:
     return extract_code_snippet(file_path, needle, before=before, after=after)
 
@@ -50,6 +51,7 @@ def explain_policy_violations(
     For each violation, read a local code snippet and ask the LLM for a short explanation + fix.
     If the LLM is not configured, returns a stub with the snippet only.
     """
+
     def _method_name_from_signature(signature: Any) -> str:
         if not isinstance(signature, str):
             return ""
@@ -63,22 +65,19 @@ def explain_policy_violations(
         evidence = v.get("evidence") if isinstance(v, dict) else None
         evidence = evidence if isinstance(evidence, dict) else {}
 
-        signature = (
-            v.get("method")
-            or v.get("target_method")
-            or evidence.get("target_method")
-            or ""
-        )
+        signature = v.get("method") or v.get("target_method") or evidence.get("target_method") or ""
         method_name = _method_name_from_signature(signature)
         file_path = v.get("file_path") or evidence.get("file_path") or ""
         snippet = _read_code_snippet(file_path, method_name)
         messages = _build_prompt(v, snippet)
         explanation = _call_llm(messages, model=model or LLM_MODEL)
-        results.append({
-            "violation": v,
-            "snippet": snippet,
-            "explanation": explanation,
-        })
+        results.append(
+            {
+                "violation": v,
+                "snippet": snippet,
+                "explanation": explanation,
+            }
+        )
     return results
 
 

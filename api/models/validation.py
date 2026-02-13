@@ -1,10 +1,12 @@
 from pydantic import BaseModel, Field
 from typing import Any, List, Literal, Optional
 
+
 class UploadResponse(BaseModel):
     status: str
     java_root: Optional[str] = None
     error: Optional[str] = None
+
 
 class UploadStatusResponse(BaseModel):
     phase: str
@@ -15,6 +17,7 @@ class UploadStatusResponse(BaseModel):
     updated_at: str
     started_at: Optional[str] = None
 
+
 class HealthCheckResponse(BaseModel):
     neo4j: bool
     faiss_index: bool
@@ -23,25 +26,31 @@ class HealthCheckResponse(BaseModel):
     opa: bool
     details: dict
 
+
 class SearchRequest(BaseModel):
     query: str
+
 
 class SearchMatch(BaseModel):
     method: str
     neighbors: List[dict]
 
+
 class SearchResponse(BaseModel):
     matches: List[str]
     contexts: List[List[SearchMatch]]
+
 
 class PolicyEvaluateResponse(BaseModel):
     violations: Optional[list] = None
     opa_output: Optional[dict] = None
     error: Optional[str] = None
 
+
 class PolicyCatalogResponse(BaseModel):
     controls: list
     error: Optional[str] = None
+
 
 class PolicyEvaluateWithLLMRequest(BaseModel):
     limit: int = 10

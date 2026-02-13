@@ -18,12 +18,12 @@ class RemediationUtilsTests(unittest.TestCase):
         cls.service = service
 
     def test_extract_json_block(self):
-        text = "Here is output:\n```json\n{\"updated_source_code\": \"ok\"}\n```"
+        text = 'Here is output:\n```json\n{"updated_source_code": "ok"}\n```'
         extracted = self.service._extract_json_block(text)
-        self.assertEqual(extracted, "{\"updated_source_code\": \"ok\"}")
+        self.assertEqual(extracted, '{"updated_source_code": "ok"}')
 
     def test_parse_llm_virtual_json(self):
-        raw = "note\n{\"updated_source_code\": \"public void foo() {}\", \"explanation\": \"ok\"}"
+        raw = 'note\n{"updated_source_code": "public void foo() {}", "explanation": "ok"}'
         parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
         self.assertEqual(parsed["updated_source_code"], "public void foo() {}")
         self.assertEqual(parsed["explanation"], "ok")
@@ -31,7 +31,7 @@ class RemediationUtilsTests(unittest.TestCase):
     def test_parse_llm_virtual_json_sample_payload(self):
         raw = (
             '{"updated_source_code":"public void doPost(HttpServletRequest request, '
-            'HttpServletResponse response) {'
+            "HttpServletResponse response) {"
             'java.security.MessageDigest md = java.security.MessageDigest.getInstance(\\"SHA-256\\");'
             '}","explanation":"Switched weak hash to SHA-256."}'
         )
@@ -56,9 +56,7 @@ class RemediationUtilsTests(unittest.TestCase):
         parsed = self.service.RemediationService._parse_llm_virtual_json(invalid_raw)
         self.assertTrue((parsed.get("parse_error") or "").startswith("invalid_json"))
         with TemporaryDirectory() as tmp:
-            out = self.service._capture_raw_llm_output(
-                tmp, "BenchmarkTest99999", 1, invalid_raw
-            )
+            out = self.service._capture_raw_llm_output(tmp, "BenchmarkTest99999", 1, invalid_raw)
             self.assertIsNotNone(out)
             self.assertTrue(Path(out).is_file())
             self.assertEqual(Path(out).read_text(encoding="utf-8"), invalid_raw)
@@ -209,7 +207,7 @@ class RemediationUtilsTests(unittest.TestCase):
                 "file_path": src_path.as_posix(),
                 "rule_id": "ISO-A.10-WEAK-HASH",
                 "evidence": {
-                    "source_code": "public void doPost(...) { MessageDigest.getInstance(\"MD5\"); }",
+                    "source_code": 'public void doPost(...) { MessageDigest.getInstance("MD5"); }',
                     "graph_context": {},
                     "vector_context": [],
                 },

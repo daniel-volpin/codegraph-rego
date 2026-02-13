@@ -4,6 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def handle_search(query: str, k: int = 5) -> SearchResponse:
     matched_signatures, graph_contexts = run_search(query, k=k)
     contexts_model = []

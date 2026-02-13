@@ -45,8 +45,7 @@ class TestBenchmarkSelectionCoverage(unittest.TestCase):
 
     def test_sampling_is_deterministic_when_enabled(self) -> None:
         records = [
-            GroundTruthRecord(testcase_id=f"BenchmarkTest{idx:05d}", cwe="CWE-330", label=True)
-            for idx in range(20)
+            GroundTruthRecord(testcase_id=f"BenchmarkTest{idx:05d}", cwe="CWE-330", label=True) for idx in range(20)
         ]
         categories = [
             CategorySpec(
@@ -73,4 +72,3 @@ class TestBenchmarkSelectionCoverage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -22,6 +22,7 @@ import json
 router = APIRouter()
 logger = logging.getLogger("codegraph.api.routers.policy")
 
+
 @router.get("/policy/evaluate", response_model=PolicyEvaluateResponse)
 async def policy_evaluate(
     max_bundles: int | None = Query(default=None, ge=1, le=5000),
@@ -39,6 +40,7 @@ async def policy_evaluate(
     except Exception as e:
         logger.error(f"Policy evaluation failed: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
 
 @router.post("/policy/evaluate_with_llm", response_model=PolicyEvaluateResponse)
 async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):

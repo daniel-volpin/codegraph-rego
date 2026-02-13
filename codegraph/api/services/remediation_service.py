@@ -31,9 +31,7 @@ def preview_virtual_remediation(
         }
     service = _get_service()
     try:
-        return service.preview_virtual_fix(
-            violation_id, target_method=target_method, file_path=file_path
-        )
+        return service.preview_virtual_fix(violation_id, target_method=target_method, file_path=file_path)
     except Exception as exc:  # pragma: no cover - runtime guard
         LOGGER.exception("Virtual remediation preview failed: %s", exc)
         return {"status": "ERROR", "error": str(exc), "violation_id": violation_id}

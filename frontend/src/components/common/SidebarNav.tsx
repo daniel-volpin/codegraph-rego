@@ -5,7 +5,8 @@ const routes = [
   { to: "/", label: "Overview" },
   { to: "/upload", label: "Upload" },
   { to: "/search", label: "Search" },
-  { to: "/policy", label: "Policy" }
+  { to: "/graph", label: "Graph Explorer" },
+  { to: "/policy", label: "Policy" },
 ];
 
 const SidebarNav = () => {
@@ -15,8 +16,23 @@ const SidebarNav = () => {
   return (
     <div className="sidebar-nav">
       <div className="sidebar-brand">
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-          <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "linear-gradient(135deg, var(--color-primary-500), var(--color-primary-700))" }}></div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            marginBottom: "0.5rem",
+          }}
+        >
+          <div
+            style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "8px",
+              background:
+                "linear-gradient(135deg, var(--color-primary-500), var(--color-primary-700))",
+            }}
+          ></div>
           <span className="nav-logo">CodeGraph</span>
         </div>
         <span className="nav-subtitle">Compliance & Search Console</span>

@@ -3,6 +3,7 @@ codegraph/common/snippet_utils.py
 
 Utility for extracting code snippets from source files around a method/function name.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

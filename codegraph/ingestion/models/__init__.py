@@ -1,2 +1,2 @@
-from .method import MethodEntity
-from .field import FieldEntity
+from .method import MethodEntity as MethodEntity
+from .field import FieldEntity as FieldEntity

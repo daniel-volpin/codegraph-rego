@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from codegraph.db import get_neo4j_driver
 from codegraph.config import FAISS_INDEX_PATH, SIGNATURE_MAP_PATH, SIGNATURE_MAP_PATH_FULL, EMBEDDING_MODEL_NAME
@@ -7,6 +7,7 @@ import shutil
 from typing import Any
 
 router = APIRouter()
+
 
 @router.get("/health", response_model=HealthCheckResponse)
 async def health():
@@ -28,6 +29,7 @@ async def health():
         checks["details"]["neo4j"] = str(e)
     try:
         from codegraph.search.hybrid import load_faiss_index, load_signature_map, load_embedding_model
+
         load_faiss_index(FAISS_INDEX_PATH)
         try:
             load_signature_map(SIGNATURE_MAP_PATH_FULL)

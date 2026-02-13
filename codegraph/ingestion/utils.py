@@ -2,16 +2,17 @@ import os
 import zipfile
 import shutil
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
+
 
 def safe_extract_zip(
     zip_file: zipfile.ZipFile,
     dest_dir: str,
     max_file_size: int = 50 * 1024 * 1024,
-    allowed_exts: Optional[list[str]] = None
+    allowed_exts: Optional[list[str]] = None,
 ) -> None:
     """
     Safely extract a ZIP to dest_dir, preventing Zip Slip path traversal and enforcing file size/type limits.
@@ -47,6 +48,7 @@ def safe_extract_zip(
                 shutil.copyfileobj(src, dst)
             # Only log extraction at debug level
             logger.debug(f"Extracted: {member.filename}")
+
 
 def find_java_root(base: str) -> Optional[str]:
     """

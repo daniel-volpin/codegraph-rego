@@ -1,0 +1,31 @@
+[project]
+name = "codegraph"
+version = "0.1.0"
+description = "A sophisticated code search and understanding engine powered by CodeGraph"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi==0.112.2",
+    "uvicorn==0.30.6",
+    "aiofiles==24.1.0",
+    "python-multipart==0.0.9",
+    "sentence-transformers==2.7.0",
+    "faiss-cpu==1.8.0.post1",
+    "numpy==1.26.4",
+    "neo4j==5.23.1",
+    "javalang==0.13.0",
+    "pydantic>=1.10,<2",
+    "python-dotenv==1.0.1",
+    "litellm==1.35.7",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+    "httpx>=0.24.1",
+    "ruff>=0.4.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"

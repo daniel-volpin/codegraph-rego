@@ -34,9 +34,7 @@ _MODEL: SentenceTransformer | None = None
 def load_faiss_index(index_path: str = FAISS_INDEX_PATH):
     global _INDEX, _INDEX_MTIME
     if not os.path.isfile(index_path):
-        raise FileNotFoundError(
-            f"FAISS index not found at {index_path}. Build embeddings first."
-        )
+        raise FileNotFoundError(f"FAISS index not found at {index_path}. Build embeddings first.")
     mtime = os.path.getmtime(index_path)
     if _INDEX is not None and _INDEX_MTIME == mtime:
         return _INDEX
@@ -75,9 +73,7 @@ def load_embedding_model(model_name: str = EMBEDDING_MODEL_NAME) -> SentenceTran
     return _MODEL
 
 
-def semantic_search(
-    query: str, model: SentenceTransformer, index, signature_map: List[str], k: int = 5
-) -> List[str]:
+def semantic_search(query: str, model: SentenceTransformer, index, signature_map: List[str], k: int = 5) -> List[str]:
     query_vector = model.encode([query], normalize_embeddings=True)
     _, indices = index.search(query_vector, k=k)
     return [signature_map[i] for i in indices[0]]
@@ -85,8 +81,7 @@ def semantic_search(
 
 def fetch_graph_context_for_method(sig: str, neo4j_driver: Driver) -> List[Dict[str, Any]]:
     with neo4j_driver.session() as session:
-        cypher = (
-            """
+        cypher = """
             MATCH (m:Method)
             WHERE m.signature = $sig OR m.full_signature = $sig
             MATCH path=(m)-[:CALLS|DECLARES|NESTED_IN*1..2]-(n)
@@ -97,6 +92,5 @@ def fetch_graph_context_for_method(sig: str, neo4j_driver: Driver) -> List[Dict[
                      ELSE {type: 'Node', id: coalesce(n.signature, n.fqn, n.name)}
                    END) AS neighbors
             """
-        )
         result = session.run(cypher, sig=sig)
         return [record.data() for record in result]

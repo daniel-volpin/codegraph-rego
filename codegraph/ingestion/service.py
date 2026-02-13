@@ -233,9 +233,7 @@ def walk_class_declarations(
         for field in getattr(decl, "fields", []):
             field_type = getattr(field.type, "name", str(field.type))
             depends_on_relations.append((class_fqn, f"{package}.{field_type}"))
-            field_annotations = [
-                getattr(ann, "name", str(ann)) for ann in getattr(field, "annotations", [])
-            ]
+            field_annotations = [getattr(ann, "name", str(ann)) for ann in getattr(field, "annotations", [])]
             field_modifiers = list(getattr(field, "modifiers", []) or [])
             base_line = _line_from_position(getattr(field, "position", None))
             for declarator in getattr(field, "declarators", []):
@@ -271,9 +269,7 @@ def walk_class_declarations(
                 for p in getattr(method, "parameters", [])
                 if getattr(p, "type", None) is not None
             ]
-            annotations = [
-                getattr(ann, "name", str(ann)) for ann in getattr(method, "annotations", [])
-            ]
+            annotations = [getattr(ann, "name", str(ann)) for ann in getattr(method, "annotations", [])]
             uses_types = [
                 f"{package}.{getattr(p.type, 'name', str(p.type))}"
                 for p in getattr(method, "parameters", [])
@@ -339,9 +335,7 @@ def walk_class_declarations(
                 for p in getattr(ctor, "parameters", [])
                 if getattr(p, "type", None) is not None
             ]
-            annotations = [
-                getattr(ann, "name", str(ann)) for ann in getattr(ctor, "annotations", [])
-            ]
+            annotations = [getattr(ann, "name", str(ann)) for ann in getattr(ctor, "annotations", [])]
             uses_types = [
                 f"{package}.{getattr(p.type, 'name', str(p.type))}"
                 for p in getattr(ctor, "parameters", [])
@@ -349,9 +343,7 @@ def walk_class_declarations(
             ]
             ctor_start_line = _line_from_position(getattr(ctor, "position", None))
             ctor_end_line = (
-                _infer_block_end_line(file_lines, ctor_start_line)
-                if getattr(ctor, "body", None)
-                else ctor_start_line
+                _infer_block_end_line(file_lines, ctor_start_line) if getattr(ctor, "body", None) else ctor_start_line
             )
             methods.append(
                 MethodEntity(
@@ -374,9 +366,7 @@ def walk_class_declarations(
                 uses_relations.append((ctor_sig, used_type))
 
         body_types = [
-            node
-            for node in getattr(decl, "body", [])
-            if isinstance(node, (ClassDeclaration, InterfaceDeclaration))
+            node for node in getattr(decl, "body", []) if isinstance(node, (ClassDeclaration, InterfaceDeclaration))
         ]
         (
             inner_methods,
@@ -448,9 +438,7 @@ def extract_entities_from_content(file_path: str, content: str):
     )
 
 
-def collect_code_structure(
-    root_dir: str, progress_callback: Optional[Callable[[str, str, float], None]] = None
-):
+def collect_code_structure(root_dir: str, progress_callback: Optional[Callable[[str, str, float], None]] = None):
     all_methods: List[MethodEntity] = []
     all_nested: List[Tuple[str, str]] = []
     all_extends: List[Tuple[str, str]] = []
@@ -619,9 +607,7 @@ def ingest_to_neo4j(
             notify("Calls relations", idx, len(calls_relations) or 1)
 
         print(f"📦 Ingesting {len(unique_method_field_relations)} method-field uses relations...")
-        for idx, (method_sig, class_fqn, field_name) in enumerate(
-            unique_method_field_relations, start=1
-        ):
+        for idx, (method_sig, class_fqn, field_name) in enumerate(unique_method_field_relations, start=1):
             safe_write(session, link_method_field_use, method_sig, class_fqn, field_name)
             notify("Method-field uses", idx, len(unique_method_field_relations) or 1)
 
@@ -630,9 +616,7 @@ def ingest_to_neo4j(
     driver.close()
 
 
-def ingest(
-    java_root_dir: str, progress_callback: Optional[Callable[[str, str, float], None]] = None
-) -> None:
+def ingest(java_root_dir: str, progress_callback: Optional[Callable[[str, str, float], None]] = None) -> None:
     print(f"📦 Parsing Java project at: {java_root_dir}")
     if progress_callback:
         progress_callback("connecting", "Checking Neo4j availability…", 10.0)
@@ -691,9 +675,7 @@ def _purge_file_entities(file_path: str) -> None:
         driver.close()
 
 
-def process_single_file(
-    file_path: str, progress_callback: Optional[Callable[[str, str, float], None]] = None
-) -> None:
+def process_single_file(file_path: str, progress_callback: Optional[Callable[[str, str, float], None]] = None) -> None:
     """Re-ingest a single Java source file without touching the rest of the graph."""
 
     if not os.path.isfile(file_path):

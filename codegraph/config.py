@@ -1,10 +1,13 @@
 from pydantic import BaseSettings, Field
 
+
 class Settings(BaseSettings):
     index_dir: str = Field("index", description="Index directory")
     faiss_index_path: str = Field("index/code_embeddings.index", description="FAISS index path")
     signature_map_path: str = Field("index/embedding_signature_map.json", description="Signature map path")
-    signature_map_path_full: str = Field("index/embedding_full_signature_map.json", description="Full signature map path")
+    signature_map_path_full: str = Field(
+        "index/embedding_full_signature_map.json", description="Full signature map path"
+    )
     embedding_metadata_path: str = Field("index/embedding_metadata.json", description="Embedding metadata path")
     embedding_cache_path: str = Field("index/embedding_cache.json", description="Embedding cache path")
     embedding_model_name: str = Field("all-MiniLM-L6-v2", description="Embedding model name")
@@ -21,8 +24,7 @@ class Settings(BaseSettings):
     remediation_raw_capture_enabled: bool = Field(
         False,
         description=(
-            "When true, remediation runs may write raw LLM outputs to disk for debugging "
-            "(only on JSON parse failures)."
+            "When true, remediation runs may write raw LLM outputs to disk for debugging (only on JSON parse failures)."
         ),
     )
     ui_review_store_path: str = Field(
@@ -54,6 +56,7 @@ class Settings(BaseSettings):
             "remediation_raw_capture_enabled": {"env": "REMEDIATION_RAW_CAPTURE_ENABLED"},
             "ui_review_store_path": {"env": "UI_REVIEW_STORE_PATH"},
         }
+
 
 settings = Settings()
 

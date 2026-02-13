@@ -177,11 +177,7 @@ def _cached_policy_evaluation() -> Dict[str, Any]:
 
 def _violation_key(violation: Dict[str, Any]) -> str:
     return str(
-        violation.get("violation_id")
-        or violation.get("id")
-        or violation.get("control")
-        or violation.get("rule")
-        or ""
+        violation.get("violation_id") or violation.get("id") or violation.get("control") or violation.get("rule") or ""
     )
 
 
@@ -351,7 +347,7 @@ class RemediationService:
         "ISO-A.10-WEAK-HASH": {
             "objective": "Replace weak hash usage (MD5) with SHA-256 with minimal edits.",
             "allowed_transformations": [
-                "Replace MessageDigest.getInstance(\"MD5\") with MessageDigest.getInstance(\"SHA-256\").",
+                'Replace MessageDigest.getInstance("MD5") with MessageDigest.getInstance("SHA-256").',
                 "Replace DigestUtils.md5* usage with a SHA-256 equivalent only if it is already available in the existing codebase context.",
             ],
             "non_goals": [
@@ -642,9 +638,7 @@ class RemediationService:
 
         try:
             with tempfile.TemporaryDirectory() as tmp:
-                temp_root, temp_file_path, temp_build_root = self._prepare_temp_workspace(
-                    Path(tmp), resolved_path
-                )
+                temp_root, temp_file_path, temp_build_root = self._prepare_temp_workspace(Path(tmp), resolved_path)
                 temp_file_path.write_text(updated_content, encoding="utf-8")
                 compilation = self._compile_project(temp_build_root)
 
@@ -722,16 +716,12 @@ class RemediationService:
                 try:
                     resolved_path.write_text(original_content, encoding="utf-8")
                 except Exception as exc:  # pragma: no cover - filesystem guard
-                    LOGGER.warning(
-                        "Failed to restore original content for %s: %s", resolved_path, exc
-                    )
+                    LOGGER.warning("Failed to restore original content for %s: %s", resolved_path, exc)
 
         status = "OK"
         if verification.get("error"):
             status = "ERROR"
-        elif verification.get("overall_status") == "FAIL" or verification.get(
-            "target_rule_status"
-        ) == "FAIL":
+        elif verification.get("overall_status") == "FAIL" or verification.get("target_rule_status") == "FAIL":
             status = "FAIL"
         if mode == "apply" and not apply_successful:
             status = "FAIL"
@@ -753,9 +743,7 @@ class RemediationService:
                 "attempt_count": attempt_count,
                 "mode": mode,
             },
-            "error": None
-            if status == "OK"
-            else (verification.get("error") or "Apply verification failed"),
+            "error": None if status == "OK" else (verification.get("error") or "Apply verification failed"),
         }
 
     # --- Context gathering -----------------------------------------------------
@@ -818,9 +806,7 @@ class RemediationService:
             non_goals=list(strategy.get("non_goals") or []),
             extra_examples=list(strategy.get("extra_examples") or []),
         )
-        messages = RemediationPromptTemplate.build_messages(
-            context=context, spec=spec, previous_errors=previous_errors
-        )
+        messages = RemediationPromptTemplate.build_messages(context=context, spec=spec, previous_errors=previous_errors)
 
         try:
             response = self._llm_client(messages, max_tokens=1500)
@@ -856,17 +842,13 @@ class RemediationService:
             if fence:
                 method = fence.group(1).strip()
             method = (method or "").strip()
-            if method and "{" in method and "}" in method and re.search(
-                r"\b(public|private|protected)\b", method
-            ):
+            if method and "{" in method and "}" in method and re.search(r"\b(public|private|protected)\b", method):
                 return {
                     "updated_source_code": method,
                     "explanation": None,
                     "parse_error": None,
                 }
-            LOGGER.debug(
-                "LLM output did not contain a method replacement: %s", (content or "")[:200]
-            )
+            LOGGER.debug("LLM output did not contain a method replacement: %s", (content or "")[:200])
             return {
                 "updated_source_code": None,
                 "explanation": None,
@@ -900,9 +882,7 @@ class RemediationService:
             }
 
         updated_source_code = (
-            data.get("replacement_method_code")
-            or data.get("updated_source_code")
-            or data.get("source")
+            data.get("replacement_method_code") or data.get("updated_source_code") or data.get("source")
         )
         explanation = data.get("explanation") or data.get("summary")
         if not isinstance(updated_source_code, str) or not updated_source_code.strip():
@@ -968,9 +948,7 @@ class RemediationService:
                 if call:
                     calls.add(call)
                 if node.qualifier and node.qualifier.lower() in {"logger", "log"}:
-                    uses_fields.append(
-                        {"name": node.qualifier, "type": "Logger", "class_fqn": None}
-                    )
+                    uses_fields.append({"name": node.qualifier, "type": "Logger", "class_fqn": None})
             elif isinstance(node, MemberReference):
                 member = node.member
                 if member:
@@ -1007,8 +985,8 @@ class RemediationService:
         uses_fields = list(context.get("uses_fields") or [])
         for match in re.findall(r"\b(?:logger|log)\.([A-Za-z_][A-Za-z0-9_]*)\s*\(", snippet):
             calls.add(f"logger.{match}")
-        for field in set(re.findall(r"\bthis\.([A-Za-z_][A-Za-z0-9_]*)", snippet)):
-            uses_fields.append({"name": field, "type": None, "class_fqn": None})
+        for matched_field in set(re.findall(r"\bthis\.([A-Za-z_][A-Za-z0-9_]*)", snippet)):
+            uses_fields.append({"name": matched_field, "type": None, "class_fqn": None})
         if re.search(r"\b(?:logger|log)\.", snippet):
             uses_fields.append({"name": "logger", "type": "Logger", "class_fqn": None})
         context["uses_fields"] = RemediationService._dedupe_fields(uses_fields)
@@ -1042,9 +1020,9 @@ class RemediationService:
     def _dedupe_fields(fields: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         seen = set()
         deduped: List[Dict[str, Any]] = []
-        for field in fields:
-            name = field.get("name")
-            key = name or id(field)
+        for f in fields:
+            name = f.get("name")
+            key = name or id(f)
             if key in seen:
                 continue
             seen.add(key)
@@ -1079,9 +1057,7 @@ class RemediationService:
                 return ancestor
         return None
 
-    def _prepare_temp_workspace(
-        self, temp_root: Path, source_path: Path
-    ) -> Tuple[Path, Path, Optional[Path]]:
+    def _prepare_temp_workspace(self, temp_root: Path, source_path: Path) -> Tuple[Path, Path, Optional[Path]]:
         build_root = self._detect_build_root(source_path)
         if build_root and build_root.exists():
             target_root = temp_root / build_root.name
@@ -1178,15 +1154,10 @@ class RemediationService:
             return False
         if not expected:
             return len(actual) == 0
-        return all(
-            cls._normalize_type_name(exp) == cls._normalize_type_name(act)
-            for exp, act in zip(expected, actual)
-        )
+        return all(cls._normalize_type_name(exp) == cls._normalize_type_name(act) for exp, act in zip(expected, actual))
 
     @classmethod
-    def _replace_method_in_source(
-        cls, source: str, updated_method: str, target_method: str
-    ) -> Tuple[str, str, str]:
+    def _replace_method_in_source(cls, source: str, updated_method: str, target_method: str) -> Tuple[str, str, str]:
         try:
             tree = javalang.parse.parse(source)
         except Exception as exc:  # pragma: no cover - parser guard
@@ -1232,9 +1203,7 @@ class RemediationService:
         original_snippet = "\n".join(source_lines[start_line - 1 : end_line])
         indent = re.match(r"\s*", source_lines[start_line - 1]).group(0)
         cleaned_updated = textwrap.dedent(updated_method).strip("\n")
-        updated_lines = [
-            f"{indent}{line}" if line.strip() else line for line in cleaned_updated.splitlines()
-        ]
+        updated_lines = [f"{indent}{line}" if line.strip() else line for line in cleaned_updated.splitlines()]
         updated_snippet = "\n".join(updated_lines)
         new_lines = source_lines[: start_line - 1] + updated_lines + source_lines[end_line:]
         new_source = "\n".join(new_lines)

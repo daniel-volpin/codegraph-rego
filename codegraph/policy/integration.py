@@ -104,9 +104,7 @@ def _violation_id_variants(violation_id: str) -> List[str]:
     return variants
 
 
-def _resolve_catalog_entry(
-    violation_id: Any, catalog: Dict[str, Dict[str, Any]]
-) -> Optional[Dict[str, Any]]:
+def _resolve_catalog_entry(violation_id: Any, catalog: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not violation_id:
         return None
     for candidate in _violation_id_variants(str(violation_id)):
@@ -134,9 +132,7 @@ def build_policy_input(*, max_bundles: int | None = None) -> Dict[str, Any]:
     finally:
         driver.close()
     hybrid_search = _load_hybrid_search()
-    bundles = [
-        build_evidence_bundle(method_snapshot, hybrid_search) for method_snapshot in methods
-    ]
+    bundles = [build_evidence_bundle(method_snapshot, hybrid_search) for method_snapshot in methods]
     return {
         "bundles": bundles,
         "rules_catalog": load_iso_rules(),
@@ -181,9 +177,7 @@ def _fetch_methods_with_context(driver, *, max_bundles: int | None = None) -> Li
             signature = rec.get("signature")
             if not signature:
                 continue
-            uses_fields = [
-                field for field in (rec.get("uses_fields") or []) if field and field.get("name")
-            ]
+            uses_fields = [field for field in (rec.get("uses_fields") or []) if field and field.get("name")]
             annotations = rec.get("property_annotations") or []
             annotation_nodes = rec.get("annotation_nodes") or []
             combined_annotations = sorted({a for a in annotations + annotation_nodes if a})
@@ -240,9 +234,7 @@ def _fetch_method_snapshot(driver, method_signature: str) -> Dict[str, Any] | No
         record = session.run(cypher, method_signature=method_signature).single()
         if not record:
             return None
-        uses_fields = [
-            field for field in (record.get("uses_fields") or []) if field and field.get("name")
-        ]
+        uses_fields = [field for field in (record.get("uses_fields") or []) if field and field.get("name")]
         annotations = record.get("property_annotations") or []
         annotation_nodes = record.get("annotation_nodes") or []
         combined_annotations = sorted({a for a in annotations + annotation_nodes if a})
@@ -287,9 +279,7 @@ def build_evidence_bundle(
             padding=2,
         )
         if not source_code and method_snapshot.get("name"):
-            source_code = extract_code_snippet(
-                resolved_path.as_posix(), method_snapshot.get("name", "")
-            )
+            source_code = extract_code_snippet(resolved_path.as_posix(), method_snapshot.get("name", ""))
     graph_context = {
         "annotations": method_snapshot.get("annotations") or [],
         "uses_fields": method_snapshot.get("uses_fields") or [],
@@ -300,9 +290,7 @@ def build_evidence_bundle(
     vector_context: List[str] = []
     if search_service is not None:
         try:
-            vector_context = search_service.similar_to_signature(
-                method_snapshot["signature"], top_k=3
-            )
+            vector_context = search_service.similar_to_signature(method_snapshot["signature"], top_k=3)
         except Exception as exc:  # pragma: no cover - optional dependency
             LOGGER.debug("Vector lookup failed for %s: %s", method_snapshot["signature"], exc)
     return {
@@ -461,9 +449,7 @@ def _evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
-            raise RuntimeError(
-                f"OPA evaluation failed for {bundle.get('target_method')}: {proc.stderr}"
-            )
+            raise RuntimeError(f"OPA evaluation failed for {bundle.get('target_method')}: {proc.stderr}")
         try:
             out = json.loads(proc.stdout)
         except json.JSONDecodeError as exc:

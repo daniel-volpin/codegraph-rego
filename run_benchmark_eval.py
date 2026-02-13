@@ -8,7 +8,7 @@ import argparse
 import json
 import logging
 import tempfile
- 
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -133,9 +133,7 @@ def score_category(
         if label is None:
             continue
         violations = violations_by_testcase.get(testcase_id, [])
-        predicted = any(
-            v.get("violation_id") in category.rego_rules for v in violations
-        )
+        predicted = any(v.get("violation_id") in category.rego_rules for v in violations)
         if label and predicted:
             tp += 1
         elif label and not predicted:
@@ -167,9 +165,7 @@ def main() -> int:
     categories = load_mapping_config(Path(args.mapping))
     benchmark_root = Path(selection_cfg["benchmark_root"])
 
-    truth_path = find_ground_truth_file(
-        benchmark_root, selection_cfg.get("ground_truth_path")
-    )
+    truth_path = find_ground_truth_file(benchmark_root, selection_cfg.get("ground_truth_path"))
     truth_schema = inspect_ground_truth_schema(truth_path)
     truth_records = load_ground_truth(benchmark_root, truth_path.as_posix())
     selection = select_testcases(truth_records, categories, selection_cfg)
@@ -218,9 +214,7 @@ def main() -> int:
 
     violations_by_testcase: Dict[str, List[Dict[str, Any]]] = {}
     for violation in violations:
-        testcase_id = extract_testcase_id(
-            violation.get("target_method") or violation.get("file_path")
-        )
+        testcase_id = extract_testcase_id(violation.get("target_method") or violation.get("file_path"))
         if not testcase_id:
             continue
         violations_by_testcase.setdefault(testcase_id, []).append(violation)
@@ -254,8 +248,7 @@ def main() -> int:
                 if label is not True:
                     continue
                 predicted = any(
-                    v.get("violation_id") in spec.rego_rules
-                    for v in violations_by_testcase.get(testcase_id, [])
+                    v.get("violation_id") in spec.rego_rules for v in violations_by_testcase.get(testcase_id, [])
                 )
                 if predicted:
                     continue

@@ -11,7 +11,7 @@ import {
   RemediationPreviewResponse,
   SearchResponse,
   UploadResponse,
-  UploadStatus
+  UploadStatus,
 } from "./types";
 
 const API_BASE_URL =
@@ -19,7 +19,7 @@ const API_BASE_URL =
   "http://127.0.0.1:8000";
 
 const defaultHeaders = {
-  Accept: "application/json"
+  Accept: "application/json",
 };
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -90,7 +90,7 @@ export async function uploadZip(file: File): Promise<UploadResponse> {
 
   const response = await fetch(`${API_BASE_URL}/upload`, {
     method: "POST",
-    body: formData
+    body: formData,
   });
 
   return handleResponse<UploadResponse>(response);
@@ -101,9 +101,9 @@ export async function searchCode(query: string): Promise<SearchResponse> {
     method: "POST",
     headers: {
       ...defaultHeaders,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query })
+    body: JSON.stringify({ query }),
   });
 
   return handleResponse<SearchResponse>(response);
@@ -125,10 +125,13 @@ export async function evaluatePolicies(args?: {
     params.set("max_per_violation_id", String(args.maxPerViolationId));
   }
   const qs = params.toString();
-  const response = await fetch(`${API_BASE_URL}/policy/evaluate${qs ? `?${qs}` : ""}`, {
-    method: "GET",
-    headers: defaultHeaders
-  });
+  const response = await fetch(
+    `${API_BASE_URL}/policy/evaluate${qs ? `?${qs}` : ""}`,
+    {
+      method: "GET",
+      headers: defaultHeaders,
+    },
+  );
 
   return handleResponse<PolicyEvaluateResponse>(response);
 }
@@ -144,15 +147,15 @@ export async function evaluatePoliciesWithLLM(payload: {
     method: "POST",
     headers: {
       ...defaultHeaders,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       limit: payload.limit,
       model: payload.model,
       max_bundles: payload.maxBundles,
       max_total_violations: payload.maxTotalViolations,
-      max_per_violation_id: payload.maxPerViolationId
-    })
+      max_per_violation_id: payload.maxPerViolationId,
+    }),
   });
 
   return handleResponse<PolicyEvaluateResponse>(response);
@@ -161,44 +164,44 @@ export async function evaluatePoliciesWithLLM(payload: {
 export async function fetchPolicyCatalog(): Promise<PolicyCatalogResponse> {
   const response = await fetch(`${API_BASE_URL}/policy/catalog`, {
     method: "GET",
-    headers: defaultHeaders
+    headers: defaultHeaders,
   });
 
   return handleResponse<PolicyCatalogResponse>(response);
 }
 
 export async function explainPolicyViolationOne(
-  payload: PolicyExplainOneRequest
+  payload: PolicyExplainOneRequest,
 ): Promise<PolicyExplainOneResponse> {
   const response = await fetch(`${API_BASE_URL}/policy/explain_one`, {
     method: "POST",
     headers: {
       ...defaultHeaders,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 
   return handleStatusPayloadResponse<PolicyExplainOneResponse>(response);
 }
 
 export async function saveViolationReview(
-  payload: PolicyReviewCreateRequest
+  payload: PolicyReviewCreateRequest,
 ): Promise<PolicyReviewCreateResponse> {
   const response = await fetch(`${API_BASE_URL}/policy/reviews`, {
     method: "POST",
     headers: {
       ...defaultHeaders,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 
   return handleStatusPayloadResponse<PolicyReviewCreateResponse>(response);
 }
 
 export async function fetchViolationReviews(
-  args: { violationKey?: string; limit?: number } = {}
+  args: { violationKey?: string; limit?: number } = {},
 ): Promise<PolicyReviewListResponse> {
   const params = new URLSearchParams();
   if (args.violationKey) {
@@ -208,10 +211,13 @@ export async function fetchViolationReviews(
     params.set("limit", String(args.limit));
   }
   const qs = params.toString();
-  const response = await fetch(`${API_BASE_URL}/policy/reviews${qs ? `?${qs}` : ""}`, {
-    method: "GET",
-    headers: defaultHeaders
-  });
+  const response = await fetch(
+    `${API_BASE_URL}/policy/reviews${qs ? `?${qs}` : ""}`,
+    {
+      method: "GET",
+      headers: defaultHeaders,
+    },
+  );
 
   return handleStatusPayloadResponse<PolicyReviewListResponse>(response);
 }
@@ -219,7 +225,7 @@ export async function fetchViolationReviews(
 export async function fetchHealth(): Promise<HealthCheckResponse> {
   const response = await fetch(`${API_BASE_URL}/health`, {
     method: "GET",
-    headers: defaultHeaders
+    headers: defaultHeaders,
   });
 
   return handleResponse<HealthCheckResponse>(response);
@@ -228,7 +234,7 @@ export async function fetchHealth(): Promise<HealthCheckResponse> {
 export async function fetchUploadStatus(): Promise<UploadStatus> {
   const response = await fetch(`${API_BASE_URL}/upload/status`, {
     method: "GET",
-    headers: defaultHeaders
+    headers: defaultHeaders,
   });
 
   return handleResponse<UploadStatus>(response);
@@ -237,19 +243,19 @@ export async function fetchUploadStatus(): Promise<UploadStatus> {
 export async function previewRemediation(
   violationId: string,
   targetMethod?: string,
-  filePath?: string
+  filePath?: string,
 ): Promise<RemediationPreviewResponse> {
   const response = await fetch(`${API_BASE_URL}/remediation/preview`, {
     method: "POST",
     headers: {
       ...defaultHeaders,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       violation_id: violationId,
       target_method: targetMethod,
-      file_path: filePath
-    })
+      file_path: filePath,
+    }),
   });
   return handleRemediationResponse<RemediationPreviewResponse>(response);
 }
@@ -262,18 +268,18 @@ export interface ApplyRemediationPayload {
 }
 
 export async function applyRemediation(
-  payload: ApplyRemediationPayload
+  payload: ApplyRemediationPayload,
 ): Promise<RemediationApplyResponse> {
   const response = await fetch(`${API_BASE_URL}/remediation/apply`, {
     method: "POST",
     headers: {
       ...defaultHeaders,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       ...payload,
-      mode: "dry_run"
-    })
+      mode: "dry_run",
+    }),
   });
 
   return handleRemediationResponse<RemediationApplyResponse>(response);

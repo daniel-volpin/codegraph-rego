@@ -23,9 +23,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         help="Number of semantic matches to return (default: %(default)s)",
     )
     parser.add_argument("--index-path", default=config.FAISS_INDEX_PATH, help="FAISS index path")
-    parser.add_argument(
-        "--signature-map", default=config.SIGNATURE_MAP_PATH_FULL, help="Signature map path"
-    )
+    parser.add_argument("--signature-map", default=config.SIGNATURE_MAP_PATH_FULL, help="Signature map path")
     parser.add_argument(
         "--legacy-signature-map",
         default=config.SIGNATURE_MAP_PATH,

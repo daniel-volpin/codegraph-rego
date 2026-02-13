@@ -117,9 +117,7 @@ def _build_candidate_violations(
 
     violations_by_testcase: Dict[str, List[Dict[str, Any]]] = {}
     for violation in violations:
-        testcase_id = extract_testcase_id(
-            violation.get("target_method") or violation.get("file_path")
-        )
+        testcase_id = extract_testcase_id(violation.get("target_method") or violation.get("file_path"))
         if not testcase_id:
             continue
         violations_by_testcase.setdefault(testcase_id, []).append(violation)
@@ -157,9 +155,7 @@ def main() -> int:
     selection_cfg = load_selection_config(Path(args.config))
     categories = load_mapping_config(Path(args.mapping))
     benchmark_root = Path(selection_cfg["benchmark_root"])
-    truth_path = find_ground_truth_file(
-        benchmark_root, selection_cfg.get("ground_truth_path")
-    )
+    truth_path = find_ground_truth_file(benchmark_root, selection_cfg.get("ground_truth_path"))
     truth_schema = inspect_ground_truth_schema(truth_path)
     truth_records = load_ground_truth(benchmark_root, truth_path.as_posix())
     selection = select_testcases(truth_records, categories, selection_cfg)
@@ -239,15 +235,8 @@ def main() -> int:
             verification = apply_result.get("verification") or {}
             compilation = apply_result.get("compilation") or {}
             target_rule_status = verification.get("target_rule_status")
-            policy_pass = (
-                apply_result.get("status") == "OK"
-                and target_rule_status == "PASS"
-            )
-            build_pass = (
-                compilation.get("success")
-                if compilation.get("attempted")
-                else None
-            )
+            policy_pass = apply_result.get("status") == "OK" and target_rule_status == "PASS"
+            build_pass = compilation.get("success") if compilation.get("attempted") else None
             results.append(
                 {
                     "violation_id": violation_id,
@@ -273,8 +262,7 @@ def main() -> int:
     build_attempted = sum(
         1
         for item in results
-        if isinstance(item.get("compilation"), dict)
-        and item["compilation"].get("attempted") is True
+        if isinstance(item.get("compilation"), dict) and item["compilation"].get("attempted") is True
     )
     build_success = sum(1 for item in results if item.get("build_pass") is True)
     fix_rate = fix_success / attempted if attempted else 0.0

@@ -1,6 +1,7 @@
 from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
+
 class ControlMetadata(BaseModel):
     id: Optional[str] = None
     control: Optional[str] = None
@@ -11,6 +12,7 @@ class ControlMetadata(BaseModel):
     rego_rule: Optional[str] = Field(default=None, alias="rego_rule")
     evidence_fields: Optional[List[str]] = None
 
+
 class PolicyViolation(BaseModel):
     standard: Optional[str] = None
     id: Optional[str] = None
@@ -19,19 +21,23 @@ class PolicyViolation(BaseModel):
     reason: Optional[str] = None
     control_metadata: Optional[ControlMetadata] = None
 
+
 class EvaluateResponse(BaseModel):
     violations: List[PolicyViolation]
     opa_output: Any
     catalog: List[ControlMetadata]
+
 
 class LLMEnrichedItem(BaseModel):
     violation: PolicyViolation
     snippet: str
     explanation: str
 
+
 class EvaluateWithLLMResponse(BaseModel):
     violations: List[PolicyViolation]
     enriched: List[LLMEnrichedItem]
+
 
 class PolicyCatalogResponse(BaseModel):
     controls: List[ControlMetadata]

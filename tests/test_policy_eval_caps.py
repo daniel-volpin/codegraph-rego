@@ -22,9 +22,12 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
             {"target_method": "m1", "file_path": "f1", "source_code": "", "graph_context": {}, "vector_context": []},
             {"target_method": "m2", "file_path": "f2", "source_code": "", "graph_context": {}, "vector_context": []},
         ]
-        with patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}), patch(
-            "codegraph.policy.integration._evaluate_bundle",
-            return_value=[{"violation_id": "A", "reason": "r", "severity": "high"}],
+        with (
+            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
+            patch(
+                "codegraph.policy.integration._evaluate_bundle",
+                return_value=[{"violation_id": "A", "reason": "r", "severity": "high"}],
+            ),
         ):
             result = evaluate_policies()
 
@@ -66,10 +69,13 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
                 return [{"violation_id": "D"}] * 200
             return [{"violation_id": "Z"}] * 200
 
-        with patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}), patch(
-            "codegraph.policy.integration._evaluate_bundle",
-            side_effect=bundle_side_effect,
-        ) as mock_eval:
+        with (
+            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
+            patch(
+                "codegraph.policy.integration._evaluate_bundle",
+                side_effect=bundle_side_effect,
+            ) as mock_eval,
+        ):
             result = evaluate_policies(max_total_violations=100, max_per_violation_id=25)
 
         self.assertIn("limits", result)
@@ -88,4 +94,3 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

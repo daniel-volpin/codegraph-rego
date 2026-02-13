@@ -20,6 +20,7 @@ from codegraph.common.progress import (
 
 router = APIRouter()
 
+
 @router.post("/upload", response_model=UploadResponse)
 async def upload_zip(file: UploadFile = File(...)):
     start_progress("upload", "Validating upload…", 2.0)

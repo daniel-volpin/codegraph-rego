@@ -43,17 +43,18 @@ const UploadPage = () => {
     },
     onSettled: () => {
       refetchStatusRef.current?.();
-    }
+    },
   });
 
-  const shouldPoll = uploadMutation.isPending || Boolean(status && !status.complete);
+  const shouldPoll =
+    uploadMutation.isPending || Boolean(status && !status.complete);
   const pollInterval = shouldPoll ? 1000 : false;
 
   const { data: statusData, refetch: refetchStatus } = useQuery({
     queryKey: ["uploadStatus"],
     queryFn: fetchUploadStatus,
     staleTime: 0,
-    refetchInterval: pollInterval
+    refetchInterval: pollInterval,
   });
 
   refetchStatusRef.current = refetchStatus;
@@ -79,7 +80,7 @@ const UploadPage = () => {
       status: activityStatus,
       message: status.message,
       progress: status.progress,
-      updatedAt: status.updated_at
+      updatedAt: status.updated_at,
     });
   }, [status, upsertActivity]);
 
@@ -95,7 +96,7 @@ const UploadPage = () => {
     if (!file) {
       const feedback: UploadResponse = {
         status: "error",
-        error: "Please select a ZIP file."
+        error: "Please select a ZIP file.",
       };
       setResult(feedback);
       toast.error(feedback.error ?? "Please select a ZIP file.");
@@ -110,15 +111,20 @@ const UploadPage = () => {
       complete: false,
       error: null,
       updated_at: now,
-      started_at: now
+      started_at: now,
     });
     refetchStatusRef.current?.();
     uploadMutation.mutate(file);
   };
 
-  const progressValue = status ? Math.min(Math.max(status.progress, 0), 100) : 0;
-  const showProgress = status ? (!status.complete || progressValue < 100) && progressValue > 0 : false;
-  const isProcessing = uploadMutation.isPending || (status ? !status.complete : false);
+  const progressValue = status
+    ? Math.min(Math.max(status.progress, 0), 100)
+    : 0;
+  const showProgress = status
+    ? (!status.complete || progressValue < 100) && progressValue > 0
+    : false;
+  const isProcessing =
+    uploadMutation.isPending || (status ? !status.complete : false);
 
   let statusToneClass: string | null = null;
   if (status) {
@@ -133,7 +139,9 @@ const UploadPage = () => {
 
   const shouldRenderStatusBanner = Boolean(
     status &&
-    ((status.message && status.message !== "Idle") || showProgress || !status.complete)
+    ((status.message && status.message !== "Idle") ||
+      showProgress ||
+      !status.complete),
   );
 
   return (
@@ -141,8 +149,9 @@ const UploadPage = () => {
       <header style={{ marginBottom: "2rem" }}>
         <h1>Upload Codebase</h1>
         <p style={{ maxWidth: "60ch", marginTop: "0.5rem" }}>
-          Upload a ZIP archive of your Java project. The system will parse the source tree,
-          ingest it into the graph database, and generate semantic embeddings for search.
+          Upload a ZIP archive of your Java project. The system will parse the
+          source tree, ingest it into the graph database, and generate semantic
+          embeddings for search.
         </p>
       </header>
       <form className="upload-form" onSubmit={handleSubmit}>
@@ -150,9 +159,13 @@ const UploadPage = () => {
           <label className="file-input">
             <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📦</div>
             <span style={{ fontSize: "1.1rem", fontWeight: 500 }}>
-              {selectedName ? "Change ZIP archive" : "Click to select ZIP archive"}
+              {selectedName
+                ? "Change ZIP archive"
+                : "Click to select ZIP archive"}
             </span>
-            <span style={{ fontSize: "0.9rem", opacity: 0.8, marginTop: "0.5rem" }}>
+            <span
+              style={{ fontSize: "0.9rem", opacity: 0.8, marginTop: "0.5rem" }}
+            >
               or drag and drop file here
             </span>
             <input
@@ -173,8 +186,14 @@ const UploadPage = () => {
           </label>
 
           <div className="upload-actions">
-            <button type="submit" className="btn-primary" disabled={isProcessing || !selectedName}>
-              {isProcessing && <span className="btn-spinner" aria-hidden="true" />}
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={isProcessing || !selectedName}
+            >
+              {isProcessing && (
+                <span className="btn-spinner" aria-hidden="true" />
+              )}
               <span>{isProcessing ? "Processing..." : "Upload & Ingest"}</span>
             </button>
           </div>
@@ -197,12 +216,15 @@ const UploadPage = () => {
         </div>
       )}
       {shouldRenderStatusBanner && statusToneClass && status && (
-        <div className={`status-banner ${statusToneClass}`}>{status.message}</div>
+        <div className={`status-banner ${statusToneClass}`}>
+          {status.message}
+        </div>
       )}
       {result && (
         <div
-          className={`callout ${result.error ? "callout-error" : "callout-success"
-            }`}
+          className={`callout ${
+            result.error ? "callout-error" : "callout-success"
+          }`}
         >
           {result.error ? (
             <div>
@@ -234,7 +256,11 @@ const UploadPage = () => {
       )}
       {isProcessing && (
         <div className="processing-overlay" aria-live="polite">
-          <div className="spinner" role="status" aria-label="Processing upload" />
+          <div
+            className="spinner"
+            role="status"
+            aria-label="Processing upload"
+          />
           <p>Ingestion running… this might take a moment.</p>
         </div>
       )}

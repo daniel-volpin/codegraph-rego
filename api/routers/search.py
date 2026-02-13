@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Form
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from api.models.validation import SearchRequest, SearchResponse, SearchMatch
 from codegraph.search.service import run_search
-from codegraph.api.models import MethodContext, Neighbor
+from codegraph.api.models import Neighbor
 import logging
 
 router = APIRouter()
 logger = logging.getLogger("codegraph.api.routers.search")
+
 
 @router.post("/search", response_model=SearchResponse)
 async def search(request: SearchRequest):

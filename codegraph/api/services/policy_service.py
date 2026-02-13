@@ -13,6 +13,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def handle_policy_evaluate() -> EvaluateResponse:
     result = evaluate_policies()
     violations = [PolicyViolation(**v) for v in result.get("violations", [])]
@@ -22,6 +23,7 @@ def handle_policy_evaluate() -> EvaluateResponse:
         opa_output=result.get("opa_output"),
         catalog=catalog_items,
     )
+
 
 def handle_policy_evaluate_with_llm(limit: int = 10, model: str | None = None) -> EvaluateWithLLMResponse:
     res = evaluate_policies()
@@ -39,6 +41,7 @@ def handle_policy_evaluate_with_llm(limit: int = 10, model: str | None = None) -
             )
         )
     return EvaluateWithLLMResponse(violations=violations_modeled, enriched=enriched_modeled)
+
 
 def handle_policy_catalog() -> PolicyCatalogResponse:
     controls = get_policy_catalog_entries()

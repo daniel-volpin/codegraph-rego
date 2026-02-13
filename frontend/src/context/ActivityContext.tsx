@@ -1,4 +1,11 @@
-import { createContext, useContext, useMemo, useReducer, ReactNode } from "react";
+/* eslint-disable react-refresh/only-export-components */
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useReducer,
+  ReactNode,
+} from "react";
 
 export type ActivityStatus = "idle" | "running" | "success" | "error";
 
@@ -25,19 +32,22 @@ interface ActivityContextValue {
   reset: () => void;
 }
 
-const ActivityContext = createContext<ActivityContextValue | undefined>(undefined);
+const ActivityContext = createContext<ActivityContextValue | undefined>(
+  undefined,
+);
 
 function activityReducer(state: ActivityState, action: Action): ActivityState {
   switch (action.type) {
     case "upsert": {
       return {
         ...state,
-        [action.activity.key]: action.activity
+        [action.activity.key]: action.activity,
       };
     }
     case "clear": {
-      const { [action.key]: _, ...rest } = state;
-      return rest;
+      const copy = { ...state };
+      delete copy[action.key];
+      return copy;
     }
     case "reset":
       return {};
@@ -51,17 +61,21 @@ export const ActivityProvider = ({ children }: { children: ReactNode }) => {
 
   const value = useMemo<ActivityContextValue>(() => {
     const activities = Object.values(state).sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt)
+      b.updatedAt.localeCompare(a.updatedAt),
     );
     return {
       activities,
       upsert: (activity) => dispatch({ type: "upsert", activity }),
       clear: (key) => dispatch({ type: "clear", key }),
-      reset: () => dispatch({ type: "reset" })
+      reset: () => dispatch({ type: "reset" }),
     };
   }, [state]);
 
-  return <ActivityContext.Provider value={value}>{children}</ActivityContext.Provider>;
+  return (
+    <ActivityContext.Provider value={value}>
+      {children}
+    </ActivityContext.Provider>
+  );
 };
 
 export const useActivityContext = () => {

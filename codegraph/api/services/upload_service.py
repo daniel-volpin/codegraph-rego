@@ -1,4 +1,3 @@
-
 from fastapi import UploadFile
 import zipfile
 import shutil
@@ -13,12 +12,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class UploadResponse(BaseModel):
     status: str | None = None
     java_root: str | None = None
     error: str | None = None
 
-def handle_upload(file: UploadFile, progress_callback: Optional[Callable[[str, str, float], None]] = None) -> tuple[UploadResponse, int]:
+
+def handle_upload(
+    file: UploadFile, progress_callback: Optional[Callable[[str, str, float], None]] = None
+) -> tuple[UploadResponse, int]:
     if not file.filename or not file.filename.endswith(".zip"):
         return UploadResponse(error="Only zip files allowed"), 400
     # Clean and extract
