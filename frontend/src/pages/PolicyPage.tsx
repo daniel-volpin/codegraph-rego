@@ -26,11 +26,47 @@ interface ViolationSummary {
   reason?: string;
   severity: string;
   control: string;
+  autoRemediationSupported: boolean;
 }
+
+const SUPPORTED_AUTO_REMEDIATION_RULES = new Set([
+  "ISO-A.10-WEAK-HASH",
+  "ISO-A.10-WEAK-CRYPTO"
+]);
+
+const ruleIdVariants = (ruleId?: string) => {
+  const text = (ruleId ?? "").trim();
+  if (!text) {
+    return [];
+  }
+  const variants = [text];
+  let base = text;
+  if (base.startsWith("ISO-27001-")) {
+    base = base.slice("ISO-27001-".length);
+  } else if (base.startsWith("ISO-")) {
+    base = base.slice("ISO-".length);
+  }
+  for (const candidate of [base, `ISO-${base}`, `ISO-27001-${base}`]) {
+    if (candidate && !variants.includes(candidate)) {
+      variants.push(candidate);
+    }
+  }
+  return variants;
+};
+
+const isAutoRemediationSupported = (ruleId?: string) => {
+  for (const candidate of ruleIdVariants(ruleId)) {
+    if (SUPPORTED_AUTO_REMEDIATION_RULES.has(candidate)) {
+      return true;
+    }
+  }
+  return false;
+};
 
 const PolicyPage = () => {
   const [limit, setLimit] = useState(5);
   const [model, setModel] = useState("");
+  const [showRemediableOnly, setShowRemediableOnly] = useState(false);
   const [evaluation, setEvaluation] =
     useState<PolicyEvaluateResponse | null>(null);
   const [llmEvaluation, setLlmEvaluation] =
@@ -291,6 +327,7 @@ const PolicyPage = () => {
         "Unknown";
 
       const title = violationId ?? reason ?? "Violation";
+      const autoRemediationSupported = isAutoRemediationSupported(violationId);
       return {
         raw: record,
         control,
@@ -299,10 +336,18 @@ const PolicyPage = () => {
         targetMethod,
         title,
         reason,
-        severity
+        severity,
+        autoRemediationSupported
       } satisfies ViolationSummary;
     });
   }, [evaluation]);
+
+  const displayedViolationSummaries = useMemo(() => {
+    if (!showRemediableOnly) {
+      return violationSummaries;
+    }
+    return violationSummaries.filter((item) => item.autoRemediationSupported);
+  }, [showRemediableOnly, violationSummaries]);
 
   useEffect(() => {
     if (baseEvalPending) {
@@ -461,9 +506,28 @@ const PolicyPage = () => {
                   ? `${evaluation.violations?.length ?? 0} potential violation(s) detected.`
                   : "No violations detected by OPA policies."}
               </p>
+              {hasViolations && (
+                <div className="callout">
+                  <p>
+                    Auto-remediation (Preview/Apply) is currently implemented for:{" "}
+                    <code>ISO-A.10-WEAK-HASH</code>, <code>ISO-A.10-WEAK-CRYPTO</code>.
+                  </p>
+                  <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.75rem" }}>
+                    <input
+                      type="checkbox"
+                      checked={showRemediableOnly}
+                      onChange={(event) => setShowRemediableOnly(event.target.checked)}
+                    />
+                    Show only auto-remediable violations
+                  </label>
+                </div>
+              )}
               {hasViolations && violationSummaries.length > 0 && (
                 <div className="violation-deck">
-                  {violationSummaries.map((item, index) => {
+                  {displayedViolationSummaries.length === 0 ? (
+                    <p className="muted">No auto-remediable violations found.</p>
+                  ) : (
+                    displayedViolationSummaries.map((item, index) => {
                     const violationKey = `${item.violationId || "unknown"}::${
                       item.targetMethod || ""
                     }::${item.filePath || ""}`;
@@ -538,58 +602,64 @@ const PolicyPage = () => {
                               >
                                 {item.severity}
                               </span>
-                              <button
-                                type="button"
-                                className="remediation-button"
-                                disabled={
-                                  !item.violationId || disableRemediationButtons || isStarting
-                                }
-                                onClick={(event) =>
-                                  handleRemediation(
-                                    item.violationId,
-                                    item.targetMethod,
-                                    item.filePath,
-                                    violationKey,
-                                    event
-                                  )
-                                }
-                              >
-                                {isStarting ? (
-                                  <>
-                                    <span className="btn-spinner" aria-hidden="true" />
-                                    <span>Previewing…</span>
-                                  </>
-                                ) : (
-                                  <span>
-                                    {remediationOutcome ? "Re-run Preview" : "Preview Fix (Virtual)"}
-                                  </span>
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                className="remediation-button"
-                                disabled={
-                                  !item.violationId || disableRemediationButtons || isApplying
-                                }
-                                onClick={(event) =>
-                                  handleApply(
-                                    item.violationId,
-                                    item.targetMethod,
-                                    item.filePath,
-                                    violationKey,
-                                    event
-                                  )
-                                }
-                              >
-                                {isApplying ? (
-                                  <>
-                                    <span className="btn-spinner" aria-hidden="true" />
-                                    <span>Applying…</span>
-                                  </>
-                                ) : (
-                                  <span>Run Apply+Verify (Dry-run)</span>
-                                )}
-                              </button>
+                              {item.autoRemediationSupported ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="remediation-button"
+                                    disabled={
+                                      !item.violationId || disableRemediationButtons || isStarting
+                                    }
+                                    onClick={(event) =>
+                                      handleRemediation(
+                                        item.violationId,
+                                        item.targetMethod,
+                                        item.filePath,
+                                        violationKey,
+                                        event
+                                      )
+                                    }
+                                  >
+                                    {isStarting ? (
+                                      <>
+                                        <span className="btn-spinner" aria-hidden="true" />
+                                        <span>Previewing…</span>
+                                      </>
+                                    ) : (
+                                      <span>
+                                        {remediationOutcome ? "Re-run Preview" : "Preview Fix (Virtual)"}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="remediation-button"
+                                    disabled={
+                                      !item.violationId || disableRemediationButtons || isApplying
+                                    }
+                                    onClick={(event) =>
+                                      handleApply(
+                                        item.violationId,
+                                        item.targetMethod,
+                                        item.filePath,
+                                        violationKey,
+                                        event
+                                      )
+                                    }
+                                  >
+                                    {isApplying ? (
+                                      <>
+                                        <span className="btn-spinner" aria-hidden="true" />
+                                        <span>Applying…</span>
+                                      </>
+                                    ) : (
+                                      <span>Run Apply+Verify (Dry-run)</span>
+                                    )}
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="muted">No auto-remediation</span>
+                              )}
                             </div>
                           </div>
                         </summary>
@@ -634,89 +704,80 @@ const PolicyPage = () => {
                               <header>
                                 <h4>Remediation</h4>
                               </header>
-                              <p className="remediation-note">
-                                Preview does not modify files.
-                              </p>
-                              {!item.violationId ? (
+                              {!item.autoRemediationSupported ? (
+                                <p className="callout callout-error">
+                                  No automatic remediation for this rule yet.
+                                </p>
+                              ) : !item.violationId ? (
                                 <p className="muted">
                                   This violation is missing an identifier required for remediation.
                                 </p>
-                              ) : remediationOutcome ? (
-                                <div className="remediation-panel">
-                                  <p className="remediation-status">
-                                    {remediationOutcome.opa_status
-                                      ? `OPA: ${remediationOutcome.opa_status}`
-                                      : remediationOutcome.status}
-                                    {remediationOutcome.rule_id
-                                      ? ` (${remediationOutcome.rule_id})`
-                                      : ""}
-                                  </p>
-                                  {remediationOutcome.explanation && (
-                                    <p className="remediation-note">
-                                      {remediationOutcome.explanation}
-                                    </p>
-                                  )}
-                                  {typeof remediationOutcome.error === "string" &&
-                                    formatAutoRemediationError(remediationOutcome.error) && (
-                                      <p className="callout callout-error">
-                                        {formatAutoRemediationError(remediationOutcome.error)}
-                                      </p>
-                                    )}
-                                  {targetRuleStatus && (
-                                    <p className="remediation-note">
-                                      Target rule status: {targetRuleStatus}
-                                    </p>
-                                  )}
-                                  {overallStatus && (
-                                    <p className="remediation-note">
-                                      Overall status: {overallStatus}
-                                    </p>
-                                  )}
-                                  {typeof newViolations === "number" && (
-                                    <p className="remediation-note">
-                                      New violations: {newViolations}
-                                    </p>
-                                  )}
-                                  {typeof remainingViolations === "number" && (
-                                    <p className="remediation-note">
-                                      Remaining violations: {remainingViolations}
-                                    </p>
-                                  )}
-                                  {remediationOutcome.updated_source_code ? (
-                                    <CodeHighlight
-                                      code={remediationOutcome.updated_source_code}
-                                      language="java"
-                                    />
-                                  ) : (
-                                    <CodeHighlight
-                                      code={JSON.stringify(remediationOutcome, null, 2)}
-                                      language="json"
-                                    />
-                                  )}
-                                  {remediationOutcome.diff && (
-                                    <CodeHighlight
-                                      code={remediationOutcome.diff}
-                                      language="text"
-                                    />
-                                  )}
-                                </div>
                               ) : (
-                                <p className="muted">
-                                  Run “Preview Fix (Virtual)” to propose and validate a patch in memory.
-                                </p>
-                              )}
-                              {item.violationId && (
                                 <>
-                                  <h5>Apply + Verify (Dry-run)</h5>
-                                  {!applyOutcome ? (
+                                  <p className="remediation-note">Preview does not modify files.</p>
+
+                                  <h5>Preview Fix (Virtual)</h5>
+                                  {!remediationOutcome ? (
                                     <p className="muted">
-                                      Run “Apply+Verify (Dry-run)” to exercise the backend apply loop (no changes are persisted).
+                                      Run “Preview Fix (Virtual)” to propose and validate a patch in memory.
                                     </p>
                                   ) : (
                                     <div className="remediation-panel">
                                       <p className="remediation-status">
-                                        Status: {applyOutcome.status}
+                                        {remediationOutcome.opa_status
+                                          ? `OPA: ${remediationOutcome.opa_status}`
+                                          : remediationOutcome.status}
+                                        {remediationOutcome.rule_id ? ` (${remediationOutcome.rule_id})` : ""}
                                       </p>
+                                      {remediationOutcome.explanation && (
+                                        <p className="remediation-note">{remediationOutcome.explanation}</p>
+                                      )}
+                                      {typeof remediationOutcome.error === "string" &&
+                                        formatAutoRemediationError(remediationOutcome.error) && (
+                                          <p className="callout callout-error">
+                                            {formatAutoRemediationError(remediationOutcome.error)}
+                                          </p>
+                                        )}
+                                      {targetRuleStatus && (
+                                        <p className="remediation-note">Target rule status: {targetRuleStatus}</p>
+                                      )}
+                                      {overallStatus && (
+                                        <p className="remediation-note">Overall status: {overallStatus}</p>
+                                      )}
+                                      {typeof newViolations === "number" && (
+                                        <p className="remediation-note">New violations: {newViolations}</p>
+                                      )}
+                                      {typeof remainingViolations === "number" && (
+                                        <p className="remediation-note">
+                                          Remaining violations: {remainingViolations}
+                                        </p>
+                                      )}
+                                      {remediationOutcome.updated_source_code ? (
+                                        <CodeHighlight
+                                          code={remediationOutcome.updated_source_code}
+                                          language="java"
+                                        />
+                                      ) : (
+                                        <CodeHighlight
+                                          code={JSON.stringify(remediationOutcome, null, 2)}
+                                          language="json"
+                                        />
+                                      )}
+                                      {remediationOutcome.diff && (
+                                        <CodeHighlight code={remediationOutcome.diff} language="text" />
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <h5>Apply + Verify (Dry-run)</h5>
+                                  {!applyOutcome ? (
+                                    <p className="muted">
+                                      Run “Apply+Verify (Dry-run)” to exercise the backend apply loop (no changes are
+                                      persisted).
+                                    </p>
+                                  ) : (
+                                    <div className="remediation-panel">
+                                      <p className="remediation-status">Status: {applyOutcome.status}</p>
                                       {typeof applyOutcome.error === "string" &&
                                         formatAutoRemediationError(applyOutcome.error) && (
                                           <p className="callout callout-error">
@@ -745,9 +806,7 @@ const PolicyPage = () => {
                                         </p>
                                       )}
                                       {typeof applyNewCount === "number" && (
-                                        <p className="remediation-note">
-                                          New violations: {applyNewCount}
-                                        </p>
+                                        <p className="remediation-note">New violations: {applyNewCount}</p>
                                       )}
                                       {typeof applyRemainingCount === "number" && (
                                         <p className="remediation-note">
@@ -770,23 +829,15 @@ const PolicyPage = () => {
                                               language="text"
                                             />
                                           ) : applyCompilation.skipped_reason ? (
-                                            <p className="muted">
-                                              {applyCompilation.skipped_reason}
-                                            </p>
+                                            <p className="muted">{applyCompilation.skipped_reason}</p>
                                           ) : null}
                                         </>
                                       )}
                                       {applyOutcome.updated_source_code && (
-                                        <CodeHighlight
-                                          code={applyOutcome.updated_source_code}
-                                          language="java"
-                                        />
+                                        <CodeHighlight code={applyOutcome.updated_source_code} language="java" />
                                       )}
                                       {applyOutcome.diff && (
-                                        <CodeHighlight
-                                          code={applyOutcome.diff}
-                                          language="text"
-                                        />
+                                        <CodeHighlight code={applyOutcome.diff} language="text" />
                                       )}
                                     </div>
                                   )}
@@ -797,7 +848,8 @@ const PolicyPage = () => {
                         </div>
                       </details>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               )}
             </>
