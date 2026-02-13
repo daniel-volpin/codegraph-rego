@@ -1,6 +1,7 @@
 import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
+  applyRemediation,
   evaluatePolicies,
   evaluatePoliciesWithLLM,
   fetchPolicyCatalog,
@@ -9,6 +10,7 @@ import {
 import type {
   PolicyCatalogResponse,
   PolicyEvaluateResponse,
+  RemediationApplyResponse,
   RemediationPreviewResponse
 } from "../lib/types";
 import { useActivityContext } from "../context/ActivityContext";
@@ -36,6 +38,9 @@ const PolicyPage = () => {
   const [llmStatus, setLlmStatus] = useState<string | null>(null);
   const [remediationPreviews, setRemediationPreviews] = useState<
     Record<string, RemediationPreviewResponse>
+  >({});
+  const [remediationApplies, setRemediationApplies] = useState<
+    Record<string, RemediationApplyResponse>
   >({});
   const { upsert: upsertActivity, clear: clearActivity } = useActivityContext();
 
@@ -94,11 +99,45 @@ const PolicyPage = () => {
     }
   });
 
+  const remediationApplyMutation = useMutation({
+    mutationFn: (args: { violationId: string; targetMethod?: string; filePath?: string; key: string }) =>
+      applyRemediation({
+        violation_id: args.violationId,
+        target_method: args.targetMethod,
+        file_path: args.filePath
+      }),
+    onSuccess: (data, variables) => {
+      const key = variables.key;
+      setRemediationApplies((prev) => ({
+        ...prev,
+        [key]: data
+      }));
+      const status = (data.status || "").toUpperCase();
+      if (status === "OK") {
+        toast.success(`Dry-run apply verified for ${variables.violationId}.`);
+      } else {
+        toast.error(
+          `Dry-run apply finished with status ${data.status} for ${variables.violationId}.`
+        );
+      }
+    },
+    onError: (error: Error, variables) => {
+      toast.error(
+        `Apply+verify failed for ${variables.violationId}: ${error.message}`
+      );
+    }
+  });
+
   const baseEvalPending = baseEvalMutation.status === "pending";
   const llmEvalPending = llmEvalMutation.status === "pending";
   const remediationPending = remediationPreviewMutation.status === "pending";
+  const applyPending = remediationApplyMutation.status === "pending";
   const activeRemediationKey = remediationPending
     ? ((remediationPreviewMutation.variables as { key?: string } | undefined)?.key ??
+      undefined)
+    : undefined;
+  const activeApplyKey = applyPending
+    ? ((remediationApplyMutation.variables as { key?: string } | undefined)?.key ??
       undefined)
     : undefined;
 
@@ -147,6 +186,31 @@ const PolicyPage = () => {
       key
     });
   };
+
+  const handleApply = (
+    violationId?: string,
+    targetMethod?: string,
+    filePath?: string,
+    key?: string,
+    event?: MouseEvent<HTMLButtonElement>
+  ) => {
+    event?.stopPropagation();
+    if (!violationId || !key) {
+      toast.error("Selected violation is missing an identifier.");
+      return;
+    }
+    if (!targetMethod || !filePath) {
+      toast.error("Apply+verify requires both target_method and file_path.");
+      return;
+    }
+    remediationApplyMutation.mutate({
+      violationId,
+      targetMethod,
+      filePath,
+      key
+    });
+  };
+
   const toHtml = (value?: string | null) => {
     if (!value) {
       return "";
@@ -385,6 +449,7 @@ const PolicyPage = () => {
                       item.targetMethod || ""
                     }::${item.filePath || ""}`;
                     const remediationOutcome = remediationPreviews[violationKey];
+                    const applyOutcome = remediationApplies[violationKey];
                     const verification = remediationOutcome?.verification as
                       | Record<string, unknown>
                       | undefined;
@@ -406,6 +471,23 @@ const PolicyPage = () => {
                         : undefined;
                     const isStarting =
                       remediationPending && activeRemediationKey === violationKey;
+                    const isApplying = applyPending && activeApplyKey === violationKey;
+                    const disableRemediationButtons = remediationPending || applyPending;
+
+                    const applyVerification = applyOutcome?.verification;
+                    const applyCompilation = applyOutcome?.compilation;
+                    const applyBaselineCount = Array.isArray(applyVerification?.baseline)
+                      ? applyVerification?.baseline?.length
+                      : undefined;
+                    const applyAfterCount = Array.isArray(applyVerification?.after)
+                      ? applyVerification?.after?.length
+                      : undefined;
+                    const applyNewCount = Array.isArray(applyVerification?.new_violations)
+                      ? applyVerification?.new_violations?.length
+                      : undefined;
+                    const applyRemainingCount = Array.isArray(applyVerification?.remaining_violations)
+                      ? applyVerification?.remaining_violations?.length
+                      : undefined;
                     return (
                       <details
                         className="violation-card"
@@ -441,7 +523,7 @@ const PolicyPage = () => {
                                 type="button"
                                 className="remediation-button"
                                 disabled={
-                                  !item.violationId || remediationPending || isStarting
+                                  !item.violationId || disableRemediationButtons || isStarting
                                 }
                                 onClick={(event) =>
                                   handleRemediation(
@@ -462,6 +544,31 @@ const PolicyPage = () => {
                                   <span>
                                     {remediationOutcome ? "Re-run Preview" : "Preview Fix (Virtual)"}
                                   </span>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                className="remediation-button"
+                                disabled={
+                                  !item.violationId || disableRemediationButtons || isApplying
+                                }
+                                onClick={(event) =>
+                                  handleApply(
+                                    item.violationId,
+                                    item.targetMethod,
+                                    item.filePath,
+                                    violationKey,
+                                    event
+                                  )
+                                }
+                              >
+                                {isApplying ? (
+                                  <>
+                                    <span className="btn-spinner" aria-hidden="true" />
+                                    <span>Applying…</span>
+                                  </>
+                                ) : (
+                                  <span>Run Apply+Verify (Dry-run)</span>
                                 )}
                               </button>
                             </div>
@@ -575,8 +682,94 @@ const PolicyPage = () => {
                                 </div>
                               ) : (
                                 <p className="muted">
-                                  Run “Fix &amp; Verify” to propose and validate a patch.
+                                  Run “Preview Fix (Virtual)” to propose and validate a patch in memory.
                                 </p>
+                              )}
+                              {item.violationId && (
+                                <>
+                                  <h5>Apply + Verify (Dry-run)</h5>
+                                  {!applyOutcome ? (
+                                    <p className="muted">
+                                      Run “Apply+Verify (Dry-run)” to exercise the backend apply loop (no changes are persisted).
+                                    </p>
+                                  ) : (
+                                    <div className="remediation-panel">
+                                      <p className="remediation-status">
+                                        Status: {applyOutcome.status}
+                                      </p>
+                                      {typeof applyOutcome.error === "string" && (
+                                        <p className="callout callout-error">
+                                          {applyOutcome.error}
+                                        </p>
+                                      )}
+                                      {applyVerification?.error && (
+                                        <p className="callout callout-error">
+                                          Verification error: {applyVerification.error}
+                                        </p>
+                                      )}
+                                      {applyVerification?.target_rule_status && (
+                                        <p className="remediation-note">
+                                          Target rule status: {applyVerification.target_rule_status}
+                                        </p>
+                                      )}
+                                      {applyVerification?.overall_status && (
+                                        <p className="remediation-note">
+                                          Overall status: {applyVerification.overall_status}
+                                        </p>
+                                      )}
+                                      {(typeof applyBaselineCount === "number" ||
+                                        typeof applyAfterCount === "number") && (
+                                        <p className="remediation-note">
+                                          Violations: {applyBaselineCount ?? "—"} → {applyAfterCount ?? "—"}
+                                        </p>
+                                      )}
+                                      {typeof applyNewCount === "number" && (
+                                        <p className="remediation-note">
+                                          New violations: {applyNewCount}
+                                        </p>
+                                      )}
+                                      {typeof applyRemainingCount === "number" && (
+                                        <p className="remediation-note">
+                                          Remaining violations: {applyRemainingCount}
+                                        </p>
+                                      )}
+                                      {applyCompilation && (
+                                        <>
+                                          <p className="remediation-note">
+                                            Compilation:{" "}
+                                            {applyCompilation.attempted
+                                              ? applyCompilation.success
+                                                ? "success"
+                                                : "failed"
+                                              : "skipped"}
+                                          </p>
+                                          {applyCompilation.output_snippet ? (
+                                            <CodeHighlight
+                                              code={applyCompilation.output_snippet}
+                                              language="text"
+                                            />
+                                          ) : applyCompilation.skipped_reason ? (
+                                            <p className="muted">
+                                              {applyCompilation.skipped_reason}
+                                            </p>
+                                          ) : null}
+                                        </>
+                                      )}
+                                      {applyOutcome.updated_source_code && (
+                                        <CodeHighlight
+                                          code={applyOutcome.updated_source_code}
+                                          language="java"
+                                        />
+                                      )}
+                                      {applyOutcome.diff && (
+                                        <CodeHighlight
+                                          code={applyOutcome.diff}
+                                          language="text"
+                                        />
+                                      )}
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </section>
                           </div>

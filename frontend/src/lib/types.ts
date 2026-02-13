@@ -60,6 +60,37 @@ export interface RemediationPreviewResponse {
   error?: string | null;
 }
 
+export interface RemediationVerificationSummary {
+  target_rule_status?: string | null;
+  overall_status?: string | null;
+  baseline?: Record<string, unknown>[] | null;
+  after?: Record<string, unknown>[] | null;
+  new_violations?: Record<string, unknown>[] | null;
+  remaining_violations?: Record<string, unknown>[] | null;
+  error?: string | null;
+}
+
+export interface RemediationCompilationResult {
+  attempted: boolean;
+  success: boolean;
+  output_snippet?: string | null;
+  skipped_reason?: string | null;
+}
+
+export interface RemediationApplyResponse {
+  status: string;
+  violation_id: string;
+  rule_id?: string | null;
+  target_method?: string | null;
+  file_path?: string | null;
+  updated_source_code?: string | null;
+  diff?: string | null;
+  verification?: RemediationVerificationSummary | null;
+  compilation?: RemediationCompilationResult | null;
+  metadata?: Record<string, unknown> | null;
+  error?: string | null;
+}
+
 export interface HealthCheckResponse {
   neo4j: boolean;
   faiss_index: boolean;

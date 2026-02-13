@@ -2,6 +2,7 @@ import {
   HealthCheckResponse,
   PolicyCatalogResponse,
   PolicyEvaluateResponse,
+  RemediationApplyResponse,
   RemediationPreviewResponse,
   SearchResponse,
   UploadResponse,
@@ -127,4 +128,29 @@ export async function previewRemediation(
     })
   });
   return handleResponse<RemediationPreviewResponse>(response);
+}
+
+export interface ApplyRemediationPayload {
+  violation_id: string;
+  target_method?: string;
+  file_path?: string;
+  max_attempts?: number;
+}
+
+export async function applyRemediation(
+  payload: ApplyRemediationPayload
+): Promise<RemediationApplyResponse> {
+  const response = await fetch(`${API_BASE_URL}/remediation/apply`, {
+    method: "POST",
+    headers: {
+      ...defaultHeaders,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      ...payload,
+      mode: "dry_run"
+    })
+  });
+
+  return handleResponse<RemediationApplyResponse>(response);
 }
