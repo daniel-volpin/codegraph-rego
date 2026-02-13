@@ -7,7 +7,7 @@
       "reference": "ISO/IEC 27001:2022 A.9.1.1",
       "summary": "Access to networked services must be restricted in accordance with an established access control policy.",
       "rego_module": "policy/iso_27001_access.rego",
-      "rego_rule": "access_control_violations",
+      "rego_rule": "violations",
       "evidence_fields": [
         "signature",
         "annotations",
@@ -22,7 +22,7 @@
       "reference": "ISO/IEC 27001:2022 A.9.4.2",
       "summary": "Systems should enforce strong log-on mechanisms so that only authorized users can access protected functionality.",
       "rego_module": "policy/iso_27001_access.rego",
-      "rego_rule": "secure_logon_violations",
+      "rego_rule": "violations",
       "evidence_fields": [
         "signature",
         "name",
@@ -38,13 +38,76 @@
       "reference": "ISO/IEC 27001:2022 A.12.4.1",
       "summary": "Security events should be logged to record actions that could affect information security.",
       "rego_module": "policy/iso_27001_access.rego",
-      "rego_rule": "logging_control_violations",
+      "rego_rule": "violations",
       "evidence_fields": [
         "signature",
         "annotations",
         "modifiers",
         "file_path",
         "called_signatures"
+      ]
+    },
+    {
+      "id": "ISO-A.9.4.1",
+      "control": "A.9.4.1",
+      "title": "Access Control for Applications",
+      "reference": "ISO/IEC 27001:2022 A.9.4.1",
+      "summary": "Public endpoints should enforce access control and authentication policies.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "annotations",
+        "modifiers",
+        "file_path"
+      ]
+    },
+    {
+      "id": "ISO-A.12.4.1",
+      "control": "A.12.4.1",
+      "title": "Event Logging",
+      "reference": "ISO/IEC 27001:2022 A.12.4.1",
+      "summary": "Security events should be logged to record actions that could affect information security.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "annotations",
+        "modifiers",
+        "file_path",
+        "called_signatures"
+      ]
+    },
+    {
+      "id": "ISO-A.10-WEAK-HASH",
+      "control": "A.10",
+      "title": "Cryptography (Weak Hash)",
+      "reference": "ISO/IEC 27001:2022 A.10",
+      "summary": "Cryptographic controls should avoid weak hash algorithms such as MD5.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "called_signatures",
+        "source_code",
+        "analysis_flags"
+      ]
+    },
+    {
+      "id": "ISO-A.10-WEAK-CRYPTO",
+      "control": "A.10",
+      "title": "Cryptography (Weak Cipher)",
+      "reference": "ISO/IEC 27001:2022 A.10",
+      "summary": "Cryptographic controls should avoid weak or deprecated ciphers and insecure modes.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "called_signatures",
+        "source_code",
+        "analysis_flags"
       ]
     }
   ]

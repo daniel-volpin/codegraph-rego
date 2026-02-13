@@ -12,7 +12,7 @@ Configuration is controlled via environment variables (see config.py):
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from codegraph.config import (
     LLM_PROVIDER,
@@ -34,6 +34,7 @@ def generate_chat_completion(
     model: Optional[str] = None,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
+    response_format: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Generate a chat completion via LiteLLM.
 
@@ -51,6 +52,8 @@ def generate_chat_completion(
     }
     if max_tokens is not None:
         params["max_tokens"] = max_tokens
+    if response_format is not None:
+        params["response_format"] = response_format
     if LLM_API_KEY:
         params["api_key"] = LLM_API_KEY
     if LLM_API_BASE:

@@ -45,6 +45,21 @@ export interface PolicyCatalogResponse {
   error?: string;
 }
 
+export interface RemediationPreviewResponse {
+  status: string;
+  violation_id: string;
+  rule_id?: string | null;
+  target_method?: string | null;
+  file_path?: string | null;
+  updated_source_code?: string | null;
+  explanation?: string | null;
+  opa_status?: string | null;
+  opa_details?: unknown;
+  diff?: string | null;
+  verification?: Record<string, unknown> | null;
+  error?: string | null;
+}
+
 export interface HealthCheckResponse {
   neo4j: boolean;
   faiss_index: boolean;

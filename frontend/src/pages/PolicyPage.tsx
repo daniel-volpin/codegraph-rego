@@ -1,13 +1,15 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   evaluatePolicies,
   evaluatePoliciesWithLLM,
-  fetchPolicyCatalog
+  fetchPolicyCatalog,
+  previewRemediation
 } from "../lib/api";
 import type {
   PolicyCatalogResponse,
-  PolicyEvaluateResponse
+  PolicyEvaluateResponse,
+  RemediationPreviewResponse
 } from "../lib/types";
 import { useActivityContext } from "../context/ActivityContext";
 import { toast } from "react-hot-toast";
@@ -19,6 +21,9 @@ interface ViolationSummary {
   severity: string;
   resource: string;
   description: string;
+  violationId?: string;
+  method?: string;
+  filePath?: string;
 }
 
 const PolicyPage = () => {
@@ -29,6 +34,9 @@ const PolicyPage = () => {
   const [llmEvaluation, setLlmEvaluation] =
     useState<PolicyEvaluateResponse | null>(null);
   const [llmStatus, setLlmStatus] = useState<string | null>(null);
+  const [remediationPreviews, setRemediationPreviews] = useState<
+    Record<string, RemediationPreviewResponse>
+  >({});
   const { upsert: upsertActivity, clear: clearActivity } = useActivityContext();
 
   const catalogQuery = useQuery<PolicyCatalogResponse, Error>({
@@ -68,6 +76,32 @@ const PolicyPage = () => {
     }
   });
 
+  const remediationPreviewMutation = useMutation({
+    mutationFn: (args: { violationId: string; targetMethod?: string; filePath?: string; key: string }) =>
+      previewRemediation(args.violationId, args.targetMethod, args.filePath),
+    onSuccess: (data, variables) => {
+      const key = variables.key;
+      setRemediationPreviews((prev) => ({
+        ...prev,
+        [key]: data
+      }));
+      toast.success(`Preview ready for ${variables.violationId}.`);
+    },
+    onError: (error: Error, variables) => {
+      toast.error(
+        `Failed to preview remediation for ${variables.violationId}: ${error.message}`
+      );
+    }
+  });
+
+  const baseEvalPending = baseEvalMutation.status === "pending";
+  const llmEvalPending = llmEvalMutation.status === "pending";
+  const remediationPending = remediationPreviewMutation.status === "pending";
+  const activeRemediationKey = remediationPending
+    ? ((remediationPreviewMutation.variables as { key?: string } | undefined)?.key ??
+      undefined)
+    : undefined;
+
   const handleLlmSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLlmStatus("Requesting LLM explanations…");
@@ -93,6 +127,26 @@ const PolicyPage = () => {
     }
     return llmEvaluation.enriched as Array<Record<string, unknown>>;
   }, [llmEvaluation]);
+
+  const handleRemediation = (
+    violationId?: string,
+    targetMethod?: string,
+    filePath?: string,
+    key?: string,
+    event?: MouseEvent<HTMLButtonElement>
+  ) => {
+    event?.stopPropagation();
+    if (!violationId || !key) {
+      toast.error("Selected violation is missing an identifier.");
+      return;
+    }
+    remediationPreviewMutation.mutate({
+      violationId,
+      targetMethod,
+      filePath,
+      key
+    });
+  };
   const toHtml = (value?: string | null) => {
     if (!value) {
       return "";
@@ -126,18 +180,24 @@ const PolicyPage = () => {
       const severity = pickString(["severity", "level", "priority"], "Low");
       const resource = pickString(["resource", "node", "target", "entity", "asset"], "—");
       const description = pickString(["description", "message", "detail", "reason"], "—");
+      const violationId = pickString(["violation_id", "id", "control", "rule"], "");
+      const method = pickString(["target_method", "method", "signature"], undefined);
+      const filePath = pickString(["file_path", "file"], undefined);
       return {
         raw: record,
         control,
         severity,
         resource,
-        description
+        description,
+        violationId,
+        method,
+        filePath
       } satisfies ViolationSummary;
     });
   }, [evaluation]);
 
   useEffect(() => {
-    if (baseEvalMutation.isLoading) {
+    if (baseEvalPending) {
       upsertActivity({
         key: "policy-base",
         label: "Policy Evaluation",
@@ -173,7 +233,7 @@ const PolicyPage = () => {
       });
     }
   }, [
-    baseEvalMutation.isLoading,
+    baseEvalPending,
     baseEvalMutation.isError,
     baseEvalMutation.isSuccess,
     baseEvalMutation.error,
@@ -183,7 +243,7 @@ const PolicyPage = () => {
   ]);
 
   useEffect(() => {
-    if (llmEvalMutation.isLoading) {
+    if (llmEvalPending) {
       upsertActivity({
         key: "policy-llm",
         label: "Policy LLM Explanations",
@@ -216,7 +276,7 @@ const PolicyPage = () => {
       });
     }
   }, [
-    llmEvalMutation.isLoading,
+    llmEvalPending,
     llmEvalMutation.isError,
     llmEvalMutation.isSuccess,
     llmEvalMutation.error,
@@ -240,10 +300,10 @@ const PolicyPage = () => {
       <div className="policy-actions">
         <button
           onClick={() => baseEvalMutation.mutate()}
-          disabled={baseEvalMutation.isLoading}
+          disabled={baseEvalPending}
         >
-          {baseEvalMutation.isLoading && <span className="btn-spinner" aria-hidden="true" />}
-          <span>{baseEvalMutation.isLoading ? "Checking…" : "Evaluate Policies"}</span>
+          {baseEvalPending && <span className="btn-spinner" aria-hidden="true" />}
+          <span>{baseEvalPending ? "Checking…" : "Evaluate Policies"}</span>
         </button>
         <form className="policy-llm-form" onSubmit={handleLlmSubmit}>
           <label>
@@ -265,9 +325,9 @@ const PolicyPage = () => {
               placeholder="Override backend default"
             />
           </label>
-          <button type="submit" disabled={llmEvalMutation.isLoading}>
-            {llmEvalMutation.isLoading && <span className="btn-spinner" aria-hidden="true" />}
-            <span>{llmEvalMutation.isLoading ? "Requesting…" : "Evaluate with LLM"}</span>
+          <button type="submit" disabled={llmEvalPending}>
+            {llmEvalPending && <span className="btn-spinner" aria-hidden="true" />}
+            <span>{llmEvalPending ? "Requesting…" : "Evaluate with LLM"}</span>
           </button>
         </form>
       </div>
@@ -294,45 +354,193 @@ const PolicyPage = () => {
                   : "No violations detected by OPA policies."}
               </p>
               {hasViolations && violationSummaries.length > 0 && (
-                <div className="violation-table-wrapper">
-                  <table className="violation-table">
-                    <thead>
-                      <tr>
-                        <th>Control</th>
-                        <th>Resource</th>
-                        <th>Severity</th>
-                        <th>Description</th>
-                        <th>Raw</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {violationSummaries.map((item, index) => (
-                        <tr key={`violation-${index}`}>
-                          <td>{item.control}</td>
-                          <td>{item.resource}</td>
-                          <td>
-                            <span
-                              className={`severity-chip severity-${item.severity
-                                .toLowerCase()
-                                .replace(/[^a-z0-9]+/g, "-")}`}
-                            >
-                              {item.severity}
-                            </span>
-                          </td>
-                          <td>{item.description}</td>
-                          <td>
-                            <details>
-                              <summary>View</summary>
+                <div className="violation-deck">
+                  {violationSummaries.map((item, index) => {
+                    const violationKey = `${item.violationId || "unknown"}::${
+                      item.method || ""
+                    }::${item.filePath || ""}`;
+                    const remediationOutcome = remediationPreviews[violationKey];
+                    const verification = remediationOutcome?.verification as
+                      | Record<string, unknown>
+                      | undefined;
+                    const targetRuleStatus =
+                      typeof verification?.target_rule_status === "string"
+                        ? verification.target_rule_status
+                        : remediationOutcome?.opa_status;
+                    const overallStatus =
+                      typeof verification?.overall_status === "string"
+                        ? verification.overall_status
+                        : undefined;
+                    const newViolations =
+                      Array.isArray(verification?.new_violations)
+                        ? verification?.new_violations?.length
+                        : undefined;
+                    const remainingViolations =
+                      Array.isArray(verification?.remaining_violations)
+                        ? verification?.remaining_violations?.length
+                        : undefined;
+                    const isStarting =
+                      remediationPending && activeRemediationKey === violationKey;
+                    return (
+                      <details
+                        className="violation-card"
+                        key={`violation-${index}`}
+                        open={index === 0}
+                      >
+                        <summary>
+                          <div className="violation-summary">
+                            <div className="violation-summary-text">
+                              <span className="violation-control">
+                                {item.control || "Unmapped control"}
+                              </span>
+                              <strong>{item.description}</strong>
+                              {item.method && (
+                                <span className="violation-method">{item.method}</span>
+                              )}
+                              {item.filePath && (
+                                <span className="violation-path">{item.filePath}</span>
+                              )}
+                            </div>
+                            <div className="violation-summary-meta">
+                              <span
+                                className={`severity-chip severity-${item.severity
+                                  .toLowerCase()
+                                  .replace(/[^a-z0-9]+/g, "-")}`}
+                              >
+                                {item.severity}
+                              </span>
+                              <button
+                                type="button"
+                                className="remediation-button"
+                                disabled={
+                                  !item.violationId || isStarting
+                                }
+                                onClick={(event) =>
+                                  handleRemediation(
+                                    item.violationId,
+                                    item.method,
+                                    item.filePath,
+                                    violationKey,
+                                    event
+                                  )
+                                }
+                              >
+                                {isStarting ? (
+                                  <>
+                                    <span className="btn-spinner" aria-hidden="true" />
+                                    <span>Previewing…</span>
+                                  </>
+                                ) : (
+                                  <span>
+                                    {remediationOutcome ? "Re-run Preview" : "Fix &amp; Verify"}
+                                  </span>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </summary>
+                        <div className="violation-body">
+                          <dl className="violation-meta-grid">
+                            <div>
+                              <dt>Violation ID</dt>
+                              <dd>{item.violationId ?? "—"}</dd>
+                            </div>
+                            <div>
+                              <dt>Resource</dt>
+                              <dd>{item.resource}</dd>
+                            </div>
+                            <div>
+                              <dt>Severity</dt>
+                              <dd>{item.severity}</dd>
+                            </div>
+                          </dl>
+                          <div className="violation-detail-grid">
+                            <section>
+                              <header>
+                                <h4>Raw evidence</h4>
+                              </header>
                               <CodeHighlight
                                 code={JSON.stringify(item.raw, null, 2)}
                                 language="json"
                               />
-                            </details>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            </section>
+                            <section>
+                              <header>
+                                <h4>Remediation</h4>
+                              </header>
+                              {!item.violationId ? (
+                                <p className="muted">
+                                  This violation is missing an identifier required for remediation.
+                                </p>
+                              ) : remediationOutcome ? (
+                                <div className="remediation-panel">
+                                  <p className="remediation-status">
+                                    {remediationOutcome.opa_status
+                                      ? `OPA: ${remediationOutcome.opa_status}`
+                                      : remediationOutcome.status}
+                                    {remediationOutcome.rule_id
+                                      ? ` (${remediationOutcome.rule_id})`
+                                      : ""}
+                                  </p>
+                                  {remediationOutcome.explanation && (
+                                    <p className="remediation-note">
+                                      {remediationOutcome.explanation}
+                                    </p>
+                                  )}
+                                  {typeof remediationOutcome.error === "string" && (
+                                    <p className="callout callout-error">
+                                      {remediationOutcome.error}
+                                    </p>
+                                  )}
+                                  {targetRuleStatus && (
+                                    <p className="remediation-note">
+                                      Target rule status: {targetRuleStatus}
+                                    </p>
+                                  )}
+                                  {overallStatus && (
+                                    <p className="remediation-note">
+                                      Overall status: {overallStatus}
+                                    </p>
+                                  )}
+                                  {typeof newViolations === "number" && (
+                                    <p className="remediation-note">
+                                      New violations: {newViolations}
+                                    </p>
+                                  )}
+                                  {typeof remainingViolations === "number" && (
+                                    <p className="remediation-note">
+                                      Remaining violations: {remainingViolations}
+                                    </p>
+                                  )}
+                                  {remediationOutcome.updated_source_code ? (
+                                    <CodeHighlight
+                                      code={remediationOutcome.updated_source_code}
+                                      language="java"
+                                    />
+                                  ) : (
+                                    <CodeHighlight
+                                      code={JSON.stringify(remediationOutcome, null, 2)}
+                                      language="json"
+                                    />
+                                  )}
+                                  {remediationOutcome.diff && (
+                                    <CodeHighlight
+                                      code={remediationOutcome.diff}
+                                      language="text"
+                                    />
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="muted">
+                                  Run “Fix &amp; Verify” to propose and validate a patch.
+                                </p>
+                              )}
+                            </section>
+                          </div>
+                        </div>
+                      </details>
+                    );
+                  })}
                 </div>
               )}
             </>
@@ -377,44 +585,72 @@ const PolicyPage = () => {
                     const snippet =
                       (typeof item.snippet === "string" && item.snippet) ||
                       (typeof item.code === "string" && item.code);
+                    const severity =
+                      (typeof item.severity === "string" && item.severity) || undefined;
+                    const violationRecord =
+                      item?.violation && typeof item.violation === "object"
+                        ? (item.violation as Record<string, unknown>)
+                        : null;
+                    const methodCandidate =
+                      violationRecord && typeof violationRecord.target_method === "string"
+                        ? violationRecord.target_method
+                        : undefined;
+                    const method =
+                      methodCandidate ||
+                      (typeof item.method === "string" ? item.method : undefined);
 
-                    return ( 
-                      <article className="llm-card" key={`llm-${index}`}>
-                        <header>
-                          <h3>{title}</h3>
-                        </header>
-                        {explanation && (
+                    return (
+                      <details className="llm-card" key={`llm-${index}`} open={index === 0}>
+                        <summary>
+                          <div className="llm-card-summary">
+                            <div className="llm-card-summary-text">
+                              <strong>{title}</strong>
+                              {method && <span className="llm-card-method">{method}</span>}
+                            </div>
+                            {severity && (
+                              <span
+                                className={`severity-chip severity-${severity
+                                  .toLowerCase()
+                                  .replace(/[^a-z0-9]+/g, "-")}`}
+                              >
+                                {severity}
+                              </span>
+                            )}
+                          </div>
+                        </summary>
+                        <div className="llm-card-body">
+                          {explanation && (
+                            <section>
+                              <h4>Explanation</h4>
+                              <div
+                                className="llm-text"
+                                dangerouslySetInnerHTML={{ __html: toHtml(explanation) }}
+                              />
+                            </section>
+                          )}
+                          {remediation && (
+                            <section>
+                              <h4>Recommended Action</h4>
+                              <div
+                                className="llm-text"
+                                dangerouslySetInnerHTML={{ __html: toHtml(remediation) }}
+                              />
+                            </section>
+                          )}
+                          {snippet && (
+                            <section>
+                              <h4>Snippet</h4>
+                              <CodeHighlight code={snippet} language="java" />
+                            </section>
+                          )}
                           <section>
-                            <h4>Explanation</h4>
-                            <div
-                              className="llm-text"
-                              dangerouslySetInnerHTML={{ __html: toHtml(explanation) }}
-                            />
+                            <details>
+                              <summary>Raw response</summary>
+                              <CodeHighlight code={JSON.stringify(item, null, 2)} language="json" />
+                            </details>
                           </section>
-                        )}
-                        {remediation && (
-                          <section>
-                            <h4>Recommended Action</h4>
-                            <div
-                              className="llm-text"
-                              dangerouslySetInnerHTML={{ __html: toHtml(remediation) }}
-                            />
-                          </section>
-                        )}
-                        {snippet && (
-                          <section>
-                            <h4>Snippet</h4>
-                            <CodeHighlight code={snippet} language="java" />
-                          </section>
-                        )}
-                        <details>
-                          <summary>Raw response</summary>
-                          <CodeHighlight
-                            code={JSON.stringify(item, null, 2)}
-                            language="json"
-                          />
-                        </details>
-                      </article>
+                        </div>
+                      </details>
                     );
                   })}
                 </div>
@@ -430,7 +666,7 @@ const PolicyPage = () => {
         </div>
       )}
 
-      {llmEvalMutation.isLoading && (
+      {llmEvalPending && (
         <div className="policy-overlay" aria-live="polite">
           <div className="spinner" role="status" aria-label="Requesting LLM" />
           <p>Asking the LLM to enrich policy violations…</p>

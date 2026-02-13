@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, List, Optional
 
 class UploadResponse(BaseModel):
     status: str
@@ -46,3 +46,46 @@ class PolicyCatalogResponse(BaseModel):
 class PolicyEvaluateWithLLMRequest(BaseModel):
     limit: int = 10
     model: Optional[str] = None
+
+
+class RemediationPreviewRequest(BaseModel):
+    violation_id: str
+    target_method: Optional[str] = None
+    file_path: Optional[str] = None
+
+
+class RemediationPreviewResponse(BaseModel):
+    status: str
+    violation_id: str
+    rule_id: Optional[str] = None
+    target_method: Optional[str] = None
+    file_path: Optional[str] = None
+    updated_source_code: Optional[str] = None
+    explanation: Optional[str] = None
+    opa_status: Optional[str] = None
+    opa_details: Optional[Any] = None
+    diff: Optional[str] = None
+    verification: Optional[dict] = None
+    error: Optional[str] = None
+
+
+class RemediationApplyRequest(BaseModel):
+    violation_id: str
+    target_method: Optional[str] = None
+    file_path: Optional[str] = None
+    mode: str = "dry_run"
+    max_attempts: int = 2
+
+
+class RemediationApplyResponse(BaseModel):
+    status: str
+    violation_id: str
+    rule_id: Optional[str] = None
+    target_method: Optional[str] = None
+    file_path: Optional[str] = None
+    updated_source_code: Optional[str] = None
+    diff: Optional[str] = None
+    verification: Optional[dict] = None
+    compilation: Optional[dict] = None
+    metadata: Optional[dict] = None
+    error: Optional[str] = None

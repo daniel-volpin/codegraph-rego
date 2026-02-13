@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
+from codegraph.policy.source_analysis import analyze_crypto_indicators
 from codegraph.db import get_neo4j_driver
 from codegraph.search.service import HybridSearchService
 
@@ -28,6 +29,7 @@ ISO_RULES_PATH = os.path.join(POLICY_DIR, "iso_rules.json")
 LOGGER = logging.getLogger(__name__)
 
 _CATALOG_CACHE: Dict[str, Dict[str, Any]] | None = None
+_CATALOG_ENTRIES_CACHE: List[Dict[str, Any]] | None = None
 _ISO_RULES_CACHE: Dict[str, Any] | None = None
 _HYBRID_SEARCH: Optional[HybridSearchService] = None
 
@@ -45,8 +47,8 @@ def _load_hybrid_search() -> Optional[HybridSearchService]:
 
 
 def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
-    global _CATALOG_CACHE, raw
-    if _CATALOG_CACHE is None:
+    global _CATALOG_CACHE, _CATALOG_ENTRIES_CACHE, raw
+    if _CATALOG_CACHE is None or _CATALOG_ENTRIES_CACHE is None:
         try:
             with open(CATALOG_PATH, "r") as file:
                 raw = json.load(file)
@@ -60,12 +62,58 @@ def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
             entries = raw
         else:
             entries = []
-        _CATALOG_CACHE = {entry.get("control") or entry.get("id"): entry for entry in entries}
+        catalog_lookup: Dict[str, Dict[str, Any]] = {}
+        catalog_entries: List[Dict[str, Any]] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            entry_id = entry.get("id")
+            if not isinstance(entry_id, str) or not entry_id.strip():
+                continue
+            catalog_entries.append(entry)
+            catalog_lookup[entry_id] = entry
+            aliases = entry.get("alias_ids") or []
+            if isinstance(aliases, list):
+                for alias in aliases:
+                    if isinstance(alias, str) and alias.strip():
+                        catalog_lookup[alias] = entry
+        _CATALOG_CACHE = catalog_lookup
+        _CATALOG_ENTRIES_CACHE = catalog_entries
     return _CATALOG_CACHE or {}
 
 
 def get_policy_catalog_entries() -> List[Dict[str, Any]]:
-    return list(load_policy_catalog().values())
+    load_policy_catalog()
+    return list(_CATALOG_ENTRIES_CACHE or [])
+
+
+def _violation_id_variants(violation_id: str) -> List[str]:
+    text = str(violation_id).strip()
+    if not text:
+        return []
+    variants = [text]
+    if text.startswith("ISO-27001-"):
+        base = text[len("ISO-27001-") :]
+    elif text.startswith("ISO-"):
+        base = text[len("ISO-") :]
+    else:
+        base = text
+    for candidate in (base, f"ISO-{base}", f"ISO-27001-{base}"):
+        if candidate and candidate not in variants:
+            variants.append(candidate)
+    return variants
+
+
+def _resolve_catalog_entry(
+    violation_id: Any, catalog: Dict[str, Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    if not violation_id:
+        return None
+    for candidate in _violation_id_variants(str(violation_id)):
+        entry = catalog.get(candidate)
+        if entry is not None:
+            return entry
+    return None
 
 
 def load_iso_rules() -> Dict[str, Any]:
@@ -153,6 +201,62 @@ def _fetch_methods_with_context(driver) -> List[Dict[str, Any]]:
     return snapshots
 
 
+def _fetch_method_snapshot(driver, method_signature: str) -> Dict[str, Any] | None:
+    cypher = (
+        "MATCH (m:Method) "
+        "WHERE coalesce(m.full_signature, m.signature) = $method_signature "
+        "   OR m.signature = $method_signature "
+        "   OR m.full_signature = $method_signature "
+        "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
+        "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
+        "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
+        "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
+        "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
+        "RETURN coalesce(m.full_signature, m.signature) AS signature, "
+        "       m.name AS name, "
+        "       m.file_path AS file_path, "
+        "       m.start_line AS start_line, "
+        "       m.end_line AS end_line, "
+        "       m.modifiers AS modifiers, "
+        "       m.annotations AS property_annotations, "
+        "       cls.fqn AS class_fqn, "
+        "       collect(DISTINCT ann.name) AS annotation_nodes, "
+        "       collect(DISTINCT CASE WHEN usedField IS NULL "
+        "                             THEN NULL "
+        "                             ELSE {"
+        "                                 name: usedField.name, "
+        "                                 type: usedField.type, "
+        "                                 class_fqn: usedField.class_fqn"
+        "                             } END) AS uses_fields, "
+        "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
+        "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
+        "LIMIT 1"
+    )
+    with driver.session() as session:
+        record = session.run(cypher, method_signature=method_signature).single()
+        if not record:
+            return None
+        uses_fields = [
+            field for field in (record.get("uses_fields") or []) if field and field.get("name")
+        ]
+        annotations = record.get("property_annotations") or []
+        annotation_nodes = record.get("annotation_nodes") or []
+        combined_annotations = sorted({a for a in annotations + annotation_nodes if a})
+        return {
+            "signature": record.get("signature"),
+            "name": record.get("name"),
+            "class_fqn": record.get("class_fqn"),
+            "file_path": record.get("file_path"),
+            "start_line": record.get("start_line"),
+            "end_line": record.get("end_line"),
+            "modifiers": record.get("modifiers") or [],
+            "annotations": combined_annotations,
+            "uses_fields": uses_fields,
+            "calls": record.get("calls") or [],
+            "callers": record.get("callers") or [],
+        }
+
+
 def _resolve_source_path(file_path: Optional[str]) -> Optional[Path]:
     if not file_path:
         return None
@@ -188,6 +292,7 @@ def build_evidence_bundle(
         "calls": method_snapshot.get("calls") or [],
         "callers": method_snapshot.get("callers") or [],
     }
+    analysis_flags = analyze_crypto_indicators(source_code)
     vector_context: List[str] = []
     if search_service is not None:
         try:
@@ -201,11 +306,31 @@ def build_evidence_bundle(
         "method_name": method_snapshot.get("name"),
         "class_fqn": method_snapshot.get("class_fqn"),
         "file_path": resolved_path.as_posix() if resolved_path else file_path,
+        "start_line": method_snapshot.get("start_line"),
+        "end_line": method_snapshot.get("end_line"),
         "modifiers": method_snapshot.get("modifiers") or [],
         "source_code": source_code,
         "graph_context": graph_context,
         "vector_context": vector_context,
+        "analysis_flags": analysis_flags,
     }
+
+
+def _normalize_violation_payload(payload: Any) -> Optional[Dict[str, Any]]:
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str):
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            LOGGER.warning("Skipping non-JSON violation payload: %s", payload)
+            return None
+        if isinstance(parsed, dict):
+            return parsed
+        LOGGER.warning("Skipping violation payload (unexpected type): %s", payload)
+        return None
+    LOGGER.warning("Skipping unexpected OPA violation payload: %r", payload)
+    return None
 
 
 def evaluate_policies() -> Dict[str, Any]:
@@ -228,13 +353,13 @@ def evaluate_policies() -> Dict[str, Any]:
         except RuntimeError as exc:
             return {"error": str(exc), "bundle": bundle.get("target_method")}
         for violation in opa_result:
-            if not isinstance(violation, dict):
-                LOGGER.warning("Skipping unexpected OPA violation payload: %r", violation)
+            normalized = _normalize_violation_payload(violation)
+            if normalized is None:
                 continue
-            violation_id = violation.get("violation_id") or violation.get("id")
-            reason = violation.get("reason")
-            severity = violation.get("severity")
-            control_meta = catalog.get(violation_id) if violation_id else None
+            violation_id = normalized.get("violation_id") or normalized.get("id")
+            reason = normalized.get("reason")
+            severity = normalized.get("severity")
+            control_meta = _resolve_catalog_entry(violation_id, catalog)
             violations.append(
                 {
                     "violation_id": violation_id,
@@ -247,6 +372,11 @@ def evaluate_policies() -> Dict[str, Any]:
                         "source_code": bundle.get("source_code", ""),
                         "graph_context": bundle.get("graph_context", {}),
                         "vector_context": bundle.get("vector_context", []),
+                        "file_path": bundle.get("file_path"),
+                        "target_method": bundle.get("target_method"),
+                        "start_line": bundle.get("start_line"),
+                        "end_line": bundle.get("end_line"),
+                        "analysis_flags": bundle.get("analysis_flags", {}),
                     },
                 }
             )
@@ -257,6 +387,20 @@ def evaluate_policies() -> Dict[str, Any]:
         "opa_runs": opa_runs,
         "bundle_count": len(bundles),
     }
+
+
+def evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Public wrapper to evaluate a single method bundle with OPA. This reuses the
+    same query and policy directory as the main evaluation path, but accepts an
+    in-memory bundle (e.g., for virtual remediation previews).
+    """
+    return _evaluate_bundle(bundle)
+
+
+def normalize_violation_payload(payload: Any) -> Optional[Dict[str, Any]]:
+    """Public helper to coerce OPA outputs into a dict or return None."""
+    return _normalize_violation_payload(payload)
 
 
 def _evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -291,6 +435,70 @@ def _evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not expressions:
             return []
         return expressions[0].get("value") or []
+
+
+class PolicyEvaluator:
+    """Evaluate policies against a single method signature."""
+
+    def __init__(self) -> None:
+        self._catalog = load_policy_catalog()
+        self._rules = load_iso_rules()
+
+    def evaluate(self, method_signature: str) -> Dict[str, Any]:
+        driver = get_neo4j_driver()
+        try:
+            snapshot = _fetch_method_snapshot(driver, method_signature)
+        finally:
+            driver.close()
+        if not snapshot:
+            return {
+                "target_method": method_signature,
+                "violations": [],
+                "error": "method_not_found",
+            }
+        bundle = build_evidence_bundle(snapshot, _load_hybrid_search())
+        try:
+            opa_output = _evaluate_bundle(bundle)
+        except RuntimeError as exc:
+            return {
+                "target_method": method_signature,
+                "violations": [],
+                "error": str(exc),
+            }
+        catalog = self._catalog
+        violations: List[Dict[str, Any]] = []
+        for violation in opa_output:
+            normalized = _normalize_violation_payload(violation)
+            if normalized is None:
+                continue
+            violation_id = normalized.get("violation_id") or normalized.get("id")
+            control_meta = _resolve_catalog_entry(violation_id, catalog)
+            violations.append(
+                {
+                    "violation_id": violation_id,
+                    "target_method": bundle.get("target_method"),
+                    "file_path": bundle.get("file_path"),
+                    "reason": normalized.get("reason"),
+                    "severity": normalized.get("severity") or "high",
+                    "control_metadata": control_meta,
+                    "evidence": {
+                        "source_code": bundle.get("source_code", ""),
+                        "graph_context": bundle.get("graph_context", {}),
+                        "vector_context": bundle.get("vector_context", []),
+                        "file_path": bundle.get("file_path"),
+                        "target_method": bundle.get("target_method"),
+                        "start_line": bundle.get("start_line"),
+                        "end_line": bundle.get("end_line"),
+                        "analysis_flags": bundle.get("analysis_flags", {}),
+                    },
+                }
+            )
+        return {
+            "target_method": method_signature,
+            "violations": violations,
+            "rules_catalog": self._rules,
+            "catalog": get_policy_catalog_entries(),
+        }
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import {
   HealthCheckResponse,
   PolicyCatalogResponse,
   PolicyEvaluateResponse,
+  RemediationPreviewResponse,
   SearchResponse,
   UploadResponse,
   UploadStatus
@@ -106,4 +107,24 @@ export async function fetchUploadStatus(): Promise<UploadStatus> {
   });
 
   return handleResponse<UploadStatus>(response);
+}
+
+export async function previewRemediation(
+  violationId: string,
+  targetMethod?: string,
+  filePath?: string
+): Promise<RemediationPreviewResponse> {
+  const response = await fetch(`${API_BASE_URL}/remediation/preview`, {
+    method: "POST",
+    headers: {
+      ...defaultHeaders,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      violation_id: violationId,
+      target_method: targetMethod,
+      file_path: filePath
+    })
+  });
+  return handleResponse<RemediationPreviewResponse>(response);
 }

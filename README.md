@@ -5,7 +5,8 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 - **Ingestion** – parses Java sources with `javalang`, stores classes/methods in Neo4j, and links `DECLARES`, `CALLS`, `USES`, `EXTENDS`, `IMPLEMENTS`, and `NESTED_IN` relationships.
 - **Semantic search** – embeds method snippets with Sentence Transformers, saves a FAISS index, and performs hybrid search that adds graph context.
 - **Policy evaluation** – exports Neo4j facts to OPA/Rego to enforce ISO controls, with optional LiteLLM-powered explanations.
-- **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, and `/health`.
+- **Remediation** – “Fix & Verify” loop that proposes patches (LLM), applies them in a temp workspace, compiles, re-ingests, and re-runs OPA to validate fixes.
+- **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, `/remediation/preview`, `/remediation/apply`, and `/health`.
 
 ---
 
@@ -44,7 +45,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 5. **Run the API**
 
    ```bash
-   uvicorn app:app --reload --port 8000
+   uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
    ```
 
 - `POST /search` (`query=...` form field) → semantic hits + graph neighbours
@@ -70,16 +71,19 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 
 ## Policy Checks (OPA/Rego)
 
-`policy/iso_27001_access.rego` currently encodes three ISO 27001 controls using Neo4j method facts. Each control is described in `policy/catalog.json`, which records the normative reference, evidence fields, and the Rego rule that enforces it.
+`policy/iso_27001_access.rego` currently encodes access, logging, and cryptography checks using Neo4j method facts. Each rule id is described in `policy/catalog.json`, which records the normative reference, evidence fields, and the Rego rule that enforces it.
 
-- **A.9.1.1 – Access control policy**  
+- **A.9.4.1 – Access control for applications**  
   Flags public HTTP endpoints missing security annotations such as `@PreAuthorize`, `@Secured`, `@RolesAllowed`, or `@DenyAll`.
-
-- **A.9.4.2 – Secure log-on procedures**  
-  Flags authentication endpoints (`login`, `signin`, `authenticate`, etc.) that are public but still lack security annotations.
 
 - **A.12.4.1 – Event logging**  
   Flags critical operations (mutation endpoints or verbs like `create`, `update`, `delete`) that show no evidence of logging (no logging/audit annotations and no calls to logger-style methods).
+
+- **A.10 (ISO-A.10-WEAK-HASH)**  
+  Flags weak hash usage such as `MessageDigest.getInstance("MD5")`.
+
+- **A.10 (ISO-A.10-WEAK-CRYPTO)**  
+  Flags weak cipher usage such as `DES`, `RC4`, or `AES/ECB/*`.
 
 Violations include the control id, method signature, file path, and a short reason.  
 Run locally with:
@@ -113,6 +117,82 @@ Try it from the CLI:
 ```bash
 python3 hybrid_code_search.py
 ```
+
+---
+
+## Remediation Preview (Virtual Fix)
+
+- API endpoint:
+  - `POST /remediation/preview` with `{"violation_id": "ISO-A.9.4.1"}` → returns a preview-only remediation:
+    - LLM-proposed full replacement method (`updated_source_code`)
+    - Short explanation
+    - OPA verdict for the same rule (`opa_status`: `PASS`/`FAIL`) plus verification breakdown + diff
+- Flow: gather violation context → LLM proposes full method → build virtual graph context in memory → re-run OPA on the virtual bundle.
+- No filesystem edits, compilation, or Neo4j mutations; the suggestion is for human review/copy‑paste.
+- Requires `opa` on `PATH`, LiteLLM-configured LLM access, and Neo4j reachable for the initial evidence.
+
+## Remediation Apply & Verify (Temp Workspace)
+
+- API endpoint:
+  - `POST /remediation/apply` with `{"violation_id": "ISO-A.9.4.1", "mode": "dry_run"}` → runs a temp workspace fix loop:
+    1. Baseline method-level OPA evaluation (before).
+    2. LLM proposes a replacement method grounded in evidence.
+    3. Apply the replacement in a temp workspace and (best effort) compile.
+    4. Re-ingest the modified file into Neo4j and re-run OPA for verification.
+    5. Return a structured response including diff, updated source, and verification summary.
+- `mode` controls persistence:
+  - `dry_run` (default) restores the original file on disk and reverts the graph after verification.
+  - `apply` persists the change back to the original file only when verification passes.
+
+---
+
+## Run & Verify Locally
+
+1) **Backend**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
+```
+Verify:
+- `curl http://localhost:8000/health` → all subsystems should be `true` (OPA requires binary on PATH).
+- `curl http://localhost:8000/policy/evaluate` → returns violations or empty list.
+- `curl -X POST http://localhost:8000/remediation/preview -H "Content-Type: application/json" -d '{"violation_id":"<ID>"}'` → returns a virtual fix preview with OPA PASS/FAIL.
+- `curl -X POST http://localhost:8000/remediation/apply -H "Content-Type: application/json" -d '{"violation_id":"<ID>","mode":"dry_run"}'` → runs apply & verify in a temp workspace (dry-run by default).
+
+2) **Frontend**
+```bash
+cd frontend
+npm install
+npm run build
+npm run preview -- --host --port 4173
+```
+Verify:
+- Open `http://localhost:4173` (or the preview host) → navigate to Policy page.
+- Run “Evaluate Policies”, then click “Fix & Verify” on a violation; the card should update with agent state, diff, and verification result.
+
+---
+
+## Benchmark Evaluation Pipeline
+
+For thesis metrics (Precision/Recall/F1, citation success, remediation success), use the CLI runners:
+
+```bash
+python run_benchmark_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval --reset-neo4j
+python run_explanation_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval --reset-neo4j
+python run_remediation_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/remediation_eval --sample-size 10 --reset-neo4j
+```
+
+`run_remediation_eval.py` reuses the same apply/verify remediation service flow used by `/remediation/apply` (default `dry_run` mode) so evaluation behavior tracks production remediation logic.
+
+Set `OWASP_BENCHMARK_ROOT` before running (or edit the template config):
+
+```bash
+export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
+cp configs/benchmark_selection.example.json configs/benchmark_selection.json  # optional
+```
+
+See `REPRODUCIBILITY.md` for full prerequisites, configuration, and output formats.
 
 ---
 

@@ -16,6 +16,9 @@ uploaded_code/*
 index/*
 !index/.gitkeep
 
+# Generated evaluation outputs
+outputs/
+
 # Tooling / editor noise
 copilot-context/
 .github/

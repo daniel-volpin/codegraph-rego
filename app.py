@@ -6,6 +6,7 @@ from api.routers.upload import router as upload_router
 from api.routers.health import router as health_router
 from api.routers.search import router as search_router
 from api.routers.policy import router as policy_router
+from api.routers.remediation import router as remediation_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,6 +28,7 @@ app.include_router(upload_router)
 app.include_router(health_router)
 app.include_router(search_router)
 app.include_router(policy_router)
+app.include_router(remediation_router)
 
 
 from fastapi import Request
