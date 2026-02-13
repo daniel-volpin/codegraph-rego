@@ -294,6 +294,10 @@ const PolicyPage = () => {
   });
 
   const baseEvalPending = baseEvalMutation.status === "pending";
+  const isFullEvalRunning =
+    baseEvalPending && (baseEvalMutation.variables == null);
+  const isInteractiveEvalRunning =
+    baseEvalPending && (baseEvalMutation.variables != null);
   const llmEvalPending = llmEvalMutation.status === "pending";
   const remediationPending = remediationPreviewMutation.status === "pending";
   const applyPending = remediationApplyMutation.status === "pending";
@@ -658,8 +662,8 @@ const PolicyPage = () => {
             </p>
           </header>
           <button onClick={() => baseEvalMutation.mutate(undefined)} disabled={baseEvalPending}>
-            {baseEvalPending && <span className="btn-spinner" aria-hidden="true" />}
-            <span>{baseEvalPending ? "Checking…" : "Run full evaluation"}</span>
+            {isFullEvalRunning && <span className="btn-spinner" aria-hidden="true" />}
+            <span>{isFullEvalRunning ? "Checking…" : "Run full evaluation"}</span>
           </button>
         </div>
 
@@ -716,8 +720,8 @@ const PolicyPage = () => {
             }
             disabled={baseEvalPending}
           >
-            {baseEvalPending && <span className="btn-spinner" aria-hidden="true" />}
-            <span>{baseEvalPending ? "Checking…" : "Run interactive evaluation"}</span>
+            {isInteractiveEvalRunning && <span className="btn-spinner" aria-hidden="true" />}
+            <span>{isInteractiveEvalRunning ? "Checking…" : "Run interactive evaluation"}</span>
           </button>
         </div>
 
