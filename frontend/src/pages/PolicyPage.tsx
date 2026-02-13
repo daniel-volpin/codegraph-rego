@@ -1,5 +1,7 @@
 import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { PolicyActions } from "../components/features/policy/PolicyActions";
+import "../components/features/policy/Policy.css";
 import {
   applyRemediation,
   explainPolicyViolationOne,
@@ -20,19 +22,10 @@ import type {
 } from "../lib/types";
 import { useActivityContext } from "../context/ActivityContext";
 import { toast } from "react-hot-toast";
-import CodeHighlight from "../components/CodeHighlight";
+import { ViolationCard } from "../components/features/policy/ViolationCard";
+import CodeHighlight from "../components/ui/CodeHighlight";
 
-interface ViolationSummary {
-  raw: Record<string, unknown>;
-  violationId?: string;
-  filePath?: string;
-  targetMethod?: string;
-  title: string;
-  reason?: string;
-  severity: string;
-  control: string;
-  autoRemediationSupported: boolean;
-}
+import { PolicyViolationSummary } from "../lib/types";
 
 interface ReviewDraft {
   label?: PolicyReviewLabel;
@@ -478,7 +471,7 @@ const PolicyPage = () => {
 
   const violationSummaries = useMemo(() => {
     if (!evaluation?.violations) {
-      return [] as ViolationSummary[];
+      return [] as PolicyViolationSummary[];
     }
     return evaluation.violations.map((item) => {
       const record = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
@@ -534,7 +527,7 @@ const PolicyPage = () => {
         reason,
         severity,
         autoRemediationSupported
-      } satisfies ViolationSummary;
+      } satisfies PolicyViolationSummary;
     });
   }, [evaluation]);
 
@@ -657,18 +650,21 @@ const PolicyPage = () => {
 
   return (
     <section className="card">
-      <h1>Policy Evaluation</h1>
-      <p>
-        Run ISO 27001 policy checks against the ingested knowledge graph and
-        optionally request LLM-authored explanations for any violations.
-      </p>
+      <header style={{ marginBottom: "2.5rem" }}>
+        <h1>Policy Evaluation</h1>
+        <p style={{ maxWidth: "65ch", marginTop: "0.5rem" }}>
+          Audit your codebase against ISO 27001 controls. Run automated checks and leverage LLMs
+          to generate remediation advice for detected violations.
+        </p>
+      </header>
+
       <div className="policy-actions">
         <div className="policy-action-card">
           <header>
-            <h3>Full evaluation (uncapped)</h3>
+            <h3>Full Evaluation</h3>
             <p className="muted">
-              Scans the entire knowledge graph. This can be slow on large codebases, but is the closest match to
-              experiment-grade behavior.
+              Scans the entire knowledge graph. Best for final compliance verification.
+              May take longer for large codebases.
             </p>
           </header>
           <button onClick={() => baseEvalMutation.mutate(undefined)} disabled={baseEvalPending}>
@@ -679,10 +675,10 @@ const PolicyPage = () => {
 
         <div className="policy-action-card">
           <header>
-            <h3>Interactive (capped) evaluation</h3>
+            <h3>Interactive Evaluation</h3>
             <p className="muted">
-              Recommended for UI triage. Caps results so one rule does not dominate, and can early-stop by limiting the
-              number of methods scanned.
+              Recommended for rapid triage. Limits the scan scope to provide quicker feedback
+              during development or review sessions.
             </p>
           </header>
 
@@ -857,513 +853,250 @@ const PolicyPage = () => {
                     <p className="muted">No fixable violations found.</p>
                   ) : (
                     displayedViolationSummaries.map((item, index) => {
-                    const violationKey = `${item.violationId || "unknown"}::${
-                      item.targetMethod || ""
-                    }::${item.filePath || ""}`;
-                    const remediationOutcome = remediationPreviews[violationKey];
-                    const applyOutcome = remediationApplies[violationKey];
-                    const verification = remediationOutcome?.verification as
-                      | Record<string, unknown>
-                      | undefined;
-                    const targetRuleStatus =
-                      typeof verification?.target_rule_status === "string"
-                        ? verification.target_rule_status
-                        : remediationOutcome?.opa_status;
-                    const overallStatus =
-                      typeof verification?.overall_status === "string"
-                        ? verification.overall_status
-                        : undefined;
-                    const newViolations =
-                      Array.isArray(verification?.new_violations)
-                        ? verification?.new_violations?.length
-                        : undefined;
-                    const remainingViolations =
-                      Array.isArray(verification?.remaining_violations)
-                        ? verification?.remaining_violations?.length
-                        : undefined;
-                    const isStarting =
-                      remediationPending && activeRemediationKey === violationKey;
-                    const isApplying = applyPending && activeApplyKey === violationKey;
-                    const disableRemediationButtons = remediationPending || applyPending;
-                    const reviewSaved = reviewSavedByKey[violationKey];
-                    const reviewDraft = reviewDraftByKey[violationKey] ?? {
-                      label: undefined,
-                      notes: "",
-                      includeGraphContext: true
-                    };
-                    const explanation = explanationsByKey[violationKey];
-                    const isExplaining = explainPending && activeExplainKey === violationKey;
-                    const isSavingReview = saveReviewPending && activeSaveReviewKey === violationKey;
+                      const violationKey = `${item.violationId || "unknown"}::${item.targetMethod || ""
+                        }::${item.filePath || ""}`;
+                      const remediationOutcome = remediationPreviews[violationKey];
+                      const applyOutcome = remediationApplies[violationKey];
+                      const verification = remediationOutcome?.verification as
+                        | Record<string, unknown>
+                        | undefined;
+                      const targetRuleStatus =
+                        typeof verification?.target_rule_status === "string"
+                          ? verification.target_rule_status
+                          : remediationOutcome?.opa_status;
+                      const overallStatus =
+                        typeof verification?.overall_status === "string"
+                          ? verification.overall_status
+                          : undefined;
+                      const newViolations =
+                        Array.isArray(verification?.new_violations)
+                          ? verification?.new_violations?.length
+                          : undefined;
+                      const remainingViolations =
+                        Array.isArray(verification?.remaining_violations)
+                          ? verification?.remaining_violations?.length
+                          : undefined;
+                      const isStarting =
+                        remediationPending && activeRemediationKey === violationKey;
+                      const isApplying = applyPending && activeApplyKey === violationKey;
+                      const disableRemediationButtons = remediationPending || applyPending;
+                      const reviewSaved = reviewSavedByKey[violationKey];
+                      const reviewDraft = reviewDraftByKey[violationKey] ?? {
+                        label: undefined,
+                        notes: "",
+                        includeGraphContext: true
+                      };
+                      const explanation = explanationsByKey[violationKey];
+                      const isExplaining = explainPending && activeExplainKey === violationKey;
+                      const isSavingReview = saveReviewPending && activeSaveReviewKey === violationKey;
 
-                    const applyVerification = applyOutcome?.verification;
-                    const applyCompilation = applyOutcome?.compilation;
-                    const applyBaselineCount = Array.isArray(applyVerification?.baseline)
-                      ? applyVerification?.baseline?.length
-                      : undefined;
-                    const applyAfterCount = Array.isArray(applyVerification?.after)
-                      ? applyVerification?.after?.length
-                      : undefined;
-                    const applyNewCount = Array.isArray(applyVerification?.new_violations)
-                      ? applyVerification?.new_violations?.length
-                      : undefined;
-                    const applyRemainingCount = Array.isArray(applyVerification?.remaining_violations)
-                      ? applyVerification?.remaining_violations?.length
-                      : undefined;
-                    return (
-                      <details
-                        className="violation-card"
-                        key={`violation-${index}`}
-                        open={index === defaultOpenViolationIndex}
-                      >
-                        <summary>
-                          <div className="violation-summary">
-                            <div className="violation-summary-text">
-                              <span className="violation-control">
-                                {item.control || item.violationId || "Unmapped control"}
-                              </span>
-                              <strong>{item.title}</strong>
-                              {item.reason && item.reason !== item.title && (
-                                <span className="violation-method">{item.reason}</span>
-                              )}
-                              {item.targetMethod && (
-                                <span className="violation-method">{item.targetMethod}</span>
-                              )}
-                              {item.filePath && (
-                                <span className="violation-path">{item.filePath}</span>
-                              )}
-                            </div>
-                            <div className="violation-summary-meta">
-                              <span
-                                className={`severity-chip severity-${item.severity
-                                  .toLowerCase()
-                                  .replace(/[^a-z0-9]+/g, "-")}`}
-                              >
-                                {item.severity}
-                              </span>
-                              {reviewSaved && (
-                                <span className="muted" style={{ fontWeight: 600 }}>
-                                  Reviewed
+                      const applyVerification = applyOutcome?.verification;
+                      const applyCompilation = applyOutcome?.compilation;
+                      const applyBaselineCount = Array.isArray(applyVerification?.baseline)
+                        ? applyVerification?.baseline?.length
+                        : undefined;
+                      const applyAfterCount = Array.isArray(applyVerification?.after)
+                        ? applyVerification?.after?.length
+                        : undefined;
+                      const applyNewCount = Array.isArray(applyVerification?.new_violations)
+                        ? applyVerification?.new_violations?.length
+                        : undefined;
+                      const applyRemainingCount = Array.isArray(applyVerification?.remaining_violations)
+                        ? applyVerification?.remaining_violations?.length
+                        : undefined;
+                      return (
+                        <details
+                          className="violation-card"
+                          key={`violation-${index}`}
+                          open={index === defaultOpenViolationIndex}
+                        >
+                          <summary>
+                            <div className="violation-summary">
+                              <div className="violation-summary-text">
+                                <span className="violation-control">
+                                  {item.control || item.violationId || "Unmapped control"}
                                 </span>
-                              )}
-                              {item.autoRemediationSupported ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="remediation-button"
-                                    disabled={
-                                      !item.violationId || disableRemediationButtons || isStarting
-                                    }
-                                    onClick={(event) =>
-                                      handleRemediation(
-                                        item.violationId,
-                                        item.targetMethod,
-                                        item.filePath,
-                                        violationKey,
-                                        event
-                                      )
-                                    }
-                                  >
-                                    {isStarting ? (
-                                      <>
-                                        <span className="btn-spinner" aria-hidden="true" />
-                                        <span>Previewing…</span>
-                                      </>
-                                    ) : (
-                                      <span>
-                                        {remediationOutcome ? "Re-run Preview" : "Preview Fix (Virtual)"}
-                                      </span>
-                                    )}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="remediation-button"
-                                    disabled={
-                                      !item.violationId || disableRemediationButtons || isApplying
-                                    }
-                                    onClick={(event) =>
-                                      handleApply(
-                                        item.violationId,
-                                        item.targetMethod,
-                                        item.filePath,
-                                        violationKey,
-                                        event
-                                      )
-                                    }
-                                  >
-                                    {isApplying ? (
-                                      <>
-                                        <span className="btn-spinner" aria-hidden="true" />
-                                        <span>Applying…</span>
-                                      </>
-                                    ) : (
-                                      <span>Run Apply+Verify (Dry-run)</span>
-                                    )}
-                                  </button>
-                                </>
-                              ) : (
-                                <span className="muted">No fix available</span>
-                              )}
-                            </div>
-                          </div>
-                        </summary>
-                        <div className="violation-body">
-                          <dl className="violation-meta-grid">
-                            <div>
-                              <dt>Violation ID</dt>
-                              <dd>{item.violationId ?? "—"}</dd>
-                            </div>
-                            <div>
-                              <dt>Control</dt>
-                              <dd>{item.control ?? item.violationId ?? "—"}</dd>
-                            </div>
-                            <div>
-                              <dt>Resource</dt>
-                              <dd>
-                                {item.filePath ? <code>{item.filePath}</code> : "—"}
-                                {item.targetMethod && (
-                                  <>
-                                    <br />
-                                    <code>{item.targetMethod}</code>
-                                  </>
-                                )}
-                              </dd>
-                            </div>
-                            <div>
-                              <dt>Severity</dt>
-                              <dd>{item.severity}</dd>
-                            </div>
-                          </dl>
-                          <div className="violation-detail-grid">
-                            <section>
-                              <header>
-                                <h4>Raw evidence</h4>
-                              </header>
-                              <CodeHighlight
-                                code={JSON.stringify(item.raw, null, 2)}
-                                language="json"
-                              />
-                            </section>
-                            <section>
-                              <header>
-                                <h4>Review</h4>
-                              </header>
-                              <div style={{ display: "grid", gap: "0.75rem" }}>
-                                <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={reviewDraft.includeGraphContext}
-                                    onChange={(event) =>
-                                      setReviewDraftByKey((prev) => ({
-                                        ...prev,
-                                        [violationKey]: {
-                                          ...reviewDraft,
-                                          includeGraphContext: event.target.checked
-                                        }
-                                      }))
-                                    }
-                                  />
-                                  Include evidence context
-                                </label>
-
-                                <button
-                                  type="button"
-                                  disabled={isExplaining || explainPending}
-                                  onClick={(event) =>
-                                    handleExplainOne(
-                                      item.raw,
-                                      violationKey,
-                                      reviewDraft.includeGraphContext,
-                                      event
-                                    )
-                                  }
-                                >
-                                  {isExplaining ? (
+                                <span className="violation-title">{item.title}</span>
+                                <span className="violation-location">
+                                  {item.targetMethod ? (
                                     <>
-                                      <span className="btn-spinner" aria-hidden="true" />
-                                      <span>Explaining…</span>
+                                      <code>{item.targetMethod.split("(")[0]}</code>
+                                      <span style={{ color: "var(--color-slate-300)" }}>•</span>
                                     </>
+                                  ) : null}
+                                  {item.filePath ? (
+                                    <span>{item.filePath.split("/").pop()}</span>
                                   ) : (
-                                    <span>Explain this violation</span>
+                                    "Unknown location"
                                   )}
-                                </button>
-
-                                {explanation?.explanation && (
-                                  <div className="llm-text">
-                                    <h5 style={{ margin: 0 }}>Explanation</h5>
-                                    <div
-                                      className="llm-text"
-                                      dangerouslySetInnerHTML={{
-                                        __html: toHtml(explanation.explanation)
-                                      }}
-                                    />
-                                    {explanation.model && (
-                                      <p className="muted" style={{ marginTop: "0.5rem" }}>
-                                        Model: <code>{explanation.model}</code>
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-
-                                <fieldset style={{ border: "1px solid rgba(0,0,0,0.1)", padding: "0.75rem" }}>
-                                  <legend style={{ padding: "0 0.25rem" }}>Label</legend>
-                                  <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                                    <input
-                                      type="radio"
-                                      name={`review-${violationKey}`}
-                                      checked={reviewDraft.label === "TP"}
-                                      onChange={() =>
-                                        setReviewDraftByKey((prev) => ({
-                                          ...prev,
-                                          [violationKey]: { ...reviewDraft, label: "TP" }
-                                        }))
-                                      }
-                                    />
-                                    TP
-                                  </label>
-                                  <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                                    <input
-                                      type="radio"
-                                      name={`review-${violationKey}`}
-                                      checked={reviewDraft.label === "FP"}
-                                      onChange={() =>
-                                        setReviewDraftByKey((prev) => ({
-                                          ...prev,
-                                          [violationKey]: { ...reviewDraft, label: "FP" }
-                                        }))
-                                      }
-                                    />
-                                    FP
-                                  </label>
-                                  <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                                    <input
-                                      type="radio"
-                                      name={`review-${violationKey}`}
-                                      checked={reviewDraft.label === "UNCLEAR"}
-                                      onChange={() =>
-                                        setReviewDraftByKey((prev) => ({
-                                          ...prev,
-                                          [violationKey]: { ...reviewDraft, label: "UNCLEAR" }
-                                        }))
-                                      }
-                                    />
-                                    Unclear
-                                  </label>
-                                </fieldset>
-
-                                <label style={{ display: "grid", gap: "0.25rem" }}>
-                                  Notes (optional)
-                                  <textarea
-                                    rows={4}
-                                    value={reviewDraft.notes}
-                                    onChange={(event) =>
-                                      setReviewDraftByKey((prev) => ({
-                                        ...prev,
-                                        [violationKey]: { ...reviewDraft, notes: event.target.value }
-                                      }))
-                                    }
-                                  />
-                                </label>
-
-                                <button
-                                  type="button"
-                                  disabled={!reviewDraft.label || isSavingReview || saveReviewPending}
-                                  onClick={(event) =>
-                                    handleSaveReview(
-                                      item.raw,
-                                      violationKey,
-                                      reviewDraft.label as PolicyReviewLabel,
-                                      reviewDraft.notes,
-                                      reviewDraft.includeGraphContext,
-                                      remediationOutcome,
-                                      applyOutcome,
-                                      event
-                                    )
-                                  }
-                                >
-                                  {isSavingReview ? (
-                                    <>
-                                      <span className="btn-spinner" aria-hidden="true" />
-                                      <span>Saving…</span>
-                                    </>
-                                  ) : (
-                                    <span>Save review</span>
-                                  )}
-                                </button>
-
-                                {reviewSaved && (
-                                  <div className="callout">
-                                    <p className="muted" style={{ margin: 0 }}>
-                                      Saved as <code>{reviewSaved.reviewId}</code>
-                                      {reviewSaved.storePath ? (
-                                        <>
-                                          {" "}
-                                          to <code>{reviewSaved.storePath}</code>
-                                        </>
-                                      ) : null}
-                                    </p>
-                                    {reviewSaved.scrubWarnings &&
-                                      reviewSaved.scrubWarnings.length > 0 && (
-                                        <details style={{ marginTop: "0.5rem" }}>
-                                          <summary>Scrub warnings</summary>
-                                          <CodeHighlight
-                                            code={JSON.stringify(reviewSaved.scrubWarnings, null, 2)}
-                                            language="json"
-                                          />
-                                        </details>
-                                      )}
-                                  </div>
-                                )}
+                                </span>
                               </div>
-                            </section>
-                            <section>
-                              <header>
-                                <h4>Remediation</h4>
-                              </header>
-                              {!item.autoRemediationSupported ? (
-                                <p className="callout callout-error">
-                                  No automatic remediation for this rule yet.
-                                </p>
-                              ) : !item.violationId ? (
-                                <p className="muted">
-                                  This violation is missing an identifier required for remediation.
-                                </p>
-                              ) : (
-                                <>
-                                  <p className="remediation-note">Preview does not modify files.</p>
+                              <div className="violation-summary-meta">
+                                {item.autoRemediationSupported && (
+                                  <span className="badge badge-fixable">Fix Available</span>
+                                )}
+                                <span
+                                  className={`badge badge-${item.severity
+                                    .toLowerCase()
+                                    .replace(/[^a-z0-9]+/g, "-")}`}
+                                >
+                                  {item.severity}
+                                </span>
+                              </div>
+                            </div>
+                          </summary>
 
-                                  <h5>Preview Fix (Virtual)</h5>
-                                  {!remediationOutcome ? (
-                                    <p className="muted">
-                                      Run “Preview Fix (Virtual)” to propose and validate a patch in memory.
-                                    </p>
-                                  ) : (
-                                    <div className="remediation-panel">
-                                      <p className="remediation-status">
-                                        {remediationOutcome.opa_status
-                                          ? `OPA: ${remediationOutcome.opa_status}`
-                                          : remediationOutcome.status}
-                                        {remediationOutcome.rule_id ? ` (${remediationOutcome.rule_id})` : ""}
-                                      </p>
-                                      {remediationOutcome.explanation && (
-                                        <p className="remediation-note">{remediationOutcome.explanation}</p>
-                                      )}
-                                      {typeof remediationOutcome.error === "string" &&
-                                        formatAutoRemediationError(remediationOutcome.error) && (
-                                          <p className="callout callout-error">
-                                            {formatAutoRemediationError(remediationOutcome.error)}
-                                          </p>
-                                        )}
-                                      {targetRuleStatus && (
-                                        <p className="remediation-note">Target rule status: {targetRuleStatus}</p>
-                                      )}
-                                      {overallStatus && (
-                                        <p className="remediation-note">Overall status: {overallStatus}</p>
-                                      )}
-                                      {typeof newViolations === "number" && (
-                                        <p className="remediation-note">New violations: {newViolations}</p>
-                                      )}
-                                      {typeof remainingViolations === "number" && (
-                                        <p className="remediation-note">
-                                          Remaining violations: {remainingViolations}
-                                        </p>
-                                      )}
-                                      {remediationOutcome.updated_source_code ? (
-                                        <CodeHighlight
-                                          code={remediationOutcome.updated_source_code}
-                                          language="java"
-                                        />
-                                      ) : (
-                                        <CodeHighlight
-                                          code={JSON.stringify(remediationOutcome, null, 2)}
-                                          language="json"
-                                        />
-                                      )}
-                                      {remediationOutcome.diff && (
-                                        <CodeHighlight code={remediationOutcome.diff} language="text" />
-                                      )}
-                                    </div>
-                                  )}
+                          <div className="violation-body">
+                            <dl className="violation-meta-grid">
+                              <div>
+                                <dt>Violation ID</dt>
+                                <dd>{item.violationId ?? "—"}</dd>
+                              </div>
+                              <div>
+                                <dt>Control</dt>
+                                <dd>{item.control ?? "—"}</dd>
+                              </div>
+                              <div>
+                                <dt>Full Path</dt>
+                                <dd className="break-all" style={{ fontSize: "0.85rem", fontFamily: "var(--font-mono)" }}>
+                                  {item.filePath ?? "—"}
+                                </dd>
+                              </div>
+                            </dl>
 
-                                  <h5>Apply + Verify (Dry-run)</h5>
-                                  {!applyOutcome ? (
-                                    <p className="muted">
-                                      Run “Apply+Verify (Dry-run)” to exercise the backend apply loop (no changes are
-                                      persisted).
-                                    </p>
-                                  ) : (
-                                    <div className="remediation-panel">
-                                      <p className="remediation-status">Status: {applyOutcome.status}</p>
-                                      {typeof applyOutcome.error === "string" &&
-                                        formatAutoRemediationError(applyOutcome.error) && (
-                                          <p className="callout callout-error">
-                                            {formatAutoRemediationError(applyOutcome.error)}
-                                          </p>
-                                        )}
-                                      {applyVerification?.error && (
-                                        <p className="callout callout-error">
-                                          Verification error: {applyVerification.error}
-                                        </p>
-                                      )}
-                                      {applyVerification?.target_rule_status && (
-                                        <p className="remediation-note">
-                                          Target rule status: {applyVerification.target_rule_status}
-                                        </p>
-                                      )}
-                                      {applyVerification?.overall_status && (
-                                        <p className="remediation-note">
-                                          Overall status: {applyVerification.overall_status}
-                                        </p>
-                                      )}
-                                      {(typeof applyBaselineCount === "number" ||
-                                        typeof applyAfterCount === "number") && (
-                                        <p className="remediation-note">
-                                          Violations: {applyBaselineCount ?? "—"} → {applyAfterCount ?? "—"}
-                                        </p>
-                                      )}
-                                      {typeof applyNewCount === "number" && (
-                                        <p className="remediation-note">New violations: {applyNewCount}</p>
-                                      )}
-                                      {typeof applyRemainingCount === "number" && (
-                                        <p className="remediation-note">
-                                          Remaining violations: {applyRemainingCount}
-                                        </p>
-                                      )}
-                                      {applyCompilation && (
-                                        <>
-                                          <p className="remediation-note">
-                                            Compilation:{" "}
-                                            {applyCompilation.attempted
-                                              ? applyCompilation.success
-                                                ? "success"
-                                                : "failed"
-                                              : "skipped"}
-                                          </p>
-                                          {applyCompilation.output_snippet ? (
-                                            <CodeHighlight
-                                              code={applyCompilation.output_snippet}
-                                              language="text"
+                            <div className="violation-actions-grid">
+                              <section className="violation-section">
+                                <header>
+                                  <h4>Analysis & Review</h4>
+                                </header>
+
+                                <div style={{ display: "grid", gap: "1rem" }}>
+                                  {/* Review Controls */}
+                                  <div style={{ background: "white", padding: "1rem", borderRadius: "8px", border: "1px solid var(--color-slate-200)" }}>
+                                    <fieldset style={{ border: "none", padding: 0, margin: "0 0 1rem 0" }}>
+                                      <legend style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--color-slate-500)", marginBottom: "0.5rem" }}>
+                                        Mark status
+                                      </legend>
+                                      <div style={{ display: "flex", gap: "1rem" }}>
+                                        {["TP", "FP", "UNCLEAR"].map((label) => (
+                                          <label key={label} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem", fontWeight: 500 }}>
+                                            <input
+                                              type="radio"
+                                              name={`review-${violationKey}`}
+                                              checked={reviewDraft.label === label}
+                                              onChange={() =>
+                                                setReviewDraftByKey((prev) => ({
+                                                  ...prev,
+                                                  [violationKey]: { ...reviewDraft, label: label as any }
+                                                }))
+                                              }
                                             />
-                                          ) : applyCompilation.skipped_reason ? (
-                                            <p className="muted">{applyCompilation.skipped_reason}</p>
-                                          ) : null}
-                                        </>
-                                      )}
-                                      {applyOutcome.updated_source_code && (
-                                        <CodeHighlight code={applyOutcome.updated_source_code} language="java" />
-                                      )}
-                                      {applyOutcome.diff && (
-                                        <CodeHighlight code={applyOutcome.diff} language="text" />
-                                      )}
+                                            {label}
+                                          </label>
+                                        ))}
+                                      </div>
+                                    </fieldset>
+
+                                    <textarea
+                                      rows={3}
+                                      placeholder="Add review notes..."
+                                      style={{ width: "100%", marginBottom: "1rem" }}
+                                      value={reviewDraft.notes}
+                                      onChange={(e) =>
+                                        setReviewDraftByKey((prev) => ({
+                                          ...prev,
+                                          [violationKey]: { ...reviewDraft, notes: e.target.value }
+                                        }))
+                                      }
+                                    />
+
+                                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                                      <button
+                                        type="button"
+                                        disabled={!reviewDraft.label || isSavingReview}
+                                        onClick={(e) => handleSaveReview(item.raw, violationKey, reviewDraft.label as any, reviewDraft.notes, reviewDraft.includeGraphContext, remediationOutcome, applyOutcome, e)}
+                                      >
+                                        {isSavingReview ? "Saving..." : "Save Review"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-secondary"
+                                        style={{ background: "transparent", border: "1px solid var(--color-slate-300)", color: "var(--color-slate-600)" }}
+                                        disabled={isExplaining}
+                                        onClick={(e) => handleExplainOne(item.raw, violationKey, true, e)}
+                                      >
+                                        {isExplaining ? "Analyzing..." : "Ask AI to Explain"}
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {explanation?.explanation && (
+                                    <div className="remediation-panel" style={{ borderLeft: "4px solid var(--color-primary-500)" }}>
+                                      <h5 style={{ marginTop: 0, color: "var(--color-primary-700)" }}>AI Explanation</h5>
+                                      <div
+                                        className="llm-text"
+                                        dangerouslySetInnerHTML={{
+                                          __html: toHtml(explanation.explanation)
+                                        }}
+                                      />
                                     </div>
                                   )}
-                                </>
-                              )}
-                            </section>
+                                </div>
+                              </section>
+
+                              <section className="violation-section">
+                                <header>
+                                  <h4>Remediation</h4>
+                                </header>
+
+                                {!item.autoRemediationSupported ? (
+                                  <div className="callout" style={{ background: "var(--color-slate-100)", border: "none" }}>
+                                    <p className="muted" style={{ margin: 0 }}>Automated remediation is not available for this violation type.</p>
+                                  </div>
+                                ) : (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                                      <button
+                                        type="button"
+                                        disabled={isStarting || disableRemediationButtons}
+                                        onClick={(e) => handleRemediation(item.violationId, item.targetMethod, item.filePath, violationKey, e)}
+                                      >
+                                        {isStarting ? "Generating..." : "Preview Fix"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleApply(item.violationId, item.targetMethod, item.filePath, violationKey, e)}
+                                        disabled={isApplying || disableRemediationButtons}
+                                        style={{ background: "white", color: "var(--color-success)", border: "1px solid var(--color-success)", boxShadow: "none" }}
+                                      >
+                                        {isApplying ? "Applying..." : "Apply Fix"}
+                                      </button>
+                                    </div>
+
+                                    {(remediationOutcome || applyOutcome) && (
+                                      <div className="remediation-panel">
+                                        {/* Simplified status display for brevity in this view */}
+                                        <p className="remediation-status">
+                                          {applyOutcome ? `Apply Status: ${applyOutcome.status}` : `Preview Status: ${remediationOutcome?.status}`}
+                                        </p>
+                                        {(applyOutcome?.updated_source_code || remediationOutcome?.updated_source_code) && (
+                                          <div style={{ maxHeight: "300px", overflow: "auto", marginTop: "1rem" }}>
+                                            <CodeHighlight
+                                              code={applyOutcome?.updated_source_code || remediationOutcome?.updated_source_code || ""}
+                                              language="java"
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </section>
+                            </div>
                           </div>
-                        </div>
-                      </details>
-                    );
-                  })
+                        </details>
+                      );
+                    })
                   )}
                 </div>
               )}

@@ -71,8 +71,8 @@ const UploadPage = () => {
     const activityStatus = status.error
       ? "error"
       : status.complete
-      ? "success"
-      : "running";
+        ? "success"
+        : "running";
     upsertActivity({
       key: "upload",
       label: "Upload & Ingestion",
@@ -133,38 +133,52 @@ const UploadPage = () => {
 
   const shouldRenderStatusBanner = Boolean(
     status &&
-      ((status.message && status.message !== "Idle") || showProgress || !status.complete)
+    ((status.message && status.message !== "Idle") || showProgress || !status.complete)
   );
 
   return (
     <section className="card">
-      <h1>Upload Java Project</h1>
-      <p>
-        Upload a ZIP file containing your Java source tree. The backend will
-        parse the project, populate Neo4j, and rebuild the semantic embedding
-        index.
-      </p>
+      <header style={{ marginBottom: "2rem" }}>
+        <h1>Upload Codebase</h1>
+        <p style={{ maxWidth: "60ch", marginTop: "0.5rem" }}>
+          Upload a ZIP archive of your Java project. The system will parse the source tree,
+          ingest it into the graph database, and generate semantic embeddings for search.
+        </p>
+      </header>
       <form className="upload-form" onSubmit={handleSubmit}>
-        <label className="file-input">
-          <span>Select ZIP archive</span>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".zip"
-            disabled={isProcessing}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              setSelectedName(file ? file.name : null);
-            }}
-          />
-        </label>
-        {selectedName && (
-          <p className="file-selected">Selected: {selectedName}</p>
-        )}
-        <button type="submit" disabled={isProcessing}>
-          {isProcessing && <span className="btn-spinner" aria-hidden="true" />}
-          <span>{isProcessing ? "Processing…" : "Upload & Ingest"}</span>
-        </button>
+        <div className="upload-container">
+          <label className="file-input">
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📦</div>
+            <span style={{ fontSize: "1.1rem", fontWeight: 500 }}>
+              {selectedName ? "Change ZIP archive" : "Click to select ZIP archive"}
+            </span>
+            <span style={{ fontSize: "0.9rem", opacity: 0.8, marginTop: "0.5rem" }}>
+              or drag and drop file here
+            </span>
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".zip"
+              disabled={isProcessing}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                setSelectedName(file ? file.name : null);
+              }}
+            />
+            {selectedName && (
+              <div className="file-selected-text">
+                <span>📄 {selectedName}</span>
+              </div>
+            )}
+          </label>
+
+          <div className="upload-actions">
+            <button type="submit" className="btn-primary" disabled={isProcessing || !selectedName}>
+              {isProcessing && <span className="btn-spinner" aria-hidden="true" />}
+              <span>{isProcessing ? "Processing..." : "Upload & Ingest"}</span>
+            </button>
+          </div>
+        </div>
       </form>
       {showProgress && (
         <div
@@ -187,9 +201,8 @@ const UploadPage = () => {
       )}
       {result && (
         <div
-          className={`callout ${
-            result.error ? "callout-error" : "callout-success"
-          }`}
+          className={`callout ${result.error ? "callout-error" : "callout-success"
+            }`}
         >
           {result.error ? (
             <div>

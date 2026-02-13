@@ -1,5 +1,4 @@
-import { useActivityContext } from "../context/ActivityContext";
-import HealthStatus from "./HealthStatus";
+import { useActivityContext } from "../../context/ActivityContext";
 
 const statusClassMap: Record<string, string> = {
   running: "activity-running",
@@ -40,7 +39,6 @@ const ActivityTray = () => {
           </ul>
         </>
       )}
-      <HealthStatus />
     </aside>
   );
 };

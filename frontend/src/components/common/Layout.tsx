@@ -3,7 +3,9 @@ import SidebarNav from "./SidebarNav";
 import Breadcrumbs from "./Breadcrumbs";
 import ActivityTray from "./ActivityTray";
 import { Toaster } from "react-hot-toast";
-import { useActivityContext } from "../context/ActivityContext";
+import { useActivityContext } from "../../context/ActivityContext";
+
+import HealthStatus from "./HealthStatus";
 
 const Layout = ({ children }: PropsWithChildren) => {
   useActivityContext();
@@ -14,6 +16,7 @@ const Layout = ({ children }: PropsWithChildren) => {
       <div className="app-body">
         <header className="app-header">
           <Breadcrumbs />
+          <HealthStatus variant="header" />
         </header>
         <div className="app-body-content">
           <main className="app-content">{children}</main>

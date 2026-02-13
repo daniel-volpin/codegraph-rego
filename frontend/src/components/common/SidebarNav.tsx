@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import "./Sidebar.css";
 
 const routes = [
   { to: "/", label: "Overview" },
@@ -14,8 +15,11 @@ const SidebarNav = () => {
   return (
     <div className="sidebar-nav">
       <div className="sidebar-brand">
-        <span className="nav-logo">CodeGraph</span>
-        <span className="nav-subtitle">Knowledge Graph Console</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
+          <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "linear-gradient(135deg, var(--color-primary-500), var(--color-primary-700))" }}></div>
+          <span className="nav-logo">CodeGraph</span>
+        </div>
+        <span className="nav-subtitle">Compliance & Search Console</span>
       </div>
       <nav>
         <ul>

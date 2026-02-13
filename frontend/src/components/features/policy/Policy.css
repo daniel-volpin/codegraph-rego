@@ -1,0 +1,262 @@
+/* --- Policy / Violation Cards --- */
+.violation-card {
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    background: white;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transition: all var(--transition-normal);
+}
+
+.violation-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-primary-200);
+}
+
+.violation-card[open] {
+    border-color: var(--color-primary-300);
+    box-shadow: var(--shadow-md);
+}
+
+.violation-card summary {
+    padding: 1.25rem 1.5rem;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: white;
+    transition: background-color var(--transition-fast);
+    font-weight: 500;
+}
+
+.violation-card summary:hover {
+    background-color: var(--color-slate-50);
+}
+
+.violation-card summary::-webkit-details-marker {
+    display: none;
+}
+
+.violation-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 1rem;
+}
+
+.violation-summary-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.violation-control {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-slate-500);
+    font-weight: 600;
+}
+
+.violation-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-slate-900);
+}
+
+.violation-location {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--color-slate-500);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.violation-summary-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.violation-body {
+    border-top: 1px solid var(--border-default);
+    padding: 1.5rem;
+    background: var(--color-slate-50);
+}
+
+/* Badge Styles */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.badge-high {
+    background: var(--color-badge-high-bg);
+    color: var(--color-badge-high-text);
+}
+
+.badge-medium {
+    background: var(--color-badge-medium-bg);
+    color: var(--color-badge-medium-text);
+}
+
+.badge-low {
+    background: var(--color-badge-low-bg);
+    color: var(--color-badge-low-text);
+}
+
+.badge-fixable {
+    background: var(--color-primary-50);
+    color: var(--color-primary-700);
+    border: 1px solid var(--color-primary-100);
+}
+
+/* Metadata Grid */
+.violation-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-default);
+}
+
+.violation-meta-grid div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.violation-meta-grid dt {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-slate-500);
+}
+
+.violation-meta-grid dd {
+    font-size: 0.95rem;
+    color: var(--color-slate-900);
+    margin: 0;
+    font-weight: 500;
+}
+
+/* Action Sections */
+.violation-actions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+@media (max-width: 1000px) {
+    .violation-actions-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.violation-section h4 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--color-slate-800);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Remediation Panel */
+.remediation-panel {
+    background: white;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+}
+
+.remediation-status {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--color-slate-900);
+}
+
+.remediation-note {
+    font-size: 0.9rem;
+    color: var(--color-slate-600);
+    margin-bottom: 1rem;
+}
+
+/* Grid Layout for Policy Actions */
+.policy-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.policy-action-card {
+    background: white;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    height: 100%;
+}
+
+.policy-cap-grid {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.policy-cap-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--color-slate-600);
+}
+
+.policy-advanced {
+    grid-column: 1 / -1;
+    background: var(--color-slate-50);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+}
+
+.policy-advanced summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--color-slate-700);
+}
+
+.policy-advanced-body {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-default);
+}
+
+.policy-llm-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+    margin-top: 1rem;
+}
+
+.policy-results {
+    margin-top: 3rem;
+}

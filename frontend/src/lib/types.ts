@@ -140,3 +140,27 @@ export interface HealthCheckResponse {
   opa: boolean;
   details: Record<string, unknown>;
 }
+
+export interface PolicyViolationSummary {
+  raw: Record<string, unknown>;
+  violationId?: string;
+  filePath?: string;
+  targetMethod?: string;
+  title: string;
+  reason?: string;
+  severity: string;
+  control: string;
+  autoRemediationSupported: boolean;
+}
+
+export interface AutoRemediationResult {
+  status: string;
+  opa_status?: string;
+  rule_id?: string;
+  explanation?: string;
+  error?: string;
+  updated_source_code?: string;
+  diff?: string;
+  verification?: Record<string, unknown>;
+  compilation?: Record<string, unknown>;
+}
