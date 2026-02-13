@@ -17,13 +17,13 @@ import CodeHighlight from "../components/CodeHighlight";
 
 interface ViolationSummary {
   raw: Record<string, unknown>;
-  control: string;
-  severity: string;
-  resource: string;
-  description: string;
   violationId?: string;
-  method?: string;
   filePath?: string;
+  targetMethod?: string;
+  title: string;
+  reason?: string;
+  severity: string;
+  control: string;
 }
 
 const PolicyPage = () => {
@@ -167,31 +167,56 @@ const PolicyPage = () => {
     }
     return evaluation.violations.map((item) => {
       const record = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
-      const pickString = (keys: string[], fallback = "—") => {
-        for (const key of keys) {
-          const value = record[key];
-          if (typeof value === "string" && value.trim().length > 0) {
-            return value;
-          }
+      const getString = (key: string): string | undefined => {
+        const value = record[key];
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          return trimmed.length > 0 ? trimmed : undefined;
         }
-        return fallback;
+        return undefined;
       };
-      const control = pickString(["control", "id", "policy", "rule"], "Unknown");
-      const severity = pickString(["severity", "level", "priority"], "Low");
-      const resource = pickString(["resource", "node", "target", "entity", "asset"], "—");
-      const description = pickString(["description", "message", "detail", "reason"], "—");
-      const violationId = pickString(["violation_id", "id", "control", "rule"], "");
-      const method = pickString(["target_method", "method", "signature"], undefined);
-      const filePath = pickString(["file_path", "file"], undefined);
+
+      const violationId = getString("violation_id") ?? getString("id");
+      const reason =
+        getString("reason") ??
+        getString("description") ??
+        getString("message") ??
+        getString("detail");
+      const severity = getString("severity") ?? "high";
+      const filePath = getString("file_path") ?? getString("file");
+      const targetMethod =
+        getString("target_method") ?? getString("method") ?? getString("signature");
+
+      const controlMetadata =
+        record.control_metadata && typeof record.control_metadata === "object"
+          ? (record.control_metadata as Record<string, unknown>)
+          : undefined;
+      const control =
+        (controlMetadata?.title && typeof controlMetadata.title === "string"
+          ? controlMetadata.title
+          : undefined) ??
+        (controlMetadata?.control && typeof controlMetadata.control === "string"
+          ? controlMetadata.control
+          : undefined) ??
+        (controlMetadata?.control_id && typeof controlMetadata.control_id === "string"
+          ? controlMetadata.control_id
+          : undefined) ??
+        (controlMetadata?.id && typeof controlMetadata.id === "string"
+          ? controlMetadata.id
+          : undefined) ??
+        violationId ??
+        "Unknown";
+
+      const title = violationId ?? reason ?? "Violation";
       return {
         raw: record,
         control,
-        severity,
-        resource,
-        description,
         violationId,
-        method,
-        filePath
+        filePath,
+        targetMethod,
+        title,
+        reason,
+        severity
       } satisfies ViolationSummary;
     });
   }, [evaluation]);
@@ -357,7 +382,7 @@ const PolicyPage = () => {
                 <div className="violation-deck">
                   {violationSummaries.map((item, index) => {
                     const violationKey = `${item.violationId || "unknown"}::${
-                      item.method || ""
+                      item.targetMethod || ""
                     }::${item.filePath || ""}`;
                     const remediationOutcome = remediationPreviews[violationKey];
                     const verification = remediationOutcome?.verification as
@@ -391,11 +416,14 @@ const PolicyPage = () => {
                           <div className="violation-summary">
                             <div className="violation-summary-text">
                               <span className="violation-control">
-                                {item.control || "Unmapped control"}
+                                {item.control || item.violationId || "Unmapped control"}
                               </span>
-                              <strong>{item.description}</strong>
-                              {item.method && (
-                                <span className="violation-method">{item.method}</span>
+                              <strong>{item.title}</strong>
+                              {item.reason && item.reason !== item.title && (
+                                <span className="violation-method">{item.reason}</span>
+                              )}
+                              {item.targetMethod && (
+                                <span className="violation-method">{item.targetMethod}</span>
                               )}
                               {item.filePath && (
                                 <span className="violation-path">{item.filePath}</span>
@@ -413,12 +441,12 @@ const PolicyPage = () => {
                                 type="button"
                                 className="remediation-button"
                                 disabled={
-                                  !item.violationId || isStarting
+                                  !item.violationId || remediationPending || isStarting
                                 }
                                 onClick={(event) =>
                                   handleRemediation(
                                     item.violationId,
-                                    item.method,
+                                    item.targetMethod,
                                     item.filePath,
                                     violationKey,
                                     event
@@ -432,7 +460,7 @@ const PolicyPage = () => {
                                   </>
                                 ) : (
                                   <span>
-                                    {remediationOutcome ? "Re-run Preview" : "Fix &amp; Verify"}
+                                    {remediationOutcome ? "Re-run Preview" : "Preview Fix (Virtual)"}
                                   </span>
                                 )}
                               </button>
@@ -446,8 +474,20 @@ const PolicyPage = () => {
                               <dd>{item.violationId ?? "—"}</dd>
                             </div>
                             <div>
+                              <dt>Control</dt>
+                              <dd>{item.control ?? item.violationId ?? "—"}</dd>
+                            </div>
+                            <div>
                               <dt>Resource</dt>
-                              <dd>{item.resource}</dd>
+                              <dd>
+                                {item.filePath ? <code>{item.filePath}</code> : "—"}
+                                {item.targetMethod && (
+                                  <>
+                                    <br />
+                                    <code>{item.targetMethod}</code>
+                                  </>
+                                )}
+                              </dd>
                             </div>
                             <div>
                               <dt>Severity</dt>
@@ -468,6 +508,9 @@ const PolicyPage = () => {
                               <header>
                                 <h4>Remediation</h4>
                               </header>
+                              <p className="remediation-note">
+                                Preview does not modify files.
+                              </p>
                               {!item.violationId ? (
                                 <p className="muted">
                                   This violation is missing an identifier required for remediation.
