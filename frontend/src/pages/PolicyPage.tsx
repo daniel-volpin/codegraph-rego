@@ -545,6 +545,16 @@ const PolicyPage = () => {
     return violationSummaries.filter((item) => item.autoRemediationSupported);
   }, [showRemediableOnly, violationSummaries]);
 
+  const defaultOpenViolationIndex = useMemo(() => {
+    if (displayedViolationSummaries.length === 0) {
+      return 0;
+    }
+    const firstFixable = displayedViolationSummaries.findIndex(
+      (item) => item.autoRemediationSupported
+    );
+    return firstFixable >= 0 ? firstFixable : 0;
+  }, [displayedViolationSummaries]);
+
   const autoRemediableCount = useMemo(() => {
     return violationSummaries.reduce((count, item) => {
       return count + (item.autoRemediationSupported ? 1 : 0);
@@ -821,14 +831,14 @@ const PolicyPage = () => {
               {hasViolations && (
                 <div className="callout">
                   <p>
-                    Auto-remediation available for{" "}
+                    Fix available for{" "}
                     <strong>
                       {autoRemediableCount} / {evaluation.violations?.length ?? violationSummaries.length}
                     </strong>{" "}
                     violation(s).
                   </p>
                   <p>
-                    Auto-remediation (Preview/Apply) is currently implemented for:{" "}
+                    Fix (Preview/Apply) is currently implemented for:{" "}
                     <code>ISO-A.10-WEAK-HASH</code>, <code>ISO-A.10-WEAK-CRYPTO</code>.
                   </p>
                   <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.75rem" }}>
@@ -837,14 +847,14 @@ const PolicyPage = () => {
                       checked={showRemediableOnly}
                       onChange={(event) => setShowRemediableOnly(event.target.checked)}
                     />
-                    Show only auto-remediable violations
+                    Show only fixable violations
                   </label>
                 </div>
               )}
               {hasViolations && violationSummaries.length > 0 && (
                 <div className="violation-deck">
                   {displayedViolationSummaries.length === 0 ? (
-                    <p className="muted">No auto-remediable violations found.</p>
+                    <p className="muted">No fixable violations found.</p>
                   ) : (
                     displayedViolationSummaries.map((item, index) => {
                     const violationKey = `${item.violationId || "unknown"}::${
@@ -903,7 +913,7 @@ const PolicyPage = () => {
                       <details
                         className="violation-card"
                         key={`violation-${index}`}
-                        open={index === 0}
+                        open={index === defaultOpenViolationIndex}
                       >
                         <summary>
                           <div className="violation-summary">
@@ -991,7 +1001,7 @@ const PolicyPage = () => {
                                   </button>
                                 </>
                               ) : (
-                                <span className="muted">No auto-remediation</span>
+                                <span className="muted">No fix available</span>
                               )}
                             </div>
                           </div>
