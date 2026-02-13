@@ -23,6 +23,8 @@ rc4_pattern := "cipher.getinstance(\"rc4"
 ecb_pattern := "cipher.getinstance(\"aes/ecb"
 random_ctor_pattern := "new random("
 math_random_pattern := "math.random("
+java_util_random_pattern := "java.util.random"
+threadlocal_random_pattern := "threadlocalrandom.current"
 sql_execute_pattern := "executequery("
 sql_execute_update_pattern := "executeupdate("
 sql_execute_generic_pattern := "execute("
@@ -127,6 +129,19 @@ servlet_context if {
   contains(lower(input.source_code), "httpservletrequest")
 }
 
+benchmark_context if {
+  input.target_method != null
+  contains(lower(input.target_method), "benchmarktest")
+}
+
+random_context if {
+  servlet_context
+}
+
+random_context if {
+  benchmark_context
+}
+
 source_insecure_random if {
   input.source_code != null
   src := lower(input.source_code)
@@ -139,6 +154,18 @@ source_insecure_random if {
   contains(src, math_random_pattern)
 }
 
+source_insecure_random if {
+  input.source_code != null
+  src := lower(input.source_code)
+  contains(src, java_util_random_pattern)
+}
+
+source_insecure_random if {
+  input.source_code != null
+  src := lower(input.source_code)
+  contains(src, threadlocal_random_pattern)
+}
+
 calls_insecure_random if {
   calls := input.graph_context.calls
   calls != null
@@ -148,12 +175,12 @@ calls_insecure_random if {
 }
 
 insecure_random if {
-  servlet_context
+  random_context
   source_insecure_random
 }
 
 insecure_random if {
-  servlet_context
+  random_context
   calls_insecure_random
 }
 
