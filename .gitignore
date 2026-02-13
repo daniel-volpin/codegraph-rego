@@ -71,13 +71,7 @@ frontend/build/
 frontend/.vite/
 frontend/.env
 frontend/.env.*
-frontend/package-lock.json
-frontend/yarn.lock
-frontend/pnpm-lock.yaml
 frontend/.turbo
 
 # General Node.js (if any root-level node project)
 node_modules/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
