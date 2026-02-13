@@ -63,6 +63,17 @@ const isAutoRemediationSupported = (ruleId?: string) => {
   return false;
 };
 
+if (import.meta.env.DEV) {
+  console.assert(
+    isAutoRemediationSupported("ISO-A.10-WEAK-HASH"),
+    "Expected ISO-A.10-WEAK-HASH to be recognized as auto-remediable."
+  );
+  console.assert(
+    isAutoRemediationSupported("A.10-WEAK-HASH"),
+    "Expected A.10-WEAK-HASH to be recognized as auto-remediable via normalization."
+  );
+}
+
 const PolicyPage = () => {
   const [limit, setLimit] = useState(5);
   const [model, setModel] = useState("");
@@ -349,6 +360,12 @@ const PolicyPage = () => {
     return violationSummaries.filter((item) => item.autoRemediationSupported);
   }, [showRemediableOnly, violationSummaries]);
 
+  const autoRemediableCount = useMemo(() => {
+    return violationSummaries.reduce((count, item) => {
+      return count + (item.autoRemediationSupported ? 1 : 0);
+    }, 0);
+  }, [violationSummaries]);
+
   useEffect(() => {
     if (baseEvalPending) {
       upsertActivity({
@@ -508,6 +525,13 @@ const PolicyPage = () => {
               </p>
               {hasViolations && (
                 <div className="callout">
+                  <p>
+                    Auto-remediation available for{" "}
+                    <strong>
+                      {autoRemediableCount} / {evaluation.violations?.length ?? violationSummaries.length}
+                    </strong>{" "}
+                    violation(s).
+                  </p>
                   <p>
                     Auto-remediation (Preview/Apply) is currently implemented for:{" "}
                     <code>ISO-A.10-WEAK-HASH</code>, <code>ISO-A.10-WEAK-CRYPTO</code>.
