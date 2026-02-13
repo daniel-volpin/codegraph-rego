@@ -3,18 +3,18 @@
 # Default target
 .DEFAULT_GOAL := help
 
-install: ## Install dependencies using uv
+install: ## Install dependencies using uv and yarn
 	@echo "Installing backend dependencies..."
 	@uv pip install -r pyproject.toml
 	@echo "Installing frontend dependencies..."
-	@cd frontend && npm install
+	@cd frontend && yarn install
 
 dev: ## Run the application in development mode (backend + frontend)
 	@echo "Starting development servers..."
 	@# Trap SIGINT to kill child processes on Ctrl+C
 	@trap 'kill 0' SIGINT; \
 	uv run uvicorn app:app --host 0.0.0.0 --port 8000 & \
-	cd frontend && npm run dev -- --port 5173 & \
+	cd frontend && yarn dev --port 5173 & \
 	wait
 
 test: ## Run backend tests
@@ -24,7 +24,7 @@ lint: ## Run linting (ruff for backend, eslint for frontend)
 	@echo "Linting backend..."
 	@uv run ruff check .
 	@echo "Linting frontend..."
-	@cd frontend && npm run lint || echo "Add 'lint' script to package.json first"
+	@cd frontend && yarn lint || echo "Add 'lint' script to package.json first"
 
 format: ## Format code (ruff for backend, prettier for frontend)
 	@echo "Formatting backend..."

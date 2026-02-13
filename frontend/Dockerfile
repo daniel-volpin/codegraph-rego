@@ -4,10 +4,10 @@ FROM node:20-slim
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
+COPY package.json yarn.lock ./
 
 # Install dependencies
-RUN npm install
+RUN yarn install
 
 # Copy source code
 COPY . .
@@ -16,4 +16,4 @@ COPY . .
 EXPOSE 5173
 
 # Command (Development mode)
-CMD ["npm", "run", "dev", "--", "--host"]
+CMD ["yarn", "dev", "--host"]

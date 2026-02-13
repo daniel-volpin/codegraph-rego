@@ -83,3 +83,12 @@ frontend/.turbo
 
 # General Node.js (if any root-level node project)
 node_modules/
+
+# Yarn
+frontend/yarn-error.log
+.yarn/
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
