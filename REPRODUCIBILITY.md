@@ -31,6 +31,16 @@ Use `configs/benchmark_selection.example.json` as the starting template:
 cp configs/benchmark_selection.example.json configs/benchmark_selection.json
 ```
 
+To evaluate multiple CWE categories (detection + explanation), you can use `configs/benchmark_selection.multicat.json`
+directly (or copy it and pin `testcase_ids` for smaller smoke runs).
+
+To evaluate **full oracle coverage** for the selected CWE set (no sampling limit), use:
+- `configs/benchmark_selection.multicat_full.json`
+
+Pinned smoke sets (explicit testcase IDs, fast and deterministic):
+- `configs/benchmark_selection.pinned_33089.json` (CWE-330 + CWE-89)
+- `configs/benchmark_selection.remediation_cwe328_smoke.json` (CWE-328 only; suitable for remediation smoke)
+
 Edit these files as needed:
 - `configs/benchmark_selection.json`
   - `benchmark_root`: defaults to `${OWASP_BENCHMARK_ROOT}`
@@ -40,6 +50,7 @@ Edit these files as needed:
 - `configs/control_mapping.json`
   - maps ISO controls → CWE → Rego rule ids
   - includes split A.10 rule ids (`ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-CRYPTO`)
+  - adds evaluation-only categories for `CWE-330` (`ISO-A.10-WEAK-RANDOM`) and `CWE-89` (`ISO-A.8-SQL-INJECTION`)
 - `debug_fn_analysis` (in selection config)
   - when true, writes `fn_analysis.jsonl` with per-testcase context
 
@@ -58,6 +69,22 @@ python run_benchmark_eval.py --config configs/benchmark_selection.json \
   --reset-neo4j
 ```
 
+Full-coverage (selected CWEs only):
+```bash
+python run_benchmark_eval.py --config configs/benchmark_selection.multicat_full.json \
+  --mapping configs/control_mapping.json \
+  --output-dir outputs/benchmark_eval_multicat_full \
+  --reset-neo4j
+```
+
+Pinned smoke (CWE-330 + CWE-89):
+```bash
+python run_benchmark_eval.py --config configs/benchmark_selection.pinned_33089.json \
+  --mapping configs/control_mapping.json \
+  --output-dir outputs/benchmark_eval_pinned33089 \
+  --reset-neo4j
+```
+
 Outputs:
 - `outputs/benchmark_eval/metrics.json`
 - `outputs/benchmark_eval/metrics.csv`
@@ -68,6 +95,22 @@ Outputs:
 python run_explanation_eval.py --config configs/benchmark_selection.json \
   --mapping configs/control_mapping.json \
   --output-dir outputs/explanation_eval \
+  --reset-neo4j
+```
+
+Full-coverage (selected CWEs only):
+```bash
+python run_explanation_eval.py --config configs/benchmark_selection.multicat_full.json \
+  --mapping configs/control_mapping.json \
+  --output-dir outputs/explanation_eval_multicat_full \
+  --reset-neo4j
+```
+
+Pinned smoke (CWE-330 + CWE-89):
+```bash
+python run_explanation_eval.py --config configs/benchmark_selection.pinned_33089.json \
+  --mapping configs/control_mapping.json \
+  --output-dir outputs/explanation_eval_pinned33089 \
   --reset-neo4j
 ```
 
@@ -86,6 +129,15 @@ python run_remediation_eval.py --config configs/benchmark_selection.json \
   --reset-neo4j
 ```
 
+Pinned smoke (CWE-328 only):
+```bash
+python run_remediation_eval.py --config configs/benchmark_selection.remediation_cwe328_smoke.json \
+  --mapping configs/control_mapping.json \
+  --output-dir outputs/remediation_eval_cwe328_smoke \
+  --sample-size 5 \
+  --reset-neo4j
+```
+
 Notes:
 - This runner reuses the same remediation apply/verify service flow as `/remediation/apply`.
 - Default mode is `dry_run` (no persistent source changes).
@@ -94,6 +146,15 @@ Outputs:
 - `outputs/remediation_eval/remediation_metrics.json`
 - `outputs/remediation_eval/remediation_metrics.csv`
 - `outputs/remediation_eval/table.md` (or `table.tex`)
+
+## One-Command Experiment Runner (Manifest)
+This runs detection, explanation, and (where supported) remediation in sequence and writes a manifest tying outputs to a git SHA:
+```bash
+python run_experiments.py --config configs/benchmark_selection.multicat_full.json \
+  --mapping configs/control_mapping.json \
+  --output-root outputs \
+  --reset-neo4j
+```
 
 ## Embedding Cache (Performance)
 Embedding builds now reuse cached vectors to avoid re-encoding unchanged methods.

@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 from codegraph.db import get_neo4j_driver
 from codegraph.evaluation.benchmark import (
     CategorySpec,
+    coverage_report,
     extract_testcase_id,
     find_ground_truth_file,
     inspect_ground_truth_schema,
@@ -181,6 +182,7 @@ def main() -> int:
     ground_truth_lookup = {rec.testcase_id: rec.label for rec in truth_records}
     categories_by_id = {spec.id: spec for spec in categories}
     selected_category_ids = selection_cfg.get("categories") or [spec.id for spec in categories]
+    coverage_by_category = coverage_report(selection, selected_category_ids)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -232,6 +234,8 @@ def main() -> int:
             continue
         testcase_ids = sampled_by_category.get(category_id, [])
         stats = score_category(spec, ground_truth_lookup, testcase_ids, violations_by_testcase)
+        if category_id in coverage_by_category and isinstance(stats, dict):
+            stats.update(coverage_by_category[category_id])
         metrics[category_id] = stats
         rows.append(
             [
@@ -260,7 +264,20 @@ def main() -> int:
                 if file_path:
                     occurrences = extract_api_occurrences(
                         file_path,
-                        terms=["MD5", "MessageDigest", "getInstance", "Cipher"],
+                        terms=[
+                            "MD5",
+                            "MessageDigest",
+                            "Cipher",
+                            "Random",
+                            "SecureRandom",
+                            "Math.random",
+                            "java.sql",
+                            "Statement",
+                            "PreparedStatement",
+                            "executeQuery",
+                            "executeUpdate",
+                            "prepareStatement",
+                        ],
                         context_lines=3,
                     )
                 fn_records.append(
@@ -300,6 +317,7 @@ def main() -> int:
         "ground_truth_schema": truth_schema,
         "categories": [spec.__dict__ for spec in categories if spec.id in selected_category_ids],
         "selection": selection_cfg,
+        "coverage_by_category": coverage_by_category,
         "metrics": metrics,
         "violation_count": len(violations),
         "sampled_testcases_by_category": sampled_by_category,

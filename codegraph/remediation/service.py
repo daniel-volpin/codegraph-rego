@@ -12,6 +12,7 @@ The original codebase, Neo4j graph, and filesystem remain untouched.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import difflib
 import json
 import logging
@@ -210,11 +211,200 @@ def _build_verification_summary(
     }
 
 
+@dataclass(frozen=True)
+class RemediationTaskSpec:
+    rule_id: str
+    objective: str
+    allowed_transformations: List[str]
+    non_goals: List[str]
+    extra_examples: List[str] = field(default_factory=list)
+
+
+class RemediationPromptTemplate:
+    TASK_SPEC_BEGIN = "BEGIN_TASK_SPEC_JSON"
+    TASK_SPEC_END = "END_TASK_SPEC_JSON"
+
+    VIOLATION_BEGIN = "BEGIN_VIOLATION_JSON"
+    VIOLATION_END = "END_VIOLATION_JSON"
+
+    CONTROL_BEGIN = "BEGIN_CONTROL_METADATA_JSON"
+    CONTROL_END = "END_CONTROL_METADATA_JSON"
+
+    SOURCE_BEGIN = "BEGIN_SOURCE_SNIPPET"
+    SOURCE_END = "END_SOURCE_SNIPPET"
+
+    GRAPH_BEGIN = "BEGIN_GRAPH_CONTEXT_JSON"
+    GRAPH_END = "END_GRAPH_CONTEXT_JSON"
+
+    VECTOR_BEGIN = "BEGIN_VECTOR_CONTEXT_JSON"
+    VECTOR_END = "END_VECTOR_CONTEXT_JSON"
+
+    PREV_ERR_BEGIN = "BEGIN_PREVIOUS_ERRORS"
+    PREV_ERR_END = "END_PREVIOUS_ERRORS"
+
+    @staticmethod
+    def system_prompt() -> str:
+        # Keep this rule-agnostic for thesis clarity and evaluation fairness.
+        return (
+            "You are a remediation agent for Java code.\n"
+            "Use ONLY the evidence provided in the user message blocks.\n"
+            "Preserve behavior and the method signature. Make the smallest change that satisfies the task.\n\n"
+            "Output EXACTLY one of the following:\n"
+            "1) The full replacement method only (signature + body braces)\n"
+            "2) NO_FIX: <reason>\n\n"
+            "Do not output JSON, markdown, backticks, code fences, diffs, or any extra commentary."
+        )
+
+    @classmethod
+    def format_task_spec_json(cls, spec: RemediationTaskSpec) -> str:
+        examples = list(spec.extra_examples or [])
+        if len(examples) > 1:
+            LOGGER.warning(
+                "Task spec extra_examples has %d items; truncating to 1 for determinism.",
+                len(examples),
+            )
+            examples = examples[:1]
+
+        # Deterministic key order via insertion order + sort_keys=False.
+        payload = {
+            "rule_id": spec.rule_id,
+            "objective": spec.objective,
+            "allowed_transformations": list(spec.allowed_transformations or []),
+            "non_goals": list(spec.non_goals or []),
+            "extra_examples": examples,
+        }
+        return "\n".join(
+            [
+                cls.TASK_SPEC_BEGIN,
+                json.dumps(payload, indent=2, ensure_ascii=True, sort_keys=False),
+                cls.TASK_SPEC_END,
+            ]
+        )
+
+    @classmethod
+    def build_user_prompt(
+        cls,
+        context: Dict[str, Any],
+        spec: RemediationTaskSpec,
+        previous_errors: Optional[List[str]] = None,
+    ) -> str:
+        violation = context.get("violation") or {}
+        evidence = context.get("evidence") or {}
+        catalog_entry = context.get("catalog_entry") or {}
+
+        target_method = context.get("target_method") or context.get("method") or "unknown"
+        file_path = context.get("file_path") or "unknown"
+        source_code = (evidence.get("source_code") or "").rstrip()
+        graph_context = evidence.get("graph_context") or {}
+        vector_context = evidence.get("vector_context") or []
+
+        violation_json = json.dumps(violation, indent=2, ensure_ascii=True, sort_keys=True)
+        control_json = json.dumps(catalog_entry, indent=2, ensure_ascii=True, sort_keys=True)
+        graph_json = json.dumps(graph_context, indent=2, ensure_ascii=True, sort_keys=True)
+        vector_json = json.dumps(vector_context, indent=2, ensure_ascii=True, sort_keys=True)
+
+        sections: List[str] = []
+        sections.append(f"FILE_PATH: {file_path}")
+        sections.append(f"TARGET_METHOD: {target_method}")
+        sections.append("")
+        sections.append(cls.format_task_spec_json(spec))
+        sections.append("")
+        sections.extend([cls.VIOLATION_BEGIN, violation_json, cls.VIOLATION_END])
+        sections.append("")
+        sections.extend([cls.CONTROL_BEGIN, control_json, cls.CONTROL_END])
+        sections.append("")
+        sections.extend([cls.SOURCE_BEGIN, source_code or "<empty>", cls.SOURCE_END])
+        sections.append("")
+        sections.extend([cls.GRAPH_BEGIN, graph_json, cls.GRAPH_END])
+        sections.append("")
+        sections.extend([cls.VECTOR_BEGIN, vector_json, cls.VECTOR_END])
+
+        errors_note = "\n".join(previous_errors or [])
+        if errors_note:
+            sections.append("")
+            sections.extend([cls.PREV_ERR_BEGIN, errors_note, cls.PREV_ERR_END])
+
+        return "\n".join(sections)
+
+    @classmethod
+    def build_messages(
+        cls,
+        *,
+        context: Dict[str, Any],
+        spec: RemediationTaskSpec,
+        previous_errors: Optional[List[str]] = None,
+    ) -> List[Dict[str, str]]:
+        return [
+            {"role": "system", "content": cls.system_prompt()},
+            {
+                "role": "user",
+                "content": cls.build_user_prompt(context, spec, previous_errors),
+            },
+        ]
+
+
 class RemediationService:
     """Preview-only remediation using virtual OPA evaluation."""
 
+    _NO_FIX_PREFIX = "NO_FIX:"
+    _FIX_STRATEGIES: Dict[str, Dict[str, Any]] = {
+        "ISO-A.10-WEAK-HASH": {
+            "objective": "Replace weak hash usage (MD5) with SHA-256 with minimal edits.",
+            "allowed_transformations": [
+                "Replace MessageDigest.getInstance(\"MD5\") with MessageDigest.getInstance(\"SHA-256\").",
+                "Replace DigestUtils.md5* usage with a SHA-256 equivalent only if it is already available in the existing codebase context.",
+            ],
+            "non_goals": [
+                "Do not change the method signature.",
+                "Do not refactor unrelated code or rename variables.",
+                "Do not add new logging or unrelated security changes.",
+            ],
+            "extra_examples": [],
+        },
+        "ISO-A.10-WEAK-CRYPTO": {
+            "objective": "Replace weak or deprecated cipher usage with a strong alternative with minimal safe edits.",
+            "allowed_transformations": [
+                "Replace DES/RC4/AES-ECB patterns with a modern AEAD mode (prefer AES/GCM/NoPadding) only if the required IV/nonce/key context is already present in the method evidence.",
+                "If a safe minimal fix is not possible with the given evidence, return NO_FIX.",
+            ],
+            "non_goals": [
+                "Do not invent key management, IV/nonce generation, protocol changes, or storage formats.",
+                "Do not change the method signature.",
+                "Do not refactor unrelated code.",
+            ],
+            "extra_examples": [],
+        },
+    }
+
     def __init__(self, *, llm_client=generate_chat_completion) -> None:
         self._llm_client = llm_client
+
+    @classmethod
+    def _rule_id_variants(cls, rule_id: str) -> List[str]:
+        text = str(rule_id or "").strip()
+        if not text:
+            return []
+        variants = [text]
+        if text.startswith("ISO-27001-"):
+            base = text[len("ISO-27001-") :]
+        elif text.startswith("ISO-"):
+            base = text[len("ISO-") :]
+        else:
+            base = text
+        for candidate in (base, f"ISO-{base}", f"ISO-27001-{base}"):
+            if candidate and candidate not in variants:
+                variants.append(candidate)
+        return variants
+
+    @classmethod
+    def _resolve_fix_strategy(cls, rule_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        if not rule_id:
+            return None
+        for candidate in cls._rule_id_variants(rule_id):
+            strategy = cls._FIX_STRATEGIES.get(candidate)
+            if strategy is not None:
+                return strategy
+        return None
 
     def preview_virtual_fix(
         self,
@@ -230,19 +420,43 @@ class RemediationService:
                 "violation_id": violation_id,
             }
 
+        rule_id = context.get("rule_id")
+        if self._resolve_fix_strategy(rule_id) is None:
+            return {
+                "status": "INVALID",
+                "error": "unsupported_rule_for_auto_fix",
+                "violation_id": violation_id,
+                "rule_id": rule_id,
+                "target_method": context.get("target_method"),
+                "file_path": context.get("file_path"),
+            }
+
         llm_output = self.propose_full_method(context)
         updated_source = llm_output.get("updated_source_code")
         explanation = llm_output.get("explanation")
+        parse_error = llm_output.get("parse_error")
+        if isinstance(parse_error, str) and parse_error.startswith("no_fix:"):
+            reason = parse_error[len("no_fix:") :].strip() or "no safe minimal fix available"
+            return {
+                "status": "FAIL",
+                "error": f"{self._NO_FIX_PREFIX} {reason}",
+                "violation_id": violation_id,
+                "target_method": context.get("target_method"),
+                "file_path": context.get("file_path"),
+                "rule_id": rule_id,
+                "explanation": explanation,
+            }
+
         original_source = (context.get("evidence") or {}).get("source_code") or ""
         diff = _unified_diff(original_source, updated_source or "", label="method")
         if not updated_source:
             return {
                 "status": "ERROR",
-                "error": "LLM did not return updated_source_code",
+                "error": parse_error or "LLM did not return updated_source_code",
                 "violation_id": violation_id,
                 "target_method": context.get("target_method"),
                 "file_path": context.get("file_path"),
-                "rule_id": context.get("rule_id"),
+                "rule_id": rule_id,
             }
 
         base_graph = (context.get("evidence") or {}).get("graph_context") or {}
@@ -312,6 +526,16 @@ class RemediationService:
                 "error": f"Violation {violation_id} not found",
                 "violation_id": violation_id,
             }
+        rule_id = context.get("rule_id")
+        if self._resolve_fix_strategy(rule_id) is None:
+            return {
+                "status": "INVALID",
+                "error": "unsupported_rule_for_auto_fix",
+                "violation_id": violation_id,
+                "rule_id": rule_id,
+                "target_method": context.get("target_method") or target_method,
+                "file_path": context.get("file_path") or file_path,
+            }
         target_method = target_method or context.get("target_method")
         file_path = file_path or context.get("file_path")
         if not target_method or not file_path:
@@ -351,6 +575,18 @@ class RemediationService:
             raw_output = llm_output.get("raw_output")
             if not updated_source:
                 parse_error = llm_output.get("parse_error")
+                if isinstance(parse_error, str) and parse_error.startswith("no_fix:"):
+                    reason = parse_error[len("no_fix:") :].strip() or "no safe minimal fix available"
+                    return {
+                        "status": "FAIL",
+                        "error": f"{self._NO_FIX_PREFIX} {reason}",
+                        "violation_id": violation_id,
+                        "target_method": target_method,
+                        "file_path": file_path,
+                        "rule_id": rule_id,
+                        "attempt_count": attempt + 1,
+                        "errors": attempt_errors,
+                    }
                 if parse_error:
                     attempt_errors.append(str(parse_error))
                 else:
@@ -573,50 +809,18 @@ class RemediationService:
     def propose_full_method(
         self, context: Dict[str, Any], previous_errors: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        violation = context.get("violation") or {}
-        evidence = context.get("evidence") or {}
-        catalog_entry = context.get("catalog_entry") or {}
-        source_code = (evidence.get("source_code") or "").strip()
-        graph_context = evidence.get("graph_context") or {}
-        vector_context = evidence.get("vector_context") or []
-        file_path = context.get("file_path") or "<unknown>"
-        policy_reason = violation.get("reason") or violation.get("description") or ""
-        policy_title = catalog_entry.get("title") if isinstance(catalog_entry, dict) else ""
-        errors_note = "\n".join(previous_errors or [])
-
-        system_prompt = (
-            "You are a senior Java engineer improving code for ISO 27001 policy compliance. "
-            "Use ONLY the provided evidence (source snippet, graph context, vector context, control metadata). "
-            "Output ONLY the full replacement method (signature + body braces). "
-            "Do not output JSON, markdown, or any extra commentary. "
-            "Preserve behavior and method signature. "
-            "Do not change unrelated strings or logic; only replace weak hash usage (MD5 -> SHA-256) and "
-            "make only minimal edits needed for that goal."
+        rule_id = context.get("rule_id")
+        strategy = self._resolve_fix_strategy(str(rule_id) if rule_id else None) or {}
+        spec = RemediationTaskSpec(
+            rule_id=str(rule_id or ""),
+            objective=str(strategy.get("objective") or "").strip(),
+            allowed_transformations=list(strategy.get("allowed_transformations") or []),
+            non_goals=list(strategy.get("non_goals") or []),
+            extra_examples=list(strategy.get("extra_examples") or []),
         )
-        if errors_note:
-            system_prompt += " Adjust the method to address previous errors."
-
-        user_sections = [
-            f"Violation: {violation}",
-            f"Policy: {policy_title or ''} — {policy_reason}",
-            f"File path: {file_path}",
-            f"Target method: {context.get('target_method') or 'unknown'}",
-            "Source snippet:",
-            "```java",
-            source_code,
-            "```",
-            "Graph context:",
-            json.dumps(graph_context, indent=2),
-            "Similar methods:",
-            json.dumps(vector_context, indent=2),
-        ]
-        if errors_note:
-            user_sections.append(f"Previous errors:\n{errors_note}")
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "\n".join(user_sections)},
-        ]
+        messages = RemediationPromptTemplate.build_messages(
+            context=context, spec=spec, previous_errors=previous_errors
+        )
 
         try:
             response = self._llm_client(messages, max_tokens=1500)
@@ -629,6 +833,17 @@ class RemediationService:
     @staticmethod
     def _parse_llm_virtual_json(response: Any) -> Dict[str, Any]:
         content = _extract_assistant_content(response).strip()
+        fence = re.search(r"```(?:java)?\s*(.*?)```", content, flags=re.DOTALL | re.IGNORECASE)
+        candidate = fence.group(1).strip() if fence else content
+        if candidate.upper().startswith(RemediationService._NO_FIX_PREFIX):
+            reason = candidate[len(RemediationService._NO_FIX_PREFIX) :].strip()
+            if not reason:
+                reason = "no safe minimal fix available"
+            return {
+                "updated_source_code": None,
+                "explanation": None,
+                "parse_error": f"no_fix: {reason}",
+            }
         json_hint = bool(
             (content.lstrip().startswith("{"))
             or ('"replacement_method_code"' in content)

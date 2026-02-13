@@ -2,11 +2,14 @@
   "model": "all-MiniLM-L6-v2",
   "dim": 384,
   "metric": "cosine",
-  "count": 733,
-  "built_at": "2025-12-07T22:22:49.745604+00:00",
+  "count": 345,
+  "built_at": "2026-02-13T16:14:52.227107+00:00",
   "index_path": "index/code_embeddings.index",
   "signature_map": {
     "full": "index/embedding_full_signature_map.json",
     "legacy": "index/embedding_signature_map.json"
-  }
+  },
+  "cache_path": "index/embedding_cache.json",
+  "cache_hits": 0,
+  "cache_misses": 345
 }

@@ -1,12 +1,39 @@
+# Environment variables
 .env
 .env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Python virtual environments
 .venv/
+venv/
+env/
+ENV/
 .python-version
 
 # Python cache/build artifacts
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
 .mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# Logs
+*.log
+*.log.*
+logs/
 
 # Uploaded corpora / ZIPs
 uploaded_code/*
@@ -15,19 +42,44 @@ uploaded_code/*
 # Generated embedding indexes
 index/*
 !index/.gitkeep
+!index/code_embeddings.index
+!index/embedding_metadata.json
+!index/embedding_signature_map.json
+!index/embedding_full_signature_map.json
 
 # Generated evaluation outputs
 outputs/
+
+# Local UI triage artifacts (kept locally, never committed)
+policy_evaluate.json
+policy_llm_enriched.json
 
 # Tooling / editor noise
 copilot-context/
 .github/
 .vscode/
-.DS_Store
+.idea/
+*.swp
+*.swo
+*~
 
-# Frontend builds
-frontend/node_modules
-frontend/dist
-frontend/.vite
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Frontend dependencies and builds
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
 frontend/.env
 frontend/.env.*
+frontend/.turbo
+
+# General Node.js (if any root-level node project)
+node_modules/

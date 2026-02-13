@@ -53,6 +53,24 @@
       "object": "CipherAlgorithm",
       "conditions": ["strongCipher"],
       "description": "Cryptographic controls should avoid weak ciphers and insecure modes"
+    },
+    {
+      "standard": "ISO-27001",
+      "id": "A.10-WEAK-RANDOM",
+      "subject": "System",
+      "action": "Protect",
+      "object": "Randomness",
+      "conditions": ["secureRandom"],
+      "description": "Security-sensitive code should avoid predictable randomness sources (e.g., java.util.Random)"
+    },
+    {
+      "standard": "ISO-27001",
+      "id": "A.8-SQL-INJECTION",
+      "subject": "Developer",
+      "action": "Validate",
+      "object": "SQLQuery",
+      "conditions": ["noInjection"],
+      "description": "Application code should prevent SQL injection by avoiding dynamic SQL concatenation with untrusted input"
     }
   ]
 }

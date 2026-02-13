@@ -23,6 +23,24 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Only display the first N violations when not using --json",
     )
+    parser.add_argument(
+        "--max-bundles",
+        type=int,
+        default=None,
+        help="Only scan the first N method bundles (early stop)",
+    )
+    parser.add_argument(
+        "--max-total-violations",
+        type=int,
+        default=None,
+        help="Stop after collecting N violations total (early stop)",
+    )
+    parser.add_argument(
+        "--max-per-violation-id",
+        type=int,
+        default=None,
+        help="Cap how many times a single violation_id can appear",
+    )
     return parser.parse_args(argv)
 
 
@@ -44,7 +62,11 @@ def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv)
     from codegraph.policy import integration as policy_integration
 
-    result = policy_integration.evaluate_policies()
+    result = policy_integration.evaluate_policies(
+        max_bundles=args.max_bundles,
+        max_total_violations=args.max_total_violations,
+        max_per_violation_id=args.max_per_violation_id,
+    )
     if args.json:
         print(json.dumps(result, indent=2))
     else:

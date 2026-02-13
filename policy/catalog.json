@@ -32,22 +32,6 @@
       ]
     },
     {
-      "id": "ISO-27001-A.12.4.1",
-      "control": "A.12.4.1",
-      "title": "Event Logging",
-      "reference": "ISO/IEC 27001:2022 A.12.4.1",
-      "summary": "Security events should be logged to record actions that could affect information security.",
-      "rego_module": "policy/iso_27001_access.rego",
-      "rego_rule": "violations",
-      "evidence_fields": [
-        "signature",
-        "annotations",
-        "modifiers",
-        "file_path",
-        "called_signatures"
-      ]
-    },
-    {
       "id": "ISO-A.9.4.1",
       "control": "A.9.4.1",
       "title": "Access Control for Applications",
@@ -64,6 +48,9 @@
     },
     {
       "id": "ISO-A.12.4.1",
+      "alias_ids": [
+        "ISO-27001-A.12.4.1"
+      ],
       "control": "A.12.4.1",
       "title": "Event Logging",
       "reference": "ISO/IEC 27001:2022 A.12.4.1",
@@ -108,6 +95,36 @@
         "called_signatures",
         "source_code",
         "analysis_flags"
+      ]
+    },
+    {
+      "id": "ISO-A.10-WEAK-RANDOM",
+      "control": "A.10",
+      "title": "Cryptography (Insecure Randomness)",
+      "reference": "ISO/IEC 27001:2022 A.10",
+      "summary": "Security-sensitive code should use cryptographically strong randomness rather than predictable PRNGs.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "called_signatures",
+        "source_code"
+      ]
+    },
+    {
+      "id": "ISO-A.8-SQL-INJECTION",
+      "control": "A.8",
+      "title": "Secure Development (SQL Injection)",
+      "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "summary": "Application code should prevent SQL injection by avoiding dynamic query construction with untrusted input.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "source_code",
+        "called_signatures"
       ]
     }
   ]

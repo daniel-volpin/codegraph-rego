@@ -6,7 +6,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 - **Semantic search** – embeds method snippets with Sentence Transformers, saves a FAISS index, and performs hybrid search that adds graph context.
 - **Policy evaluation** – exports Neo4j facts to OPA/Rego to enforce ISO controls, with optional LiteLLM-powered explanations.
 - **Remediation** – “Fix & Verify” loop that proposes patches (LLM), applies them in a temp workspace, compiles, re-ingests, and re-runs OPA to validate fixes.
-- **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, `/remediation/preview`, `/remediation/apply`, and `/health`.
+- **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, `/policy/explain_one`, `/policy/reviews`, `/remediation/preview`, `/remediation/apply`, and `/health`.
 
 ---
 
@@ -33,6 +33,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
      - `JAVA_ROOT_DIR` (defaults to `<repo>/uploaded_code`)
      - `INDEX_DIR`, `EMBEDDING_MODEL_NAME`
      - `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_API_BASE` for LiteLLM routing
+     - `UI_REVIEW_STORE_PATH` to override where UI triage reviews are appended (default: `outputs/policy_ui_reviews/reviews.jsonl`)
 
 4. **Ingest & embed (one-time per codebase change)**
 
@@ -50,6 +51,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 
 - `POST /search` (`query=...` form field) → semantic hits + graph neighbours
 - `GET /policy/evaluate` → raw ISO control violations (OPA)  
+- `GET /policy/evaluate?max_bundles=500&max_total_violations=100&max_per_violation_id=25` → faster interactive scan (caps work per violation id + overall)  
 - `GET /policy/catalog` → catalog of controls, evidence requirements, and Rego rule mapping  
 - `POST /policy/evaluate_with_llm?limit=5&model=...` → violations + LLM guidance  
 - `POST /upload` (zip file) → safe extraction, ingestion, embedding rebuild  
@@ -183,6 +185,12 @@ python run_explanation_eval.py --config configs/benchmark_selection.json --mappi
 python run_remediation_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/remediation_eval --sample-size 10 --reset-neo4j
 ```
 
+To run detection/explanation evaluation across multiple CWE categories (incl. `CWE-330` and `CWE-89`), use:
+```bash
+python run_benchmark_eval.py --config configs/benchmark_selection.multicat.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval_multicat --reset-neo4j
+python run_explanation_eval.py --config configs/benchmark_selection.multicat.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval_multicat --reset-neo4j
+```
+
 `run_remediation_eval.py` reuses the same apply/verify remediation service flow used by `/remediation/apply` (default `dry_run` mode) so evaluation behavior tracks production remediation logic.
 
 Set `OWASP_BENCHMARK_ROOT` before running (or edit the template config):
@@ -193,6 +201,19 @@ cp configs/benchmark_selection.example.json configs/benchmark_selection.json  # 
 ```
 
 See `REPRODUCIBILITY.md` for full prerequisites, configuration, and output formats.
+
+### Covered Categories (OWASP Benchmark)
+This prototype uses a manual CWE → ISO-control → Rego mapping layer (see `configs/control_mapping.json`) to evaluate detectors against the OWASP Benchmark ground truth.
+
+Current mapping includes:
+- `CWE-327` → `ISO-A.10-WEAK-CRYPTO`
+- `CWE-328` → `ISO-A.10-WEAK-HASH`
+- `CWE-330` → `ISO-A.10-WEAK-RANDOM`
+- `CWE-89` → `ISO-A.8-SQL-INJECTION` (pragmatic mapping for evaluation; not a claim of perfect ISO alignment)
+
+Auto-remediation is intentionally scoped and does **not** cover SQL injection:
+- Supported: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-CRYPTO`
+- Unsupported: `ISO-A.10-WEAK-RANDOM`, `ISO-A.8-SQL-INJECTION`
 
 ---
 

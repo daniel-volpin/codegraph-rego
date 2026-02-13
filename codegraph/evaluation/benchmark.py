@@ -32,6 +32,20 @@ class GroundTruthRecord:
     category: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class CoverageStats:
+    available_cases: int
+    selected_cases: int
+    sampled: bool
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "available_cases": int(self.available_cases),
+            "selected_cases": int(self.selected_cases),
+            "sampled": bool(self.sampled),
+        }
+
+
 def _normalize_cwe(value: str | None) -> str:
     if not value:
         return ""
@@ -112,13 +126,21 @@ def load_selection_config(path: Path) -> Dict[str, Any]:
         payload = json.load(handle)
     if not isinstance(payload, dict) or "benchmark_root" not in payload:
         raise ValueError("Selection config must include 'benchmark_root'.")
+    raw_max_cases = payload.get("max_cases_per_category")
+    max_cases: Optional[int] = None
+    if isinstance(raw_max_cases, int):
+        max_cases = raw_max_cases if raw_max_cases > 0 else None
+    elif isinstance(raw_max_cases, str) and raw_max_cases.strip().isdigit():
+        parsed = int(raw_max_cases.strip())
+        max_cases = parsed if parsed > 0 else None
     return {
         "benchmark_root": _expand_env_path(str(payload["benchmark_root"])),
         "java_relative_root": payload.get("java_relative_root", "src/main/java"),
         "ground_truth_path": _expand_env_path(payload.get("ground_truth_path")),
         "categories": payload.get("categories") or [],
         "testcase_ids": payload.get("testcase_ids") or [],
-        "max_cases_per_category": payload.get("max_cases_per_category"),
+        # Missing/null/0 means "no sampling limit".
+        "max_cases_per_category": max_cases,
         "seed": payload.get("seed", 7),
         "debug_fn_analysis": bool(payload.get("debug_fn_analysis", False)),
         "build_command": payload.get("build_command"),
@@ -238,6 +260,7 @@ class SelectionResult:
     selected_by_category: Dict[str, List[GroundTruthRecord]]
     selected_testcase_ids: List[str]
     missing_testcases: List[str] = field(default_factory=list)
+    coverage_by_category: Dict[str, CoverageStats] = field(default_factory=dict)
 
 
 def select_testcases(
@@ -252,6 +275,7 @@ def select_testcases(
     categories_by_id = {spec.id: spec for spec in categories}
     selected_by_category: Dict[str, List[GroundTruthRecord]] = {}
     selected_testcases: List[str] = []
+    coverage_by_category: Dict[str, CoverageStats] = {}
 
     for idx, category_id in enumerate(selected_ids):
         spec = categories_by_id.get(category_id)
@@ -262,17 +286,39 @@ def select_testcases(
         candidates = [rec for rec in records if _normalize_cwe(rec.cwe) in cwe_set]
         if filter_set:
             candidates = [rec for rec in candidates if rec.testcase_id in filter_set]
-        if max_cases and len(candidates) > max_cases:
+        available_cases = len(candidates)
+        sampled = False
+        if isinstance(max_cases, int) and max_cases > 0 and len(candidates) > max_cases:
             rng = random.Random(seed + idx)
             candidates = rng.sample(candidates, k=max_cases)
+            sampled = True
         selected_by_category[category_id] = candidates
         selected_testcases.extend([rec.testcase_id for rec in candidates])
+        coverage_by_category[category_id] = CoverageStats(
+            available_cases=available_cases,
+            selected_cases=len(candidates),
+            sampled=sampled,
+        )
 
     unique_testcases = sorted(set(selected_testcases))
     return SelectionResult(
         selected_by_category=selected_by_category,
         selected_testcase_ids=unique_testcases,
+        coverage_by_category=coverage_by_category,
     )
+
+
+def coverage_report(
+    selection: SelectionResult, selected_category_ids: List[str]
+) -> Dict[str, Dict[str, Any]]:
+    """Return JSON-serializable coverage stats for the selected category ids."""
+    report: Dict[str, Dict[str, Any]] = {}
+    for category_id in selected_category_ids:
+        stats = selection.coverage_by_category.get(category_id)
+        if stats is None:
+            continue
+        report[category_id] = stats.as_dict()
+    return report
 
 
 def stage_benchmark_subset(

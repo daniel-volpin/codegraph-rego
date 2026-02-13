@@ -5,9 +5,18 @@ from typing import Any, Dict, List
 from codegraph.policy.integration import evaluate_policies, get_policy_catalog_entries
 
 
-def evaluate() -> Dict[str, Any]:
+def evaluate(
+    *,
+    max_bundles: int | None = None,
+    max_total_violations: int | None = None,
+    max_per_violation_id: int | None = None,
+) -> Dict[str, Any]:
     """Run OPA evaluation and return the enriched result dictionary."""
-    return evaluate_policies()
+    return evaluate_policies(
+        max_bundles=max_bundles,
+        max_total_violations=max_total_violations,
+        max_per_violation_id=max_per_violation_id,
+    )
 
 
 def catalog() -> List[Dict[str, Any]]:

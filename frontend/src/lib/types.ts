@@ -32,6 +32,47 @@ export interface PolicyEvaluateResponse {
   error?: string;
 }
 
+export interface PolicyExplainOneRequest {
+  violation: Record<string, unknown>;
+  include_graph_context?: boolean;
+  model?: string | null;
+}
+
+export interface PolicyExplainOneResponse {
+  status: string;
+  explanation?: string | null;
+  model?: string | null;
+  include_graph_context: boolean;
+  error?: string | null;
+}
+
+export type PolicyReviewLabel = "TP" | "FP" | "UNCLEAR";
+
+export interface PolicyReviewCreateRequest {
+  label: PolicyReviewLabel;
+  notes?: string | null;
+  violation: Record<string, unknown>;
+  explanation?: string | null;
+  llm_model?: string | null;
+  include_graph_context?: boolean;
+  remediation_preview?: Record<string, unknown> | null;
+  remediation_apply?: Record<string, unknown> | null;
+}
+
+export interface PolicyReviewCreateResponse {
+  status: string;
+  review_id?: string | null;
+  store_path?: string | null;
+  scrub_warnings: string[];
+  error?: string | null;
+}
+
+export interface PolicyReviewListResponse {
+  status: string;
+  reviews: Record<string, unknown>[];
+  error?: string | null;
+}
+
 export interface PolicyCatalogEntry {
   id?: string;
   control?: string;
@@ -57,6 +98,37 @@ export interface RemediationPreviewResponse {
   opa_details?: unknown;
   diff?: string | null;
   verification?: Record<string, unknown> | null;
+  error?: string | null;
+}
+
+export interface RemediationVerificationSummary {
+  target_rule_status?: string | null;
+  overall_status?: string | null;
+  baseline?: Record<string, unknown>[] | null;
+  after?: Record<string, unknown>[] | null;
+  new_violations?: Record<string, unknown>[] | null;
+  remaining_violations?: Record<string, unknown>[] | null;
+  error?: string | null;
+}
+
+export interface RemediationCompilationResult {
+  attempted: boolean;
+  success: boolean;
+  output_snippet?: string | null;
+  skipped_reason?: string | null;
+}
+
+export interface RemediationApplyResponse {
+  status: string;
+  violation_id: string;
+  rule_id?: string | null;
+  target_method?: string | null;
+  file_path?: string | null;
+  updated_source_code?: string | null;
+  diff?: string | null;
+  verification?: RemediationVerificationSummary | null;
+  compilation?: RemediationCompilationResult | null;
+  metadata?: Record<string, unknown> | null;
   error?: string | null;
 }
 

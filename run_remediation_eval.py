@@ -15,6 +15,7 @@ from typing import Any, Dict, List
 from codegraph.api.services.remediation_service import apply_remediation
 from codegraph.db import get_neo4j_driver
 from codegraph.evaluation.benchmark import (
+    coverage_report,
     extract_testcase_id,
     find_ground_truth_file,
     inspect_ground_truth_schema,
@@ -163,6 +164,8 @@ def main() -> int:
     truth_records = load_ground_truth(benchmark_root, truth_path.as_posix())
     selection = select_testcases(truth_records, categories, selection_cfg)
     selected_ids = selection.selected_testcase_ids
+    selected_category_ids = selection_cfg.get("categories") or [spec.id for spec in categories]
+    coverage_by_category = coverage_report(selection, selected_category_ids)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -283,6 +286,7 @@ def main() -> int:
         "ground_truth_file": truth_path.as_posix(),
         "ground_truth_schema": truth_schema,
         "selection": selection_cfg,
+        "coverage_by_category": coverage_by_category,
         "mode": args.mode,
         "max_attempts": args.max_attempts,
         "attempted": attempted,
