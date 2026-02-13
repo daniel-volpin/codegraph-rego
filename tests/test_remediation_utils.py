@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import Mock
 
 try:
     import javalang  # noqa: F401
@@ -87,10 +88,8 @@ class RemediationUtilsTests(unittest.TestCase):
     def test_preview_virtual_fix_rejects_unsupported_rule_without_llm_call(self):
         svc_mod = self.service
 
-        def boom_llm(*_args, **_kwargs):
-            raise AssertionError("LLM should not be called for unsupported rules")
-
-        remediation = svc_mod.RemediationService(llm_client=boom_llm)
+        llm_client = Mock(return_value="public void noop() { return; }")
+        remediation = svc_mod.RemediationService(llm_client=llm_client)
         remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
             "violation": {"violation_id": "ISO-A.12.4.1", "reason": "logging"},
             "target_method": "com.example.Foo.update()",
@@ -104,14 +103,13 @@ class RemediationUtilsTests(unittest.TestCase):
         out = remediation.preview_virtual_fix("ISO-A.12.4.1")
         self.assertEqual(out.get("status"), "INVALID")
         self.assertEqual(out.get("error"), "unsupported_rule_for_auto_fix")
+        llm_client.assert_not_called()
 
     def test_apply_fix_rejects_unsupported_rule_without_llm_call(self):
         svc_mod = self.service
 
-        def boom_llm(*_args, **_kwargs):
-            raise AssertionError("LLM should not be called for unsupported rules")
-
-        remediation = svc_mod.RemediationService(llm_client=boom_llm)
+        llm_client = Mock(return_value="public void noop() { return; }")
+        remediation = svc_mod.RemediationService(llm_client=llm_client)
         remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
             "violation": {"violation_id": "ISO-A.12.4.1", "reason": "logging"},
             "target_method": "com.example.Foo.update()",
@@ -125,6 +123,49 @@ class RemediationUtilsTests(unittest.TestCase):
         out = remediation.apply_fix("ISO-A.12.4.1", mode="dry_run", max_attempts=1)
         self.assertEqual(out.get("status"), "INVALID")
         self.assertEqual(out.get("error"), "unsupported_rule_for_auto_fix")
+        llm_client.assert_not_called()
+
+    def test_prompt_template_system_is_rule_agnostic_and_task_spec_is_structured_json(self):
+        svc_mod = self.service
+
+        captured = []
+
+        def capture_llm(messages, *_args, **_kwargs):
+            captured.append(messages)
+            return "public void hash() { return; }"
+
+        remediation = svc_mod.RemediationService(llm_client=capture_llm)
+        base_context = {
+            "violation": {"violation_id": "X", "reason": "test"},
+            "target_method": "com.example.Foo.hash()",
+            "file_path": "Example.java",
+            "evidence": {"source_code": "public void hash() { }", "graph_context": {}, "vector_context": []},
+            "catalog_entry": {"title": "Test"},
+            "baseline_violations": [],
+        }
+
+        out_hash = remediation.propose_full_method({**base_context, "rule_id": "ISO-A.10-WEAK-HASH"})
+        self.assertIsNone(out_hash.get("parse_error"))
+        out_crypto = remediation.propose_full_method({**base_context, "rule_id": "ISO-A.10-WEAK-CRYPTO"})
+        self.assertIsNone(out_crypto.get("parse_error"))
+
+        self.assertEqual(len(captured), 2)
+        system_1 = captured[0][0]["content"]
+        system_2 = captured[1][0]["content"]
+        self.assertEqual(system_1, system_2)
+
+        upper = system_1.upper()
+        for needle in ["MD5", "SHA", "SHA-256", "DES", "RC4", "ECB"]:
+            self.assertNotIn(needle, upper)
+
+        user_1 = captured[0][1]["content"]
+        user_2 = captured[1][1]["content"]
+        self.assertIn("BEGIN_TASK_SPEC_JSON", user_1)
+        self.assertIn("END_TASK_SPEC_JSON", user_1)
+        self.assertIn('"rule_id": "ISO-A.10-WEAK-HASH"', user_1)
+        self.assertIn("BEGIN_TASK_SPEC_JSON", user_2)
+        self.assertIn("END_TASK_SPEC_JSON", user_2)
+        self.assertIn('"rule_id": "ISO-A.10-WEAK-CRYPTO"', user_2)
 
     def test_no_fix_output_is_handled(self):
         svc_mod = self.service
