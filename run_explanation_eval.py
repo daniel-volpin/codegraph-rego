@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Tuple
 
 from codegraph.db import get_neo4j_driver
 from codegraph.evaluation.benchmark import (
+    coverage_report,
     extract_testcase_id,
     find_ground_truth_file,
     inspect_ground_truth_schema,
@@ -171,6 +172,7 @@ def main() -> int:
     samples_per_category: Dict[str, int] = {}
     categories_by_id = {spec.id: spec for spec in categories}
     selected_category_ids = selection_cfg.get("categories") or [spec.id for spec in categories]
+    coverage_by_category = coverage_report(selection, selected_category_ids)
 
     total_with = total_without = total_count = 0
 
@@ -232,6 +234,8 @@ def main() -> int:
             "rate_with_context": round(rate_with, 4),
             "rate_without_context": round(rate_without, 4),
         }
+        if category_id in coverage_by_category:
+            metrics[category_id].update(coverage_by_category[category_id])
         rows.append(
             [
                 spec.label,
@@ -261,6 +265,7 @@ def main() -> int:
         "ground_truth_file": truth_path.as_posix(),
         "ground_truth_schema": truth_schema,
         "selection": selection_cfg,
+        "coverage_by_category": coverage_by_category,
         "metrics": metrics,
         "sample_count": len(samples),
     }
