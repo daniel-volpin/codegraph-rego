@@ -260,7 +260,20 @@ def main() -> int:
                 if file_path:
                     occurrences = extract_api_occurrences(
                         file_path,
-                        terms=["MD5", "MessageDigest", "getInstance", "Cipher"],
+                        terms=[
+                            "MD5",
+                            "MessageDigest",
+                            "Cipher",
+                            "Random",
+                            "SecureRandom",
+                            "Math.random",
+                            "java.sql",
+                            "Statement",
+                            "PreparedStatement",
+                            "executeQuery",
+                            "executeUpdate",
+                            "prepareStatement",
+                        ],
                         context_lines=3,
                     )
                 fn_records.append(
