@@ -42,6 +42,10 @@ uploaded_code/*
 # Generated embedding indexes
 index/*
 !index/.gitkeep
+!index/code_embeddings.index
+!index/embedding_metadata.json
+!index/embedding_signature_map.json
+!index/embedding_full_signature_map.json
 
 # Generated evaluation outputs
 outputs/
