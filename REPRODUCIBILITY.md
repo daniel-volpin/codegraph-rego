@@ -40,6 +40,7 @@ Edit these files as needed:
 - `configs/control_mapping.json`
   - maps ISO controls → CWE → Rego rule ids
   - includes split A.10 rule ids (`ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-CRYPTO`)
+  - adds evaluation-only categories for `CWE-330` (`ISO-A.10-WEAK-RANDOM`) and `CWE-89` (`ISO-A.8-SQL-INJECTION`)
 - `debug_fn_analysis` (in selection config)
   - when true, writes `fn_analysis.jsonl` with per-testcase context
 

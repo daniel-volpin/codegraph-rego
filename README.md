@@ -194,6 +194,19 @@ cp configs/benchmark_selection.example.json configs/benchmark_selection.json  # 
 
 See `REPRODUCIBILITY.md` for full prerequisites, configuration, and output formats.
 
+### Covered Categories (OWASP Benchmark)
+This prototype uses a manual CWE → ISO-control → Rego mapping layer (see `configs/control_mapping.json`) to evaluate detectors against the OWASP Benchmark ground truth.
+
+Current mapping includes:
+- `CWE-327` → `ISO-A.10-WEAK-CRYPTO`
+- `CWE-328` → `ISO-A.10-WEAK-HASH`
+- `CWE-330` → `ISO-A.10-WEAK-RANDOM`
+- `CWE-89` → `ISO-A.8-SQL-INJECTION` (pragmatic mapping for evaluation; not a claim of perfect ISO alignment)
+
+Auto-remediation is intentionally scoped and does **not** cover SQL injection:
+- Supported: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-CRYPTO`
+- Unsupported: `ISO-A.10-WEAK-RANDOM`, `ISO-A.8-SQL-INJECTION`
+
 ---
 
 ## Useful Cypher Queries
