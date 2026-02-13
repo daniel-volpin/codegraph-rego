@@ -25,6 +25,10 @@ class Settings(BaseSettings):
             "(only on JSON parse failures)."
         ),
     )
+    ui_review_store_path: str = Field(
+        "outputs/policy_ui_reviews/reviews.jsonl",
+        description="Append-only JSONL store for UI triage/review records.",
+    )
 
     class Config:
         env_file = ".env"
@@ -48,6 +52,7 @@ class Settings(BaseSettings):
             "llm_api_key": {"env": "LLM_API_KEY"},
             "llm_temperature": {"env": "LLM_TEMPERATURE"},
             "remediation_raw_capture_enabled": {"env": "REMEDIATION_RAW_CAPTURE_ENABLED"},
+            "ui_review_store_path": {"env": "UI_REVIEW_STORE_PATH"},
         }
 
 settings = Settings()
@@ -71,3 +76,4 @@ LLM_API_BASE = settings.llm_api_base
 LLM_API_KEY = settings.llm_api_key
 LLM_TEMPERATURE = settings.llm_temperature
 REMEDIATION_RAW_CAPTURE_ENABLED = settings.remediation_raw_capture_enabled
+UI_REVIEW_STORE_PATH = settings.ui_review_store_path

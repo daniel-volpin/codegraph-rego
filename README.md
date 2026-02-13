@@ -6,7 +6,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 - **Semantic search** – embeds method snippets with Sentence Transformers, saves a FAISS index, and performs hybrid search that adds graph context.
 - **Policy evaluation** – exports Neo4j facts to OPA/Rego to enforce ISO controls, with optional LiteLLM-powered explanations.
 - **Remediation** – “Fix & Verify” loop that proposes patches (LLM), applies them in a temp workspace, compiles, re-ingests, and re-runs OPA to validate fixes.
-- **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, `/remediation/preview`, `/remediation/apply`, and `/health`.
+- **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, `/policy/explain_one`, `/policy/reviews`, `/remediation/preview`, `/remediation/apply`, and `/health`.
 
 ---
 
@@ -33,6 +33,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
      - `JAVA_ROOT_DIR` (defaults to `<repo>/uploaded_code`)
      - `INDEX_DIR`, `EMBEDDING_MODEL_NAME`
      - `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_API_BASE` for LiteLLM routing
+     - `UI_REVIEW_STORE_PATH` to override where UI triage reviews are appended (default: `outputs/policy_ui_reviews/reviews.jsonl`)
 
 4. **Ingest & embed (one-time per codebase change)**
 
@@ -50,6 +51,7 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 
 - `POST /search` (`query=...` form field) → semantic hits + graph neighbours
 - `GET /policy/evaluate` → raw ISO control violations (OPA)  
+- `GET /policy/evaluate?max_bundles=500&max_total_violations=100&max_per_violation_id=25` → faster interactive scan (caps work per violation id + overall)  
 - `GET /policy/catalog` → catalog of controls, evidence requirements, and Rego rule mapping  
 - `POST /policy/evaluate_with_llm?limit=5&model=...` → violations + LLM guidance  
 - `POST /upload` (zip file) → safe extraction, ingestion, embedding rebuild  

@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Any, List, Optional
+from pydantic import BaseModel, Field
+from typing import Any, List, Literal, Optional
 
 class UploadResponse(BaseModel):
     status: str
@@ -46,6 +46,48 @@ class PolicyCatalogResponse(BaseModel):
 class PolicyEvaluateWithLLMRequest(BaseModel):
     limit: int = 10
     model: Optional[str] = None
+    max_bundles: Optional[int] = None
+    max_total_violations: Optional[int] = None
+    max_per_violation_id: Optional[int] = None
+
+
+class PolicyExplainOneRequest(BaseModel):
+    violation: dict
+    include_graph_context: bool = True
+    model: Optional[str] = None
+
+
+class PolicyExplainOneResponse(BaseModel):
+    status: Literal["OK", "ERROR"]
+    explanation: Optional[str] = None
+    model: Optional[str] = None
+    include_graph_context: bool = True
+    error: Optional[str] = None
+
+
+class PolicyReviewCreateRequest(BaseModel):
+    label: Literal["TP", "FP", "UNCLEAR"]
+    notes: Optional[str] = None
+    violation: dict
+    explanation: Optional[str] = None
+    llm_model: Optional[str] = None
+    include_graph_context: bool = True
+    remediation_preview: Optional[dict] = None
+    remediation_apply: Optional[dict] = None
+
+
+class PolicyReviewCreateResponse(BaseModel):
+    status: Literal["OK", "ERROR"]
+    review_id: Optional[str] = None
+    store_path: Optional[str] = None
+    scrub_warnings: List[str] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class PolicyReviewListResponse(BaseModel):
+    status: Literal["OK", "ERROR"]
+    reviews: List[dict] = Field(default_factory=list)
+    error: Optional[str] = None
 
 
 class RemediationPreviewRequest(BaseModel):

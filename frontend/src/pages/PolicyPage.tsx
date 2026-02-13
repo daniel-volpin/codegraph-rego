@@ -2,14 +2,19 @@ import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   applyRemediation,
+  explainPolicyViolationOne,
   evaluatePolicies,
   evaluatePoliciesWithLLM,
   fetchPolicyCatalog,
-  previewRemediation
+  previewRemediation,
+  saveViolationReview
 } from "../lib/api";
 import type {
   PolicyCatalogResponse,
   PolicyEvaluateResponse,
+  PolicyExplainOneResponse,
+  PolicyReviewLabel,
+  PolicyReviewCreateResponse,
   RemediationApplyResponse,
   RemediationPreviewResponse
 } from "../lib/types";
@@ -27,6 +32,19 @@ interface ViolationSummary {
   severity: string;
   control: string;
   autoRemediationSupported: boolean;
+}
+
+interface ReviewDraft {
+  label?: PolicyReviewLabel;
+  notes: string;
+  includeGraphContext: boolean;
+}
+
+interface ReviewSaved {
+  reviewId: string;
+  savedAt: string;
+  storePath?: string | null;
+  scrubWarnings?: string[];
 }
 
 const SUPPORTED_AUTO_REMEDIATION_RULES = new Set([
@@ -78,11 +96,24 @@ const PolicyPage = () => {
   const [limit, setLimit] = useState(5);
   const [model, setModel] = useState("");
   const [showRemediableOnly, setShowRemediableOnly] = useState(false);
+  const [interactiveMaxBundles, setInteractiveMaxBundles] = useState(500);
+  const [interactiveMaxTotal, setInteractiveMaxTotal] = useState(100);
+  const [interactiveMaxPerRule, setInteractiveMaxPerRule] = useState(25);
+  const [batchUseInteractiveCaps, setBatchUseInteractiveCaps] = useState(true);
   const [evaluation, setEvaluation] =
     useState<PolicyEvaluateResponse | null>(null);
   const [llmEvaluation, setLlmEvaluation] =
     useState<PolicyEvaluateResponse | null>(null);
   const [llmStatus, setLlmStatus] = useState<string | null>(null);
+  const [explanationsByKey, setExplanationsByKey] = useState<
+    Record<string, PolicyExplainOneResponse & { updatedAt: string }>
+  >({});
+  const [reviewDraftByKey, setReviewDraftByKey] = useState<
+    Record<string, ReviewDraft>
+  >({});
+  const [reviewSavedByKey, setReviewSavedByKey] = useState<
+    Record<string, ReviewSaved>
+  >({});
   const [remediationPreviews, setRemediationPreviews] = useState<
     Record<string, RemediationPreviewResponse>
   >({});
@@ -97,7 +128,8 @@ const PolicyPage = () => {
   });
 
   const baseEvalMutation = useMutation({
-    mutationFn: evaluatePolicies,
+    mutationFn: (args?: { maxBundles?: number; maxTotalViolations?: number; maxPerViolationId?: number }) =>
+      evaluatePolicies(args),
     onSuccess: (data) => {
       setEvaluation(data);
       const violationCount = data.violations?.length ?? 0;
@@ -114,7 +146,14 @@ const PolicyPage = () => {
   });
 
   const llmEvalMutation = useMutation({
-    mutationFn: () => evaluatePoliciesWithLLM(limit, model || undefined),
+    mutationFn: () =>
+      evaluatePoliciesWithLLM({
+        limit,
+        model: model || undefined,
+        maxBundles: batchUseInteractiveCaps ? interactiveMaxBundles : undefined,
+        maxTotalViolations: batchUseInteractiveCaps ? interactiveMaxTotal : undefined,
+        maxPerViolationId: batchUseInteractiveCaps ? interactiveMaxPerRule : undefined
+      }),
     onSuccess: (data) => {
       setLlmEvaluation(data);
       setLlmStatus("LLM explanations generated.");
@@ -180,10 +219,86 @@ const PolicyPage = () => {
     }
   });
 
+  const explainOneMutation = useMutation({
+    mutationFn: (args: {
+      key: string;
+      violation: Record<string, unknown>;
+      includeGraphContext: boolean;
+      model?: string;
+    }) =>
+      explainPolicyViolationOne({
+        violation: args.violation,
+        include_graph_context: args.includeGraphContext,
+        model: args.model ?? null
+      }),
+    onSuccess: (data, variables) => {
+      setExplanationsByKey((prev) => ({
+        ...prev,
+        [variables.key]: {
+          ...data,
+          updatedAt: new Date().toISOString()
+        }
+      }));
+      if ((data.status || "").toUpperCase() === "OK") {
+        toast.success("Explanation ready.");
+      } else {
+        toast.error(data.error || "Explanation failed.");
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`Explain failed: ${error.message}`);
+    }
+  });
+
+  const saveReviewMutation = useMutation({
+    mutationFn: (args: {
+      key: string;
+      label: PolicyReviewLabel;
+      notes: string;
+      violation: Record<string, unknown>;
+      includeGraphContext: boolean;
+      explanation?: PolicyExplainOneResponse | null;
+      remediationPreview?: RemediationPreviewResponse;
+      remediationApply?: RemediationApplyResponse;
+    }) =>
+      saveViolationReview({
+        label: args.label,
+        notes: args.notes || null,
+        violation: args.violation,
+        explanation: args.explanation?.explanation ?? null,
+        llm_model: args.explanation?.model ?? model ?? null,
+        include_graph_context: args.includeGraphContext,
+        remediation_preview: (args.remediationPreview as unknown as Record<string, unknown>) ?? null,
+        remediation_apply: (args.remediationApply as unknown as Record<string, unknown>) ?? null
+      }),
+    onSuccess: (data: PolicyReviewCreateResponse, variables) => {
+      const status = (data.status || "").toUpperCase();
+      if (status !== "OK") {
+        toast.error(data.error || "Failed to save review.");
+        return;
+      }
+      setReviewSavedByKey((prev) => ({
+        ...prev,
+        [variables.key]: {
+          reviewId: data.review_id || "unknown",
+          savedAt: new Date().toISOString(),
+          storePath: data.store_path,
+          scrubWarnings: data.scrub_warnings || []
+        }
+      }));
+      toast.success("Review saved.");
+    },
+    onError: (error: Error) => {
+      toast.error(`Save review failed: ${error.message}`);
+    }
+  });
+
   const baseEvalPending = baseEvalMutation.status === "pending";
   const llmEvalPending = llmEvalMutation.status === "pending";
   const remediationPending = remediationPreviewMutation.status === "pending";
   const applyPending = remediationApplyMutation.status === "pending";
+  const explainPending = explainOneMutation.status === "pending";
+  const saveReviewPending = saveReviewMutation.status === "pending";
   const activeRemediationKey = remediationPending
     ? ((remediationPreviewMutation.variables as { key?: string } | undefined)?.key ??
       undefined)
@@ -192,10 +307,16 @@ const PolicyPage = () => {
     ? ((remediationApplyMutation.variables as { key?: string } | undefined)?.key ??
       undefined)
     : undefined;
+  const activeExplainKey = explainPending
+    ? ((explainOneMutation.variables as { key?: string } | undefined)?.key ?? undefined)
+    : undefined;
+  const activeSaveReviewKey = saveReviewPending
+    ? ((saveReviewMutation.variables as { key?: string } | undefined)?.key ?? undefined)
+    : undefined;
 
   const handleLlmSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setLlmStatus("Requesting LLM explanations…");
+    setLlmStatus("Requesting batch LLM explanations…");
     setLlmEvaluation(null);
     upsertActivity({
       key: "policy-llm",
@@ -210,6 +331,27 @@ const PolicyPage = () => {
 
   const hasViolations = useMemo(() => {
     return Boolean(evaluation?.violations && evaluation.violations.length > 0);
+  }, [evaluation]);
+
+  const evaluationMeta = useMemo(() => {
+    if (!evaluation || typeof evaluation !== "object") {
+      return null;
+    }
+    const record = evaluation as unknown as Record<string, unknown>;
+    const limits =
+      record.limits && typeof record.limits === "object"
+        ? (record.limits as Record<string, unknown>)
+        : null;
+    const truncated = Boolean(record.truncated);
+    const bundleCount =
+      typeof record.bundle_count === "number" ? record.bundle_count : null;
+    const opaRuns = typeof record.opa_runs === "number" ? record.opa_runs : null;
+    return {
+      truncated,
+      limits,
+      bundleCount,
+      opaRuns
+    };
   }, [evaluation]);
 
   const enrichedViolations = useMemo(() => {
@@ -260,6 +402,45 @@ const PolicyPage = () => {
       targetMethod,
       filePath,
       key
+    });
+  };
+
+  const handleExplainOne = (
+    violation: Record<string, unknown>,
+    key: string,
+    includeGraphContext: boolean,
+    event?: MouseEvent<HTMLButtonElement>
+  ) => {
+    event?.stopPropagation();
+    explainOneMutation.mutate({
+      key,
+      violation,
+      includeGraphContext,
+      model: model || undefined
+    });
+  };
+
+  const handleSaveReview = (
+    violation: Record<string, unknown>,
+    key: string,
+    label: PolicyReviewLabel,
+    notes: string,
+    includeGraphContext: boolean,
+    remediationPreview?: RemediationPreviewResponse,
+    remediationApply?: RemediationApplyResponse,
+    event?: MouseEvent<HTMLButtonElement>
+  ) => {
+    event?.stopPropagation();
+    const explanation = explanationsByKey[key] ?? null;
+    saveReviewMutation.mutate({
+      key,
+      label,
+      notes,
+      violation,
+      includeGraphContext,
+      explanation,
+      remediationPreview,
+      remediationApply
     });
   };
 
@@ -468,38 +649,120 @@ const PolicyPage = () => {
         optionally request LLM-authored explanations for any violations.
       </p>
       <div className="policy-actions">
-        <button
-          onClick={() => baseEvalMutation.mutate()}
-          disabled={baseEvalPending}
-        >
-          {baseEvalPending && <span className="btn-spinner" aria-hidden="true" />}
-          <span>{baseEvalPending ? "Checking…" : "Evaluate Policies"}</span>
-        </button>
-        <form className="policy-llm-form" onSubmit={handleLlmSubmit}>
-          <label>
-            Limit
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={limit}
-              onChange={(event) => setLimit(Number(event.target.value))}
-            />
-          </label>
-          <label>
-            LLM model (optional)
-            <input
-              type="text"
-              value={model}
-              onChange={(event) => setModel(event.target.value)}
-              placeholder="Override backend default"
-            />
-          </label>
-          <button type="submit" disabled={llmEvalPending}>
-            {llmEvalPending && <span className="btn-spinner" aria-hidden="true" />}
-            <span>{llmEvalPending ? "Requesting…" : "Evaluate with LLM"}</span>
+        <div className="policy-action-card">
+          <header>
+            <h3>Full evaluation (uncapped)</h3>
+            <p className="muted">
+              Scans the entire knowledge graph. This can be slow on large codebases, but is the closest match to
+              experiment-grade behavior.
+            </p>
+          </header>
+          <button onClick={() => baseEvalMutation.mutate(undefined)} disabled={baseEvalPending}>
+            {baseEvalPending && <span className="btn-spinner" aria-hidden="true" />}
+            <span>{baseEvalPending ? "Checking…" : "Run full evaluation"}</span>
           </button>
-        </form>
+        </div>
+
+        <div className="policy-action-card">
+          <header>
+            <h3>Interactive (capped) evaluation</h3>
+            <p className="muted">
+              Recommended for UI triage. Caps results so one rule does not dominate, and can early-stop by limiting the
+              number of methods scanned.
+            </p>
+          </header>
+
+          <div className="policy-cap-grid">
+            <label>
+              Max methods scanned
+              <input
+                type="number"
+                min={1}
+                max={5000}
+                value={interactiveMaxBundles}
+                onChange={(event) => setInteractiveMaxBundles(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Max total violations
+              <input
+                type="number"
+                min={1}
+                max={2000}
+                value={interactiveMaxTotal}
+                onChange={(event) => setInteractiveMaxTotal(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Max per rule (violation id)
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={interactiveMaxPerRule}
+                onChange={(event) => setInteractiveMaxPerRule(Number(event.target.value))}
+              />
+            </label>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              baseEvalMutation.mutate({
+                maxBundles: interactiveMaxBundles,
+                maxTotalViolations: interactiveMaxTotal,
+                maxPerViolationId: interactiveMaxPerRule
+              })
+            }
+            disabled={baseEvalPending}
+          >
+            {baseEvalPending && <span className="btn-spinner" aria-hidden="true" />}
+            <span>{baseEvalPending ? "Checking…" : "Run interactive evaluation"}</span>
+          </button>
+        </div>
+
+        <details className="policy-advanced">
+          <summary>Advanced: batch explanation (not recommended for thesis runs)</summary>
+          <div className="policy-advanced-body">
+            <p className="muted">
+              Prefer the per-violation “Explain this violation” flow for interactive labeling. Batch explanation is
+              primarily for debugging or small ablations.
+            </p>
+            <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={batchUseInteractiveCaps}
+                onChange={(event) => setBatchUseInteractiveCaps(event.target.checked)}
+              />
+              Use interactive caps (faster)
+            </label>
+            <form className="policy-llm-form" onSubmit={handleLlmSubmit}>
+              <label>
+                Top N violations (batch)
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={limit}
+                  onChange={(event) => setLimit(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Model override (advanced)
+                <input
+                  type="text"
+                  value={model}
+                  onChange={(event) => setModel(event.target.value)}
+                  placeholder="Leave blank to use backend LLM_MODEL"
+                />
+              </label>
+              <button type="submit" disabled={llmEvalPending}>
+                {llmEvalPending && <span className="btn-spinner" aria-hidden="true" />}
+                <span>{llmEvalPending ? "Requesting…" : "Run batch explanation"}</span>
+              </button>
+            </form>
+          </div>
+        </details>
       </div>
 
       {evaluation && (
@@ -511,7 +774,7 @@ const PolicyPage = () => {
               <button
                 type="button"
                 className="callout-action"
-                onClick={() => baseEvalMutation.mutate()}
+                onClick={() => baseEvalMutation.mutate(undefined)}
               >
                 Retry evaluation
               </button>
@@ -523,6 +786,34 @@ const PolicyPage = () => {
                   ? `${evaluation.violations?.length ?? 0} potential violation(s) detected.`
                   : "No violations detected by OPA policies."}
               </p>
+              {evaluationMeta?.truncated && (
+                <div className="callout">
+                  <p style={{ margin: 0 }}>
+                    Interactive evaluation truncated results.
+                    {typeof evaluationMeta.bundleCount === "number"
+                      ? ` Scanned ${evaluationMeta.bundleCount} method(s).`
+                      : ""}
+                  </p>
+                  {evaluationMeta.limits && (
+                    <p className="muted" style={{ marginTop: "0.5rem" }}>
+                      Limits:{" "}
+                      <code>
+                        max_bundles={String(evaluationMeta.limits.max_bundles ?? "—")}
+                      </code>
+                      {"  "}
+                      <code>
+                        max_total_violations=
+                        {String(evaluationMeta.limits.max_total_violations ?? "—")}
+                      </code>
+                      {"  "}
+                      <code>
+                        max_per_violation_id=
+                        {String(evaluationMeta.limits.max_per_violation_id ?? "—")}
+                      </code>
+                    </p>
+                  )}
+                </div>
+              )}
               {hasViolations && (
                 <div className="callout">
                   <p>
@@ -580,6 +871,15 @@ const PolicyPage = () => {
                       remediationPending && activeRemediationKey === violationKey;
                     const isApplying = applyPending && activeApplyKey === violationKey;
                     const disableRemediationButtons = remediationPending || applyPending;
+                    const reviewSaved = reviewSavedByKey[violationKey];
+                    const reviewDraft = reviewDraftByKey[violationKey] ?? {
+                      label: undefined,
+                      notes: "",
+                      includeGraphContext: true
+                    };
+                    const explanation = explanationsByKey[violationKey];
+                    const isExplaining = explainPending && activeExplainKey === violationKey;
+                    const isSavingReview = saveReviewPending && activeSaveReviewKey === violationKey;
 
                     const applyVerification = applyOutcome?.verification;
                     const applyCompilation = applyOutcome?.compilation;
@@ -626,6 +926,11 @@ const PolicyPage = () => {
                               >
                                 {item.severity}
                               </span>
+                              {reviewSaved && (
+                                <span className="muted" style={{ fontWeight: 600 }}>
+                                  Reviewed
+                                </span>
+                              )}
                               {item.autoRemediationSupported ? (
                                 <>
                                   <button
@@ -723,6 +1028,178 @@ const PolicyPage = () => {
                                 code={JSON.stringify(item.raw, null, 2)}
                                 language="json"
                               />
+                            </section>
+                            <section>
+                              <header>
+                                <h4>Review</h4>
+                              </header>
+                              <div style={{ display: "grid", gap: "0.75rem" }}>
+                                <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={reviewDraft.includeGraphContext}
+                                    onChange={(event) =>
+                                      setReviewDraftByKey((prev) => ({
+                                        ...prev,
+                                        [violationKey]: {
+                                          ...reviewDraft,
+                                          includeGraphContext: event.target.checked
+                                        }
+                                      }))
+                                    }
+                                  />
+                                  Include evidence context
+                                </label>
+
+                                <button
+                                  type="button"
+                                  disabled={isExplaining || explainPending}
+                                  onClick={(event) =>
+                                    handleExplainOne(
+                                      item.raw,
+                                      violationKey,
+                                      reviewDraft.includeGraphContext,
+                                      event
+                                    )
+                                  }
+                                >
+                                  {isExplaining ? (
+                                    <>
+                                      <span className="btn-spinner" aria-hidden="true" />
+                                      <span>Explaining…</span>
+                                    </>
+                                  ) : (
+                                    <span>Explain this violation</span>
+                                  )}
+                                </button>
+
+                                {explanation?.explanation && (
+                                  <div className="llm-text">
+                                    <h5 style={{ margin: 0 }}>Explanation</h5>
+                                    <div
+                                      className="llm-text"
+                                      dangerouslySetInnerHTML={{
+                                        __html: toHtml(explanation.explanation)
+                                      }}
+                                    />
+                                    {explanation.model && (
+                                      <p className="muted" style={{ marginTop: "0.5rem" }}>
+                                        Model: <code>{explanation.model}</code>
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+
+                                <fieldset style={{ border: "1px solid rgba(0,0,0,0.1)", padding: "0.75rem" }}>
+                                  <legend style={{ padding: "0 0.25rem" }}>Label</legend>
+                                  <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                                    <input
+                                      type="radio"
+                                      name={`review-${violationKey}`}
+                                      checked={reviewDraft.label === "TP"}
+                                      onChange={() =>
+                                        setReviewDraftByKey((prev) => ({
+                                          ...prev,
+                                          [violationKey]: { ...reviewDraft, label: "TP" }
+                                        }))
+                                      }
+                                    />
+                                    TP
+                                  </label>
+                                  <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                                    <input
+                                      type="radio"
+                                      name={`review-${violationKey}`}
+                                      checked={reviewDraft.label === "FP"}
+                                      onChange={() =>
+                                        setReviewDraftByKey((prev) => ({
+                                          ...prev,
+                                          [violationKey]: { ...reviewDraft, label: "FP" }
+                                        }))
+                                      }
+                                    />
+                                    FP
+                                  </label>
+                                  <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                                    <input
+                                      type="radio"
+                                      name={`review-${violationKey}`}
+                                      checked={reviewDraft.label === "UNCLEAR"}
+                                      onChange={() =>
+                                        setReviewDraftByKey((prev) => ({
+                                          ...prev,
+                                          [violationKey]: { ...reviewDraft, label: "UNCLEAR" }
+                                        }))
+                                      }
+                                    />
+                                    Unclear
+                                  </label>
+                                </fieldset>
+
+                                <label style={{ display: "grid", gap: "0.25rem" }}>
+                                  Notes (optional)
+                                  <textarea
+                                    rows={4}
+                                    value={reviewDraft.notes}
+                                    onChange={(event) =>
+                                      setReviewDraftByKey((prev) => ({
+                                        ...prev,
+                                        [violationKey]: { ...reviewDraft, notes: event.target.value }
+                                      }))
+                                    }
+                                  />
+                                </label>
+
+                                <button
+                                  type="button"
+                                  disabled={!reviewDraft.label || isSavingReview || saveReviewPending}
+                                  onClick={(event) =>
+                                    handleSaveReview(
+                                      item.raw,
+                                      violationKey,
+                                      reviewDraft.label as PolicyReviewLabel,
+                                      reviewDraft.notes,
+                                      reviewDraft.includeGraphContext,
+                                      remediationOutcome,
+                                      applyOutcome,
+                                      event
+                                    )
+                                  }
+                                >
+                                  {isSavingReview ? (
+                                    <>
+                                      <span className="btn-spinner" aria-hidden="true" />
+                                      <span>Saving…</span>
+                                    </>
+                                  ) : (
+                                    <span>Save review</span>
+                                  )}
+                                </button>
+
+                                {reviewSaved && (
+                                  <div className="callout">
+                                    <p className="muted" style={{ margin: 0 }}>
+                                      Saved as <code>{reviewSaved.reviewId}</code>
+                                      {reviewSaved.storePath ? (
+                                        <>
+                                          {" "}
+                                          to <code>{reviewSaved.storePath}</code>
+                                        </>
+                                      ) : null}
+                                    </p>
+                                    {reviewSaved.scrubWarnings &&
+                                      reviewSaved.scrubWarnings.length > 0 && (
+                                        <details style={{ marginTop: "0.5rem" }}>
+                                          <summary>Scrub warnings</summary>
+                                          <CodeHighlight
+                                            code={JSON.stringify(reviewSaved.scrubWarnings, null, 2)}
+                                            language="json"
+                                          />
+                                        </details>
+                                      )}
+                                  </div>
+                                )}
+                              </div>
                             </section>
                             <section>
                               <header>

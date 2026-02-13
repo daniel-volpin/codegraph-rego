@@ -127,10 +127,10 @@ def load_iso_rules() -> Dict[str, Any]:
     return _ISO_RULES_CACHE or {}
 
 
-def build_policy_input() -> Dict[str, Any]:
+def build_policy_input(*, max_bundles: int | None = None) -> Dict[str, Any]:
     driver = get_neo4j_driver()
     try:
-        methods = _fetch_methods_with_context(driver)
+        methods = _fetch_methods_with_context(driver, max_bundles=max_bundles)
     finally:
         driver.close()
     hybrid_search = _load_hybrid_search()
@@ -144,7 +144,7 @@ def build_policy_input() -> Dict[str, Any]:
     }
 
 
-def _fetch_methods_with_context(driver) -> List[Dict[str, Any]]:
+def _fetch_methods_with_context(driver, *, max_bundles: int | None = None) -> List[Dict[str, Any]]:
     cypher = (
         "MATCH (m:Method) "
         "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
@@ -171,9 +171,13 @@ def _fetch_methods_with_context(driver) -> List[Dict[str, Any]]:
         "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
         "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
     )
+    params: Dict[str, Any] = {}
+    if isinstance(max_bundles, int) and max_bundles > 0:
+        cypher += " LIMIT $max_bundles"
+        params["max_bundles"] = max_bundles
     snapshots: List[Dict[str, Any]] = []
     with driver.session() as session:
-        for rec in session.run(cypher):
+        for rec in session.run(cypher, params):
             signature = rec.get("signature")
             if not signature:
                 continue
@@ -333,18 +337,28 @@ def _normalize_violation_payload(payload: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
-def evaluate_policies() -> Dict[str, Any]:
+def evaluate_policies(
+    *,
+    max_bundles: int | None = None,
+    max_total_violations: int | None = None,
+    max_per_violation_id: int | None = None,
+) -> Dict[str, Any]:
     if not shutil.which("opa"):
         return {
             "error": "OPA CLI not found on PATH",
             "hint": "Install OPA: https://www.openpolicyagent.org/docs/latest/#running-opa",
         }
 
-    policy_input = build_policy_input()
+    policy_input = build_policy_input(max_bundles=max_bundles)
     bundles = policy_input.get("bundles") or []
     catalog = load_policy_catalog()
     rules_catalog = load_iso_rules()
     violations: List[Dict[str, Any]] = []
+    violation_counts_by_id: Dict[str, int] = {}
+    truncated = False
+    include_limit_metadata = any(
+        value is not None for value in (max_bundles, max_total_violations, max_per_violation_id)
+    )
     opa_runs = 0
     for bundle in bundles:
         opa_runs += 1
@@ -357,6 +371,11 @@ def evaluate_policies() -> Dict[str, Any]:
             if normalized is None:
                 continue
             violation_id = normalized.get("violation_id") or normalized.get("id")
+            if violation_id is not None:
+                current_count = violation_counts_by_id.get(str(violation_id), 0)
+                if isinstance(max_per_violation_id, int) and max_per_violation_id > 0:
+                    if current_count >= max_per_violation_id:
+                        continue
             reason = normalized.get("reason")
             severity = normalized.get("severity")
             control_meta = _resolve_catalog_entry(violation_id, catalog)
@@ -380,13 +399,34 @@ def evaluate_policies() -> Dict[str, Any]:
                     },
                 }
             )
-    return {
+            if violation_id is not None:
+                violation_counts_by_id[str(violation_id)] = current_count + 1
+            if isinstance(max_total_violations, int) and max_total_violations > 0:
+                if len(violations) >= max_total_violations:
+                    truncated = True
+                    break
+        if truncated:
+            break
+    response: Dict[str, Any] = {
         "violations": violations,
         "rules_catalog": rules_catalog,
         "catalog": get_policy_catalog_entries(),
         "opa_runs": opa_runs,
         "bundle_count": len(bundles),
     }
+    if include_limit_metadata:
+        response.update(
+            {
+                "truncated": truncated,
+                "limits": {
+                    "max_bundles": max_bundles,
+                    "max_total_violations": max_total_violations,
+                    "max_per_violation_id": max_per_violation_id,
+                },
+                "violation_counts_by_id": violation_counts_by_id,
+            }
+        )
+    return response
 
 
 def evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:

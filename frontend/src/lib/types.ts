@@ -32,6 +32,47 @@ export interface PolicyEvaluateResponse {
   error?: string;
 }
 
+export interface PolicyExplainOneRequest {
+  violation: Record<string, unknown>;
+  include_graph_context?: boolean;
+  model?: string | null;
+}
+
+export interface PolicyExplainOneResponse {
+  status: string;
+  explanation?: string | null;
+  model?: string | null;
+  include_graph_context: boolean;
+  error?: string | null;
+}
+
+export type PolicyReviewLabel = "TP" | "FP" | "UNCLEAR";
+
+export interface PolicyReviewCreateRequest {
+  label: PolicyReviewLabel;
+  notes?: string | null;
+  violation: Record<string, unknown>;
+  explanation?: string | null;
+  llm_model?: string | null;
+  include_graph_context?: boolean;
+  remediation_preview?: Record<string, unknown> | null;
+  remediation_apply?: Record<string, unknown> | null;
+}
+
+export interface PolicyReviewCreateResponse {
+  status: string;
+  review_id?: string | null;
+  store_path?: string | null;
+  scrub_warnings: string[];
+  error?: string | null;
+}
+
+export interface PolicyReviewListResponse {
+  status: string;
+  reviews: Record<string, unknown>[];
+  error?: string | null;
+}
+
 export interface PolicyCatalogEntry {
   id?: string;
   control?: string;
