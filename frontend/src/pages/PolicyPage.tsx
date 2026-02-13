@@ -1017,7 +1017,13 @@ const PolicyPage = () => {
         {catalogQuery.data && (
           <ul>
             {catalogQuery.data.controls.map((control, index) => (
-              <li key={control.control ?? control.id ?? index}>
+              <li
+                key={
+                  (typeof control.id === "string" && control.id.trim())
+                    ? control.id
+                    : `${String(control.control ?? "control")}:${String(control.title ?? "")}:${index}`
+                }
+              >
                 <strong>{control.control ?? control.id ?? "Control"}</strong>{" "}
                 {control.title && <span>- {control.title}</span>}
                 {control.description && (
