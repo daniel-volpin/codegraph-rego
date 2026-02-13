@@ -50,10 +50,28 @@ def explain_policy_violations(
     For each violation, read a local code snippet and ask the LLM for a short explanation + fix.
     If the LLM is not configured, returns a stub with the snippet only.
     """
+    def _method_name_from_signature(signature: Any) -> str:
+        if not isinstance(signature, str):
+            return ""
+        text = signature.strip()
+        if not text:
+            return ""
+        return text.split(".")[-1].split("(")[0]
+
     results: List[Dict[str, Any]] = []
     for v in violations[:max_items]:
-        method_name = v.get("method", "").split(".")[-1].split("(")[0]
-        snippet = _read_code_snippet(v.get("file_path", "") or "", method_name)
+        evidence = v.get("evidence") if isinstance(v, dict) else None
+        evidence = evidence if isinstance(evidence, dict) else {}
+
+        signature = (
+            v.get("method")
+            or v.get("target_method")
+            or evidence.get("target_method")
+            or ""
+        )
+        method_name = _method_name_from_signature(signature)
+        file_path = v.get("file_path") or evidence.get("file_path") or ""
+        snippet = _read_code_snippet(file_path, method_name)
         messages = _build_prompt(v, snippet)
         explanation = _call_llm(messages, model=model or LLM_MODEL)
         results.append({
