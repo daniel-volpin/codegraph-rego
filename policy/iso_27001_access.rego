@@ -27,6 +27,8 @@ sql_execute_pattern := "executequery("
 sql_execute_update_pattern := "executeupdate("
 sql_execute_generic_pattern := "execute("
 sql_prepare_pattern := "preparestatement("
+sql_keywords := {"select ", "insert ", "update ", "delete "}
+untrusted_input_markers := {"getparameter(", "getheader(", "getquerystring(", "getcookies("}
 
 normalized_annotations := {normalized |
   annotations := input.graph_context.annotations
@@ -187,14 +189,28 @@ sql_calls if {
   contains(lower(call), "java.sql.")
 }
 
+sql_present if {
+  sql_source_exec
+}
+
+sql_present if {
+  sql_source_prepare
+}
+
+sql_present if {
+  sql_calls
+}
+
 sql_injection_heuristic if {
   servlet_context
   input.source_code != null
-  (sql_source_exec or sql_source_prepare or sql_calls)
+  sql_present
   src := lower(input.source_code)
   contains(src, "+")
-  (contains(src, "select ") or contains(src, "insert ") or contains(src, "update ") or contains(src, "delete "))
-  (contains(src, "getparameter(") or contains(src, "getheader(") or contains(src, "getquerystring(") or contains(src, "getcookies("))
+  some kw in sql_keywords
+  contains(src, kw)
+  some marker in untrusted_input_markers
+  contains(src, marker)
 }
 
 violations[v] if {
