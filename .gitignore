@@ -50,6 +50,10 @@ index/*
 # Generated evaluation outputs
 outputs/
 
+# Local UI triage artifacts (kept locally, never committed)
+policy_evaluate.json
+policy_llm_enriched.json
+
 # Tooling / editor noise
 copilot-context/
 .github/
