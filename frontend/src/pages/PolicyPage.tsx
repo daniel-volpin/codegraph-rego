@@ -90,7 +90,12 @@ const PolicyPage = () => {
         ...prev,
         [key]: data
       }));
-      toast.success(`Preview ready for ${variables.violationId}.`);
+      const status = (data.status || "").toUpperCase();
+      if (status === "OK") {
+        toast.success(`Preview ready for ${variables.violationId}.`);
+      } else {
+        toast.error(`Preview finished with status ${data.status} for ${variables.violationId}.`);
+      }
     },
     onError: (error: Error, variables) => {
       toast.error(
@@ -223,6 +228,20 @@ const PolicyPage = () => {
       .replace(/\*(.+?)\*/g, "<em>$1</em>")
       .replace(/`(.+?)`/g, "<code>$1</code>")
       .replace(/\n/g, "<br />");
+  };
+
+  const formatAutoRemediationError = (value?: string | null) => {
+    if (!value) {
+      return null;
+    }
+    const normalized = value.toLowerCase();
+    if (normalized.includes("unsupported_rule_for_auto_fix")) {
+      return "No automatic remediation for this rule yet.";
+    }
+    if (normalized.startsWith("no_fix:") || normalized.startsWith("no_fix")) {
+      return value.replace(/^no_fix:\s*/i, "NO_FIX: ");
+    }
+    return value;
   };
 
   const violationSummaries = useMemo(() => {
@@ -637,11 +656,12 @@ const PolicyPage = () => {
                                       {remediationOutcome.explanation}
                                     </p>
                                   )}
-                                  {typeof remediationOutcome.error === "string" && (
-                                    <p className="callout callout-error">
-                                      {remediationOutcome.error}
-                                    </p>
-                                  )}
+                                  {typeof remediationOutcome.error === "string" &&
+                                    formatAutoRemediationError(remediationOutcome.error) && (
+                                      <p className="callout callout-error">
+                                        {formatAutoRemediationError(remediationOutcome.error)}
+                                      </p>
+                                    )}
                                   {targetRuleStatus && (
                                     <p className="remediation-note">
                                       Target rule status: {targetRuleStatus}
@@ -697,11 +717,12 @@ const PolicyPage = () => {
                                       <p className="remediation-status">
                                         Status: {applyOutcome.status}
                                       </p>
-                                      {typeof applyOutcome.error === "string" && (
-                                        <p className="callout callout-error">
-                                          {applyOutcome.error}
-                                        </p>
-                                      )}
+                                      {typeof applyOutcome.error === "string" &&
+                                        formatAutoRemediationError(applyOutcome.error) && (
+                                          <p className="callout callout-error">
+                                            {formatAutoRemediationError(applyOutcome.error)}
+                                          </p>
+                                        )}
                                       {applyVerification?.error && (
                                         <p className="callout callout-error">
                                           Verification error: {applyVerification.error}

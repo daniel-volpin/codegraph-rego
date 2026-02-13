@@ -213,8 +213,52 @@ def _build_verification_summary(
 class RemediationService:
     """Preview-only remediation using virtual OPA evaluation."""
 
+    _NO_FIX_PREFIX = "NO_FIX:"
+    _FIX_STRATEGIES: Dict[str, Dict[str, str]] = {
+        "ISO-A.10-WEAK-HASH": {
+            "objective": (
+                "Replace weak hash usage (MD5) with SHA-256. "
+                "Make the smallest change that removes MD5 while preserving behavior and the method signature."
+            )
+        },
+        "ISO-A.10-WEAK-CRYPTO": {
+            "objective": (
+                "Replace weak or deprecated cipher usage (e.g., DES, RC4, AES/ECB) with a strong alternative "
+                "(prefer AES/GCM/NoPadding). If a safe minimal fix is not possible without additional context "
+                "(IV/nonce generation, key management, protocol compatibility), respond with NO_FIX."
+            )
+        },
+    }
+
     def __init__(self, *, llm_client=generate_chat_completion) -> None:
         self._llm_client = llm_client
+
+    @classmethod
+    def _rule_id_variants(cls, rule_id: str) -> List[str]:
+        text = str(rule_id or "").strip()
+        if not text:
+            return []
+        variants = [text]
+        if text.startswith("ISO-27001-"):
+            base = text[len("ISO-27001-") :]
+        elif text.startswith("ISO-"):
+            base = text[len("ISO-") :]
+        else:
+            base = text
+        for candidate in (base, f"ISO-{base}", f"ISO-27001-{base}"):
+            if candidate and candidate not in variants:
+                variants.append(candidate)
+        return variants
+
+    @classmethod
+    def _resolve_fix_strategy(cls, rule_id: Optional[str]) -> Optional[Dict[str, str]]:
+        if not rule_id:
+            return None
+        for candidate in cls._rule_id_variants(rule_id):
+            strategy = cls._FIX_STRATEGIES.get(candidate)
+            if strategy is not None:
+                return strategy
+        return None
 
     def preview_virtual_fix(
         self,
@@ -230,19 +274,43 @@ class RemediationService:
                 "violation_id": violation_id,
             }
 
+        rule_id = context.get("rule_id")
+        if self._resolve_fix_strategy(rule_id) is None:
+            return {
+                "status": "INVALID",
+                "error": "unsupported_rule_for_auto_fix",
+                "violation_id": violation_id,
+                "rule_id": rule_id,
+                "target_method": context.get("target_method"),
+                "file_path": context.get("file_path"),
+            }
+
         llm_output = self.propose_full_method(context)
         updated_source = llm_output.get("updated_source_code")
         explanation = llm_output.get("explanation")
+        parse_error = llm_output.get("parse_error")
+        if isinstance(parse_error, str) and parse_error.startswith("no_fix:"):
+            reason = parse_error[len("no_fix:") :].strip() or "no safe minimal fix available"
+            return {
+                "status": "FAIL",
+                "error": f"{self._NO_FIX_PREFIX} {reason}",
+                "violation_id": violation_id,
+                "target_method": context.get("target_method"),
+                "file_path": context.get("file_path"),
+                "rule_id": rule_id,
+                "explanation": explanation,
+            }
+
         original_source = (context.get("evidence") or {}).get("source_code") or ""
         diff = _unified_diff(original_source, updated_source or "", label="method")
         if not updated_source:
             return {
                 "status": "ERROR",
-                "error": "LLM did not return updated_source_code",
+                "error": parse_error or "LLM did not return updated_source_code",
                 "violation_id": violation_id,
                 "target_method": context.get("target_method"),
                 "file_path": context.get("file_path"),
-                "rule_id": context.get("rule_id"),
+                "rule_id": rule_id,
             }
 
         base_graph = (context.get("evidence") or {}).get("graph_context") or {}
@@ -312,6 +380,16 @@ class RemediationService:
                 "error": f"Violation {violation_id} not found",
                 "violation_id": violation_id,
             }
+        rule_id = context.get("rule_id")
+        if self._resolve_fix_strategy(rule_id) is None:
+            return {
+                "status": "INVALID",
+                "error": "unsupported_rule_for_auto_fix",
+                "violation_id": violation_id,
+                "rule_id": rule_id,
+                "target_method": context.get("target_method") or target_method,
+                "file_path": context.get("file_path") or file_path,
+            }
         target_method = target_method or context.get("target_method")
         file_path = file_path or context.get("file_path")
         if not target_method or not file_path:
@@ -351,6 +429,18 @@ class RemediationService:
             raw_output = llm_output.get("raw_output")
             if not updated_source:
                 parse_error = llm_output.get("parse_error")
+                if isinstance(parse_error, str) and parse_error.startswith("no_fix:"):
+                    reason = parse_error[len("no_fix:") :].strip() or "no safe minimal fix available"
+                    return {
+                        "status": "FAIL",
+                        "error": f"{self._NO_FIX_PREFIX} {reason}",
+                        "violation_id": violation_id,
+                        "target_method": target_method,
+                        "file_path": file_path,
+                        "rule_id": rule_id,
+                        "attempt_count": attempt + 1,
+                        "errors": attempt_errors,
+                    }
                 if parse_error:
                     attempt_errors.append(str(parse_error))
                 else:
@@ -583,15 +673,20 @@ class RemediationService:
         policy_reason = violation.get("reason") or violation.get("description") or ""
         policy_title = catalog_entry.get("title") if isinstance(catalog_entry, dict) else ""
         errors_note = "\n".join(previous_errors or [])
+        rule_id = context.get("rule_id")
+        strategy = self._resolve_fix_strategy(str(rule_id) if rule_id else None) or {}
+        objective = strategy.get("objective") or ""
 
         system_prompt = (
             "You are a senior Java engineer improving code for ISO 27001 policy compliance. "
             "Use ONLY the provided evidence (source snippet, graph context, vector context, control metadata). "
-            "Output ONLY the full replacement method (signature + body braces). "
-            "Do not output JSON, markdown, or any extra commentary. "
-            "Preserve behavior and method signature. "
-            "Do not change unrelated strings or logic; only replace weak hash usage (MD5 -> SHA-256) and "
-            "make only minimal edits needed for that goal."
+            "Preserve behavior and the method signature. "
+            "Make minimal edits that address the objective.\n\n"
+            f"Objective: {objective}\n\n"
+            "Output EXACTLY one of the following:\n"
+            "1) The full replacement method (signature + body braces)\n"
+            "2) NO_FIX: <reason>\n\n"
+            "Do not output JSON, markdown, backticks, or any extra commentary."
         )
         if errors_note:
             system_prompt += " Adjust the method to address previous errors."
@@ -629,6 +724,17 @@ class RemediationService:
     @staticmethod
     def _parse_llm_virtual_json(response: Any) -> Dict[str, Any]:
         content = _extract_assistant_content(response).strip()
+        fence = re.search(r"```(?:java)?\s*(.*?)```", content, flags=re.DOTALL | re.IGNORECASE)
+        candidate = fence.group(1).strip() if fence else content
+        if candidate.upper().startswith(RemediationService._NO_FIX_PREFIX):
+            reason = candidate[len(RemediationService._NO_FIX_PREFIX) :].strip()
+            if not reason:
+                reason = "no safe minimal fix available"
+            return {
+                "updated_source_code": None,
+                "explanation": None,
+                "parse_error": f"no_fix: {reason}",
+            }
         json_hint = bool(
             (content.lstrip().startswith("{"))
             or ('"replacement_method_code"' in content)

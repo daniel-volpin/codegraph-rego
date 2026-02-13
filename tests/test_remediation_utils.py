@@ -84,6 +84,68 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertIsNone(parsed.get("parse_error"))
         self.assertIn("public void doPost", parsed["updated_source_code"])
 
+    def test_preview_virtual_fix_rejects_unsupported_rule_without_llm_call(self):
+        svc_mod = self.service
+
+        def boom_llm(*_args, **_kwargs):
+            raise AssertionError("LLM should not be called for unsupported rules")
+
+        remediation = svc_mod.RemediationService(llm_client=boom_llm)
+        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+            "violation": {"violation_id": "ISO-A.12.4.1", "reason": "logging"},
+            "target_method": "com.example.Foo.update()",
+            "file_path": "Example.java",
+            "rule_id": "ISO-A.12.4.1",
+            "evidence": {"source_code": "", "graph_context": {}, "vector_context": []},
+            "catalog_entry": {"title": "Event Logging"},
+            "baseline_violations": [],
+        }
+
+        out = remediation.preview_virtual_fix("ISO-A.12.4.1")
+        self.assertEqual(out.get("status"), "INVALID")
+        self.assertEqual(out.get("error"), "unsupported_rule_for_auto_fix")
+
+    def test_apply_fix_rejects_unsupported_rule_without_llm_call(self):
+        svc_mod = self.service
+
+        def boom_llm(*_args, **_kwargs):
+            raise AssertionError("LLM should not be called for unsupported rules")
+
+        remediation = svc_mod.RemediationService(llm_client=boom_llm)
+        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+            "violation": {"violation_id": "ISO-A.12.4.1", "reason": "logging"},
+            "target_method": "com.example.Foo.update()",
+            "file_path": "Example.java",
+            "rule_id": "ISO-A.12.4.1",
+            "evidence": {"source_code": "", "graph_context": {}, "vector_context": []},
+            "catalog_entry": {"title": "Event Logging"},
+            "baseline_violations": [],
+        }
+
+        out = remediation.apply_fix("ISO-A.12.4.1", mode="dry_run", max_attempts=1)
+        self.assertEqual(out.get("status"), "INVALID")
+        self.assertEqual(out.get("error"), "unsupported_rule_for_auto_fix")
+
+    def test_no_fix_output_is_handled(self):
+        svc_mod = self.service
+
+        remediation = svc_mod.RemediationService(
+            llm_client=lambda *_args, **_kwargs: "NO_FIX: cannot safely update without build context"
+        )
+        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+            "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
+            "target_method": "com.example.Foo.hash()",
+            "file_path": "Example.java",
+            "rule_id": "ISO-A.10-WEAK-HASH",
+            "evidence": {"source_code": "public void hash() {}", "graph_context": {}, "vector_context": []},
+            "catalog_entry": {"title": "Cryptography (Weak Hash)"},
+            "baseline_violations": [],
+        }
+
+        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-HASH")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertTrue(str(out.get("error") or "").startswith("NO_FIX:"))
+
     def test_apply_fix_restores_original_file_on_verification_exception(self):
         # Ensure dry_run restores the on-disk file even if verification (PolicyEvaluator) blows up.
         from tempfile import TemporaryDirectory

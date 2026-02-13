@@ -33,6 +33,32 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return payload as T;
 }
 
+async function handleRemediationResponse<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type");
+  const isJson = contentType && contentType.includes("application/json");
+  const payload = isJson ? await response.json() : null;
+
+  if (response.ok) {
+    return payload as T;
+  }
+
+  // Remediation endpoints return structured JSON even on 4xx/5xx (e.g. status=INVALID).
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "status" in payload &&
+    "violation_id" in payload
+  ) {
+    return payload as T;
+  }
+
+  const detail =
+    payload && typeof payload === "object" && "error" in payload
+      ? (payload.error as string)
+      : response.statusText;
+  throw new Error(detail || "Request failed");
+}
+
 export async function uploadZip(file: File): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append("file", file);
@@ -127,7 +153,7 @@ export async function previewRemediation(
       file_path: filePath
     })
   });
-  return handleResponse<RemediationPreviewResponse>(response);
+  return handleRemediationResponse<RemediationPreviewResponse>(response);
 }
 
 export interface ApplyRemediationPayload {
@@ -152,5 +178,5 @@ export async function applyRemediation(
     })
   });
 
-  return handleResponse<RemediationApplyResponse>(response);
+  return handleRemediationResponse<RemediationApplyResponse>(response);
 }
