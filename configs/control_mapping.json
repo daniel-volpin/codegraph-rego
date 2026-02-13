@@ -13,6 +13,20 @@
       "iso_controls": ["A.10"],
       "cwes": ["CWE-328"],
       "rego_rules": ["ISO-A.10-WEAK-HASH"]
+    },
+    {
+      "id": "rng-insecure",
+      "label": "Randomness (CWE-330)",
+      "iso_controls": ["A.10"],
+      "cwes": ["CWE-330"],
+      "rego_rules": ["ISO-A.10-WEAK-RANDOM"]
+    },
+    {
+      "id": "sql-injection",
+      "label": "SQL Injection (CWE-89)",
+      "iso_controls": ["A.8"],
+      "cwes": ["CWE-89"],
+      "rego_rules": ["ISO-A.8-SQL-INJECTION"]
     }
   ]
 }
