@@ -51,7 +51,7 @@ async def upload_zip(file: UploadFile = File(...)):
         error_progress("Java root directory not found in uploaded ZIP.")
         return JSONResponse(content={"error": "Java root directory not found in uploaded ZIP."}, status_code=400)
     try:
-        ingest(java_root, progress_callback=update_progress)
+        ingest(java_root, progress_callback=update_progress, sync=True)
         EmbeddingService.build_embeddings(progress_callback=update_progress)
     except Exception as exc:
         error_progress(f"Processing failed: {exc}")

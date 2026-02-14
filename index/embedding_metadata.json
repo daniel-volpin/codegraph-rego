@@ -3,13 +3,13 @@
   "dim": 384,
   "metric": "cosine",
   "count": 4308,
-  "built_at": "2026-02-14T11:59:34.353971+00:00",
+  "built_at": "2026-02-14T12:44:57.689898+00:00",
   "index_path": "index/code_embeddings.index",
   "signature_map": {
     "full": "index/embedding_full_signature_map.json",
     "legacy": "index/embedding_signature_map.json"
   },
   "cache_path": "index/embedding_cache.json",
-  "cache_hits": 345,
-  "cache_misses": 3963
+  "cache_hits": 4308,
+  "cache_misses": 0
 }

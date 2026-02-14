@@ -11,6 +11,13 @@ export default {
         foreground: "#0f172a",
         card: "#ffffff",
         border: "#e2e8f0",
+        sidebar: {
+          DEFAULT: "#020617",
+          foreground: "#e2e8f0",
+          border: "#1e293b",
+          accent: "#4f46e5",
+          muted: "#94a3b8",
+        },
         primary: {
           DEFAULT: "#4f46e5",
           foreground: "#ffffff",

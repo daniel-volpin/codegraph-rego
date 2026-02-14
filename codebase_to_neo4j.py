@@ -32,6 +32,11 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Print effective settings without writing to Neo4j",
     )
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="Prune stale files from the graph",
+    )
     return parser.parse_args(argv)
 
 
@@ -50,9 +55,10 @@ def main(argv: List[str] | None = None) -> int:
         print(f"  java_root : {args.java_root}")
         print(f"  neo4j_uri : {args.neo4j_uri}")
         print(f"  neo4j_user: {args.neo4j_user}")
+        print(f"  sync      : {args.sync}")
         return 0
 
-    ingestion_service.ingest(args.java_root, progress_callback=_progress)
+    ingestion_service.ingest(args.java_root, progress_callback=_progress, sync=args.sync)
     return 0
 
 

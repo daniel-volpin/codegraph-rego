@@ -86,6 +86,7 @@ def generate_policy_explanation(
     *,
     include_graph_context: bool = True,
     model: str = LLM_MODEL,
+    raise_on_error: bool = False,
 ) -> str:
     """
     Generate a single explanation with optional graph context for evaluation runners.
@@ -130,4 +131,4 @@ def generate_policy_explanation(
         user_lines.append("Only the violation text is provided. Do not invent file paths or line numbers.")
 
     messages = [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(user_lines)}]
-    return generate_chat_completion(messages, model=model or LLM_MODEL)
+    return generate_chat_completion(messages, model=model or LLM_MODEL, raise_on_error=raise_on_error)

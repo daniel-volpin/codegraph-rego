@@ -45,7 +45,16 @@ async def _preload_resources():
             SIGNATURE_MAP_PATH,
             SIGNATURE_MAP_PATH_FULL,
             EMBEDDING_MODEL_NAME,
+            JAVA_ROOT_DIR,
         )
+        from codegraph.ingestion.service import ingest
+
+        logger.info("Starting automatic graph synchronization...")
+        try:
+            # Sync graph (prune stale nodes) on startup
+            ingest(JAVA_ROOT_DIR, sync=True)
+        except Exception as exc:
+            logger.error(f"Startup ingestion failed: {exc}")
 
         try:
             load_signature_map(SIGNATURE_MAP_PATH_FULL)

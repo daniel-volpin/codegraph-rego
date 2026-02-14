@@ -1,11 +1,16 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FileArchive, UploadCloud } from "lucide-react";
 import { fetchUploadStatus, uploadZip } from "../lib/api";
 import type { UploadResponse, UploadStatus } from "../lib/types";
 import { useActivityContext } from "../context/ActivityContext";
 import { toast } from "sonner";
+import { Card } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
 
 const UploadPage = () => {
+  const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const refetchStatusRef = useRef<(() => void) | null>(null);
   const [selectedName, setSelectedName] = useState<string | null>(null);
@@ -35,6 +40,11 @@ const UploadPage = () => {
       } catch {
         /* ignore storage errors */
       }
+      // New codebase ingested: clear cached policy results so we don't show stale evaluations.
+      queryClient.removeQueries({ queryKey: ["policyEvaluation:last"] });
+      queryClient.removeQueries({ queryKey: ["policy:previewById"] });
+      queryClient.removeQueries({ queryKey: ["policy:applyById"] });
+      queryClient.removeQueries({ queryKey: ["policy:explainById"] });
     },
     onError: (error: Error) => {
       const payload: UploadResponse = { status: "error", error: error.message };
@@ -117,157 +127,87 @@ const UploadPage = () => {
     uploadMutation.mutate(file);
   };
 
-  const progressValue = status
-    ? Math.min(Math.max(status.progress, 0), 100)
-    : 0;
-  const showProgress = status
-    ? (!status.complete || progressValue < 100) && progressValue > 0
-    : false;
-  const isProcessing =
-    uploadMutation.isPending || (status ? !status.complete : false);
+  const progressValue = status ? Math.min(Math.max(status.progress, 0), 100) : 0;
+  const isProcessing = uploadMutation.isPending || (status ? !status.complete : false);
 
-  let statusToneClass: string | null = null;
-  if (status) {
-    if (status.phase === "error" || status.error) {
-      statusToneClass = "status-error";
-    } else if (status.phase === "complete" && !status.error) {
-      statusToneClass = "status-success";
-    } else {
-      statusToneClass = "status-info";
-    }
-  }
-
-  const shouldRenderStatusBanner = Boolean(
-    status &&
-    ((status.message && status.message !== "Idle") ||
-      showProgress ||
-      !status.complete),
-  );
+  const statusTone = status?.error || status?.phase === "error"
+    ? "destructive"
+    : status?.complete
+      ? "success"
+      : "warning";
 
   return (
-    <section className="card">
-      <header style={{ marginBottom: "2rem" }}>
-        <h1>Upload Codebase</h1>
-        <p style={{ maxWidth: "60ch", marginTop: "0.5rem" }}>
-          Upload a ZIP archive of your Java project. The system will parse the
-          source tree, ingest it into the graph database, and generate semantic
-          embeddings for search.
+    <div className="space-y-4">
+      <Card className="p-6">
+        <h1 className="text-2xl font-semibold text-slate-900">Upload Codebase</h1>
+        <p className="mt-2 max-w-3xl text-sm text-slate-600">
+          Upload a ZIP archive for ingestion. The backend parses source structure, builds graph entities, and refreshes semantic embeddings.
         </p>
-      </header>
-      <form className="upload-form" onSubmit={handleSubmit}>
-        <div className="upload-container">
-          <label className="file-input">
-            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📦</div>
-            <span style={{ fontSize: "1.1rem", fontWeight: 500 }}>
-              {selectedName
-                ? "Change ZIP archive"
-                : "Click to select ZIP archive"}
-            </span>
-            <span
-              style={{ fontSize: "0.9rem", opacity: 0.8, marginTop: "0.5rem" }}
-            >
-              or drag and drop file here
-            </span>
+
+        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+          <label className="group flex min-h-80 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center transition hover:border-indigo-400 hover:bg-indigo-50">
             <input
               ref={inputRef}
               type="file"
               accept=".zip"
               disabled={isProcessing}
+              className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 setSelectedName(file ? file.name : null);
               }}
             />
+            <div className="mb-4 rounded-full bg-white p-3 shadow-sm ring-1 ring-slate-200">
+              <FileArchive className="h-8 w-8 text-indigo-600" />
+            </div>
+            <p className="text-xl font-semibold text-slate-900">
+              {selectedName ? "File selected" : "Click to select ZIP archive"}
+            </p>
+            <p className="mt-1 text-sm text-slate-500">or drag and drop file here</p>
             {selectedName && (
-              <div className="file-selected-text">
-                <span>📄 {selectedName}</span>
-              </div>
+              <Badge variant="secondary" className="mt-4 max-w-full truncate px-3 py-1 text-xs">
+                {selectedName}
+              </Badge>
             )}
           </label>
 
-          <div className="upload-actions">
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={isProcessing || !selectedName}
-            >
-              {isProcessing && (
-                <span className="btn-spinner" aria-hidden="true" />
-              )}
-              <span>{isProcessing ? "Processing..." : "Upload & Ingest"}</span>
-            </button>
+          <div className="flex items-center justify-end">
+            <Button type="submit" disabled={isProcessing || !selectedName}>
+              <UploadCloud className="mr-1 h-4 w-4" />
+              {isProcessing ? "Processing..." : "Upload & Ingest"}
+            </Button>
           </div>
-        </div>
-      </form>
-      {showProgress && (
-        <div
-          className="progress-track"
-          role="progressbar"
-          aria-label="Upload progress"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(progressValue)}
-          title="Upload progress"
-        >
-          <div
-            className="progress-bar"
-            style={{ width: `${progressValue}%` }}
-          />
-        </div>
+        </form>
+      </Card>
+
+      {status && (
+        <Card className="p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-slate-800">{status.message || "Processing upload"}</p>
+            <Badge variant={statusTone}>{status.complete ? "Complete" : "Running"}</Badge>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full bg-indigo-600 transition-all"
+              style={{ width: `${progressValue}%` }}
+            />
+          </div>
+        </Card>
       )}
-      {shouldRenderStatusBanner && statusToneClass && status && (
-        <div className={`status-banner ${statusToneClass}`}>
-          {status.message}
-        </div>
-      )}
+
       {result && (
-        <div
-          className={`callout ${
-            result.error ? "callout-error" : "callout-success"
-          }`}
-        >
-          {result.error ? (
-            <div>
-              <p>Error: {result.error}</p>
-              <button
-                type="button"
-                className="callout-action"
-                onClick={() => {
-                  uploadMutation.reset();
-                  setStatus(null);
-                  setResult(null);
-                  inputRef.current?.click();
-                }}
-              >
-                Retry upload
-              </button>
-            </div>
-          ) : (
-            <>
-              <p>{result.status}</p>
-              {result.java_root && (
-                <p>
-                  Detected Java root: <code>{result.java_root}</code>
-                </p>
-              )}
-            </>
+        <Card className={`p-4 ${result.error ? "border-rose-200 bg-rose-50" : "border-emerald-200 bg-emerald-50"}`}>
+          <p className={`text-sm font-medium ${result.error ? "text-rose-700" : "text-emerald-700"}`}>
+            {result.error ? `Upload failed: ${result.error}` : "Codebase processed successfully."}
+          </p>
+          {!result.error && result.java_root && (
+            <p className="mt-2 break-all text-sm text-slate-700">
+              Detected Java root: <code className="rounded bg-white px-1 py-0.5">{result.java_root}</code>
+            </p>
           )}
-        </div>
+        </Card>
       )}
-      {isProcessing && (
-        <div className="processing-overlay" aria-live="polite">
-          <div
-            className="spinner"
-            role="status"
-            aria-label="Processing upload"
-          />
-          <p>Ingestion running… this might take a moment.</p>
-        </div>
-      )}
-      <div aria-live="polite" className="sr-only">
-        {status?.message}
-      </div>
-    </section>
+    </div>
   );
 };
 

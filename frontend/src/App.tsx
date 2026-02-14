@@ -5,7 +5,6 @@ import UploadPage from "./pages/UploadPage";
 import SearchPage from "./pages/SearchPage";
 import PolicyPage from "./pages/PolicyPage";
 import SettingsPage from "./pages/SettingsPage";
-import "./App.css";
 
 const App = () => {
   return (

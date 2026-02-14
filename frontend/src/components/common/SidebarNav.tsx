@@ -11,14 +11,14 @@ const routes = [
 
 const SidebarNav = () => {
   return (
-    <aside className="sticky top-0 flex h-screen w-72 flex-col border-r border-slate-800 bg-slate-950 p-6 text-slate-200">
+    <aside className="sticky top-0 flex h-screen w-72 flex-col border-r border-sidebar-border bg-sidebar p-6 text-sidebar-foreground">
       <div className="mb-8 flex items-center gap-3">
-        <div className="rounded-lg bg-indigo-600 p-2">
+        <div className="rounded-lg bg-sidebar-accent p-2">
           <ShieldCheck className="h-5 w-5 text-white" />
         </div>
         <div>
           <div className="font-semibold text-white">CodeGraph</div>
-          <div className="text-xs uppercase tracking-wide text-slate-400">Security Research Framework</div>
+          <div className="text-xs uppercase tracking-wide text-sidebar-muted">Security Research Framework</div>
         </div>
       </div>
       <nav className="space-y-1">
@@ -30,8 +30,8 @@ const SidebarNav = () => {
               to={route.to}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-900 hover:text-white",
-                  isActive && "bg-indigo-600 text-white shadow",
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground transition hover:bg-sidebar-border hover:text-white",
+                  isActive && "bg-sidebar-accent text-white shadow",
                 )
               }
             >

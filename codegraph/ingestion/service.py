@@ -616,7 +616,12 @@ def ingest_to_neo4j(
     driver.close()
 
 
-def ingest(java_root_dir: str, progress_callback: Optional[Callable[[str, str, float], None]] = None) -> None:
+def ingest(
+    java_root_dir: str,
+    progress_callback: Optional[Callable[[str, str, float], None]] = None,
+    sync: bool = False,
+) -> None:
+    java_root_dir = os.path.abspath(java_root_dir)
     print(f"📦 Parsing Java project at: {java_root_dir}")
     if progress_callback:
         progress_callback("connecting", "Checking Neo4j availability…", 10.0)
@@ -654,8 +659,45 @@ def ingest(java_root_dir: str, progress_callback: Optional[Callable[[str, str, f
     all_data = collect_code_structure(java_root_dir, progress_callback=progress_callback)
     print("✅ Ingesting into Neo4j...")
     ingest_to_neo4j(*all_data, progress_callback=progress_callback)
+
+    if sync:
+        print("🔄 Syncing graph: checking for stale files...")
+        if progress_callback:
+            progress_callback("sync", "Pruning stale files...", 80.0)
+
+        # Collect files seen in this scan
+        seen_paths = set()
+        # all_data[0] is methods, all_data[7] is fields
+        for m in all_data[0]:
+            seen_paths.add(m.file_path)
+        for f in all_data[7]:
+            seen_paths.add(f.file_path)
+
+        stale_count = 0
+        try:
+            driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+            with driver.session() as session:
+                # Find all file paths currently in DB
+                result = session.run("MATCH (m:Method) RETURN DISTINCT m.file_path as p")
+                db_paths = {record["p"] for record in result}
+                
+                # Also check fields in case there are files with fields but no methods (rare but possible)
+                result_fields = session.run("MATCH (f:Field) RETURN DISTINCT f.file_path as p")
+                db_paths.update({record["p"] for record in result_fields})
+
+                # Determine which are stale (in DB, not in scan, AND inside the root dir)
+                for path in db_paths:
+                    if path and path.startswith(java_root_dir) and path not in seen_paths:
+                        print(f"🗑️ Pruning stale file: {path}")
+                        _purge_file_entities(path)
+                        stale_count += 1
+            driver.close()
+            print(f"🧹 Pruned {stale_count} stale files.")
+        except Exception as exc:
+            print(f"[WARN] Sync failed: {exc}")
+
     if progress_callback:
-        progress_callback("ingesting", "Ingestion complete.", 80.0)
+        progress_callback("ingesting", "Ingestion complete.", 90.0 if sync else 80.0)
     print("🎉 Ingestion complete.")
 
 
