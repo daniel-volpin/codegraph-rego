@@ -1,54 +1,47 @@
 import { NavLink } from "react-router-dom";
-import "./Sidebar.css";
+import { ShieldCheck, Upload, Search, Settings, Scale } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 const routes = [
-  { to: "/", label: "Overview" },
-  { to: "/upload", label: "Upload" },
-  { to: "/search", label: "Search" },
-  { to: "/graph", label: "Graph Explorer" },
-  { to: "/policy", label: "Policy" },
+  { to: "/upload", label: "Upload", icon: Upload },
+  { to: "/search", label: "Search", icon: Search },
+  { to: "/policy", label: "Policy", icon: Scale },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 const SidebarNav = () => {
-  const linkClass = ({ isActive }: { isActive: boolean }) =>
-    `sidebar-link${isActive ? " sidebar-link-active" : ""}`;
-
   return (
-    <div className="sidebar-nav">
-      <div className="sidebar-brand">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            marginBottom: "0.5rem",
-          }}
-        >
-          <div
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "8px",
-              background:
-                "linear-gradient(135deg, var(--color-primary-500), var(--color-primary-700))",
-            }}
-          ></div>
-          <span className="nav-logo">CodeGraph</span>
+    <aside className="sticky top-0 flex h-screen w-72 flex-col border-r border-slate-800 bg-slate-950 p-6 text-slate-200">
+      <div className="mb-8 flex items-center gap-3">
+        <div className="rounded-lg bg-indigo-600 p-2">
+          <ShieldCheck className="h-5 w-5 text-white" />
         </div>
-        <span className="nav-subtitle">Compliance & Search Console</span>
+        <div>
+          <div className="font-semibold text-white">CodeGraph</div>
+          <div className="text-xs uppercase tracking-wide text-slate-400">Security Research Framework</div>
+        </div>
       </div>
-      <nav>
-        <ul>
-          {routes.map((route) => (
-            <li key={route.to}>
-              <NavLink className={linkClass} to={route.to}>
-                {route.label}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
+      <nav className="space-y-1">
+        {routes.map((route) => {
+          const Icon = route.icon;
+          return (
+            <NavLink
+              key={route.to}
+              to={route.to}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-900 hover:text-white",
+                  isActive && "bg-indigo-600 text-white shadow",
+                )
+              }
+            >
+              <Icon className="h-4 w-4" />
+              {route.label}
+            </NavLink>
+          );
+        })}
       </nav>
-    </div>
+    </aside>
   );
 };
 

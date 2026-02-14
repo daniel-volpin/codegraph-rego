@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { searchCode } from "../lib/api";
 import type { SearchResponse } from "../lib/types";
-import { toast } from "react-hot-toast";
+import { toast } from "sonner";
 import { SearchResultCard } from "../components/features/search/SearchResultCard";
 
 const SearchPage = () => {

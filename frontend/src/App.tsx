@@ -4,7 +4,7 @@ import HomePage from "./pages/HomePage";
 import UploadPage from "./pages/UploadPage";
 import SearchPage from "./pages/SearchPage";
 import PolicyPage from "./pages/PolicyPage";
-
+import SettingsPage from "./pages/SettingsPage";
 import "./App.css";
 
 const App = () => {
@@ -14,9 +14,9 @@ const App = () => {
         <Route path="/" element={<HomePage />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/search" element={<SearchPage />} />
-
         <Route path="/policy" element={<PolicyPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="*" element={<Navigate to="/upload" replace />} />
       </Routes>
     </Layout>
   );
