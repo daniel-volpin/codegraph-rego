@@ -1,45 +1,64 @@
+import { ShieldCheck, Search, Scale, UploadCloud } from "lucide-react";
+import { Card } from "../components/ui/card";
+
+const highlights = [
+  {
+    title: "Ingest & Index",
+    description:
+      "Parse Java source into graph relationships and semantic embeddings for enterprise-grade discovery.",
+    icon: UploadCloud,
+  },
+  {
+    title: "Semantic Search",
+    description:
+      "Query code in natural language and retrieve context-rich structural neighbors for fast triage.",
+    icon: Search,
+  },
+  {
+    title: "Policy & Remediation",
+    description:
+      "Evaluate ISO controls, inspect violations, and orchestrate preview/apply remediation workflows.",
+    icon: Scale,
+  },
+];
+
 const HomePage = () => {
   return (
-    <div className="card">
-      <header className="home-header">
-        <h1 className="home-title">Welcome to CodeGraph</h1>
-        <p className="home-subtitle">
-          Your intelligent companion for secure, compliant, and queryable Java
-          codebases.
+    <div className="space-y-6">
+      <Card className="p-8">
+        <div className="flex items-start gap-4">
+          <div className="rounded-xl bg-indigo-100 p-3 text-indigo-700">
+            <ShieldCheck className="h-6 w-6" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold text-slate-900">Security Research Dashboard</h1>
+            <p className="max-w-3xl text-sm text-slate-600">
+              Unified workspace for Java ingestion, semantic graph search, policy evaluation, and LLM-guided remediation.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {highlights.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Card key={item.title} className="p-6">
+              <div className="mb-4 inline-flex rounded-lg bg-slate-100 p-2 text-slate-700">
+                <Icon className="h-5 w-5" />
+              </div>
+              <h2 className="text-lg font-semibold text-slate-900">{item.title}</h2>
+              <p className="mt-2 text-sm text-slate-600">{item.description}</p>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Card className="border-dashed p-4">
+        <p className="text-sm text-slate-600">
+          <span className="font-semibold text-slate-800">Tip:</span> set <code className="rounded bg-slate-100 px-1 py-0.5">VITE_API_BASE_URL</code> for environment-specific API routing.
         </p>
-      </header>
-
-      <div className="home-grid">
-        <div className="feature-card">
-          <h3 className="feature-title">Ingest & Index</h3>
-          <p className="text-sm">
-            Parses Java source code into a Neo4j graph and builds semantic
-            embeddings for hybrid search.
-          </p>
-        </div>
-
-        <div className="feature-card">
-          <h3 className="feature-title">Semantic Search</h3>
-          <p className="text-sm">
-            Find code using natural language queries, enriched with graph-based
-            context.
-          </p>
-        </div>
-
-        <div className="feature-card">
-          <h3 className="feature-title">Policy Evaluation</h3>
-          <p className="text-sm">
-            Automated ISO 27001 compliance checks with LLM-powered remediation
-            suggestions.
-          </p>
-        </div>
-      </div>
-
-      <div className="config-tip">
-        <strong>Configuration Tip:</strong> Ensure the backend is running at{" "}
-        <code className="code-snippet">http://127.0.0.1:8000</code> or set{" "}
-        <code>VITE_API_BASE_URL</code>.
-      </div>
+      </Card>
     </div>
   );
 };

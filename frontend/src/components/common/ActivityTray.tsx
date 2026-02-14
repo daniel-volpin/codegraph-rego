@@ -1,50 +1,33 @@
 import { useActivityContext } from "../../context/ActivityContext";
 
 const statusClassMap: Record<string, string> = {
-  running: "activity-running",
-  success: "activity-success",
-  error: "activity-error",
-  idle: "activity-idle",
+  running: "text-amber-700 bg-amber-50",
+  success: "text-emerald-700 bg-emerald-50",
+  error: "text-rose-700 bg-rose-50",
+  idle: "text-slate-600 bg-slate-100",
 };
 
 const ActivityTray = () => {
   const { activities } = useActivityContext();
-  const hasActivities = activities.length > 0;
+  if (!activities.length) return null;
 
   return (
-    <aside className="activity-tray" aria-live="polite">
-      {hasActivities && (
-        <>
-          <h3>Activity</h3>
-          <ul>
-            {activities.map((activity) => (
-              <li
-                key={activity.key}
-                className={statusClassMap[activity.status] ?? ""}
-              >
-                <div className="activity-header">
-                  <span className="activity-label">{activity.label}</span>
-                  <span className="activity-status">{activity.status}</span>
-                </div>
-                {activity.message && (
-                  <p className="activity-message">{activity.message}</p>
-                )}
-                {typeof activity.progress === "number" &&
-                  !Number.isNaN(activity.progress) && (
-                    <div className="activity-progress">
-                      <div
-                        className="activity-progress-bar"
-                        style={{
-                          width: `${Math.min(Math.max(activity.progress, 0), 100)}%`,
-                        }}
-                      />
-                    </div>
-                  )}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+    <aside className="w-80 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <h3 className="text-sm font-semibold text-slate-900">Activity</h3>
+      {activities.map((activity) => (
+        <div key={activity.key} className="rounded-lg border border-slate-200 p-3">
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="font-medium">{activity.label}</span>
+            <span className={`rounded-full px-2 py-0.5 ${statusClassMap[activity.status] ?? ""}`}>{activity.status}</span>
+          </div>
+          {activity.message && <p className="text-xs text-slate-600">{activity.message}</p>}
+          {typeof activity.progress === "number" && (
+            <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+              <div className="h-1.5 rounded-full bg-indigo-600" style={{ width: `${Math.min(Math.max(activity.progress, 0), 100)}%` }} />
+            </div>
+          )}
+        </div>
+      ))}
     </aside>
   );
 };

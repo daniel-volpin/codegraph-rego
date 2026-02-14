@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     llm_api_base: str = Field(None, description="LLM API base")
     llm_api_key: str = Field(None, description="LLM API key")
     llm_temperature: float = Field(0.2, description="LLM temperature")
+    llm_enable_thinking: bool = Field(
+        True,
+        description=(
+            "Whether to allow LLM chain-of-thought <think> blocks. "
+            "Set to false to suppress thinking on models that support it (Qwen3, DeepSeek)."
+        ),
+    )
     remediation_raw_capture_enabled: bool = Field(
         False,
         description=(
@@ -53,6 +60,7 @@ class Settings(BaseSettings):
             "llm_api_base": {"env": "LLM_API_BASE"},
             "llm_api_key": {"env": "LLM_API_KEY"},
             "llm_temperature": {"env": "LLM_TEMPERATURE"},
+            "llm_enable_thinking": {"env": "LLM_ENABLE_THINKING"},
             "remediation_raw_capture_enabled": {"env": "REMEDIATION_RAW_CAPTURE_ENABLED"},
             "ui_review_store_path": {"env": "UI_REVIEW_STORE_PATH"},
         }
@@ -78,5 +86,6 @@ LLM_MODEL = settings.llm_model
 LLM_API_BASE = settings.llm_api_base
 LLM_API_KEY = settings.llm_api_key
 LLM_TEMPERATURE = settings.llm_temperature
+LLM_ENABLE_THINKING = settings.llm_enable_thinking
 REMEDIATION_RAW_CAPTURE_ENABLED = settings.remediation_raw_capture_enabled
 UI_REVIEW_STORE_PATH = settings.ui_review_store_path

@@ -245,9 +245,16 @@ class RemediationPromptTemplate:
             "You are a remediation agent for Java code.\n"
             "Use ONLY the evidence provided in the user message blocks.\n"
             "Preserve behavior and the method signature. Make the smallest change that satisfies the task.\n\n"
-            "Output EXACTLY one of the following:\n"
-            "1) The full replacement method only (signature + body braces)\n"
-            "2) NO_FIX: <reason>\n\n"
+            "YOUR OUTPUT MUST BE the COMPLETE replacement method — starting from the access modifier "
+            "(public/private/protected), including the return type, method name, parameters, "
+            "the opening brace '{', the ENTIRE method body with ALL lines (both changed and unchanged), "
+            "and the closing brace '}'.\n\n"
+            "Example of correct output format:\n"
+            "public void doPost(HttpServletRequest request, HttpServletResponse response) throws Exception {\n"
+            "    // ... all lines of the method body ...\n"
+            "}\n\n"
+            "A single changed line or partial code snippet is NOT valid output.\n"
+            "If the violation cannot be safely fixed, output exactly: NO_FIX: <reason>\n\n"
             "Do not output JSON, markdown, backticks, code fences, diffs, or any extra commentary."
         )
 
@@ -1026,7 +1033,7 @@ class RemediationService:
             if key in seen:
                 continue
             seen.add(key)
-            deduped.append(field)
+            deduped.append(f)
         return deduped
 
     # --- Apply helpers ------------------------------------------------------------

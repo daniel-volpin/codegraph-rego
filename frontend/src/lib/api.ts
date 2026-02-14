@@ -256,6 +256,7 @@ export async function previewRemediation(
       target_method: targetMethod,
       file_path: filePath,
     }),
+    signal: AbortSignal.timeout(300_000),
   });
   return handleRemediationResponse<RemediationPreviewResponse>(response);
 }
@@ -280,6 +281,7 @@ export async function applyRemediation(
       ...payload,
       mode: "dry_run",
     }),
+    signal: AbortSignal.timeout(300_000),
   });
 
   return handleRemediationResponse<RemediationApplyResponse>(response);

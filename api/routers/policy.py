@@ -13,6 +13,7 @@ from api.models.validation import (
 )
 from codegraph.policy.service import evaluate as evaluate_policies, catalog as get_policy_catalog_entries
 from codegraph.llm.integration import explain_policy_violations, generate_policy_explanation
+from codegraph.llm.client import LLMUnavailableError
 from codegraph.config import LLM_MODEL, settings
 from codegraph.policy.review_store import append_review_jsonl, resolve_review_store_path
 import logging
@@ -64,12 +65,13 @@ async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
 
 @router.post("/policy/explain_one", response_model=PolicyExplainOneResponse)
 async def policy_explain_one(payload: PolicyExplainOneRequest):
+    model = (payload.model or "").strip() or settings.llm_model
     try:
-        model = (payload.model or "").strip() or settings.llm_model
         explanation = generate_policy_explanation(
             payload.violation,
             include_graph_context=bool(payload.include_graph_context),
             model=model,
+            raise_on_error=True,
         )
         return JSONResponse(
             {
@@ -80,12 +82,25 @@ async def policy_explain_one(payload: PolicyExplainOneRequest):
             },
             status_code=200,
         )
+    except LLMUnavailableError as exc:
+        # Expected runtime error when a local LLM server (e.g. LM Studio) isn't running or credentials are missing.
+        logger.info("Explain-one LLM unavailable: %s", exc)
+        return JSONResponse(
+            {
+                "status": "ERROR",
+                "error": str(exc),
+                "model": model,
+                "include_graph_context": bool(payload.include_graph_context),
+            },
+            status_code=503,
+        )
     except Exception as exc:
         logger.exception("Explain-one failed: %s", exc)
         return JSONResponse(
             {
                 "status": "ERROR",
                 "error": str(exc),
+                "model": model,
                 "include_graph_context": bool(payload.include_graph_context),
             },
             status_code=500,
