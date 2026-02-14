@@ -49,12 +49,16 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
    # Runs both backend (port 8000) and frontend (port 5173) in parallel.
    ```
 
-- `POST /search` (`query=...` form field) → semantic hits + graph neighbours
+- `POST /search` (JSON body `{"query": "..."}`) → semantic hits + graph neighbours
 - `GET /policy/evaluate` → raw ISO control violations (OPA)  
 - `GET /policy/evaluate?max_bundles=500&max_total_violations=100&max_per_violation_id=25` → faster interactive scan (caps work per violation id + overall)  
 - `GET /policy/catalog` → catalog of controls, evidence requirements, and Rego rule mapping  
-- `POST /policy/evaluate_with_llm?limit=5&model=...` → violations + LLM guidance  
-- `POST /upload` (zip file) → safe extraction, ingestion, embedding rebuild  
+- `POST /policy/evaluate_with_llm` (JSON body `{"limit": 5, "model": "..."}`) → violations + LLM guidance
+- `POST /policy/explain_one` (JSON body `{"violation_id": "...", ...}`) → single-violation LLM explanation
+- `POST /policy/reviews` (JSON body) → save a triage/review record
+- `GET /policy/reviews?violation_key=...&limit=N` → list saved reviews  
+- `POST /upload` (zip file) → safe extraction, ingestion, embedding rebuild
+- `GET /upload/status` → poll ingestion progress  
 - `GET /health` → readiness check for Neo4j, FAISS, signature map, model, OPA
 
 ---
@@ -91,7 +95,7 @@ Violations include the control id, method signature, file path, and a short reas
 Run locally with:
 
 ```bash
-python3 policy_integration.py                # CLI summary
+python3 -m codegraph.policy.integration      # CLI summary
 curl http://localhost:8000/policy/evaluate   # API endpoint
 ```
 
@@ -152,9 +156,8 @@ python3 hybrid_code_search.py
 
 1) **Backend**
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
+make install               # installs backend (uv) + frontend (yarn) deps
+uv run uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
 ```
 Verify:
 - `curl http://localhost:8000/health` → all subsystems should be `true` (OPA requires binary on PATH).
@@ -165,9 +168,9 @@ Verify:
 2) **Frontend**
 ```bash
 cd frontend
-npm install
-npm run build
-npm run preview -- --host --port 4173
+yarn install
+yarn build
+yarn preview --host --port 4173
 ```
 Verify:
 - Open `http://localhost:4173` (or the preview host) → navigate to Policy page.
