@@ -53,6 +53,7 @@ outputs/
 # Local UI triage artifacts (kept locally, never committed)
 policy_evaluate.json
 policy_llm_enriched.json
+tmp_bundle.json
 
 # Tooling / editor noise
 copilot-context/

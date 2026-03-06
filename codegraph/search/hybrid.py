@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 import json
 import os
+import threading
 
 import faiss  # type: ignore
 from sentence_transformers import SentenceTransformer
@@ -29,6 +30,7 @@ _INDEX_MTIME: float | None = None
 _SIGMAP: List[str] | None = None
 _SIGMAP_MTIME: Tuple[str, float] | None = None
 _MODEL: SentenceTransformer | None = None
+_MODEL_LOCK = threading.Lock()
 
 
 def load_faiss_index(index_path: str = FAISS_INDEX_PATH):
@@ -68,8 +70,15 @@ def load_signature_map(map_path: str = SIGNATURE_MAP_PATH) -> List[str]:
 
 def load_embedding_model(model_name: str = EMBEDDING_MODEL_NAME) -> SentenceTransformer:
     global _MODEL
-    if _MODEL is None:
-        _MODEL = SentenceTransformer(model_name)
+    
+    # Fast path without lock if already loaded
+    if _MODEL is not None:
+        return _MODEL
+        
+    with _MODEL_LOCK:
+        # Double-check inside the lock
+        if _MODEL is None:
+            _MODEL = SentenceTransformer(model_name)
     return _MODEL
 
 

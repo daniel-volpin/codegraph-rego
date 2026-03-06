@@ -51,58 +51,63 @@ def _infer_statement_end_line(lines: List[str], start_line: Optional[int]) -> Op
     return start_line
 
 
-def link_extends_classes(tx, child_fqn: str, parent_fqn: str) -> None:
+def link_extends_classes_batch(tx, relations: List[Dict[str, str]]) -> None:
     tx.run(
         """
-        MATCH (child:Class {fqn: $child_fqn}), (parent:Class {fqn: $parent_fqn})
+        UNWIND $relations AS rel
+        MATCH (child:Class {fqn: rel.child_fqn})
+        MATCH (parent:Class {fqn: rel.parent_fqn})
         MERGE (child)-[:EXTENDS]->(parent)
         """,
-        child_fqn=child_fqn,
-        parent_fqn=parent_fqn,
+        relations=relations,
     )
 
 
-def link_implements_classes(tx, class_fqn: str, interface_fqn: str) -> None:
+def link_implements_classes_batch(tx, relations: List[Dict[str, str]]) -> None:
     tx.run(
         """
-        MATCH (cls:Class {fqn: $class_fqn}), (iface:Class {fqn: $interface_fqn})
+        UNWIND $relations AS rel
+        MATCH (cls:Class {fqn: rel.class_fqn})
+        MATCH (iface:Class {fqn: rel.interface_fqn})
         MERGE (cls)-[:IMPLEMENTS]->(iface)
         """,
-        class_fqn=class_fqn,
-        interface_fqn=interface_fqn,
+        relations=relations,
     )
 
 
-def link_uses(tx, method_sig: str, class_fqn: str) -> None:
+def link_uses_batch(tx, relations: List[Dict[str, str]]) -> None:
     tx.run(
         """
-        MATCH (m:Method {signature: $method_sig}), (c:Class {fqn: $class_fqn})
+        UNWIND $relations AS rel
+        MATCH (m:Method {signature: rel.method_sig})
+        MATCH (c:Class {fqn: rel.class_fqn})
         MERGE (m)-[:USES]->(c)
         """,
-        method_sig=method_sig,
-        class_fqn=class_fqn,
+        relations=relations,
     )
 
 
-def link_depends_on(tx, class_fqn: str, dep_class_fqn: str) -> None:
+def link_depends_on_batch(tx, relations: List[Dict[str, str]]) -> None:
     tx.run(
         """
-        MATCH (c1:Class {fqn: $class_fqn}), (c2:Class {fqn: $dep_class_fqn})
+        UNWIND $relations AS rel
+        MATCH (c1:Class {fqn: rel.class_fqn})
+        MATCH (c2:Class {fqn: rel.dep_class_fqn})
         MERGE (c1)-[:DEPENDS_ON]->(c2)
         """,
-        class_fqn=class_fqn,
-        dep_class_fqn=dep_class_fqn,
+        relations=relations,
     )
 
 
-def link_calls(tx, caller_sig: str, callee_sig: str) -> None:
+def link_calls_batch(tx, relations: List[Dict[str, str]]) -> None:
     tx.run(
         """
-        MATCH (caller:Method {signature: $caller_sig}), (callee:Method {signature: $callee_sig})
+        UNWIND $relations AS rel
+        MATCH (caller:Method {signature: rel.caller_sig})
+        MATCH (callee:Method {signature: rel.callee_sig})
         MERGE (caller)-[:CALLS]->(callee)
         """,
-        caller_sig=caller_sig,
-        callee_sig=callee_sig,
+        relations=relations,
     )
 
 
@@ -130,28 +135,27 @@ def create_field(tx, field: FieldEntity) -> None:
     )
 
 
-def link_method_annotation(tx, method_sig: str, annotation_name: str) -> None:
+def link_method_annotation_batch(tx, relations: List[Dict[str, str]]) -> None:
     tx.run(
         """
-        MATCH (m:Method {signature: $method_sig})
-        MERGE (ann:Annotation {name: $annotation})
+        UNWIND $relations AS rel
+        MATCH (m:Method {signature: rel.method_sig})
+        MERGE (ann:Annotation {name: rel.annotation})
         MERGE (m)-[:ANNOTATED_WITH]->(ann)
         """,
-        method_sig=method_sig,
-        annotation=annotation_name,
+        relations=relations,
     )
 
 
-def link_method_field_use(tx, method_sig: str, class_fqn: str, field_name: str) -> None:
+def link_method_field_use_batch(tx, relations: List[Dict[str, str]]) -> None:
     tx.run(
         """
-        MATCH (m:Method {signature: $method_sig})
-        MERGE (f:Field {class_fqn: $class_fqn, name: $field_name})
+        UNWIND $relations AS rel
+        MATCH (m:Method {signature: rel.method_sig})
+        MATCH (f:Field {class_fqn: rel.class_fqn, name: rel.field_name})
         MERGE (m)-[:USES]->(f)
         """,
-        method_sig=method_sig,
-        class_fqn=class_fqn,
-        field_name=field_name,
+        relations=relations,
     )
 
 
@@ -185,14 +189,15 @@ def create_class_and_method(tx, m: MethodEntity) -> None:
     )
 
 
-def link_nested_classes(tx, child_fqn: str, parent_fqn: str) -> None:
+def link_nested_classes_batch(tx, relations: List[Dict[str, str]]) -> None:
     tx.run(
         """
-        MATCH (child:Class {fqn: $child_fqn}), (parent:Class {fqn: $parent_fqn})
+        UNWIND $relations AS rel
+        MATCH (child:Class {fqn: rel.child_fqn})
+        MATCH (parent:Class {fqn: rel.parent_fqn})
         MERGE (child)-[:NESTED_IN]->(parent)
         """,
-        child_fqn=child_fqn,
-        parent_fqn=parent_fqn,
+        relations=relations,
     )
 
 
@@ -529,22 +534,28 @@ def ingest_to_neo4j(
         except Exception as exc:
             print(f"[WARN] Failed to create relationship: {args} - {exc}")
 
+    def chunked_iterable(iterable, size):
+        for i in range(0, len(iterable), size):
+            yield iterable[i:i + size]
+
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
     with driver.session() as session:
         annotation_count = sum(len(m.annotations) for m in methods)
         unique_method_field_relations = list(dict.fromkeys(method_field_relations))
+        
         total_operations = (
             len(methods)
             + len(field_entities)
-            + annotation_count
-            + len(nested_relations)
-            + len(extends_relations)
-            + len(implements_relations)
-            + len(uses_relations)
-            + len(depends_on_relations)
-            + len(calls_relations)
-            + len(unique_method_field_relations)
+            + (annotation_count // 5000) + 1
+            + (len(nested_relations) // 5000) + 1
+            + (len(extends_relations) // 5000) + 1
+            + (len(implements_relations) // 5000) + 1
+            + (len(uses_relations) // 5000) + 1
+            + (len(depends_on_relations) // 5000) + 1
+            + (len(calls_relations) // 5000) + 1
+            + (len(unique_method_field_relations) // 5000) + 1
         ) or 1
+        
         processed = 0
 
         def notify(label: str, index: int, total: int) -> None:
@@ -568,48 +579,52 @@ def ingest_to_neo4j(
             notify("Fields", idx, len(field_entities) or 1)
 
         print(f"🏷️ Linking {annotation_count} method annotations...")
-        annotation_total = annotation_count or 1
-        anno_idx = 0
-        for method in methods:
-            for annotation in method.annotations:
-                anno_idx += 1
-                safe_write(session, link_method_annotation, method.signature, annotation)
-                notify("Method annotations", anno_idx, annotation_total)
+        relations_ma = [{"method_sig": m.signature, "annotation": ann} for m in methods for ann in m.annotations]
+        for idx, chunk in enumerate(chunked_iterable(relations_ma, 5000), start=1):
+            safe_write(session, link_method_annotation_batch, chunk)
+            notify("Method annotations chunks", idx, (len(relations_ma) // 5000) + 1)
 
         print(f"🔗 Ingesting {len(nested_relations)} nested class relations...")
-        for idx, (child, parent) in enumerate(nested_relations, start=1):
-            safe_write(session, link_nested_classes, child, parent)
-            notify("Nested relations", idx, len(nested_relations) or 1)
+        relations_nested = [{"child_fqn": c, "parent_fqn": p} for c, p in nested_relations]
+        for idx, chunk in enumerate(chunked_iterable(relations_nested, 5000), start=1):
+            safe_write(session, link_nested_classes_batch, chunk)
+            notify("Nested relations chunks", idx, (len(relations_nested) // 5000) + 1)
 
         print(f"🧬 Ingesting {len(extends_relations)} extends relations...")
-        for idx, (child, parent) in enumerate(extends_relations, start=1):
-            safe_write(session, link_extends_classes, child, parent)
-            notify("Extends relations", idx, len(extends_relations) or 1)
+        relations_extends = [{"child_fqn": c, "parent_fqn": p} for c, p in extends_relations]
+        for idx, chunk in enumerate(chunked_iterable(relations_extends, 5000), start=1):
+            safe_write(session, link_extends_classes_batch, chunk)
+            notify("Extends relations chunks", idx, (len(relations_extends) // 5000) + 1)
 
         print(f"🧬 Ingesting {len(implements_relations)} implements relations...")
-        for idx, (child, parent) in enumerate(implements_relations, start=1):
-            safe_write(session, link_implements_classes, child, parent)
-            notify("Implements relations", idx, len(implements_relations) or 1)
+        relations_impl = [{"class_fqn": c, "interface_fqn": p} for c, p in implements_relations]
+        for idx, chunk in enumerate(chunked_iterable(relations_impl, 5000), start=1):
+            safe_write(session, link_implements_classes_batch, chunk)
+            notify("Implements relations chunks", idx, (len(relations_impl) // 5000) + 1)
 
         print(f"🔗 Ingesting {len(uses_relations)} uses relations...")
-        for idx, (method_sig, class_fqn) in enumerate(uses_relations, start=1):
-            safe_write(session, link_uses, method_sig, class_fqn)
-            notify("Uses relations", idx, len(uses_relations) or 1)
+        relations_uses = [{"method_sig": m, "class_fqn": c} for m, c in uses_relations]
+        for idx, chunk in enumerate(chunked_iterable(relations_uses, 5000), start=1):
+            safe_write(session, link_uses_batch, chunk)
+            notify("Uses relations chunks", idx, (len(relations_uses) // 5000) + 1)
 
         print(f"🔗 Ingesting {len(depends_on_relations)} depends_on relations...")
-        for idx, (class_fqn, dep_class_fqn) in enumerate(depends_on_relations, start=1):
-            safe_write(session, link_depends_on, class_fqn, dep_class_fqn)
-            notify("Depends_on relations", idx, len(depends_on_relations) or 1)
+        relations_deps = [{"class_fqn": c1, "dep_class_fqn": c2} for c1, c2 in depends_on_relations]
+        for idx, chunk in enumerate(chunked_iterable(relations_deps, 5000), start=1):
+            safe_write(session, link_depends_on_batch, chunk)
+            notify("Depends_on relations chunks", idx, (len(relations_deps) // 5000) + 1)
 
         print(f"🔗 Ingesting {len(calls_relations)} calls relations...")
-        for idx, (caller_sig, callee_sig) in enumerate(calls_relations, start=1):
-            safe_write(session, link_calls, caller_sig, callee_sig)
-            notify("Calls relations", idx, len(calls_relations) or 1)
+        relations_calls = [{"caller_sig": c1, "callee_sig": c2} for c1, c2 in calls_relations]
+        for idx, chunk in enumerate(chunked_iterable(relations_calls, 5000), start=1):
+            safe_write(session, link_calls_batch, chunk)
+            notify("Calls relations chunks", idx, (len(relations_calls) // 5000) + 1)
 
         print(f"📦 Ingesting {len(unique_method_field_relations)} method-field uses relations...")
-        for idx, (method_sig, class_fqn, field_name) in enumerate(unique_method_field_relations, start=1):
-            safe_write(session, link_method_field_use, method_sig, class_fqn, field_name)
-            notify("Method-field uses", idx, len(unique_method_field_relations) or 1)
+        relations_mf = [{"method_sig": sig, "class_fqn": cls, "field_name": name} for sig, cls, name in unique_method_field_relations]
+        for idx, chunk in enumerate(chunked_iterable(relations_mf, 5000), start=1):
+            safe_write(session, link_method_field_use_batch, chunk)
+            notify("Method-field uses chunks", idx, (len(relations_mf) // 5000) + 1)
 
         if progress_callback:
             progress_callback("ingesting", "Neo4j ingestion complete.", 80.0)

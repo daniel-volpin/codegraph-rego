@@ -28,7 +28,7 @@ frontend/                       # Vite + React + TypeScript SPA
   src/context/                  #   React context providers
 configs/                        # Benchmark evaluation configs
 tests/                          # pytest test suite
-docs/                           # Design docs (frontend_backend_contract, remediation_prompting_design)
+docs/                           # Design docs (frontend_backend_contract, remediation_prompting_design, thesis_context)
 copilot-context/                # Copilot-specific context anchors
 index/                          # FAISS index + signature maps (generated)
 uploaded_code/                  # Workspace for uploaded Java projects

@@ -24,6 +24,7 @@ from codegraph.config import (
     LLM_API_KEY,
     LLM_TEMPERATURE,
     LLM_ENABLE_THINKING,
+    LLM_MAX_TOKENS_EXPLANATION,
 )
 
 try:
@@ -73,6 +74,7 @@ def generate_chat_completion(
     model: Optional[str] = None,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
+    stop: Optional[List[str] | str] = None,
     response_format: Optional[Dict[str, Any]] = None,
     raise_on_error: bool = False,
 ) -> str:
@@ -93,8 +95,13 @@ def generate_chat_completion(
         "messages": messages,
         "temperature": temperature if temperature is not None else LLM_TEMPERATURE,
     }
-    if max_tokens is not None:
-        params["max_tokens"] = max_tokens
+    # If caller didn't supply a limit, we default to the explanation cap as a generic safe limit.
+    # Remediation specifically overrides this when calling generate_chat_completion.
+    effective_max_tokens = max_tokens if max_tokens is not None else LLM_MAX_TOKENS_EXPLANATION
+    if effective_max_tokens is not None:
+        params["max_tokens"] = effective_max_tokens
+    if stop is not None:
+        params["stop"] = stop
     if response_format is not None:
         params["response_format"] = response_format
     if LLM_API_KEY:

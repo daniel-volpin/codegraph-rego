@@ -28,7 +28,12 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import javalang
 from javalang.tree import MemberReference, MethodDeclaration, MethodInvocation
 
-from codegraph.config import settings
+from codegraph.config import (
+    settings,
+    LLM_MODEL,
+    REMEDIATION_RAW_CAPTURE_ENABLED,
+    LLM_MAX_TOKENS_REMEDIATION,
+)
 from codegraph.ingestion.service import process_single_file_content
 from codegraph.llm.client import generate_chat_completion
 from codegraph.policy.integration import (

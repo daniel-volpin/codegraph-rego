@@ -27,8 +27,8 @@ logger = logging.getLogger("codegraph.api.routers.policy")
 @router.get("/policy/evaluate", response_model=PolicyEvaluateResponse)
 async def policy_evaluate(
     max_bundles: int | None = Query(default=None, ge=1, le=5000),
-    max_total_violations: int | None = Query(default=None, ge=1, le=2000),
-    max_per_violation_id: int | None = Query(default=None, ge=1, le=1000),
+    max_total_violations: int | None = Query(default=None),
+    max_per_violation_id: int | None = Query(default=None),
 ):
     try:
         result = evaluate_policies(

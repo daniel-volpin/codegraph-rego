@@ -105,7 +105,7 @@ const PolicyPage = () => {
   const queryClient = useQueryClient();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
-  const [maxTotal, setMaxTotal] = useState(100);
+  const [maxTotal, setMaxTotal] = useState(5);
   const [pendingAction, setPendingAction] = useState<Record<string, PendingAction>>({});
 
   const markPending = useCallback((id: string, action: PendingAction) => {

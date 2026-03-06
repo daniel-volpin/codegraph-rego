@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseSettings, Field
 
 
@@ -26,6 +27,21 @@ class Settings(BaseSettings):
         description=(
             "Whether to allow LLM chain-of-thought <think> blocks. "
             "Set to false to suppress thinking on models that support it (Qwen3, DeepSeek)."
+        ),
+    )
+    llm_max_tokens_explanation: Optional[int] = Field(
+        512,
+        description="Maximum tokens to generate for explanation calls.",
+    )
+    llm_max_tokens_remediation: Optional[int] = Field(
+        1024,
+        description="Maximum tokens to generate for remediation calls.",
+    )
+    llm_concurrency: int = Field(
+        2,
+        description=(
+            "Maximum number of concurrent LLM HTTP requests. Keep at 2 for local models "
+            "(LM Studio handles limited parallelism). Increase for hosted APIs."
         ),
     )
     remediation_raw_capture_enabled: bool = Field(
@@ -61,6 +77,9 @@ class Settings(BaseSettings):
             "llm_api_key": {"env": "LLM_API_KEY"},
             "llm_temperature": {"env": "LLM_TEMPERATURE"},
             "llm_enable_thinking": {"env": "LLM_ENABLE_THINKING"},
+            "llm_max_tokens_explanation": {"env": "LLM_MAX_TOKENS_EXPLANATION"},
+            "llm_max_tokens_remediation": {"env": "LLM_MAX_TOKENS_REMEDIATION"},
+            "llm_concurrency": {"env": "LLM_CONCURRENCY"},
             "remediation_raw_capture_enabled": {"env": "REMEDIATION_RAW_CAPTURE_ENABLED"},
             "ui_review_store_path": {"env": "UI_REVIEW_STORE_PATH"},
         }
@@ -87,5 +106,8 @@ LLM_API_BASE = settings.llm_api_base
 LLM_API_KEY = settings.llm_api_key
 LLM_TEMPERATURE = settings.llm_temperature
 LLM_ENABLE_THINKING = settings.llm_enable_thinking
+LLM_MAX_TOKENS_EXPLANATION = settings.llm_max_tokens_explanation
+LLM_MAX_TOKENS_REMEDIATION = settings.llm_max_tokens_remediation
+LLM_CONCURRENCY = settings.llm_concurrency
 REMEDIATION_RAW_CAPTURE_ENABLED = settings.remediation_raw_capture_enabled
 UI_REVIEW_STORE_PATH = settings.ui_review_store_path
