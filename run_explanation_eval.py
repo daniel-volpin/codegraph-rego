@@ -8,9 +8,11 @@ import argparse
 import logging
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from time import perf_counter
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from codegraph.config import LLM_CONCURRENCY
 from codegraph.db import get_neo4j_driver
 from codegraph.evaluation.benchmark import (
     coverage_report,
@@ -26,6 +28,7 @@ from codegraph.evaluation.benchmark import (
 from codegraph.evaluation.explanation_runtime import ExplanationRuntime, utc_now_iso
 from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
 from codegraph.ingestion.service import ingest
+from codegraph.llm.explanation_prompting import build_explanation_prompt
 from codegraph.llm.integration import generate_policy_explanation
 from codegraph.policy.integration import evaluate_policies
 
@@ -70,6 +73,18 @@ def parse_args() -> argparse.Namespace:
         "--reset-neo4j",
         action="store_true",
         help="Clear Neo4j before ingesting benchmark subset",
+    )
+    parser.add_argument(
+        "--evidence-mode",
+        choices=["full", "lean"],
+        default="lean",
+        help="Explanation evidence mode (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--llm-max-tokens-eval",
+        type=int,
+        default=192,
+        help="Maximum tokens for explanation-eval LLM calls (default: %(default)s)",
     )
     return parser.parse_args()
 
@@ -149,6 +164,46 @@ def build_category_violations_by_id(
     return category_violations_by_id
 
 
+def _measure_prompt_chars(messages: List[Dict[str, str]]) -> int:
+    return sum(len(message.get("content", "")) for message in messages)
+
+
+def _run_explanation_request(
+    *,
+    violation: Dict[str, Any],
+    include_graph_context: bool,
+    evidence_mode: str,
+    max_tokens: int,
+) -> Dict[str, Any]:
+    messages = build_explanation_prompt(
+        violation,
+        include_graph_context=include_graph_context,
+        evidence_mode=evidence_mode,
+    )
+    prompt_chars = _measure_prompt_chars(messages)
+    started = perf_counter()
+    error = None
+    try:
+        explanation = generate_policy_explanation(
+            violation,
+            include_graph_context=include_graph_context,
+            evidence_mode=evidence_mode,
+            structured_output=True,
+            max_tokens=max_tokens,
+        )
+    except Exception as exc:  # pragma: no cover - defensive runtime guard
+        explanation = f"[LLM unavailable: unexpected error: {exc}]"
+        error = str(exc)
+    latency_ms = round((perf_counter() - started) * 1000, 2)
+    return {
+        "explanation": explanation,
+        "prompt_chars": prompt_chars,
+        "response_chars": len(explanation),
+        "latency_ms": latency_ms,
+        "error": error,
+    }
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = parse_args()
@@ -173,6 +228,8 @@ def main() -> int:
         selection_cfg=selection_cfg,
         coverage_by_category=coverage_by_category,
         sample_per_category=args.sample_per_category,
+        evidence_mode=args.evidence_mode,
+        llm_max_tokens_eval=args.llm_max_tokens_eval,
     )
     runtime.write_stage_progress("initialization", "Loading configs and benchmark ground truth")
     runtime.write_stage_progress(
@@ -246,68 +303,119 @@ def main() -> int:
     interrupted = False
 
     try:
-        for category_id in selected_category_ids:
-            spec = categories_by_id.get(category_id)
-            if not spec:
-                continue
-            category_violations = category_violations_by_id.get(category_id, [])
-            runtime.start_category(
-                category_id=category_id,
-                category_label=spec.label,
-                category_total=len(category_violations),
-                metrics=metrics,
-            )
-            with_success = 0
-            without_success = 0
-            metrics[category_id] = {
-                "count": 0,
-                "with_context": 0,
-                "without_context": 0,
-                "rate_with_context": 0.0,
-                "rate_without_context": 0.0,
-            }
-            if category_id in coverage_by_category:
-                metrics[category_id].update(coverage_by_category[category_id])
-
-            for idx, violation in enumerate(category_violations, start=1):
-                tokens = build_citation_tokens(violation)
-                # Run with-context and without-context LLM calls concurrently.
-                with ThreadPoolExecutor(max_workers=2) as pool:
-                    fut_with = pool.submit(generate_policy_explanation, violation, include_graph_context=True)
-                    fut_without = pool.submit(generate_policy_explanation, violation, include_graph_context=False)
-                    explanation_with = fut_with.result()
-                    explanation_without = fut_without.result()
-                with_hit = tokens and has_citation(explanation_with, tokens)
-                without_hit = tokens and has_citation(explanation_without, tokens)
-                if with_hit:
-                    with_success += 1
-                if without_hit:
-                    without_success += 1
-
-                if args.sample_per_category > 0:
-                    count = samples_per_category.get(category_id, 0)
-                    if count < args.sample_per_category:
-                        sample = {
-                            "category": spec.label,
-                            "violation_id": violation.get("violation_id"),
-                            "target_method": violation.get("target_method"),
-                            "file_path": violation.get("file_path"),
-                            "evidence_tokens": tokens,
-                            "explanation_with_context": explanation_with,
-                            "explanation_without_context": explanation_without,
-                        }
-                        runtime.write_sample(sample)
-                        samples_per_category[category_id] = count + 1
-
+        with ThreadPoolExecutor(max_workers=max(1, LLM_CONCURRENCY)) as pool:
+            for category_id in selected_category_ids:
+                spec = categories_by_id.get(category_id)
+                if not spec:
+                    continue
+                category_violations = category_violations_by_id.get(category_id, [])
+                runtime.start_category(
+                    category_id=category_id,
+                    category_label=spec.label,
+                    category_total=len(category_violations),
+                    metrics=metrics,
+                )
+                with_success = 0
+                without_success = 0
                 metrics[category_id] = {
-                    **metrics[category_id],
-                    "count": idx,
-                    "with_context": with_success,
-                    "without_context": without_success,
-                    "rate_with_context": round((with_success / idx) if idx else 0.0, 4),
-                    "rate_without_context": round((without_success / idx) if idx else 0.0, 4),
+                    "count": 0,
+                    "with_context": 0,
+                    "without_context": 0,
+                    "rate_with_context": 0.0,
+                    "rate_without_context": 0.0,
                 }
-                runtime.record_violation_result(with_context_hit=bool(with_hit), without_context_hit=bool(without_hit), metrics=metrics)
+                if category_id in coverage_by_category:
+                    metrics[category_id].update(coverage_by_category[category_id])
+
+                for idx, violation in enumerate(category_violations, start=1):
+                    tokens = build_citation_tokens(violation)
+                    fut_with = pool.submit(
+                        _run_explanation_request,
+                        violation=violation,
+                        include_graph_context=True,
+                        evidence_mode=args.evidence_mode,
+                        max_tokens=args.llm_max_tokens_eval,
+                    )
+                    fut_without = pool.submit(
+                        _run_explanation_request,
+                        violation=violation,
+                        include_graph_context=False,
+                        evidence_mode=args.evidence_mode,
+                        max_tokens=args.llm_max_tokens_eval,
+                    )
+                    with_result = fut_with.result()
+                    without_result = fut_without.result()
+
+                    explanation_with = with_result["explanation"]
+                    explanation_without = without_result["explanation"]
+                    with_hit = bool(tokens and has_citation(explanation_with, tokens))
+                    without_hit = bool(tokens and has_citation(explanation_without, tokens))
+                    if with_hit:
+                        with_success += 1
+                    if without_hit:
+                        without_success += 1
+
+                    base_metric = {
+                        "timestamp": utc_now_iso(),
+                        "category_id": category_id,
+                        "category_label": spec.label,
+                        "violation_id": violation.get("violation_id"),
+                        "target_method": violation.get("target_method"),
+                        "evidence_mode": args.evidence_mode,
+                        "max_tokens": args.llm_max_tokens_eval,
+                    }
+                    runtime.write_request_metric(
+                        {
+                            **base_metric,
+                            "context_mode": "with_context",
+                            "prompt_chars": with_result["prompt_chars"],
+                            "response_chars": with_result["response_chars"],
+                            "latency_ms": with_result["latency_ms"],
+                            "citation_hit": with_hit,
+                            "error": with_result["error"],
+                        }
+                    )
+                    runtime.write_request_metric(
+                        {
+                            **base_metric,
+                            "context_mode": "without_context",
+                            "prompt_chars": without_result["prompt_chars"],
+                            "response_chars": without_result["response_chars"],
+                            "latency_ms": without_result["latency_ms"],
+                            "citation_hit": without_hit,
+                            "error": without_result["error"],
+                        }
+                    )
+
+                    if args.sample_per_category > 0:
+                        count = samples_per_category.get(category_id, 0)
+                        if count < args.sample_per_category:
+                            sample = {
+                                "category": spec.label,
+                                "violation_id": violation.get("violation_id"),
+                                "target_method": violation.get("target_method"),
+                                "file_path": violation.get("file_path"),
+                                "evidence_tokens": tokens,
+                                "evidence_mode": args.evidence_mode,
+                                "explanation_with_context": explanation_with,
+                                "explanation_without_context": explanation_without,
+                            }
+                            runtime.write_sample(sample)
+                            samples_per_category[category_id] = count + 1
+
+                    metrics[category_id] = {
+                        **metrics[category_id],
+                        "count": idx,
+                        "with_context": with_success,
+                        "without_context": without_success,
+                        "rate_with_context": round((with_success / idx) if idx else 0.0, 4),
+                        "rate_without_context": round((without_success / idx) if idx else 0.0, 4),
+                    }
+                    runtime.record_violation_result(
+                        with_context_hit=with_hit,
+                        without_context_hit=without_hit,
+                        metrics=metrics,
+                    )
     except KeyboardInterrupt:
         interrupted = True
         LOGGER.warning("Interrupted by user. Writing partial artifacts to %s", output_dir)

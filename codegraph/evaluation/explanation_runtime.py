@@ -22,12 +22,15 @@ class ExplanationRuntime:
     selection_cfg: Dict[str, Any]
     coverage_by_category: Dict[str, Any]
     sample_per_category: int
+    evidence_mode: str = "full"
+    llm_max_tokens_eval: int | None = None
 
     def __post_init__(self) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.progress_path = self.output_dir / "progress.json"
         self.partial_metrics_path = self.output_dir / "partial_metrics.json"
         self.samples_path = self.output_dir / "explanation_samples.jsonl"
+        self.request_metrics_path = self.output_dir / "request_metrics.jsonl"
         self.started_at = datetime.now(timezone.utc)
 
         self.total_target_violations = 0
@@ -35,6 +38,8 @@ class ExplanationRuntime:
         self.total_with = 0
         self.total_without = 0
         self.sample_count = 0
+        self.request_count = 0
+        self.total_request_latency_ms = 0.0
 
         self.current_category_id: Optional[str] = None
         self.current_category_label: Optional[str] = None
@@ -42,6 +47,7 @@ class ExplanationRuntime:
         self.current_category_total = 0
 
         self.samples_handle = self.samples_path.open("w", encoding="utf-8") if self.sample_per_category > 0 else None
+        self.request_metrics_handle = self.request_metrics_path.open("w", encoding="utf-8")
 
     def elapsed_seconds(self) -> float:
         return (datetime.now(timezone.utc) - self.started_at).total_seconds()
@@ -58,6 +64,8 @@ class ExplanationRuntime:
             "total_violations": None,
             "percent_complete": None,
             "eta_seconds": None,
+            "evidence_mode": self.evidence_mode,
+            "llm_max_tokens_eval": self.llm_max_tokens_eval,
             **extra,
         }
         write_json(self.progress_path, payload)
@@ -89,10 +97,19 @@ class ExplanationRuntime:
         self.samples_handle.flush()
         self.sample_count += 1
 
+    def write_request_metric(self, metric: Dict[str, Any]) -> None:
+        self.request_metrics_handle.write(json.dumps(metric) + "\n")
+        self.request_metrics_handle.flush()
+        self.request_count += 1
+        latency_ms = metric.get("latency_ms")
+        if isinstance(latency_ms, (int, float)):
+            self.total_request_latency_ms += float(latency_ms)
+
     def close(self) -> None:
         if self.samples_handle is not None:
             self.samples_handle.close()
             self.samples_handle = None
+        self.request_metrics_handle.close()
 
     def finalize(self, status: str, metrics: Dict[str, Any]) -> None:
         self.write_live_artifacts(status=status, stage="finalization", metrics=metrics)
@@ -106,6 +123,9 @@ class ExplanationRuntime:
         else:
             eta_seconds = 0.0
         percent_complete = (self.total_count / self.total_target_violations) if self.total_target_violations else 1.0
+        avg_request_latency_ms = (
+            round(self.total_request_latency_ms / self.request_count, 2) if self.request_count > 0 else None
+        )
 
         progress_payload = {
             "status": status,
@@ -130,6 +150,9 @@ class ExplanationRuntime:
                 "rate_without_context": round((self.total_without / self.total_count) if self.total_count else 0.0, 4),
             },
             "sample_count": self.sample_count,
+            "evidence_mode": self.evidence_mode,
+            "llm_max_tokens_eval": self.llm_max_tokens_eval,
+            "avg_request_latency_ms": avg_request_latency_ms,
         }
 
         partial_payload = {
@@ -151,6 +174,9 @@ class ExplanationRuntime:
                 },
             },
             "sample_count": self.sample_count,
+            "evidence_mode": self.evidence_mode,
+            "llm_max_tokens_eval": self.llm_max_tokens_eval,
+            "avg_request_latency_ms": avg_request_latency_ms,
         }
 
         write_json(self.progress_path, progress_payload)

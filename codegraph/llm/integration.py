@@ -10,12 +10,13 @@ supported endpoint. If the LLM is unavailable, a fallback message is returned so
 
 from __future__ import annotations
 
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List
-import json
 
 from codegraph.config import LLM_MODEL, LLM_CONCURRENCY
 from codegraph.llm.client import generate_chat_completion
+from codegraph.llm.explanation_prompting import build_explanation_prompt, build_explanation_response_format
 from codegraph.common.snippet_utils import extract_code_snippet
 
 
@@ -42,6 +43,37 @@ def _build_prompt(violation: Dict[str, Any], code_snippet: str) -> List[Dict[str
 
 def _call_llm(messages: List[Dict[str, str]], model: str) -> str:
     return generate_chat_completion(messages, model=model)
+
+
+def _render_structured_explanation(content: str) -> str:
+    text = (content or "").strip()
+    if not text:
+        return text
+    for token in ("<|im_end|>", "<|endoftext|>"):
+        text = text.replace(token, "")
+    text = text.strip()
+    if text.startswith("{"):
+        end_idx = text.rfind("}")
+        if end_idx != -1:
+            text = text[: end_idx + 1]
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+    if not isinstance(payload, dict):
+        return text
+
+    citation = str(payload.get("citation") or "").strip()
+    why = str(payload.get("why") or "").strip()
+    fix = str(payload.get("fix") or "").strip()
+    lines = []
+    if citation:
+        lines.append(f"Citation: {citation}")
+    if why:
+        lines.append(f"Why: {why}")
+    if fix:
+        lines.append(f"Fix: {fix}")
+    return "\n".join(lines) if lines else text
 
 
 def explain_policy_violations(
@@ -88,54 +120,25 @@ def generate_policy_explanation(
     violation: Dict[str, Any],
     *,
     include_graph_context: bool = True,
+    evidence_mode: str = "full",
+    structured_output: bool = False,
     model: str = LLM_MODEL,
+    max_tokens: int | None = None,
     raise_on_error: bool = False,
 ) -> str:
     """
     Generate a single explanation with optional graph context for evaluation runners.
     """
-    evidence = violation.get("evidence") or {}
-    file_path = evidence.get("file_path") or violation.get("file_path")
-    target_method = evidence.get("target_method") or violation.get("target_method")
-    start_line = evidence.get("start_line")
-    end_line = evidence.get("end_line")
-    source_code = evidence.get("source_code") or ""
-    graph_context = evidence.get("graph_context") or {}
-    vector_context = evidence.get("vector_context") or []
-
-    system = (
-        "You are a senior application security engineer. "
-        "Provide a concise explanation and remediation guidance. "
-        "When evidence is provided, cite it explicitly (file path or line range)."
+    messages = build_explanation_prompt(
+        violation,
+        include_graph_context=include_graph_context,
+        evidence_mode=evidence_mode,
     )
-
-    # Build a clean violation summary — strip the nested evidence block since we
-    # add file_path, source code, and graph context explicitly below.
-    violation_summary = {k: v for k, v in violation.items() if k != "evidence"}
-    user_lines = [f"Violation: {json.dumps(violation_summary, indent=2)}"]
-    if include_graph_context:
-        user_lines.append("Evidence bundle:")
-        if file_path:
-            user_lines.append(f"- file_path: {file_path}")
-        if target_method:
-            user_lines.append(f"- target_method: {target_method}")
-        if start_line is not None and end_line is not None:
-            user_lines.append(f"- lines: {start_line}-{end_line}")
-        if source_code:
-            user_lines.append("Source snippet:")
-            user_lines.append("```java")
-            user_lines.append(source_code)
-            user_lines.append("```")
-        if graph_context:
-            user_lines.append("Graph context:")
-            user_lines.append(json.dumps(graph_context, indent=2))
-        if vector_context:
-            user_lines.append("Similar methods (FAISS):")
-            user_lines.append(json.dumps(vector_context, indent=2))
-        user_lines.append("Cite file paths or line ranges in your response.")
-    else:
-        # No graph context — also skip vector context for a fairer ablation comparison.
-        user_lines.append("Only the violation metadata is provided. Do not invent file paths or line numbers.")
-
-    messages = [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(user_lines)}]
-    return generate_chat_completion(messages, model=model or LLM_MODEL, raise_on_error=raise_on_error)
+    response = generate_chat_completion(
+        messages,
+        model=model or LLM_MODEL,
+        max_tokens=max_tokens,
+        response_format=build_explanation_response_format() if structured_output else None,
+        raise_on_error=raise_on_error,
+    )
+    return _render_structured_explanation(response) if structured_output else response
