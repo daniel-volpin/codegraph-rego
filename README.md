@@ -23,7 +23,7 @@ Master's thesis prototype. Turns a Java/Spring codebase into a queryable knowled
 
    ```bash
    make install
-   # This installs backend dependencies with uv and frontend dependencies with npm.
+   # This installs backend dependencies with uv and frontend dependencies with yarn.
    ```
 
 3. **Configure**
@@ -78,38 +78,25 @@ The React / Vite SPA (port 5173 dev / 4173 preview) has five pages:
 
 ---
 
-## Evaluation Results (Thesis)
+## Evaluation Status
 
-Benchmarked against the [OWASP Benchmark v1.2](https://owasp.org/www-project-benchmark/) using the three evaluation runners. See `REPRODUCIBILITY.md` for full re-run instructions.
+Benchmarked against the [OWASP Benchmark v1.2](https://owasp.org/www-project-benchmark/) using the dedicated detection, explanation, and remediation runners. See [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md) for exact commands and expected artifacts.
 
-**LLM used:** `qwen/qwen3-8b` via LM Studio (`LLM_ENABLE_THINKING=false`)  
-**Git SHA:** `a4c578f`
+Current validated explanation-eval setup on this branch:
+- `evidence_mode=lean`
+- `llm_max_tokens_eval=192`
+- `LLM_CONCURRENCY=1`
+- structured JSON-schema output for explanation generation
+- explicit stop sequences for local Qwen/LM Studio requests
 
-### Detection — Precision / Recall / F1
+Latest medium explanation validation on this branch:
+- categories: `crypto-md5`, `hash-md5`, `rng-insecure`, `sql-injection`
+- total positives evaluated: `57`
+- citation success:
+  - `with_context`: `1.00`
+  - `without_context`: `0.8947`
 
-| Category | TP | FP | FN | Precision | Recall | F1 |
-|---|---|---|---|---|---|---|
-| Randomness (CWE-330) | 3 | 0 | 0 | 1.00 | 1.00 | 1.00 |
-| SQL Injection (CWE-89) | 3 | 0 | 0 | 1.00 | 1.00 | 1.00 |
-| **Overall** | **6** | **0** | **0** | **1.00** | **1.00** | **1.00** |
-
-> Pinned smoke set — 6 positive-only test cases. Full multi-category run: `configs/benchmark_selection.multicat_full.json`.
-
-### LLM Explanation — Citation Success Rate (with vs. without graph context)
-
-| Category | With Graph Context | Without Graph Context |
-|---|---|---|
-| Randomness (CWE-330) | 1.00 | 1.00 |
-| SQL Injection (CWE-89) | 1.00 | 0.67 |
-| **Overall** | **1.00** | **0.83** |
-
-### Remediation — Fix Success Rate (CWE-328, MD5 → SHA-256)
-
-| Metric | Value |
-|---|---|
-| Attempted violations | 5 |
-| OPA PASS after patch | **5/5 (100%)** |
-| Mode | `dry_run` |
+For exact run artifacts, inspect the corresponding output directories under `outputs/` rather than treating the README as a pinned results ledger.
 
 ---
 
