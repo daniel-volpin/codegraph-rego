@@ -93,6 +93,7 @@ class TestExplanationPrompting(unittest.TestCase):
 
         schema = response_format["json_schema"]["schema"]
         self.assertEqual(response_format["type"], "json_schema")
+        self.assertTrue(response_format["json_schema"]["strict"])
         self.assertEqual(schema["required"], ["citation", "why", "fix"])
         self.assertFalse(schema["additionalProperties"])
 

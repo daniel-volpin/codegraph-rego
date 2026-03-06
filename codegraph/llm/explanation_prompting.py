@@ -139,6 +139,7 @@ def build_explanation_response_format() -> Dict[str, Any]:
         "type": "json_schema",
         "json_schema": {
             "name": "policy_explanation",
+            "strict": True,
             "schema": {
                 "type": "object",
                 "additionalProperties": False,

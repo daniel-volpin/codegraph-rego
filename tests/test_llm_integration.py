@@ -48,6 +48,7 @@ class TestLlmIntegration(unittest.TestCase):
         _args, kwargs = mock_generate_chat_completion.call_args
         self.assertEqual(kwargs["model"], "dummy-model")
         self.assertEqual(kwargs["max_tokens"], 192)
+        self.assertIsNone(kwargs["stop"])
         self.assertIsNone(kwargs["response_format"])
 
     @patch(
@@ -84,6 +85,7 @@ class TestLlmIntegration(unittest.TestCase):
         _args, kwargs = mock_generate_chat_completion.call_args
         self.assertEqual(kwargs["model"], "dummy-model")
         self.assertEqual(kwargs["max_tokens"], 192)
+        self.assertEqual(kwargs["stop"], ["<|im_end|>", "<|endoftext|>"])
         self.assertEqual(kwargs["response_format"]["type"], "json_schema")
 
     @patch(

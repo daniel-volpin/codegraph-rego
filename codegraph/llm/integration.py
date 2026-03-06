@@ -19,6 +19,8 @@ from codegraph.llm.client import generate_chat_completion
 from codegraph.llm.explanation_prompting import build_explanation_prompt, build_explanation_response_format
 from codegraph.common.snippet_utils import extract_code_snippet
 
+STRUCTURED_EXPLANATION_STOPS = ["<|im_end|>", "<|endoftext|>"]
+
 
 def _read_code_snippet(file_path: str, needle: str, before: int = 8, after: int = 24) -> str:
     return extract_code_snippet(file_path, needle, before=before, after=after)
@@ -138,6 +140,7 @@ def generate_policy_explanation(
         messages,
         model=model or LLM_MODEL,
         max_tokens=max_tokens,
+        stop=STRUCTURED_EXPLANATION_STOPS if structured_output else None,
         response_format=build_explanation_response_format() if structured_output else None,
         raise_on_error=raise_on_error,
     )
