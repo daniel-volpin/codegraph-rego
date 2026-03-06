@@ -1,11 +1,12 @@
-# Java Code Graph & Search
+# CodeGraph — Java Code Knowledge Graph & ISO 27001 Compliance Checker
 
-FastAPI service that turns a Java/Spring codebase into a queryable knowledge graph, semantic search index, and ISO 27001 compliance checker. It combines:
+Master's thesis prototype. Turns a Java/Spring codebase into a queryable knowledge graph, semantic search index, and ISO 27001 compliance checker. It combines:
 
 - **Ingestion** – parses Java sources with `javalang`, stores classes/methods in Neo4j, and links `DECLARES`, `CALLS`, `USES`, `EXTENDS`, `IMPLEMENTS`, and `NESTED_IN` relationships.
-- **Semantic search** – embeds method snippets with Sentence Transformers, saves a FAISS index, and performs hybrid search that adds graph context.
-- **Policy evaluation** – exports Neo4j facts to OPA/Rego to enforce ISO controls, with optional LiteLLM-powered explanations.
-- **Remediation** – “Fix & Verify” loop that proposes patches (LLM), applies them in a temp workspace, compiles, re-ingests, and re-runs OPA to validate fixes.
+- **Semantic search** – embeds method snippets with Sentence Transformers, saves a FAISS index, and performs hybrid search with graph-context enrichment.
+- **Policy evaluation** – builds OPA/Rego evidence bundles from Neo4j facts to enforce ISO 27001 controls, with optional LiteLLM-powered explanations (with and without graph context).
+- **Remediation** – LLM "Fix & Verify" loop that proposes patches, applies them in a temp workspace, re-ingests to Neo4j, and re-runs OPA to validate the fix.
+- **Evaluation pipeline** – OWASP Benchmark v1.2 integration for Precision/Recall/F1, LLM explanation citation success (ablation), and remediation fix-rate metrics.
 - **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, `/policy/explain_one`, `/policy/reviews`, `/remediation/preview`, `/remediation/apply`, and `/health`.
 
 ---
@@ -63,7 +64,57 @@ FastAPI service that turns a Java/Spring codebase into a queryable knowledge gra
 
 ---
 
+## Frontend Pages
+
+The React / Vite SPA (port 5173 dev / 4173 preview) has five pages:
+
+| Page | Route | Description |
+|---|---|---|
+| Home | `/` | Overview and system status |
+| Upload | `/upload` | ZIP upload with real-time ingestion progress |
+| Search | `/search` | Semantic query over method embeddings with interactive graph context |
+| Policy | `/policy` | Run ISO 27001 policy checks, browse violations, request LLM explanations, trigger Fix & Verify, and save triage reviews |
+| Settings | `/settings` | LLM provider / model / API base configuration |
+
+---
+
+## Evaluation Results (Thesis)
+
+Benchmarked against the [OWASP Benchmark v1.2](https://owasp.org/www-project-benchmark/) using the three evaluation runners. See `REPRODUCIBILITY.md` for full re-run instructions.
+
+**LLM used:** `qwen/qwen3-8b` via LM Studio (`LLM_ENABLE_THINKING=false`)  
+**Git SHA:** `a4c578f`
+
+### Detection — Precision / Recall / F1
+
+| Category | TP | FP | FN | Precision | Recall | F1 |
+|---|---|---|---|---|---|---|
+| Randomness (CWE-330) | 3 | 0 | 0 | 1.00 | 1.00 | 1.00 |
+| SQL Injection (CWE-89) | 3 | 0 | 0 | 1.00 | 1.00 | 1.00 |
+| **Overall** | **6** | **0** | **0** | **1.00** | **1.00** | **1.00** |
+
+> Pinned smoke set — 6 positive-only test cases. Full multi-category run: `configs/benchmark_selection.multicat_full.json`.
+
+### LLM Explanation — Citation Success Rate (with vs. without graph context)
+
+| Category | With Graph Context | Without Graph Context |
+|---|---|---|
+| Randomness (CWE-330) | 1.00 | 1.00 |
+| SQL Injection (CWE-89) | 1.00 | 0.67 |
+| **Overall** | **1.00** | **0.83** |
+
+### Remediation — Fix Success Rate (CWE-328, MD5 → SHA-256)
+
+| Metric | Value |
+|---|---|
+| Attempted violations | 5 |
+| OPA PASS after patch | **5/5 (100%)** |
+| Mode | `dry_run` |
+
+---
+
 ## Configuration Reference
+
 
 - `config.py` centralises defaults and auto-loads `.env` when `python-dotenv` is available.
 - Output artifacts live in `INDEX_DIR` (default `index/`):

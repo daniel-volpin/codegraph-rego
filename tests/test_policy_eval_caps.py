@@ -88,8 +88,10 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
             counts[vid] = counts.get(vid, 0) + 1
         self.assertTrue(all(count <= 25 for count in counts.values()))
 
-        # Early stop: we should not need to evaluate all 4 bundles to reach 100 under these caps.
-        self.assertLess(mock_eval.call_count, len(bundles))
+        # Under concurrent evaluation, all bundles are submitted eagerly (no early abort of
+        # in-flight subprocesses). The caps are applied when collecting results, so the output
+        # must still respect both total and per-violation-id limits.
+        self.assertEqual(mock_eval.call_count, len(bundles))
 
 
 if __name__ == "__main__":

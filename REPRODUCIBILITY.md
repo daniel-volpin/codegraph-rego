@@ -8,20 +8,28 @@ This document describes how to run the evaluation pipeline for the thesis protot
 - OPA CLI on `PATH`
 - Java + Maven (for remediation build checks)
 - OWASP Benchmark Java dataset checked out locally
-- Optional LLM access via LiteLLM (for explanation/remediation)
+- LLM access via LiteLLM — evaluation runs used **qwen/qwen3-8b** loaded in [LM Studio](https://lmstudio.ai) (OpenAI-compatible endpoint). Any OpenAI-compatible model works; set `LLM_ENABLE_THINKING=false` for Qwen3/DeepSeek to suppress `<think>` blocks.
 
 ## Environment Setup
 ```bash
-python3 -m venv .venv
+# Install backend deps via uv (do NOT use pip install -r requirements.txt)
+pip install uv          # once, if uv is not yet installed
+uv sync
 source .venv/bin/activate
-pip install -r requirements.txt
+
 export NEO4J_URI=bolt://127.0.0.1:7687
 export NEO4J_USER=neo4j
 export NEO4J_PASS=your_password
 export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
 
-# Optional diagnostics: write raw LLM outputs (only on JSON parse failures) into the remediation eval output dir.
-# Default is OFF.
+# LLM config (for explanation and remediation evaluation)
+export LLM_PROVIDER=openai              # keep "openai" for LM Studio (OpenAI-compatible)
+export LLM_API_BASE=http://127.0.0.1:1234/v1
+export LLM_API_KEY=lm-studio           # any non-empty string; LM Studio ignores it
+export LLM_MODEL=qwen/qwen3-8b         # model used in thesis evaluation runs
+export LLM_ENABLE_THINKING=false       # suppress <think> blocks from Qwen3/DeepSeek models
+
+# Optional: capture raw LLM output on JSON parse failures (default OFF)
 export REMEDIATION_RAW_CAPTURE_ENABLED=0
 ```
 
@@ -168,3 +176,34 @@ python build_code_embeddings.py --rebuild-index
 - `--reset-neo4j` is recommended for deterministic metrics (clears the graph).
 - Explanation/remediation runs require LLM access; without it, output will contain fallback text.
 - Keep category scope small (2–4) to keep runs reproducible and fast.
+
+---
+
+## Results Reference
+
+The following output directories in `outputs/` correspond to recorded evaluation runs:
+
+| Output Directory | Eval Type | Categories | Git SHA | LLM Model | Notes |
+|---|---|---|---|---|---|
+| `benchmark_eval_pinned33089` | Detection P/R/F1 | CWE-330, CWE-89 | `a4c578f` | — | 6 pinned positive-only test cases |
+| `explanation_eval_pinned33089` | Citation success | CWE-330, CWE-89 | `a4c578f` | `qwen/qwen3-8b` | With vs. without graph context |
+| `remediation_eval_postcleanup` | Fix success rate | CWE-328 | `a4c578f` | `qwen/qwen3-8b` | 5/5 OPA PASS, dry_run mode |
+| `benchmark_eval_smoke33089` | Detection P/R/F1 | CWE-330, CWE-89 | `a4c578f` | — | Smoke subset |
+
+To reproduce the detection run:
+```bash
+python run_benchmark_eval.py \
+  --config configs/benchmark_selection.pinned_33089.json \
+  --mapping configs/control_mapping.json \
+  --output-dir outputs/benchmark_eval_pinned33089 \
+  --reset-neo4j
+```
+
+To run a mixed positive/negative smoke (new config with FP/TN):
+```bash
+python run_benchmark_eval.py \
+  --config configs/benchmark_selection.smoke_mixed.json \
+  --mapping configs/control_mapping.json \
+  --output-dir outputs/benchmark_eval_smoke_mixed \
+  --reset-neo4j
+```

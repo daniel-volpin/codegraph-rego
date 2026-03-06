@@ -8,6 +8,7 @@ import argparse
 import json
 import logging
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -24,6 +25,7 @@ from codegraph.evaluation.benchmark import (
     select_testcases,
     stage_benchmark_subset,
 )
+from codegraph.config import LLM_CONCURRENCY
 from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
 from codegraph.ingestion.service import ingest
 from codegraph.llm.integration import generate_policy_explanation
@@ -196,10 +198,15 @@ def main() -> int:
 
         with_success = 0
         without_success = 0
+        workers = max(1, LLM_CONCURRENCY)
         for violation in category_violations:
             tokens = build_citation_tokens(violation)
-            explanation_with = generate_policy_explanation(violation, include_graph_context=True)
-            explanation_without = generate_policy_explanation(violation, include_graph_context=False)
+            # Run with-context and without-context LLM calls concurrently.
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                fut_with = pool.submit(generate_policy_explanation, violation, include_graph_context=True)
+                fut_without = pool.submit(generate_policy_explanation, violation, include_graph_context=False)
+                explanation_with = fut_with.result()
+                explanation_without = fut_without.result()
             if tokens and has_citation(explanation_with, tokens):
                 with_success += 1
             if tokens and has_citation(explanation_without, tokens):

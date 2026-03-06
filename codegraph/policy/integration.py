@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -132,7 +133,19 @@ def build_policy_input(*, max_bundles: int | None = None) -> Dict[str, Any]:
     finally:
         driver.close()
     hybrid_search = _load_hybrid_search()
-    bundles = [build_evidence_bundle(method_snapshot, hybrid_search) for method_snapshot in methods]
+
+    # Build evidence bundles concurrently (file I/O + FAISS).
+    # This is CPU/IO bound, so we use available CPU cores to maximize throughput.
+    workers = min(32, (os.cpu_count() or 4) + 4)
+    bundles: List[Dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_to_idx = {
+            pool.submit(build_evidence_bundle, m, hybrid_search): i
+            for i, m in enumerate(methods)
+        }
+        for future in as_completed(future_to_idx):
+            bundles[future_to_idx[future]] = future.result()
+
     return {
         "bundles": bundles,
         "rules_catalog": load_iso_rules(),
@@ -347,14 +360,23 @@ def evaluate_policies(
     include_limit_metadata = any(
         value is not None for value in (max_bundles, max_total_violations, max_per_violation_id)
     )
-    opa_runs = 0
-    for bundle in bundles:
-        opa_runs += 1
-        try:
-            opa_result = _evaluate_bundle(bundle)
-        except RuntimeError as exc:
-            return {"error": str(exc), "bundle": bundle.get("target_method")}
-        for violation in opa_result:
+
+    # Evaluate OPA for all bundles concurrently.
+    # OPA subprocesses are CPU-bound, so we maximize thread usage independent of LLM limits.
+    workers = min(32, (os.cpu_count() or 4) + 4)
+    opa_results: List[Any] = [None] * len(bundles)  # preserve order
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_to_idx = {pool.submit(_evaluate_bundle, b): i for i, b in enumerate(bundles)}
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                opa_results[idx] = future.result()
+            except RuntimeError as exc:
+                return {"error": str(exc), "bundle": bundles[idx].get("target_method")}
+
+    opa_runs = len(bundles)
+    for bundle, opa_result in zip(bundles, opa_results):
+        for violation in (opa_result or []):
             normalized = _normalize_violation_payload(violation)
             if normalized is None:
                 continue
