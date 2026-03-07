@@ -38,6 +38,8 @@ The runner already enables:
 - explicit stop sequences for local completions
 - live progress and request-level metrics
 
+Interactive UI explains now use the same structured `citation` / `why` / `fix` response shape, so the frontend no longer depends on freeform model prose behaving well.
+
 ## 4. Choose a Config
 - small smoke: `configs/benchmark_selection.smoke_mixed.json`
 - medium thesis check: `configs/benchmark_selection.multicat_medium.json`
@@ -104,6 +106,7 @@ python run_remediation_eval.py \
 ## 10. Notes
 - Use `--reset-neo4j` for reproducible runs.
 - Keep separate output directories for separate experiments.
+- Policy evaluation excludes Java sources under `src/test/**` to keep findings focused on production-risk code.
 - Secondary operator utilities now live under `scripts/`:
   - `scripts/ingestion/codebase_to_neo4j.py`
   - `scripts/ingestion/build_code_embeddings.py`

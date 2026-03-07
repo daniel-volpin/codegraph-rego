@@ -89,6 +89,7 @@ def build_explanation_prompt(
     *,
     include_graph_context: bool = True,
     evidence_mode: str = "full",
+    structured_output: bool = False,
 ) -> List[Dict[str, str]]:
     payload = build_explanation_evidence(
         violation,
@@ -101,6 +102,14 @@ def build_explanation_prompt(
         "When evidence is provided, cite it explicitly using the exact file path and exact line range strings. "
         "Return only the final answer. Do not include thinking process, analysis steps, or chain-of-thought."
     )
+    if structured_output:
+        system = (
+            "You are a senior application security engineer. "
+            "Return a JSON object only with exactly these string fields: citation, why, fix. "
+            "Do not include markdown, preamble, reasoning, analysis, or chain-of-thought. "
+            "When evidence is provided, cite it explicitly using the exact file path and exact line range strings. "
+            "Keep each field concise and user-facing."
+        )
 
     violation_summary = {k: v for k, v in violation.items() if k != "evidence"}
     user_lines = [f"Violation: {json.dumps(violation_summary, indent=2)}"]
@@ -126,10 +135,18 @@ def build_explanation_prompt(
             user_lines.append(json.dumps(payload["vector_context"], indent=2))
         user_lines.append("Use the exact citation strings from the evidence bundle.")
         user_lines.append("If file path and lines are present, repeat them verbatim.")
-        user_lines.append("Do not output Thinking Process, Analysis, or any preamble before the answer.")
+        if structured_output:
+            user_lines.append('Return JSON only with keys "citation", "why", and "fix".')
+            user_lines.append("Do not output Thinking Process, Analysis, or any text before or after the JSON object.")
+        else:
+            user_lines.append("Do not output Thinking Process, Analysis, or any preamble before the answer.")
     else:
         user_lines.append("Only the violation metadata is provided. Do not invent file paths or line numbers.")
-        user_lines.append("Return only the final answer. Do not output Thinking Process or Analysis.")
+        if structured_output:
+            user_lines.append('Return JSON only with keys "citation", "why", and "fix".')
+            user_lines.append("Do not output Thinking Process, Analysis, or any text before or after the JSON object.")
+        else:
+            user_lines.append("Return only the final answer. Do not output Thinking Process or Analysis.")
 
     return [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(user_lines)}]
 

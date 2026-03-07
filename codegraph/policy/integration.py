@@ -47,6 +47,13 @@ def _load_hybrid_search() -> Optional[HybridSearchService]:
     return _HYBRID_SEARCH
 
 
+def _is_test_source_path(file_path: Any) -> bool:
+    if not isinstance(file_path, str):
+        return False
+    normalized = file_path.replace("\\", "/")
+    return "/src/test/" in normalized
+
+
 def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
     global _CATALOG_CACHE, _CATALOG_ENTRIES_CACHE, raw
     if _CATALOG_CACHE is None or _CATALOG_ENTRIES_CACHE is None:
@@ -190,6 +197,9 @@ def _fetch_methods_with_context(driver, *, max_bundles: int | None = None) -> Li
             signature = rec.get("signature")
             if not signature:
                 continue
+            file_path = rec.get("file_path")
+            if _is_test_source_path(file_path):
+                continue
             uses_fields = [field for field in (rec.get("uses_fields") or []) if field and field.get("name")]
             annotations = rec.get("property_annotations") or []
             annotation_nodes = rec.get("annotation_nodes") or []
@@ -199,7 +209,7 @@ def _fetch_methods_with_context(driver, *, max_bundles: int | None = None) -> Li
                     "signature": signature,
                     "name": rec.get("name"),
                     "class_fqn": rec.get("class_fqn"),
-                    "file_path": rec.get("file_path"),
+                    "file_path": file_path,
                     "start_line": rec.get("start_line"),
                     "end_line": rec.get("end_line"),
                     "modifiers": rec.get("modifiers") or [],

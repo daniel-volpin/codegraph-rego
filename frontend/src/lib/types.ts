@@ -38,9 +38,16 @@ export interface PolicyExplainOneRequest {
   model?: string | null;
 }
 
+export interface PolicyExplanationStructured {
+  citation: string;
+  why: string;
+  fix: string;
+}
+
 export interface PolicyExplainOneResponse {
   status: string;
   explanation?: string | null;
+  explanation_structured?: PolicyExplanationStructured | null;
   model?: string | null;
   include_graph_context: boolean;
   error?: string | null;

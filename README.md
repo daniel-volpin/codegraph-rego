@@ -70,7 +70,7 @@ Architecture notes:
 - `GET /policy/evaluate?max_bundles=500&max_total_violations=100&max_per_violation_id=25` → faster interactive scan (caps work per violation id + overall)  
 - `GET /policy/catalog` → catalog of controls, evidence requirements, and Rego rule mapping  
 - `POST /policy/evaluate_with_llm` (JSON body `{"limit": 5, "model": "..."}`) → violations + LLM guidance
-- `POST /policy/explain_one` (JSON body `{"violation_id": "...", ...}`) → single-violation LLM explanation
+- `POST /policy/explain_one` (JSON body `{"violation": {...}, ...}`) → single-violation LLM explanation with both a compatibility string and structured `citation` / `why` / `fix` fields
 - `POST /policy/reviews` (JSON body) → save a triage/review record
 - `GET /policy/reviews?violation_key=...&limit=N` → list saved reviews  
 - `POST /upload` (zip file) → safe extraction, ingestion, embedding rebuild
@@ -145,6 +145,10 @@ For exact run artifacts, inspect the corresponding output directories under `out
   Flags weak cipher usage such as `DES`, `RC4`, or `AES/ECB/*`.
 
 Violations include the control id, method signature, file path, and a short reason.  
+Policy evaluation intentionally excludes Java files under `src/test/**` so thesis/demo findings stay focused on production-relevant application code.
+
+The Explain UI/API path returns structured `citation`, `why`, and `fix` output for direct rendering, while also keeping a plain-text compatibility field for older clients.
+
 Run locally with:
 
 ```bash

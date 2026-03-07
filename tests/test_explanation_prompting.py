@@ -88,6 +88,18 @@ class TestExplanationPrompting(unittest.TestCase):
         self.assertIn("Use the exact citation strings from the evidence bundle.", messages[1]["content"])
         self.assertIn("Do not output Thinking Process", messages[1]["content"])
 
+    def test_build_explanation_prompt_structured_output_requires_json_only(self) -> None:
+        messages = build_explanation_prompt(
+            self.violation,
+            include_graph_context=True,
+            evidence_mode="lean",
+            structured_output=True,
+        )
+
+        self.assertIn("Return a JSON object only", messages[0]["content"])
+        self.assertIn('Return JSON only with keys "citation", "why", and "fix".', messages[1]["content"])
+        self.assertIn("Do not output Thinking Process, Analysis, or any text before or after the JSON object.", messages[1]["content"])
+
     def test_build_explanation_response_format_requires_citation_why_fix(self) -> None:
         response_format = build_explanation_response_format()
 

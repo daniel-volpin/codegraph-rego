@@ -2,7 +2,84 @@ import unittest
 from unittest.mock import patch
 
 
+class _FakeResult:
+    def __init__(self, records):
+        self._records = records
+
+    def __iter__(self):
+        return iter(self._records)
+
+
+class _FakeSession:
+    def __init__(self, records):
+        self._records = records
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def run(self, _cypher, _params):
+        return _FakeResult(self._records)
+
+
+class _FakeDriver:
+    def __init__(self, records):
+        self._records = records
+
+    def session(self):
+        return _FakeSession(self._records)
+
+
 class TestPolicyEvaluateCaps(unittest.TestCase):
+    def test_is_test_source_path_matches_src_test_only(self) -> None:
+        from codegraph.policy.integration import _is_test_source_path
+
+        self.assertTrue(_is_test_source_path("/workspace/project/src/test/java/org/example/FooTest.java"))
+        self.assertTrue(_is_test_source_path(r"C:\workspace\project\src\test\java\org\example\FooTest.java"))
+        self.assertFalse(_is_test_source_path("/workspace/project/src/main/java/org/example/Foo.java"))
+        self.assertFalse(_is_test_source_path(None))
+
+    def test_fetch_methods_with_context_excludes_test_sources(self) -> None:
+        from codegraph.policy.integration import _fetch_methods_with_context
+
+        records = [
+            {
+                "signature": "org.example.TestController.endpoint()",
+                "name": "endpoint",
+                "file_path": "/workspace/project/src/test/java/org/example/TestController.java",
+                "start_line": 10,
+                "end_line": 12,
+                "modifiers": [],
+                "property_annotations": ["GetMapping"],
+                "class_fqn": "org.example.TestController",
+                "annotation_nodes": ["GetMapping"],
+                "uses_fields": [],
+                "calls": [],
+                "callers": [],
+            },
+            {
+                "signature": "org.example.MainController.endpoint()",
+                "name": "endpoint",
+                "file_path": "/workspace/project/src/main/java/org/example/MainController.java",
+                "start_line": 20,
+                "end_line": 24,
+                "modifiers": [],
+                "property_annotations": ["GetMapping"],
+                "class_fqn": "org.example.MainController",
+                "annotation_nodes": ["GetMapping"],
+                "uses_fields": [],
+                "calls": [],
+                "callers": [],
+            },
+        ]
+
+        snapshots = _fetch_methods_with_context(_FakeDriver(records))
+
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual(snapshots[0]["signature"], "org.example.MainController.endpoint()")
+
     @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
     @patch("codegraph.policy.integration.load_iso_rules", return_value={})
     @patch("codegraph.policy.integration.load_policy_catalog", return_value={})

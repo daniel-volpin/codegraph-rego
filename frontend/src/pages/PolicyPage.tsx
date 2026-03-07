@@ -23,6 +23,7 @@ import {
 import type {
   PolicyCatalogResponse,
   PolicyEvaluateResponse,
+  PolicyExplanationStructured,
   PolicyExplainOneResponse,
   RemediationApplyResponse,
   RemediationPreviewResponse,
@@ -103,6 +104,23 @@ const severityVariant = (severity: string): "destructive" | "warning" | "seconda
   if (severity === "MEDIUM") return "warning";
   return "secondary";
 };
+
+const renderStructuredExplanation = (payload: PolicyExplanationStructured) => (
+  <div className="space-y-3 rounded-md border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Citation</p>
+      <p className="mt-1 break-words">{payload.citation}</p>
+    </div>
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Why</p>
+      <p className="mt-1 break-words">{payload.why}</p>
+    </div>
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Fix</p>
+      <p className="mt-1 break-words">{payload.fix}</p>
+    </div>
+  </div>
+);
 
 type PendingAction = "explain" | "preview" | "apply";
 
@@ -469,11 +487,16 @@ const PolicyPage = () => {
                             </div>
                           )}
 
-                          {explainById[row.original.id]?.status === "OK" && explainById[row.original.id]?.explanation && (
-                            <div className="prose prose-sm prose-indigo max-w-none rounded-md border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 break-words [&_pre]:whitespace-pre-wrap [&_code]:break-all">
-                              <Markdown>{explainById[row.original.id].explanation}</Markdown>
-                            </div>
-                          )}
+                          {explainById[row.original.id]?.status === "OK" &&
+                            (explainById[row.original.id]?.explanation_structured ||
+                              explainById[row.original.id]?.explanation) &&
+                            (explainById[row.original.id]?.explanation_structured
+                              ? renderStructuredExplanation(explainById[row.original.id].explanation_structured!)
+                              : (
+                                <div className="prose prose-sm prose-indigo max-w-none rounded-md border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 break-words [&_pre]:whitespace-pre-wrap [&_code]:break-all">
+                                  <Markdown>{explainById[row.original.id].explanation!}</Markdown>
+                                </div>
+                              ))}
 
                           <div className="rounded-lg border border-slate-200">
                             <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">

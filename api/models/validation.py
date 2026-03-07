@@ -66,9 +66,16 @@ class PolicyExplainOneRequest(BaseModel):
     model: Optional[str] = None
 
 
+class PolicyExplanationStructured(BaseModel):
+    citation: str
+    why: str
+    fix: str
+
+
 class PolicyExplainOneResponse(BaseModel):
     status: Literal["OK", "ERROR"]
     explanation: Optional[str] = None
+    explanation_structured: Optional[PolicyExplanationStructured] = None
     model: Optional[str] = None
     include_graph_context: bool = True
     error: Optional[str] = None
