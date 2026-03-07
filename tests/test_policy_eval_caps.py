@@ -214,6 +214,65 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
         self.assertEqual(violation["snippet_end_line"], 12)
         self.assertEqual(violation["evidence"]["source_code"], "public void m1() {}")
 
+    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
+    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
+    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
+    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
+    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
+    def test_policy_results_include_remediation_capability_metadata(
+        self,
+        _mock_which,
+        _mock_resolve_catalog,
+        _mock_load_catalog,
+        _mock_load_rules,
+        _mock_catalog_entries,
+    ) -> None:
+        from codegraph.policy.integration import evaluate_policies
+
+        bundles = [
+            {"target_method": "m1", "file_path": "src/main/java/F1.java", "source_code": "", "graph_context": {}, "vector_context": []},
+            {"target_method": "m2", "file_path": "src/main/java/F2.java", "source_code": "", "graph_context": {}, "vector_context": []},
+        ]
+
+        with (
+            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
+            patch(
+                "codegraph.policy.integration._evaluate_bundle",
+                side_effect=[
+                    [{"violation_id": "ISO-A.10-WEAK-HASH", "reason": "r1", "severity": "high"}],
+                    [{"violation_id": "ISO-A.9.4.1", "reason": "r2", "severity": "high"}],
+                ],
+            ),
+        ):
+            result = evaluate_policies()
+
+        violations = result["violations"]
+        supported = next(v for v in violations if v["violation_id"] == "ISO-A.10-WEAK-HASH")
+        unsupported = next(v for v in violations if v["violation_id"] == "ISO-A.9.4.1")
+
+        self.assertEqual(
+            supported["remediation"],
+            {
+                "supported": True,
+                "reason_code": "supported_rule_for_auto_fix",
+                "strategy": "llm_method_replacement",
+                "preview_available": True,
+                "verify_available": True,
+                "ui_apply_mode": "dry_run",
+            },
+        )
+        self.assertEqual(
+            unsupported["remediation"],
+            {
+                "supported": False,
+                "reason_code": "unsupported_rule_for_auto_fix",
+                "strategy": None,
+                "preview_available": False,
+                "verify_available": False,
+                "ui_apply_mode": "dry_run",
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -45,6 +45,11 @@ const UploadPage = () => {
       queryClient.removeQueries({ queryKey: ["policy:previewById"] });
       queryClient.removeQueries({ queryKey: ["policy:applyById"] });
       queryClient.removeQueries({ queryKey: ["policy:explainById"] });
+      try {
+        localStorage.removeItem("codegraph:policy:lastEvaluation");
+      } catch {
+        /* ignore storage errors */
+      }
     },
     onError: (error: Error) => {
       const payload: UploadResponse = { status: "error", error: error.message };

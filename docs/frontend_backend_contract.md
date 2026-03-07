@@ -54,6 +54,7 @@ Request/response models: `api/models/`
   - `target_method: string`
   - `file_path: string`
   - `control_metadata: object|null`
+  - `remediation?: object` (`supported`, `reason_code`, `strategy`, `preview_available`, `verify_available`, `ui_apply_mode`)
   - `evidence: object`
 
 ### `POST /policy/evaluate_with_llm`
@@ -121,3 +122,7 @@ All API calls are centralised in `frontend/src/lib/api.ts`.
 | `saveReview` / `fetchReviews` | `POST`/`GET /policy/reviews` | Triage review persistence |
 | `previewRemediation` | `POST /remediation/preview` | Virtual fix; no disk writes |
 | `applyRemediation` | `POST /remediation/apply` | Frontend hardcodes `mode="dry_run"` |
+
+Notes:
+- The frontend should use `violation.remediation` metadata to decide whether automatic remediation actions are available.
+- Automatic remediation is intentionally limited to selected crypto findings; unsupported rules should be surfaced as unavailable rather than treated as failed auto-fixes.

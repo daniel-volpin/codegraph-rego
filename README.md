@@ -193,6 +193,7 @@ python3 scripts/search/hybrid_code_search.py "find insecure hash usage"
 - Flow: gather violation context → LLM proposes full method → build virtual graph context in memory → re-run OPA on the virtual bundle.
 - No filesystem edits, compilation, or Neo4j mutations; the suggestion is for human review/copy‑paste.
 - Requires `opa` on `PATH`, LiteLLM-configured LLM access, and Neo4j reachable for the initial evidence.
+- Automatic remediation is intentionally limited to selected crypto findings (`ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-CRYPTO`). Other rules remain manual-review only.
 
 ## Remediation Apply & Verify (Temp Workspace)
 
@@ -206,6 +207,7 @@ python3 scripts/search/hybrid_code_search.py "find insecure hash usage"
 - `mode` controls persistence:
   - `dry_run` (default) restores the original file on disk and reverts the graph after verification.
   - `apply` persists the change back to the original file only when verification passes.
+- The current frontend uses `dry_run` only, so UI verification never persists source-file changes.
 
 ---
 

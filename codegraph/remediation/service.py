@@ -38,6 +38,7 @@ from codegraph.policy.integration import (
     load_policy_catalog,
     normalize_violation_payload,
 )
+from codegraph.remediation.capabilities import get_remediation_capability, rule_id_variants
 
 LOGGER = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -384,24 +385,14 @@ class RemediationService:
 
     @classmethod
     def _rule_id_variants(cls, rule_id: str) -> List[str]:
-        text = str(rule_id or "").strip()
-        if not text:
-            return []
-        variants = [text]
-        if text.startswith("ISO-27001-"):
-            base = text[len("ISO-27001-") :]
-        elif text.startswith("ISO-"):
-            base = text[len("ISO-") :]
-        else:
-            base = text
-        for candidate in (base, f"ISO-{base}", f"ISO-27001-{base}"):
-            if candidate and candidate not in variants:
-                variants.append(candidate)
-        return variants
+        return rule_id_variants(rule_id)
 
     @classmethod
     def _resolve_fix_strategy(cls, rule_id: Optional[str]) -> Optional[Dict[str, Any]]:
         if not rule_id:
+            return None
+        capability = get_remediation_capability(rule_id, supported_rule_ids=cls._FIX_STRATEGIES.keys())
+        if not capability.supported:
             return None
         for candidate in cls._rule_id_variants(rule_id):
             strategy = cls._FIX_STRATEGIES.get(candidate)
@@ -424,10 +415,11 @@ class RemediationService:
             }
 
         rule_id = context.get("rule_id")
-        if self._resolve_fix_strategy(rule_id) is None:
+        capability = get_remediation_capability(rule_id, supported_rule_ids=self._FIX_STRATEGIES.keys())
+        if not capability.supported:
             return {
                 "status": "INVALID",
-                "error": "unsupported_rule_for_auto_fix",
+                "error": capability.reason_code,
                 "violation_id": violation_id,
                 "rule_id": rule_id,
                 "target_method": context.get("target_method"),
@@ -530,10 +522,11 @@ class RemediationService:
                 "violation_id": violation_id,
             }
         rule_id = context.get("rule_id")
-        if self._resolve_fix_strategy(rule_id) is None:
+        capability = get_remediation_capability(rule_id, supported_rule_ids=self._FIX_STRATEGIES.keys())
+        if not capability.supported:
             return {
                 "status": "INVALID",
-                "error": "unsupported_rule_for_auto_fix",
+                "error": capability.reason_code,
                 "violation_id": violation_id,
                 "rule_id": rule_id,
                 "target_method": context.get("target_method") or target_method,

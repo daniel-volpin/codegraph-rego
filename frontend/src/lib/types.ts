@@ -32,6 +32,15 @@ export interface PolicyEvaluateResponse {
   error?: string;
 }
 
+export interface RemediationCapability {
+  supported: boolean;
+  reason_code: string;
+  strategy?: string | null;
+  preview_available: boolean;
+  verify_available: boolean;
+  ui_apply_mode: "dry_run";
+}
+
 export interface PolicyExplainOneRequest {
   violation: Record<string, unknown>;
   include_graph_context?: boolean;

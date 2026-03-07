@@ -83,6 +83,31 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertIsNone(parsed.get("parse_error"))
         self.assertIn("public void doPost", parsed["updated_source_code"])
 
+    def test_remediation_capability_matches_supported_rule_set(self):
+        from codegraph.remediation.capabilities import (
+            DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS,
+            get_remediation_capability,
+        )
+
+        self.assertEqual(
+            set(self.service.RemediationService._FIX_STRATEGIES.keys()),
+            set(DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS),
+        )
+
+        supported = get_remediation_capability(
+            "ISO-A.10-WEAK-HASH",
+            supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
+        )
+        unsupported = get_remediation_capability(
+            "ISO-A.9.4.1",
+            supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
+        )
+
+        self.assertTrue(supported.supported)
+        self.assertEqual(supported.reason_code, "supported_rule_for_auto_fix")
+        self.assertFalse(unsupported.supported)
+        self.assertEqual(unsupported.reason_code, "unsupported_rule_for_auto_fix")
+
     def test_preview_virtual_fix_rejects_unsupported_rule_without_llm_call(self):
         svc_mod = self.service
 
