@@ -11,7 +11,7 @@ from api.models.validation import (
     RemediationPreviewRequest,
     RemediationPreviewResponse,
 )
-from codegraph.api.services.remediation_service import (
+from codegraph.remediation.orchestration import (
     apply_remediation,
     preview_virtual_remediation,
 )

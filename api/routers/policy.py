@@ -12,7 +12,11 @@ from api.models.validation import (
     PolicyReviewListResponse,
 )
 from codegraph.policy.service import evaluate as evaluate_policies, catalog as get_policy_catalog_entries
-from codegraph.llm.integration import explain_policy_violations, generate_policy_explanation
+from codegraph.llm.integration import (
+    explain_policy_violations,
+    generate_policy_explanation_structured,
+    render_policy_explanation_structured,
+)
 from codegraph.llm.client import LLMUnavailableError
 from codegraph.config import LLM_MODEL, settings
 from codegraph.policy.review_store import append_review_jsonl, resolve_review_store_path
@@ -67,16 +71,18 @@ async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
 async def policy_explain_one(payload: PolicyExplainOneRequest):
     model = (payload.model or "").strip() or settings.llm_model
     try:
-        explanation = generate_policy_explanation(
+        explanation_structured = generate_policy_explanation_structured(
             payload.violation,
             include_graph_context=bool(payload.include_graph_context),
             model=model,
             raise_on_error=True,
         )
+        explanation = render_policy_explanation_structured(explanation_structured)
         return JSONResponse(
             {
                 "status": "OK",
                 "explanation": explanation,
+                "explanation_structured": explanation_structured,
                 "model": model,
                 "include_graph_context": bool(payload.include_graph_context),
             },

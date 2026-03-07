@@ -1,6 +1,6 @@
 # CodeGraph — Java Code Knowledge Graph & ISO 27001 Compliance Checker
 
-Master's thesis prototype. Turns a Java/Spring codebase into a queryable knowledge graph, semantic search index, and ISO 27001 compliance checker. It combines:
+CodeGraph is a FastAPI + React system for turning a Java/Spring codebase into a queryable knowledge graph, semantic search index, and ISO 27001 policy evaluation pipeline. This branch keeps the validated thesis evaluation flow while organizing the repository around clearer backend boundaries:
 
 - **Ingestion** – parses Java sources with `javalang`, stores classes/methods in Neo4j, and links `DECLARES`, `CALLS`, `USES`, `EXTENDS`, `IMPLEMENTS`, and `NESTED_IN` relationships.
 - **Semantic search** – embeds method snippets with Sentence Transformers, saves a FAISS index, and performs hybrid search with graph-context enrichment.
@@ -8,6 +8,21 @@ Master's thesis prototype. Turns a Java/Spring codebase into a queryable knowled
 - **Remediation** – LLM "Fix & Verify" loop that proposes patches, applies them in a temp workspace, re-ingests to Neo4j, and re-runs OPA to validate the fix.
 - **Evaluation pipeline** – OWASP Benchmark v1.2 integration for Precision/Recall/F1, LLM explanation citation success (ablation), and remediation fix-rate metrics.
 - **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, `/policy/explain_one`, `/policy/reviews`, `/remediation/preview`, `/remediation/apply`, and `/health`.
+
+---
+
+## Repository Layout
+
+- `app.py` – stable FastAPI entrypoint for `uvicorn app:app`
+- `api/` – HTTP routers and request/response models
+- `codegraph/` – backend domain logic and orchestration
+- `run_benchmark_eval.py`, `run_explanation_eval.py`, `run_remediation_eval.py` – validated thesis evaluation runners
+- `scripts/` – secondary operator utilities such as ingestion/search/policy helpers
+- `docs/architecture/` – repository structure and artifact policy notes for maintainers/reviewers
+
+Architecture notes:
+- [docs/architecture/repo-layout.md](docs/architecture/repo-layout.md)
+- [docs/architecture/artifact-policy.md](docs/architecture/artifact-policy.md)
 
 ---
 
@@ -23,7 +38,7 @@ Master's thesis prototype. Turns a Java/Spring codebase into a queryable knowled
 
    ```bash
    make install
-   # This installs backend dependencies with uv and frontend dependencies with yarn.
+   # This syncs backend dependencies with uv and installs frontend dependencies with yarn.
    ```
 
 3. **Configure**
@@ -39,8 +54,8 @@ Master's thesis prototype. Turns a Java/Spring codebase into a queryable knowled
 
    ```bash
    export JAVA_ROOT_DIR=/abs/path/to/project/src/main/java  # optional if using defaults
-   python3 codebase_to_neo4j.py           # parses Java, writes graph to Neo4j
-   python3 build_code_embeddings.py       # builds FAISS index + signature maps
+   python3 scripts/ingestion/codebase_to_neo4j.py      # parses Java, writes graph to Neo4j
+   python3 scripts/ingestion/build_code_embeddings.py  # builds FAISS index + signature maps
    ```
 
 5. **Run the API**
@@ -55,7 +70,7 @@ Master's thesis prototype. Turns a Java/Spring codebase into a queryable knowled
 - `GET /policy/evaluate?max_bundles=500&max_total_violations=100&max_per_violation_id=25` → faster interactive scan (caps work per violation id + overall)  
 - `GET /policy/catalog` → catalog of controls, evidence requirements, and Rego rule mapping  
 - `POST /policy/evaluate_with_llm` (JSON body `{"limit": 5, "model": "..."}`) → violations + LLM guidance
-- `POST /policy/explain_one` (JSON body `{"violation_id": "...", ...}`) → single-violation LLM explanation
+- `POST /policy/explain_one` (JSON body `{"violation": {...}, ...}`) → single-violation LLM explanation with both a compatibility string and structured `citation` / `why` / `fix` fields
 - `POST /policy/reviews` (JSON body) → save a triage/review record
 - `GET /policy/reviews?violation_key=...&limit=N` → list saved reviews  
 - `POST /upload` (zip file) → safe extraction, ingestion, embedding rebuild
@@ -130,6 +145,10 @@ For exact run artifacts, inspect the corresponding output directories under `out
   Flags weak cipher usage such as `DES`, `RC4`, or `AES/ECB/*`.
 
 Violations include the control id, method signature, file path, and a short reason.  
+Policy evaluation intentionally excludes Java files under `src/test/**` so thesis/demo findings stay focused on production-relevant application code.
+
+The Explain UI/API path returns structured `citation`, `why`, and `fix` output for direct rendering, while also keeping a plain-text compatibility field for older clients.
+
 Run locally with:
 
 ```bash
@@ -143,7 +162,7 @@ Add or adjust rules by editing files under `policy/`; OPA automatically loads ev
 
 ## LLM Enrichment
 
-- `llm_integration.py` reads nearby source lines for each violation and asks an LLM model for concise remediation advice.
+- `codegraph/llm/integration.py` reads nearby source lines for each violation and asks an LLM model for concise remediation advice.
 - Works with OpenAI and LM Studio via environment variables defined in `config.py`.
 - Failures return a descriptive placeholder so API responses stay stable during misconfiguration or outages.
 
@@ -151,15 +170,15 @@ Add or adjust rules by editing files under `policy/`; OPA automatically loads ev
 
 ## Hybrid Search Workflow
 
-1. `codebase_to_neo4j.py` discovers classes, methods, constructors, annotations, modifiers, file paths, and relationships.
-2. `build_code_embeddings.py` extracts method snippets, encodes them with `SentenceTransformer`, and builds a cosine FAISS index plus signature maps.
-3. `hybrid_code_search.py` lazily reloads the index/signature map on modification, embeds queries, retrieves semantic hits, and enriches results with two-hop Neo4j neighbourhoods.
+1. `scripts/ingestion/codebase_to_neo4j.py` discovers classes, methods, constructors, annotations, modifiers, file paths, and relationships.
+2. `scripts/ingestion/build_code_embeddings.py` extracts method snippets, encodes them with `SentenceTransformer`, and builds a cosine FAISS index plus signature maps.
+3. `scripts/search/hybrid_code_search.py` lazily reloads the index/signature map on modification, embeds queries, retrieves semantic hits, and enriches results with two-hop Neo4j neighbourhoods.
 4. `app.py` exposes `/search`, reusing the cached loaders to keep latency low.
 
 Try it from the CLI:
 
 ```bash
-python3 hybrid_code_search.py
+python3 scripts/search/hybrid_code_search.py "find insecure hash usage"
 ```
 
 ---
@@ -194,7 +213,7 @@ python3 hybrid_code_search.py
 
 1) **Backend**
 ```bash
-make install               # installs backend (uv) + frontend (yarn) deps
+make install               # syncs backend (uv) + frontend (yarn) deps
 uv run uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
 ```
 Verify:

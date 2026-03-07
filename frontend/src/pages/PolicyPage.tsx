@@ -23,6 +23,7 @@ import {
 import type {
   PolicyCatalogResponse,
   PolicyEvaluateResponse,
+  PolicyExplanationStructured,
   PolicyExplainOneResponse,
   RemediationApplyResponse,
   RemediationPreviewResponse,
@@ -46,6 +47,9 @@ interface ViolationRow {
   raw: RawViolation;
   autoRemediable: boolean;
 }
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 
 const AUTO_RULES = new Set(["ISO-A.10-WEAK-HASH", "ISO-A.10-WEAK-CRYPTO", "A.10-WEAK-HASH", "A.10-WEAK-CRYPTO"]);
 
@@ -74,6 +78,8 @@ const compactTargetMethod = (value: string) => {
 };
 
 const normalizeViolation = (item: RawViolation): ViolationRow => {
+  const evidence = asRecord(item.evidence);
+  const evidenceSnippet = evidence ? asString(evidence.source_code ?? "", "") : "";
   const ruleId = asString(item.violation_id ?? item.rule_id);
   const targetMethod = asString(item.target_method);
   const filePath = asString(item.file_path);
@@ -87,7 +93,7 @@ const normalizeViolation = (item: RawViolation): ViolationRow => {
     reason: asString(item.reason ?? item.description),
     // Prefer an empty string over the "—" placeholder so we can render an explicit
     // "snippet unavailable" message in the UI.
-    snippet: asString(item.code_snippet ?? item.updated_source_code ?? "", ""),
+    snippet: asString(item.code_snippet ?? evidenceSnippet ?? item.updated_source_code ?? "", ""),
     raw: item,
     autoRemediable: AUTO_RULES.has(ruleId),
   };
@@ -98,6 +104,23 @@ const severityVariant = (severity: string): "destructive" | "warning" | "seconda
   if (severity === "MEDIUM") return "warning";
   return "secondary";
 };
+
+const renderStructuredExplanation = (payload: PolicyExplanationStructured) => (
+  <div className="space-y-3 rounded-md border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Citation</p>
+      <p className="mt-1 break-words">{payload.citation}</p>
+    </div>
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Why</p>
+      <p className="mt-1 break-words">{payload.why}</p>
+    </div>
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Fix</p>
+      <p className="mt-1 break-words">{payload.fix}</p>
+    </div>
+  </div>
+);
 
 type PendingAction = "explain" | "preview" | "apply";
 
@@ -464,11 +487,16 @@ const PolicyPage = () => {
                             </div>
                           )}
 
-                          {explainById[row.original.id]?.status === "OK" && explainById[row.original.id]?.explanation && (
-                            <div className="prose prose-sm prose-indigo max-w-none rounded-md border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 break-words [&_pre]:whitespace-pre-wrap [&_code]:break-all">
-                              <Markdown>{explainById[row.original.id].explanation}</Markdown>
-                            </div>
-                          )}
+                          {explainById[row.original.id]?.status === "OK" &&
+                            (explainById[row.original.id]?.explanation_structured ||
+                              explainById[row.original.id]?.explanation) &&
+                            (explainById[row.original.id]?.explanation_structured
+                              ? renderStructuredExplanation(explainById[row.original.id].explanation_structured!)
+                              : (
+                                <div className="prose prose-sm prose-indigo max-w-none rounded-md border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 break-words [&_pre]:whitespace-pre-wrap [&_code]:break-all">
+                                  <Markdown>{explainById[row.original.id].explanation!}</Markdown>
+                                </div>
+                              ))}
 
                           <div className="rounded-lg border border-slate-200">
                             <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">

@@ -2,7 +2,84 @@ import unittest
 from unittest.mock import patch
 
 
+class _FakeResult:
+    def __init__(self, records):
+        self._records = records
+
+    def __iter__(self):
+        return iter(self._records)
+
+
+class _FakeSession:
+    def __init__(self, records):
+        self._records = records
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def run(self, _cypher, _params):
+        return _FakeResult(self._records)
+
+
+class _FakeDriver:
+    def __init__(self, records):
+        self._records = records
+
+    def session(self):
+        return _FakeSession(self._records)
+
+
 class TestPolicyEvaluateCaps(unittest.TestCase):
+    def test_is_test_source_path_matches_src_test_only(self) -> None:
+        from codegraph.policy.integration import _is_test_source_path
+
+        self.assertTrue(_is_test_source_path("/workspace/project/src/test/java/org/example/FooTest.java"))
+        self.assertTrue(_is_test_source_path(r"C:\workspace\project\src\test\java\org\example\FooTest.java"))
+        self.assertFalse(_is_test_source_path("/workspace/project/src/main/java/org/example/Foo.java"))
+        self.assertFalse(_is_test_source_path(None))
+
+    def test_fetch_methods_with_context_excludes_test_sources(self) -> None:
+        from codegraph.policy.integration import _fetch_methods_with_context
+
+        records = [
+            {
+                "signature": "org.example.TestController.endpoint()",
+                "name": "endpoint",
+                "file_path": "/workspace/project/src/test/java/org/example/TestController.java",
+                "start_line": 10,
+                "end_line": 12,
+                "modifiers": [],
+                "property_annotations": ["GetMapping"],
+                "class_fqn": "org.example.TestController",
+                "annotation_nodes": ["GetMapping"],
+                "uses_fields": [],
+                "calls": [],
+                "callers": [],
+            },
+            {
+                "signature": "org.example.MainController.endpoint()",
+                "name": "endpoint",
+                "file_path": "/workspace/project/src/main/java/org/example/MainController.java",
+                "start_line": 20,
+                "end_line": 24,
+                "modifiers": [],
+                "property_annotations": ["GetMapping"],
+                "class_fqn": "org.example.MainController",
+                "annotation_nodes": ["GetMapping"],
+                "uses_fields": [],
+                "calls": [],
+                "callers": [],
+            },
+        ]
+
+        snapshots = _fetch_methods_with_context(_FakeDriver(records))
+
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual(snapshots[0]["signature"], "org.example.MainController.endpoint()")
+
     @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
     @patch("codegraph.policy.integration.load_iso_rules", return_value={})
     @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
@@ -92,6 +169,50 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
         # in-flight subprocesses). The caps are applied when collecting results, so the output
         # must still respect both total and per-violation-id limits.
         self.assertEqual(mock_eval.call_count, len(bundles))
+
+    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
+    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
+    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
+    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
+    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
+    def test_policy_results_expose_top_level_code_snippet_fields(
+        self,
+        _mock_which,
+        _mock_resolve_catalog,
+        _mock_load_catalog,
+        _mock_load_rules,
+        _mock_catalog_entries,
+    ) -> None:
+        from codegraph.policy.integration import evaluate_policies
+
+        bundles = [
+            {
+                "target_method": "m1",
+                "file_path": "f1",
+                "source_code": "public void m1() {}",
+                "graph_context": {},
+                "vector_context": [],
+                "start_line": 10,
+                "end_line": 12,
+                "analysis_flags": {"md5_detected": False},
+            }
+        ]
+
+        with (
+            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
+            patch(
+                "codegraph.policy.integration._evaluate_bundle",
+                return_value=[{"violation_id": "A", "reason": "r", "severity": "high"}],
+            ),
+        ):
+            result = evaluate_policies()
+
+        violation = result["violations"][0]
+        self.assertEqual(violation["code_snippet"], "public void m1() {}")
+        self.assertTrue(violation["snippet_available"])
+        self.assertEqual(violation["snippet_start_line"], 10)
+        self.assertEqual(violation["snippet_end_line"], 12)
+        self.assertEqual(violation["evidence"]["source_code"], "public void m1() {}")
 
 
 if __name__ == "__main__":

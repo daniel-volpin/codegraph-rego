@@ -45,7 +45,7 @@ def main(argv: List[str] | None = None) -> int:
 
     from codegraph.ingestion import service as ingestion_service
 
-    # allow CLI overrides without re-importing the module
+    # Allow CLI overrides without re-importing the module.
     ingestion_service.NEO4J_URI = args.neo4j_uri
     ingestion_service.NEO4J_USER = args.neo4j_user
     ingestion_service.NEO4J_PASS = args.neo4j_pass

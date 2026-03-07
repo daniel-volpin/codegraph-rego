@@ -2,7 +2,6 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from api.models.validation import SearchRequest, SearchResponse, SearchMatch
 from codegraph.search.service import run_search
-from codegraph.api.models import Neighbor
 import logging
 
 router = APIRouter()
@@ -17,7 +16,7 @@ async def search(request: SearchRequest):
         for ctx in graph_contexts:
             ctx_entries = []
             for entry in ctx:
-                neighbors = [Neighbor(**n) for n in entry.get("neighbors", [])]
+                neighbors = [dict(neighbor) for neighbor in entry.get("neighbors", [])]
                 ctx_entries.append(SearchMatch(method=entry.get("method", ""), neighbors=neighbors))
             contexts_model.append(ctx_entries)
         return SearchResponse(matches=matched_signatures, contexts=contexts_model)

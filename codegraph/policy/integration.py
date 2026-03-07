@@ -47,6 +47,13 @@ def _load_hybrid_search() -> Optional[HybridSearchService]:
     return _HYBRID_SEARCH
 
 
+def _is_test_source_path(file_path: Any) -> bool:
+    if not isinstance(file_path, str):
+        return False
+    normalized = file_path.replace("\\", "/")
+    return "/src/test/" in normalized
+
+
 def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
     global _CATALOG_CACHE, _CATALOG_ENTRIES_CACHE, raw
     if _CATALOG_CACHE is None or _CATALOG_ENTRIES_CACHE is None:
@@ -190,6 +197,9 @@ def _fetch_methods_with_context(driver, *, max_bundles: int | None = None) -> Li
             signature = rec.get("signature")
             if not signature:
                 continue
+            file_path = rec.get("file_path")
+            if _is_test_source_path(file_path):
+                continue
             uses_fields = [field for field in (rec.get("uses_fields") or []) if field and field.get("name")]
             annotations = rec.get("property_annotations") or []
             annotation_nodes = rec.get("annotation_nodes") or []
@@ -199,7 +209,7 @@ def _fetch_methods_with_context(driver, *, max_bundles: int | None = None) -> Li
                     "signature": signature,
                     "name": rec.get("name"),
                     "class_fqn": rec.get("class_fqn"),
-                    "file_path": rec.get("file_path"),
+                    "file_path": file_path,
                     "start_line": rec.get("start_line"),
                     "end_line": rec.get("end_line"),
                     "modifiers": rec.get("modifiers") or [],
@@ -338,6 +348,39 @@ def _normalize_violation_payload(payload: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _build_violation_response(
+    normalized: Dict[str, Any],
+    bundle: Dict[str, Any],
+    control_meta: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    source_code = bundle.get("source_code", "") or ""
+    start_line = bundle.get("start_line")
+    end_line = bundle.get("end_line")
+    evidence = {
+        "source_code": source_code,
+        "graph_context": bundle.get("graph_context", {}),
+        "vector_context": bundle.get("vector_context", []),
+        "file_path": bundle.get("file_path"),
+        "target_method": bundle.get("target_method"),
+        "start_line": start_line,
+        "end_line": end_line,
+        "analysis_flags": bundle.get("analysis_flags", {}),
+    }
+    return {
+        "violation_id": normalized.get("violation_id") or normalized.get("id"),
+        "target_method": bundle.get("target_method"),
+        "file_path": bundle.get("file_path"),
+        "reason": normalized.get("reason"),
+        "severity": normalized.get("severity") or "high",
+        "control_metadata": control_meta,
+        "code_snippet": source_code,
+        "snippet_available": bool(source_code),
+        "snippet_start_line": start_line,
+        "snippet_end_line": end_line,
+        "evidence": evidence,
+    }
+
+
 def evaluate_policies(
     *,
     max_bundles: int | None = None,
@@ -386,29 +429,8 @@ def evaluate_policies(
                 if isinstance(max_per_violation_id, int) and max_per_violation_id > 0:
                     if current_count >= max_per_violation_id:
                         continue
-            reason = normalized.get("reason")
-            severity = normalized.get("severity")
             control_meta = _resolve_catalog_entry(violation_id, catalog)
-            violations.append(
-                {
-                    "violation_id": violation_id,
-                    "target_method": bundle.get("target_method"),
-                    "file_path": bundle.get("file_path"),
-                    "reason": reason,
-                    "severity": severity or "high",
-                    "control_metadata": control_meta,
-                    "evidence": {
-                        "source_code": bundle.get("source_code", ""),
-                        "graph_context": bundle.get("graph_context", {}),
-                        "vector_context": bundle.get("vector_context", []),
-                        "file_path": bundle.get("file_path"),
-                        "target_method": bundle.get("target_method"),
-                        "start_line": bundle.get("start_line"),
-                        "end_line": bundle.get("end_line"),
-                        "analysis_flags": bundle.get("analysis_flags", {}),
-                    },
-                }
-            )
+            violations.append(_build_violation_response(normalized, bundle, control_meta))
             if violation_id is not None:
                 violation_counts_by_id[str(violation_id)] = current_count + 1
             if isinstance(max_total_violations, int) and max_total_violations > 0:
@@ -521,26 +543,7 @@ class PolicyEvaluator:
                 continue
             violation_id = normalized.get("violation_id") or normalized.get("id")
             control_meta = _resolve_catalog_entry(violation_id, catalog)
-            violations.append(
-                {
-                    "violation_id": violation_id,
-                    "target_method": bundle.get("target_method"),
-                    "file_path": bundle.get("file_path"),
-                    "reason": normalized.get("reason"),
-                    "severity": normalized.get("severity") or "high",
-                    "control_metadata": control_meta,
-                    "evidence": {
-                        "source_code": bundle.get("source_code", ""),
-                        "graph_context": bundle.get("graph_context", {}),
-                        "vector_context": bundle.get("vector_context", []),
-                        "file_path": bundle.get("file_path"),
-                        "target_method": bundle.get("target_method"),
-                        "start_line": bundle.get("start_line"),
-                        "end_line": bundle.get("end_line"),
-                        "analysis_flags": bundle.get("analysis_flags", {}),
-                    },
-                }
-            )
+            violations.append(_build_violation_response(normalized, bundle, control_meta))
         return {
             "target_method": method_signature,
             "violations": violations,
