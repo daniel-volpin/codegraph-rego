@@ -1,91 +1,105 @@
 # AGENTS
 
-This repository hosts **CodeGraph** — a FastAPI + Pydantic backend that turns a Java/Spring codebase into a queryable knowledge graph, semantic search index, and ISO 27001 compliance checker, paired with a Vite + React (TypeScript) frontend. Follow these conventions for any change in this repo.
+CodeGraph is a benchmark-backed security/compliance framework for JVM code. Its primary thesis and product proof surface is **OWASP Benchmark**, not an uploaded demo app. Treat realistic apps as secondary workflow case studies.
 
-## Project layout
+Keep this file short, explicit, and current. Prefer benchmark evidence, canonical configs, and verified behavior over prototype shortcuts.
 
-```
-app.py                          # FastAPI entrypoint
-codegraph/                      # Core Python package
-  config.py                     #   Pydantic BaseSettings – all env vars
-  db.py                         #   Neo4j driver + idempotent constraints
-  api/                          #   Pydantic request/response models
-  embedding/                    #   FAISS index builder
-  ingestion/                    #   Java parser → Neo4j
-  llm/                          #   LiteLLM-based explanations
-  policy/                       #   OPA/Rego evaluation, catalog, bundle runner
-  remediation/                  #   Agentic fix-and-verify service
-  search/                       #   Hybrid semantic + graph search
-  common/                       #   Shared utilities (snippets, progress)
-  evaluation/                   #   Benchmark evaluation helpers
-api/routers/                    # FastAPI routers (health, upload, search, policy, remediation)
-api/models/                     # Shared validation models
-policy/                         # OPA Rego rules + catalog.json
-frontend/                       # Vite + React + TypeScript SPA
-  src/components/               #   Reusable UI components
-  src/pages/                    #   Route-level pages
-  src/lib/                      #   API client (api.ts) and shared types (types.ts)
-  src/context/                  #   React context providers
-configs/                        # Benchmark evaluation configs
-tests/                          # pytest test suite
-docs/                           # Design docs (frontend_backend_contract, remediation_prompting_design, thesis_context)
-copilot-context/                # Copilot-specific context anchors
-index/                          # FAISS index + signature maps (generated)
-uploaded_code/                  # Workspace for uploaded Java projects
-```
+## Current Ground Truth
 
-## Tooling & workflow
+- Primary workflow: ingest Java -> Neo4j graph -> OPA/Rego policy evaluation -> structured explanation -> bounded remediation -> re-verification.
+- Canonical benchmark configs live in `configs/benchmark/`.
+- Root-level `configs/benchmark_selection*.json` files are legacy compatibility shims. Do not use them as defaults.
+- Benchmark-first categories currently in scope:
+  - `CWE-22` -> `ISO-A.8-PATH-TRAVERSAL`
+  - `CWE-78` -> `ISO-A.8-CMD-INJECTION`
+  - `CWE-89` -> `ISO-A.8-SQL-INJECTION`
+  - `CWE-90` -> `ISO-A.8-LDAP-INJECTION`
+  - `CWE-327` -> `ISO-A.10-WEAK-CRYPTO`
+  - `CWE-328` -> `ISO-A.10-WEAK-HASH`
+  - `CWE-330` -> `ISO-A.10-WEAK-RANDOM`
+  - `CWE-643` -> `ISO-A.8-XPATH-INJECTION`
+- Remediation support tiers:
+  - `full`: weak hash, weak random
+  - `guarded`: weak crypto
+  - `manual`: SQLi, path traversal, command injection, LDAP injection, XPath injection, access/logging rules
 
-| Task | Command | Notes |
-|------|---------|-------|
-| Install all deps | `make install` | Backend via `uv`, frontend via `yarn` |
-| Dev servers | `make dev` | Backend on `:8000`, frontend on `:5173` |
-| Backend lint | `make lint` | Runs `ruff check .` + `yarn lint` |
-| Backend format | `make format` | Runs `ruff format .` + `prettier` |
-| Backend tests | `make test` | Runs `pytest` via `uv run` |
-| Frontend build check | `cd frontend && yarn build` | Runs `tsc && vite build` |
-| Docker | `make docker-up` / `make docker-down` | |
+## Repository Focus
 
-- **Package manager (backend):** `uv` with `pyproject.toml` — do NOT use `pip install -r requirements.txt`.
-- **Package manager (frontend):** `yarn` — prefer `yarn add` over `npm install`.
-- **Linter (backend):** `ruff` (line-length 120, target Python 3.10).
-- **Linter (frontend):** `eslint` with TypeScript + React plugins.
-- **Formatter:** `ruff format` (backend), `prettier` (frontend).
+- `codegraph/`: backend domain logic
+- `api/routers/`: FastAPI HTTP boundary
+- `policy/`: Rego rules and catalog
+- `frontend/`: React/Vite UI
+- `configs/benchmark/`: canonical benchmark configs
+- `docs/`: contract, prompting, thesis context
+- `tests/`: pytest coverage
 
-## Backend (Python)
+## Engineering Rules
 
-- Target **Python 3.10+**. Prefer `pathlib.Path`, type hints, and small helpers over inline path/string juggling.
-- Use structured logging via the standard `logging` module; avoid `print` for runtime diagnostics.
-- **Configuration:** Reuse `codegraph.config.settings` (a `Pydantic BaseSettings` instance in `codegraph/config.py`). It auto-loads `.env`. Do NOT read environment variables directly with `os.getenv()`.
-- **Database:** Keep Neo4j access centralized through `codegraph.db`. Add new constraints/indexes there idempotently.
-- **Policy:** Keep `policy/` Rego rules and `policy/catalog.json` aligned. When adding a new control, add both the Rego rule AND a catalog entry so API responses stay traceable.
-- **Remediation:** The remediation service in `codegraph/remediation/service.py` uses full method replacement (not unified diffs). It exposes two flows:
-  - `preview_virtual_fix()` — virtual-only, no filesystem edits.
-  - `apply_fix()` — temp workspace: apply → compile → re-ingest → OPA verify.
-  - Unsupported rule IDs return `status=INVALID` without calling the LLM.
-- **API routers** live in `api/routers/`. Current endpoints: `/health`, `/upload`, `/upload/status`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, `/policy/catalog`, `/policy/explain_one`, `/policy/reviews` (GET + POST), `/remediation/preview`, `/remediation/apply`.
+- Use `codegraph.config.settings`; do not read env vars ad hoc.
+- Keep Neo4j access centralized via `codegraph.db`.
+- Keep routers thin; business logic belongs under `codegraph/`.
+- Keep `policy/catalog.json` aligned with Rego rules.
+- Prefer typed helpers, dataclasses/Pydantic models, and explicit return objects.
+- Use `logging`, not `print`.
+- Avoid frontend/backend contract drift; update `frontend/src/lib/types.ts` when API payloads change.
 
-## Frontend (React + Vite)
+## Benchmark and Thesis Rules
 
-- Use **functional React components** with hooks; colocate shared UI in `frontend/src/components/` and feature pages in `frontend/src/pages/`.
-- **Routing:** `react-router-dom` v6 for client-side routing.
-- **API layer:** Keep API interactions in `frontend/src/lib/api.ts`. Use `@tanstack/react-query` for async workflows.
-- **Styling:** Vanilla CSS only (`App.css` for component styles, `index.css` for design tokens/resets). No Tailwind.
-- **Icons:** `lucide-react` — do not add other icon libraries.
-- **Code highlighting:** `prismjs` for syntax-highlighted code blocks.
-- **Graph visualization:** `react-force-graph-2d` for interactive graph rendering.
-- **Notifications:** `react-hot-toast` for toast messages.
-- Read the API base URL from `VITE_API_BASE_URL`; avoid hardcoding backend hosts.
+- Benchmark evidence matters more than intuition. When changing benchmark behavior, run a targeted smoke or medium evaluation.
+- Do not silently change benchmark semantics or control mappings.
+- Prefer new canonical configs over mutating old thesis-era ones.
+- Keep outputs reviewable and traceable by purpose; do not overwrite prior evidence casually.
+- For thesis claims, be precise:
+  - broad detection and explanation coverage
+  - bounded remediation support
+  - safe refusal is valid behavior
+- The compact project source of truth lives under `docs/project/`.
 
-## Testing expectations
+## LLM Rules
 
-- **Backend:** run `make lint` (ruff) and `make test` (pytest) when touching Python code.
-- **Frontend:** run `cd frontend && yarn build` (tsc + vite build) when modifying TypeScript/React code.
-- If changes span both stacks, note the executed commands in the final summary.
-- Use `python -m compileall codegraph api` as a quick syntax-only check when pytest is not needed.
+- Explanation uses structured output and should yield concise `Citation / Why / Fix`.
+- Remediation uses a structured contract and currently expects:
+  - `decision`
+  - `replacement_method_lines`
+  - `reason`
+- Do not fall back to fragile parser tricks as the primary solution.
+- Explanation and remediation may use different models. Prefer remediation-specific settings when testing code generation quality.
+- Current LM Studio setup is the expected local runtime. Prefer model-specific tuning over widening parser hacks.
 
-## Documentation and responses
+## Tooling
 
-- Keep `README.md` in sync with user-facing behavior when adding endpoints, CLI scripts, or env vars.
-- Update `copilot-context/` files when architecture changes significantly.
-- In PR summaries, enumerate touched areas and list any tests/checks that were run (or explain why none were needed).
+- Backend package manager: `uv`
+- Frontend package manager: `yarn`
+- Backend lint/format: `ruff`
+- Frontend build check: `cd frontend && yarn build`
+- Fast syntax check: `python -m compileall codegraph api scripts/evaluation`
+
+## Default Validation
+
+- Python changes: run relevant `pytest` targets plus `ruff check`.
+- Frontend changes: run `cd frontend && yarn build`.
+- Benchmark-sensitive changes: run at least one smoke or focused benchmark command.
+- When discussing final results, cite output files under `outputs/`.
+
+## Canonical Runs
+
+- Detection baseline:
+  - `run_benchmark_eval.py --config configs/benchmark/baseline.json`
+- Medium benchmark breadth:
+  - `run_benchmark_eval.py --config configs/benchmark/multicat_medium.json`
+- Full selected-category benchmark:
+  - `run_benchmark_eval.py --config configs/benchmark/multicat_full.json`
+- Explanation full:
+  - `run_explanation_eval.py --config configs/benchmark/multicat_full.json`
+- Supported remediation medium:
+  - `run_remediation_eval.py --config configs/benchmark/remediation_supported_medium.json`
+
+## Documentation Discipline
+
+- Keep `README.md` and `REPRODUCIBILITY.md` aligned with current defaults.
+- Keep `docs/project/` aligned with the latest benchmark evidence and current support matrix.
+- If architecture or contracts change, update the corresponding docs in `docs/`.
+- In summaries and PRs, report:
+  - what changed
+  - what was tested
+  - what is still bounded or unresolved
