@@ -80,4 +80,8 @@ The service converts that schema into the additive API payload:
   - `REMEDIATION_LLM_MODEL`
   - `REMEDIATION_LLM_MAX_TOKENS`
   - `REMEDIATION_LLM_TEMPERATURE`
+  - `REMEDIATION_LLM_MODEL_TTL_SECONDS`
+- The shared/default explanation path can also set `LLM_MODEL_TTL_SECONDS`.
+- When using LM Studio with multiple local models, enable LM Studio `Auto-Evict`. CodeGraph sends TTL hints per request so explanation and remediation models can unload after idle periods rather than staying resident together.
 - A code-editing model is preferred for remediation over a lighter explanation model.
+- Use `scripts/evaluation/run_remediation_model_bakeoff.py` to compare local remediation candidates on the bounded benchmark subset before changing the default remediation override.

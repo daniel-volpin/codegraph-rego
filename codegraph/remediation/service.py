@@ -852,6 +852,11 @@ class RemediationService:
             if settings.remediation_llm_max_tokens is not None
             else settings.llm_max_tokens_remediation
         )
+        ttl_seconds = (
+            settings.remediation_llm_model_ttl_seconds
+            if settings.remediation_llm_model_ttl_seconds is not None
+            else settings.llm_model_ttl_seconds
+        )
 
         try:
             response = self._llm_client(
@@ -859,6 +864,7 @@ class RemediationService:
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                ttl_seconds=ttl_seconds,
                 stop=_STRUCTURED_GENERATION_STOPS,
                 response_format=build_remediation_response_format(),
                 raise_on_error=True,

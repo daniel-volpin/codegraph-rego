@@ -37,6 +37,10 @@ class Settings(BaseSettings):
         1024,
         description="Maximum tokens to generate for remediation calls.",
     )
+    llm_model_ttl_seconds: Optional[int] = Field(
+        None,
+        description="Optional LM Studio model TTL (seconds) for explanation/default requests.",
+    )
     remediation_llm_model: Optional[str] = Field(
         None,
         description="Optional model override for remediation generation.",
@@ -48,6 +52,10 @@ class Settings(BaseSettings):
     remediation_llm_temperature: Optional[float] = Field(
         None,
         description="Optional temperature override for remediation generation.",
+    )
+    remediation_llm_model_ttl_seconds: Optional[int] = Field(
+        None,
+        description="Optional LM Studio model TTL (seconds) for remediation requests.",
     )
     llm_concurrency: int = Field(
         2,
@@ -91,9 +99,11 @@ class Settings(BaseSettings):
             "llm_enable_thinking": {"env": "LLM_ENABLE_THINKING"},
             "llm_max_tokens_explanation": {"env": "LLM_MAX_TOKENS_EXPLANATION"},
             "llm_max_tokens_remediation": {"env": "LLM_MAX_TOKENS_REMEDIATION"},
+            "llm_model_ttl_seconds": {"env": "LLM_MODEL_TTL_SECONDS"},
             "remediation_llm_model": {"env": "REMEDIATION_LLM_MODEL"},
             "remediation_llm_max_tokens": {"env": "REMEDIATION_LLM_MAX_TOKENS"},
             "remediation_llm_temperature": {"env": "REMEDIATION_LLM_TEMPERATURE"},
+            "remediation_llm_model_ttl_seconds": {"env": "REMEDIATION_LLM_MODEL_TTL_SECONDS"},
             "llm_concurrency": {"env": "LLM_CONCURRENCY"},
             "remediation_raw_capture_enabled": {"env": "REMEDIATION_RAW_CAPTURE_ENABLED"},
             "ui_review_store_path": {"env": "UI_REVIEW_STORE_PATH"},
@@ -123,9 +133,11 @@ LLM_TEMPERATURE = settings.llm_temperature
 LLM_ENABLE_THINKING = settings.llm_enable_thinking
 LLM_MAX_TOKENS_EXPLANATION = settings.llm_max_tokens_explanation
 LLM_MAX_TOKENS_REMEDIATION = settings.llm_max_tokens_remediation
+LLM_MODEL_TTL_SECONDS = settings.llm_model_ttl_seconds
 REMEDIATION_LLM_MODEL = settings.remediation_llm_model
 REMEDIATION_LLM_MAX_TOKENS = settings.remediation_llm_max_tokens
 REMEDIATION_LLM_TEMPERATURE = settings.remediation_llm_temperature
+REMEDIATION_LLM_MODEL_TTL_SECONDS = settings.remediation_llm_model_ttl_seconds
 LLM_CONCURRENCY = settings.llm_concurrency
 REMEDIATION_RAW_CAPTURE_ENABLED = settings.remediation_raw_capture_enabled
 UI_REVIEW_STORE_PATH = settings.ui_review_store_path

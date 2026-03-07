@@ -25,11 +25,16 @@ export LLM_API_BASE=http://localhost:1234/v1
 export LLM_API_KEY=lm-studio
 export LLM_MODEL=qwen/qwen3-8b
 export LLM_ENABLE_THINKING=false
+export LLM_MODEL_TTL_SECONDS=180
 
 # Optional remediation-specific overrides
-export REMEDIATION_LLM_MODEL=qwen3.5-9b-mlx
-export REMEDIATION_LLM_MAX_TOKENS=1500
+export REMEDIATION_LLM_MODEL=qwen/qwen3-coder-30b
+export REMEDIATION_LLM_MAX_TOKENS=2048
+export REMEDIATION_LLM_TEMPERATURE=0.0
+export REMEDIATION_LLM_MODEL_TTL_SECONDS=300
 ```
+
+If you are using LM Studio with different explanation/remediation models, enable LM Studio's `Auto-Evict` setting. CodeGraph now sends per-request TTL hints so idle models can be unloaded automatically.
 
 ## 3. Recommended Explanation-Eval Defaults
 Use these settings for local Qwen/LM Studio runs:
@@ -113,6 +118,17 @@ python run_remediation_eval.py \
   --config configs/benchmark/remediation_bounded_smoke.json \
   --mapping configs/control_mapping.json \
   --output-dir outputs/remediation_eval_bounded_smoke \
+  --sample-size 3 \
+  --reset-neo4j
+```
+
+To compare local remediation models on the same bounded subset:
+
+```bash
+python scripts/evaluation/run_remediation_model_bakeoff.py \
+  --models qwen/qwen3-coder-30b qwen3.5-27b \
+  --config configs/benchmark/remediation_bounded_smoke.json \
+  --output-dir outputs/remediation_model_bakeoff \
   --sample-size 3 \
   --reset-neo4j
 ```

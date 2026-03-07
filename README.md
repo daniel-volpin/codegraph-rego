@@ -48,7 +48,9 @@ Architecture notes:
      - `JAVA_ROOT_DIR` (defaults to `<repo>/uploaded_code`)
      - `INDEX_DIR`, `EMBEDDING_MODEL_NAME`
      - `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_API_BASE` for LiteLLM routing
+     - `LLM_MODEL_TTL_SECONDS` and `REMEDIATION_LLM_MODEL_TTL_SECONDS` for LM Studio model eviction hints
      - `UI_REVIEW_STORE_PATH` to override where UI triage reviews are appended (default: `outputs/policy_ui_reviews/reviews.jsonl`)
+   - If you are using LM Studio for multiple local models, enable `Auto-Evict` in LM Studio. CodeGraph now sends per-request TTL hints so explanation/remediation models can unload when idle instead of remaining resident together.
 
 4. **Ingest & embed (one-time per codebase change)**
 
@@ -245,6 +247,8 @@ python3 scripts/search/hybrid_code_search.py "find insecure hash usage"
   - `REMEDIATION_LLM_MODEL`
   - `REMEDIATION_LLM_MAX_TOKENS`
   - `REMEDIATION_LLM_TEMPERATURE`
+  - `REMEDIATION_LLM_MODEL_TTL_SECONDS`
+- For local LM Studio runs, prefer a coding-focused remediation model and validate it with `scripts/evaluation/run_remediation_model_bakeoff.py` before promoting it as the remediation default.
 
 ---
 
@@ -291,6 +295,17 @@ python run_explanation_eval.py --config configs/benchmark/multicat_medium.json -
 ```
 
 `run_remediation_eval.py` reuses the same apply/verify remediation service flow used by `/remediation/apply` (default `dry_run` mode) so evaluation behavior tracks production remediation logic.
+
+To compare local remediation models on the same bounded benchmark subset:
+
+```bash
+python scripts/evaluation/run_remediation_model_bakeoff.py \
+  --models qwen/qwen3-coder-30b qwen3.5-27b \
+  --config configs/benchmark/remediation_bounded_smoke.json \
+  --output-dir outputs/remediation_model_bakeoff \
+  --sample-size 3 \
+  --reset-neo4j
+```
 
 Set `OWASP_BENCHMARK_ROOT` before running (or edit the template config):
 
