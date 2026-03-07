@@ -19,9 +19,9 @@
     {
       "category_id": "crypto-md5",
       "rego_rule": "ISO-A.10-WEAK-CRYPTO",
-      "testcase_id": "BenchmarkTest02023",
+      "testcase_id": "BenchmarkTest00005",
       "expected_tier": "guarded",
-      "notes": "Literal DESede/ECB cipher setup suitable for guarded weak-crypto remediation."
+      "notes": "Literal DES/CBC cipher setup suitable for guarded weak-crypto remediation."
     },
     {
       "category_id": "sql-injection",
@@ -29,6 +29,34 @@
       "testcase_id": "BenchmarkTest00008",
       "expected_tier": "manual",
       "notes": "Known SQL injection true positive kept explanation-only for manual review."
+    },
+    {
+      "category_id": "path-traversal",
+      "rego_rule": "ISO-A.8-PATH-TRAVERSAL",
+      "testcase_id": "BenchmarkTest00001",
+      "expected_tier": "manual",
+      "notes": "Direct file path construction from cookie-derived input."
+    },
+    {
+      "category_id": "command-injection",
+      "rego_rule": "ISO-A.8-CMD-INJECTION",
+      "testcase_id": "BenchmarkTest00006",
+      "expected_tier": "manual",
+      "notes": "ProcessBuilder command assembled from untrusted header input."
+    },
+    {
+      "category_id": "ldap-injection",
+      "rego_rule": "ISO-A.8-LDAP-INJECTION",
+      "testcase_id": "BenchmarkTest00012",
+      "expected_tier": "manual",
+      "notes": "LDAP filter concatenates untrusted header input."
+    },
+    {
+      "category_id": "xpath-injection",
+      "rego_rule": "ISO-A.8-XPATH-INJECTION",
+      "testcase_id": "BenchmarkTest00207",
+      "expected_tier": "manual",
+      "notes": "XPath expression concatenates untrusted header input."
     }
   ]
 }

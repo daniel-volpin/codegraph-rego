@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
-from codegraph.policy.source_analysis import analyze_crypto_indicators
+from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.db import get_neo4j_driver
 from codegraph.remediation.capabilities import remediation_capability_dict
 from codegraph.search.service import HybridSearchService
@@ -310,7 +310,7 @@ def build_evidence_bundle(
         "calls": method_snapshot.get("calls") or [],
         "callers": method_snapshot.get("callers") or [],
     }
-    analysis_flags = analyze_crypto_indicators(source_code)
+    analysis_flags = analyze_policy_indicators(source_code)
     vector_context: List[str] = []
     if search_service is not None:
         try:
@@ -389,6 +389,7 @@ def evaluate_policies(
     max_bundles: int | None = None,
     max_total_violations: int | None = None,
     max_per_violation_id: int | None = None,
+    rule_ids: List[str] | None = None,
 ) -> Dict[str, Any]:
     if not shutil.which("opa"):
         return {
@@ -403,8 +404,9 @@ def evaluate_policies(
     violations: List[Dict[str, Any]] = []
     violation_counts_by_id: Dict[str, int] = {}
     truncated = False
+    allowed_rule_ids = {str(rule_id).strip() for rule_id in (rule_ids or []) if str(rule_id).strip()}
     include_limit_metadata = any(
-        value is not None for value in (max_bundles, max_total_violations, max_per_violation_id)
+        value is not None for value in (max_bundles, max_total_violations, max_per_violation_id, rule_ids)
     )
 
     # Evaluate OPA for all bundles concurrently.
@@ -427,6 +429,8 @@ def evaluate_policies(
             if normalized is None:
                 continue
             violation_id = normalized.get("violation_id") or normalized.get("id")
+            if allowed_rule_ids and str(violation_id or "").strip() not in allowed_rule_ids:
+                continue
             if violation_id is not None:
                 current_count = violation_counts_by_id.get(str(violation_id), 0)
                 if isinstance(max_per_violation_id, int) and max_per_violation_id > 0:
@@ -457,6 +461,7 @@ def evaluate_policies(
                     "max_bundles": max_bundles,
                     "max_total_violations": max_total_violations,
                     "max_per_violation_id": max_per_violation_id,
+                    "rule_ids": sorted(allowed_rule_ids) if allowed_rule_ids else None,
                 },
                 "violation_counts_by_id": violation_counts_by_id,
             }

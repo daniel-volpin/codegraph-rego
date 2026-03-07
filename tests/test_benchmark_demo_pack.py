@@ -61,10 +61,20 @@ class BenchmarkDemoPackTests(unittest.TestCase):
                                 "category_id": "hash-md5",
                                 "rego_rule": "ISO-A.10-WEAK-HASH",
                                 "testcase_id": "BenchmarkTest00046",
+                            },
+                            {
+                                "category_id": "rng-insecure",
+                                "rego_rule": "ISO-A.10-WEAK-RANDOM",
+                                "testcase_id": "BenchmarkTest00083",
                             }
                         ],
                     }
                 ),
+                encoding="utf-8",
+            )
+
+            (testcase_dir / "BenchmarkTest00083.java").write_text(
+                "package org.owasp.benchmark.testcode;\nclass BenchmarkTest00083 {}\n",
                 encoding="utf-8",
             )
 
@@ -101,7 +111,7 @@ class BenchmarkDemoPackTests(unittest.TestCase):
                 ).is_file()
             )
             self.assertTrue(Path(result["zip_path"]).is_file())
-            self.assertEqual(result["testcase_ids"], ["BenchmarkTest00046"])
+            self.assertEqual(result["testcase_ids"], ["BenchmarkTest00046", "BenchmarkTest00083"])
 
     def test_build_demo_pack_raises_for_missing_testcase(self) -> None:
         module = _load_script_module()

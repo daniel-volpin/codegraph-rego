@@ -32,6 +32,13 @@ export interface PolicyEvaluateResponse {
   error?: string;
 }
 
+export interface PolicyEvaluateOptions {
+  maxBundles?: number;
+  maxTotalViolations?: number;
+  maxPerViolationId?: number;
+  ruleIds?: string[];
+}
+
 export interface RemediationCapability {
   supported: boolean;
   support_tier: "full" | "guarded" | "manual";
@@ -117,7 +124,17 @@ export interface RemediationPreviewResponse {
   opa_details?: unknown;
   diff?: string | null;
   verification?: Record<string, unknown> | null;
+  generation?: RemediationGenerationResult | null;
   error?: string | null;
+}
+
+export interface RemediationGenerationResult {
+  decision?: "replace_method" | "no_fix" | null;
+  replacement_method_lines?: string[] | null;
+  replacement_method_code?: string | null;
+  reason?: string | null;
+  raw_response_valid: boolean;
+  schema_error?: string | null;
 }
 
 export interface RemediationVerificationSummary {
@@ -148,6 +165,7 @@ export interface RemediationApplyResponse {
   verification?: RemediationVerificationSummary | null;
   compilation?: RemediationCompilationResult | null;
   metadata?: Record<string, unknown> | null;
+  generation?: RemediationGenerationResult | null;
   error?: string | null;
 }
 

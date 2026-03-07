@@ -32,7 +32,6 @@ import type {
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
-import { Input } from "../components/ui/input";
 import CodeHighlight from "../components/ui/CodeHighlight";
 
 type RawViolation = Record<string, unknown>;
@@ -64,7 +63,10 @@ interface ViolationGroupRow {
 interface PersistedPolicyEvaluation {
   data: PolicyEvaluateResponse;
   savedAt: number;
+  preset: PolicyViewPreset;
 }
+
+type PolicyViewPreset = "all" | "framework_demo";
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -236,30 +238,59 @@ const ruleGroupStatusVariant = (group: ViolationGroupRow): "success" | "secondar
   return group.fullSupportCount > 0 || group.guardedSupportCount > 0 ? "success" : "secondary";
 };
 
+const FRAMEWORK_DEMO_RULE_IDS = [
+  "ISO-A.10-WEAK-HASH",
+  "ISO-A.10-WEAK-RANDOM",
+  "ISO-A.10-WEAK-CRYPTO",
+  "ISO-A.8-SQL-INJECTION",
+  "ISO-A.8-PATH-TRAVERSAL",
+  "ISO-A.8-CMD-INJECTION",
+  "ISO-A.8-LDAP-INJECTION",
+  "ISO-A.8-XPATH-INJECTION",
+];
 const POLICY_EVALUATION_STORAGE_KEY = "codegraph:policy:lastEvaluation";
+const POLICY_VIEW_PRESET_STORAGE_KEY = "codegraph:policy:viewPreset";
 
-const readPersistedPolicyEvaluation = (): PersistedPolicyEvaluation | null => {
+const readPolicyViewPreset = (): PolicyViewPreset => {
+  try {
+    const saved = localStorage.getItem(POLICY_VIEW_PRESET_STORAGE_KEY);
+    return saved === "framework_demo" ? "framework_demo" : "all";
+  } catch {
+    return "all";
+  }
+};
+
+const readPersistedPolicyEvaluation = (preset: PolicyViewPreset): PersistedPolicyEvaluation | null => {
   try {
     const saved = localStorage.getItem(POLICY_EVALUATION_STORAGE_KEY);
     if (!saved) return null;
     const parsed = JSON.parse(saved) as Partial<PersistedPolicyEvaluation>;
-    if (!parsed || typeof parsed !== "object" || !parsed.data || typeof parsed.savedAt !== "number") {
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !parsed.data ||
+      typeof parsed.savedAt !== "number" ||
+      (parsed.preset !== "all" && parsed.preset !== "framework_demo")
+    ) {
       return null;
     }
+    if (parsed.preset !== preset) return null;
     return {
       data: parsed.data as PolicyEvaluateResponse,
       savedAt: parsed.savedAt,
+      preset: parsed.preset,
     };
   } catch {
     return null;
   }
 };
 
-const persistPolicyEvaluation = (data: PolicyEvaluateResponse) => {
+const persistPolicyEvaluation = (data: PolicyEvaluateResponse, preset: PolicyViewPreset) => {
   try {
     const payload: PersistedPolicyEvaluation = {
       data,
       savedAt: Date.now(),
+      preset,
     };
     localStorage.setItem(POLICY_EVALUATION_STORAGE_KEY, JSON.stringify(payload));
   } catch {
@@ -315,11 +346,15 @@ type PendingAction = "explain" | "preview" | "apply";
 
 const PolicyPage = () => {
   const queryClient = useQueryClient();
-  const initialEvalSnapshotRef = useRef<PersistedPolicyEvaluation | null>(readPersistedPolicyEvaluation());
+  const initialViewPreset = readPolicyViewPreset();
+  const initialEvalSnapshotRef = useRef<Record<PolicyViewPreset, PersistedPolicyEvaluation | null>>({
+    all: readPersistedPolicyEvaluation("all"),
+    framework_demo: readPersistedPolicyEvaluation("framework_demo"),
+  });
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
   const [expandedFindingByGroup, setExpandedFindingByGroup] = useState<Record<string, string | null>>({});
-  const [maxTotal, setMaxTotal] = useState(5);
+  const [viewPreset, setViewPreset] = useState<PolicyViewPreset>(initialViewPreset);
   const [pendingAction, setPendingAction] = useState<Record<string, PendingAction>>({});
 
   const markPending = useCallback((id: string, action: PendingAction) => {
@@ -362,37 +397,21 @@ const PolicyPage = () => {
   const previewById = previewByIdQuery.data;
   const explainById = explainByIdQuery.data;
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("codegraph:policy:maxTotalViolations");
-      if (!saved) return;
-      const parsed = Number(saved);
-      if (Number.isFinite(parsed) && parsed > 0) setMaxTotal(parsed);
-    } catch {
-      /* ignore storage errors */
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("codegraph:policy:maxTotalViolations", String(maxTotal));
-    } catch {
-      /* ignore storage errors */
-    }
-  }, [maxTotal]);
-
   useQuery<PolicyCatalogResponse, Error>({ queryKey: ["policyCatalog"], queryFn: fetchPolicyCatalog });
 
-  const lastEvalToastAtRef = useRef(initialEvalSnapshotRef.current?.savedAt ?? 0);
+  const lastEvalToastAtRef = useRef(initialEvalSnapshotRef.current[viewPreset]?.savedAt ?? 0);
   const lastEvalErrorToastAtRef = useRef(0);
 
   // Keep the last evaluation results in the React Query cache so they survive route navigation.
   const evalQuery = useQuery<PolicyEvaluateResponse, Error>({
-    queryKey: ["policyEvaluation:last"],
-    queryFn: () => evaluatePolicies({ maxTotalViolations: maxTotal }),
+    queryKey: ["policyEvaluation:last", viewPreset],
+    queryFn: () =>
+      evaluatePolicies({
+        ruleIds: viewPreset === "framework_demo" ? FRAMEWORK_DEMO_RULE_IDS : undefined,
+      }),
     enabled: false,
-    initialData: initialEvalSnapshotRef.current?.data,
-    initialDataUpdatedAt: initialEvalSnapshotRef.current?.savedAt,
+    initialData: initialEvalSnapshotRef.current[viewPreset]?.data,
+    initialDataUpdatedAt: initialEvalSnapshotRef.current[viewPreset]?.savedAt,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 6,
     retry: false,
@@ -400,8 +419,16 @@ const PolicyPage = () => {
 
   useEffect(() => {
     if (!evalQuery.data) return;
-    persistPolicyEvaluation(evalQuery.data);
-  }, [evalQuery.data]);
+    persistPolicyEvaluation(evalQuery.data, viewPreset);
+  }, [evalQuery.data, viewPreset]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(POLICY_VIEW_PRESET_STORAGE_KEY, viewPreset);
+    } catch {
+      /* ignore storage errors */
+    }
+  }, [viewPreset]);
 
   useEffect(() => {
     if (!evalQuery.dataUpdatedAt || !evalQuery.data) return;
@@ -583,21 +610,59 @@ const PolicyPage = () => {
   return (
     <div className="space-y-4">
       <Card className="p-6">
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">max_total_violations</label>
-            <Input type="number" value={maxTotal} onChange={(e) => setMaxTotal(Number(e.target.value))} className="w-44" />
+        <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_auto] lg:items-center">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-slate-600">View mode</label>
+            <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={viewPreset === "framework_demo"}
+                aria-label="Toggle framework demo focus"
+                onClick={() => setViewPreset((current) => (current === "all" ? "framework_demo" : "all"))}
+                className={`relative inline-flex h-7 w-14 items-center rounded-full border transition-colors ${
+                  viewPreset === "framework_demo"
+                    ? "border-indigo-600 bg-indigo-600"
+                    : "border-slate-300 bg-slate-200"
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                    viewPreset === "framework_demo" ? "translate-x-8" : "translate-x-1"
+                  }`}
+                />
+              </button>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">Framework demo focus</p>
+                <p className="text-xs text-slate-500">
+                  {viewPreset === "framework_demo"
+                    ? "On. Show only the benchmark-aligned framework categories."
+                    : "Off. Show the full policy surface for the current upload."}
+                </p>
+              </div>
+            </div>
           </div>
-          <Button onClick={() => evalQuery.refetch()} disabled={evalQuery.isFetching}>
-            {evalQuery.isFetching ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Evaluating...
-              </>
-            ) : (
-              "Run Policy Evaluation"
-            )}
-          </Button>
+          <div className="flex lg:justify-end lg:self-center">
+            <Button
+              onClick={() => evalQuery.refetch()}
+              disabled={evalQuery.isFetching}
+              title={
+                viewPreset === "framework_demo"
+                  ? "Evaluate only the benchmark-aligned framework demo categories."
+                  : "Evaluate the full policy surface for the current upload."
+              }
+              className="w-full lg:min-w-[18rem] lg:w-auto"
+            >
+              {evalQuery.isFetching ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {viewPreset === "framework_demo" ? "Running demo scan..." : "Running full scan..."}
+                </>
+              ) : (
+                viewPreset === "framework_demo" ? "Run Framework Demo Scan" : "Run Full Policy Scan"
+              )}
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -625,6 +690,11 @@ const PolicyPage = () => {
       </div>
 
       <Card className="overflow-hidden">
+        {viewPreset === "framework_demo" && (
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Showing the benchmark-aligned categories used in the thesis framework demo. Switch to All findings to inspect the full policy surface.
+          </div>
+        )}
         <div className="overflow-auto">
           <table className="w-full table-fixed border-collapse text-sm">
             <thead className="bg-slate-100 text-left text-slate-700">

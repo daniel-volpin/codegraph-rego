@@ -178,6 +178,36 @@ class TestLlmIntegration(unittest.TestCase):
                 model="dummy-model",
             )
 
+    @patch(
+        "codegraph.llm.integration.generate_chat_completion",
+        return_value="Citation: src/Foo.java:10-18\nWhy: Weak hash is insecure.\nFix: Use SHA-256.",
+    )
+    @patch("codegraph.llm.integration.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    def test_generate_policy_explanation_structured_accepts_labeled_plain_text(
+        self,
+        _mock_build_prompt,
+        _mock_generate_chat_completion,
+    ) -> None:
+        from codegraph.llm.integration import generate_policy_explanation_structured
+
+        violation = {"violation_id": "ISO-A.10-WEAK-HASH", "evidence": {}}
+        result = generate_policy_explanation_structured(
+            violation,
+            include_graph_context=True,
+            evidence_mode="lean",
+            max_tokens=192,
+            model="dummy-model",
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "citation": "src/Foo.java:10-18",
+                "why": "Weak hash is insecure.",
+                "fix": "Use SHA-256.",
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -27,6 +27,34 @@
       "iso_controls": ["A.8"],
       "cwes": ["CWE-89"],
       "rego_rules": ["ISO-A.8-SQL-INJECTION"]
+    },
+    {
+      "id": "path-traversal",
+      "label": "Path Traversal (CWE-22)",
+      "iso_controls": ["A.8"],
+      "cwes": ["CWE-22"],
+      "rego_rules": ["ISO-A.8-PATH-TRAVERSAL"]
+    },
+    {
+      "id": "command-injection",
+      "label": "Command Injection (CWE-78)",
+      "iso_controls": ["A.8"],
+      "cwes": ["CWE-78"],
+      "rego_rules": ["ISO-A.8-CMD-INJECTION"]
+    },
+    {
+      "id": "ldap-injection",
+      "label": "LDAP Injection (CWE-90)",
+      "iso_controls": ["A.8"],
+      "cwes": ["CWE-90"],
+      "rego_rules": ["ISO-A.8-LDAP-INJECTION"]
+    },
+    {
+      "id": "xpath-injection",
+      "label": "XPath Injection (CWE-643)",
+      "iso_controls": ["A.8"],
+      "cwes": ["CWE-643"],
+      "rego_rules": ["ISO-A.8-XPATH-INJECTION"]
     }
   ]
 }

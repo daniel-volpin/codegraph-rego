@@ -25,6 +25,7 @@ from codegraph.config import (
     LLM_TEMPERATURE,
     LLM_ENABLE_THINKING,
     LLM_MAX_TOKENS_EXPLANATION,
+    LLM_MODEL_TTL_SECONDS,
 )
 
 try:
@@ -74,6 +75,7 @@ def generate_chat_completion(
     model: Optional[str] = None,
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
+    ttl_seconds: Optional[int] = None,
     stop: Optional[List[str] | str] = None,
     response_format: Optional[Dict[str, Any]] = None,
     raise_on_error: bool = False,
@@ -111,14 +113,21 @@ def generate_chat_completion(
     if provider:
         params["custom_llm_provider"] = provider
 
+    extra_body: Dict[str, Any] = {}
+
     # Pass enable_thinking to the model via extra_body.
     # Set LLM_ENABLE_THINKING=false in .env to suppress <think> blocks
     # on models that support it (Qwen3, DeepSeek, etc.).
     if not LLM_ENABLE_THINKING:
-        params["extra_body"] = {
-            "enable_thinking": False,
-            "chat_template_kwargs": {"enable_thinking": False},
-        }
+        extra_body["enable_thinking"] = False
+        extra_body["chat_template_kwargs"] = {"enable_thinking": False}
+
+    effective_ttl = ttl_seconds if ttl_seconds is not None else LLM_MODEL_TTL_SECONDS
+    if effective_ttl is not None and _is_lm_studio_api_base(LLM_API_BASE):
+        extra_body["ttl"] = int(effective_ttl)
+
+    if extra_body:
+        params["extra_body"] = extra_body
 
     try:
         response = litellm.completion(**params)  # type: ignore[arg-type]
@@ -137,3 +146,10 @@ def generate_chat_completion(
         if raise_on_error:
             raise LLMUnavailableError(message) from exc
         return f"[LLM unavailable: {message}]"
+
+
+def _is_lm_studio_api_base(api_base: Optional[str]) -> bool:
+    if not api_base:
+        return False
+    lowered = api_base.lower()
+    return "localhost:1234" in lowered or "127.0.0.1:1234" in lowered

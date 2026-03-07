@@ -89,28 +89,38 @@ def _parse_structured_explanation(content: str) -> Optional[Dict[str, str]]:
     if not text:
         return None
     json_text = _extract_json_object(text)
-    if not json_text:
+    if json_text:
+        try:
+            payload = json.loads(json_text)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict) and set(payload.keys()) == set(STRUCTURED_EXPLANATION_FIELDS):
+            parsed: Dict[str, str] = {}
+            for field in STRUCTURED_EXPLANATION_FIELDS:
+                value = payload.get(field)
+                if not isinstance(value, str):
+                    return None
+                normalized = value.strip()
+                if not normalized:
+                    return None
+                parsed[field] = normalized
+            return parsed
+
+    lowered = text.lower()
+    citation_idx = lowered.find("citation:")
+    why_idx = lowered.find("why:")
+    fix_idx = lowered.find("fix:")
+    if citation_idx == -1 or why_idx == -1 or fix_idx == -1:
         return None
-    try:
-        payload = json.loads(json_text)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(payload, dict):
+    if not (citation_idx < why_idx < fix_idx):
         return None
 
-    if set(payload.keys()) != set(STRUCTURED_EXPLANATION_FIELDS):
+    citation = text[citation_idx + len("citation:") : why_idx].strip()
+    why = text[why_idx + len("why:") : fix_idx].strip()
+    fix = text[fix_idx + len("fix:") :].strip()
+    if not citation or not why or not fix:
         return None
-
-    parsed: Dict[str, str] = {}
-    for field in STRUCTURED_EXPLANATION_FIELDS:
-        value = payload.get(field)
-        if not isinstance(value, str):
-            return None
-        normalized = value.strip()
-        if not normalized:
-            return None
-        parsed[field] = normalized
-    return parsed
+    return {"citation": citation, "why": why, "fix": fix}
 
 
 def render_policy_explanation_structured(payload: Dict[str, str]) -> str:

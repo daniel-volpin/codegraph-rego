@@ -80,6 +80,32 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
         self.assertEqual(len(snapshots), 1)
         self.assertEqual(snapshots[0]["signature"], "org.example.MainController.endpoint()")
 
+    def test_evaluate_bundle_does_not_flag_random_string_literals_as_insecure_random(self) -> None:
+        from codegraph.policy.integration import evaluate_bundle
+
+        bundle = {
+            "target_method": "org.owasp.benchmark.testcode.BenchmarkTest99999.doPost(HttpServletRequest,HttpServletResponse)",
+            "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest99999.java",
+            "source_code": 'response.getWriter().println("Weak Randomness Test java.util.Random.nextInt(int) executed");',
+            "graph_context": {"annotations": [], "uses_fields": [], "calls": [], "callers": []},
+            "analysis_flags": {
+                "md5_detected": False,
+                "weak_cipher_detected": False,
+                "insecure_random_detected": False,
+                "sha1prng_detected": False,
+                "path_traversal_detected": False,
+                "command_injection_detected": False,
+                "ldap_injection_detected": False,
+                "xpath_injection_detected": False,
+                "sql_prepare_call_detected": False,
+                "sql_callable_statement_detected": False,
+            },
+        }
+
+        violations = evaluate_bundle(bundle)
+        violation_ids = {v.get("violation_id") for v in violations}
+        self.assertNotIn("ISO-A.10-WEAK-RANDOM", violation_ids)
+
     @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
     @patch("codegraph.policy.integration.load_iso_rules", return_value={})
     @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
@@ -295,6 +321,41 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
                 "safe_refusal_possible": False,
             },
         )
+
+    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
+    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
+    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
+    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
+    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
+    def test_policy_results_can_be_filtered_by_rule_ids(
+        self,
+        _mock_which,
+        _mock_resolve_catalog,
+        _mock_load_catalog,
+        _mock_load_rules,
+        _mock_catalog_entries,
+    ) -> None:
+        from codegraph.policy.integration import evaluate_policies
+
+        bundles = [
+            {"target_method": "m1", "file_path": "src/main/java/F1.java", "source_code": "", "graph_context": {}, "vector_context": []},
+            {"target_method": "m2", "file_path": "src/main/java/F2.java", "source_code": "", "graph_context": {}, "vector_context": []},
+        ]
+
+        with (
+            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
+            patch(
+                "codegraph.policy.integration._evaluate_bundle",
+                side_effect=[
+                    [{"violation_id": "ISO-A.10-WEAK-HASH", "reason": "hash", "severity": "high"}],
+                    [{"violation_id": "ISO-A.8-SQL-INJECTION", "reason": "sql", "severity": "high"}],
+                ],
+            ),
+        ):
+            result = evaluate_policies(rule_ids=["ISO-A.10-WEAK-HASH"])
+
+        self.assertEqual(len(result["violations"]), 1)
+        self.assertEqual(result["violations"][0]["violation_id"], "ISO-A.10-WEAK-HASH")
 
 
 if __name__ == "__main__":

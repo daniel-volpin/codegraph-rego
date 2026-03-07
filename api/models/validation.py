@@ -58,6 +58,7 @@ class PolicyEvaluateWithLLMRequest(BaseModel):
     max_bundles: Optional[int] = None
     max_total_violations: Optional[int] = None
     max_per_violation_id: Optional[int] = None
+    rule_ids: Optional[List[str]] = None
 
 
 class PolicyExplainOneRequest(BaseModel):
@@ -112,6 +113,15 @@ class RemediationPreviewRequest(BaseModel):
     file_path: Optional[str] = None
 
 
+class RemediationGenerationResponse(BaseModel):
+    decision: Optional[Literal["replace_method", "no_fix"]] = None
+    replacement_method_lines: Optional[List[str]] = None
+    replacement_method_code: Optional[str] = None
+    reason: Optional[str] = None
+    raw_response_valid: bool = False
+    schema_error: Optional[str] = None
+
+
 class RemediationPreviewResponse(BaseModel):
     status: str
     violation_id: str
@@ -124,6 +134,7 @@ class RemediationPreviewResponse(BaseModel):
     opa_details: Optional[Any] = None
     diff: Optional[str] = None
     verification: Optional[dict] = None
+    generation: Optional[RemediationGenerationResponse] = None
     error: Optional[str] = None
 
 
@@ -146,4 +157,5 @@ class RemediationApplyResponse(BaseModel):
     verification: Optional[dict] = None
     compilation: Optional[dict] = None
     metadata: Optional[dict] = None
+    generation: Optional[RemediationGenerationResponse] = None
     error: Optional[str] = None

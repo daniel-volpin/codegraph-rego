@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -9,6 +10,30 @@ except ImportError:  # pragma: no cover - environment guard
     javalang = None
 
 
+def _structured_replace_method(method_code: str | list[str]) -> str:
+    if isinstance(method_code, str):
+        method_lines = method_code.splitlines()
+    else:
+        method_lines = method_code
+    return json.dumps(
+        {
+            "decision": "replace_method",
+            "replacement_method_lines": method_lines,
+            "reason": "",
+        }
+    )
+
+
+def _structured_no_fix(reason: str) -> str:
+    return json.dumps(
+        {
+            "decision": "no_fix",
+            "replacement_method_lines": [],
+            "reason": reason,
+        }
+    )
+
+
 @unittest.skipIf(javalang is None, "javalang not installed")
 class RemediationUtilsTests(unittest.TestCase):
     @classmethod
@@ -18,70 +43,166 @@ class RemediationUtilsTests(unittest.TestCase):
         cls.service = service
 
     def test_extract_json_block(self):
-        text = 'Here is output:\n```json\n{"updated_source_code": "ok"}\n```'
+        text = 'Here is output:\n```json\n{"decision":"no_fix","replacement_method_lines":[],"reason":"x"}\n```'
         extracted = self.service._extract_json_block(text)
-        self.assertEqual(extracted, '{"updated_source_code": "ok"}')
+        self.assertEqual(extracted, '{"decision":"no_fix","replacement_method_lines":[],"reason":"x"}')
 
-    def test_parse_llm_virtual_json(self):
-        raw = 'note\n{"updated_source_code": "public void foo() {}", "explanation": "ok"}'
-        parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
-        self.assertEqual(parsed["updated_source_code"], "public void foo() {}")
-        self.assertEqual(parsed["explanation"], "ok")
+    def test_parse_structured_generation_replace_method(self):
+        raw = _structured_replace_method('public void foo() { System.out.println("ok"); }')
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertEqual(parsed["decision"], "replace_method")
+        self.assertEqual(parsed["replacement_method_lines"], ['public void foo() { System.out.println("ok"); }'])
+        self.assertIn('System.out.println("ok")', parsed["replacement_method_code"])
+        self.assertEqual(parsed["reason"], "")
+        self.assertIsNone(parsed["schema_error"])
 
-    def test_parse_llm_virtual_json_sample_payload(self):
-        raw = (
-            '{"updated_source_code":"public void doPost(HttpServletRequest request, '
-            "HttpServletResponse response) {"
-            'java.security.MessageDigest md = java.security.MessageDigest.getInstance(\\"SHA-256\\");'
-            '}","explanation":"Switched weak hash to SHA-256."}'
+    def test_parse_structured_generation_no_fix(self):
+        raw = _structured_no_fix("safe minimal fix is not possible with the available context")
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertEqual(parsed["decision"], "no_fix")
+        self.assertEqual(parsed["reason"], "safe minimal fix is not possible with the available context")
+        self.assertIsNone(parsed["replacement_method_code"])
+        self.assertEqual(parsed["replacement_method_lines"], [])
+
+    def test_parse_structured_generation_rejects_malformed_json(self):
+        raw = '{"decision":"replace_method","replacement_method_lines":["public void foo() { }"]'
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertTrue((parsed["schema_error"] or "").startswith("invalid_json"))
+
+    def test_parse_structured_generation_rejects_missing_fields(self):
+        raw = '{"decision":"replace_method","replacement_method_lines":["public void foo() { }"]}'
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertIn("schema_mismatch", parsed["schema_error"])
+
+    def test_parse_structured_generation_rejects_empty_replacement_lines(self):
+        raw = _structured_replace_method([])
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertEqual(parsed["schema_error"], "empty_replacement_lines")
+
+    def test_parse_structured_generation_rejects_empty_no_fix_reason(self):
+        raw = _structured_no_fix("   ")
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertIn("no_fix requires reason", parsed["schema_error"])
+
+    def test_parse_structured_generation_rejects_non_string_lines(self):
+        raw = json.dumps(
+            {
+                "decision": "replace_method",
+                "replacement_method_lines": ["public void foo() {", 123, "}"],
+                "reason": "",
+            }
         )
-        parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
-        self.assertIsNone(parsed.get("parse_error"))
-        self.assertGreater(len(parsed["updated_source_code"]), 0)
-        self.assertEqual(parsed["explanation"], "Switched weak hash to SHA-256.")
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertIn("must contain strings", parsed["schema_error"])
 
-    def test_parse_llm_virtual_json_replacement_method_code(self):
-        raw = (
-            '{"file_path":"Example.java","target_method_signature":"example.Foo.doPost(HttpServletRequest,HttpServletResponse)",'
-            '"replacement_method_code":"public void doPost(HttpServletRequest request, HttpServletResponse response) {\\n'
-            'java.security.MessageDigest md = java.security.MessageDigest.getInstance(\\"SHA-256\\");\\n}",'
-            '"explanation":"Structured output patch."}'
+    def test_parse_structured_generation_rejects_non_method_replacement(self):
+        raw = _structured_replace_method('java.security.MessageDigest.getInstance("SHA-256");')
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertEqual(parsed["schema_error"], "invalid_method_shape")
+
+    def test_parse_structured_generation_normalizes_embedded_newlines_in_line_entries(self):
+        raw = _structured_replace_method(
+            ['@Override\\npublic void hash() {', '    System.out.println("ok");', '}']
         )
-        parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
-        self.assertIsNone(parsed.get("parse_error"))
-        self.assertIn("SHA-256", parsed["updated_source_code"])
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.hash()")
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertIn("\npublic void hash()", parsed["replacement_method_code"])
+        self.assertNotIn("\\n", parsed["replacement_method_code"])
 
-    def test_capture_raw_llm_output_on_invalid_json(self):
-        invalid_raw = '{"updated_source_code":"public void foo() {}"'
-        parsed = self.service.RemediationService._parse_llm_virtual_json(invalid_raw)
-        self.assertTrue((parsed.get("parse_error") or "").startswith("invalid_json"))
-        with TemporaryDirectory() as tmp:
-            out = self.service._capture_raw_llm_output(tmp, "BenchmarkTest99999", 1, invalid_raw)
-            self.assertIsNotNone(out)
-            self.assertTrue(Path(out).is_file())
-            self.assertEqual(Path(out).read_text(encoding="utf-8"), invalid_raw)
-
-    def test_parse_llm_virtual_json_rejects_unescaped_quotes_in_code(self):
-        # This mimics the real failure mode in remediation_eval: the model returns JSON-like text,
-        # but embeds raw `"` from Java string literals inside a JSON string field.
-        raw = (
-            '{"file_path":"Example.java","target_method_signature":"x.y.Foo.doPost(A,B)",'
-            '"replacement_method_code":"public void doPost(A a, B b) { System.out.println("hi"); }"}'
+    def test_parse_structured_generation_rejects_invalid_java_method_syntax(self):
+        raw = _structured_replace_method(
+            'public void hash() { System.out.println("oops"; }'
         )
-        parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
-        self.assertTrue((parsed.get("parse_error") or "").startswith("invalid_json"))
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.hash()")
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertIn("invalid_java_syntax", parsed["schema_error"])
 
-    def test_parse_llm_virtual_json_accepts_code_only_output(self):
-        raw = "public void doPost(A a, B b) { return; }"
-        parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
-        self.assertIsNone(parsed.get("parse_error"))
-        self.assertEqual(parsed["updated_source_code"], raw)
+    def test_parse_structured_generation_rejects_method_name_mismatch(self):
+        raw = _structured_replace_method("public void wrongName() { return; }")
+        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.hash()")
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertEqual(parsed["schema_error"], "method_name_mismatch")
 
-    def test_parse_llm_virtual_json_accepts_fenced_code_block(self):
-        raw = "```java\npublic void doPost(A a, B b) { return; }\n```"
-        parsed = self.service.RemediationService._parse_llm_virtual_json(raw)
-        self.assertIsNone(parsed.get("parse_error"))
-        self.assertIn("public void doPost", parsed["updated_source_code"])
+    def test_parse_structured_generation_rejects_parameter_count_mismatch(self):
+        raw = _structured_replace_method("public void hash(String a) { return; }")
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            "com.example.Foo.hash(HttpServletRequest,HttpServletResponse)",
+        )
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertEqual(parsed["schema_error"], "parameter_count_mismatch")
+
+    def test_propose_full_method_uses_structured_generation_contract(self):
+        svc_mod = self.service
+
+        captured = {}
+
+        def capture_llm(messages, **kwargs):
+            captured["messages"] = messages
+            captured["kwargs"] = kwargs
+            return _structured_replace_method(
+                "public void hash() { java.security.MessageDigest.getInstance(\"SHA-256\"); }"
+            )
+
+        remediation = svc_mod.RemediationService(llm_client=capture_llm)
+        context = {
+            "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
+            "target_method": "com.example.Foo.hash()",
+            "file_path": "Example.java",
+            "rule_id": "ISO-A.10-WEAK-HASH",
+            "evidence": {"source_code": "public void hash() { }", "graph_context": {}, "vector_context": []},
+            "catalog_entry": {"title": "Cryptography (Weak Hash)"},
+            "baseline_violations": [],
+        }
+
+        out = remediation.propose_full_method(context)
+        self.assertEqual(out["decision"], "replace_method")
+        self.assertTrue(out["generation"]["raw_response_valid"])
+        self.assertEqual(captured["kwargs"]["response_format"]["type"], "json_schema")
+        self.assertEqual(captured["kwargs"]["stop"], ["<|im_end|>", "<|endoftext|>"])
+        self.assertIn("BEGIN_TASK_SPEC_JSON", captured["messages"][1]["content"])
+        self.assertEqual(
+            out["generation"]["replacement_method_lines"],
+            ['public void hash() { java.security.MessageDigest.getInstance("SHA-256"); }'],
+        )
+
+    def test_remediation_prompt_omits_empty_graph_and_vector_blocks(self):
+        from codegraph.remediation.prompting import RemediationPromptTemplate, RemediationTaskSpec
+
+        prompt = RemediationPromptTemplate.build_user_prompt(
+            context={
+                "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
+                "target_method": "com.example.Foo.hash()",
+                "file_path": "Example.java",
+                "rule_id": "ISO-A.10-WEAK-HASH",
+                "evidence": {"source_code": "public void hash() {}", "graph_context": {}, "vector_context": []},
+                "catalog_entry": {"title": "Cryptography (Weak Hash)"},
+            },
+            spec=RemediationTaskSpec(
+                rule_id="ISO-A.10-WEAK-HASH",
+                objective="Replace MD5 with SHA-256",
+                allowed_transformations=[],
+                non_goals=[],
+            ),
+        )
+
+        self.assertNotIn(RemediationPromptTemplate.GRAPH_BEGIN, prompt)
+        self.assertNotIn(RemediationPromptTemplate.VECTOR_BEGIN, prompt)
+
+    def test_remediation_system_prompt_requires_complete_valid_method_or_no_fix(self):
+        from codegraph.remediation.prompting import RemediationPromptTemplate
+
+        prompt = RemediationPromptTemplate.system_prompt()
+        self.assertIn("Only return replace_method when you can produce a COMPLETE syntactically valid Java method", prompt)
+        self.assertIn("return no_fix instead of a partial draft", prompt)
 
     def test_remediation_capability_matches_supported_rule_set(self):
         from codegraph.remediation.capabilities import (
@@ -113,21 +234,17 @@ class RemediationUtilsTests(unittest.TestCase):
 
         self.assertTrue(supported.supported)
         self.assertEqual(supported.support_tier, "full")
-        self.assertEqual(supported.reason_code, "supported_rule_for_auto_fix")
         self.assertTrue(random_supported.supported)
         self.assertEqual(random_supported.support_tier, "full")
-        self.assertTrue(random_supported.safe_refusal_possible)
         self.assertTrue(guarded.supported)
         self.assertEqual(guarded.support_tier, "guarded")
-        self.assertTrue(guarded.safe_refusal_possible)
         self.assertFalse(unsupported.supported)
         self.assertEqual(unsupported.support_tier, "manual")
-        self.assertEqual(unsupported.reason_code, "unsupported_rule_for_auto_fix")
 
     def test_preview_virtual_fix_rejects_unsupported_rule_without_llm_call(self):
         svc_mod = self.service
 
-        llm_client = Mock(return_value="public void noop() { return; }")
+        llm_client = Mock(return_value=_structured_replace_method("public void noop() { return; }"))
         remediation = svc_mod.RemediationService(llm_client=llm_client)
         remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
             "violation": {"violation_id": "ISO-A.12.4.1", "reason": "logging"},
@@ -144,92 +261,10 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertEqual(out.get("error"), "unsupported_rule_for_auto_fix")
         llm_client.assert_not_called()
 
-    def test_apply_fix_rejects_unsupported_rule_without_llm_call(self):
+    def test_preview_virtual_fix_returns_no_fix_for_preflight_random_shape(self):
         svc_mod = self.service
 
-        llm_client = Mock(return_value="public void noop() { return; }")
-        remediation = svc_mod.RemediationService(llm_client=llm_client)
-        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
-            "violation": {"violation_id": "ISO-A.12.4.1", "reason": "logging"},
-            "target_method": "com.example.Foo.update()",
-            "file_path": "Example.java",
-            "rule_id": "ISO-A.12.4.1",
-            "evidence": {"source_code": "", "graph_context": {}, "vector_context": []},
-            "catalog_entry": {"title": "Event Logging"},
-            "baseline_violations": [],
-        }
-
-        out = remediation.apply_fix("ISO-A.12.4.1", mode="dry_run", max_attempts=1)
-        self.assertEqual(out.get("status"), "INVALID")
-        self.assertEqual(out.get("error"), "unsupported_rule_for_auto_fix")
-        llm_client.assert_not_called()
-
-    def test_prompt_template_system_is_rule_agnostic_and_task_spec_is_structured_json(self):
-        svc_mod = self.service
-
-        captured = []
-
-        def capture_llm(messages, *_args, **_kwargs):
-            captured.append(messages)
-            return "public void hash() { return; }"
-
-        remediation = svc_mod.RemediationService(llm_client=capture_llm)
-        base_context = {
-            "violation": {"violation_id": "X", "reason": "test"},
-            "target_method": "com.example.Foo.hash()",
-            "file_path": "Example.java",
-            "evidence": {"source_code": "public void hash() { }", "graph_context": {}, "vector_context": []},
-            "catalog_entry": {"title": "Test"},
-            "baseline_violations": [],
-        }
-
-        out_hash = remediation.propose_full_method({**base_context, "rule_id": "ISO-A.10-WEAK-HASH"})
-        self.assertIsNone(out_hash.get("parse_error"))
-        out_crypto = remediation.propose_full_method({**base_context, "rule_id": "ISO-A.10-WEAK-CRYPTO"})
-        self.assertIsNone(out_crypto.get("parse_error"))
-
-        self.assertEqual(len(captured), 2)
-        system_1 = captured[0][0]["content"]
-        system_2 = captured[1][0]["content"]
-        self.assertEqual(system_1, system_2)
-
-        upper = system_1.upper()
-        for needle in ["MD5", "SHA", "SHA-256", "DES", "RC4", "ECB"]:
-            self.assertNotIn(needle, upper)
-
-        user_1 = captured[0][1]["content"]
-        user_2 = captured[1][1]["content"]
-        self.assertIn("BEGIN_TASK_SPEC_JSON", user_1)
-        self.assertIn("END_TASK_SPEC_JSON", user_1)
-        self.assertIn('"rule_id": "ISO-A.10-WEAK-HASH"', user_1)
-        self.assertIn("BEGIN_TASK_SPEC_JSON", user_2)
-        self.assertIn("END_TASK_SPEC_JSON", user_2)
-        self.assertIn('"rule_id": "ISO-A.10-WEAK-CRYPTO"', user_2)
-
-    def test_no_fix_output_is_handled(self):
-        svc_mod = self.service
-
-        remediation = svc_mod.RemediationService(
-            llm_client=lambda *_args, **_kwargs: "NO_FIX: cannot safely update without build context"
-        )
-        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
-            "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
-            "target_method": "com.example.Foo.hash()",
-            "file_path": "Example.java",
-            "rule_id": "ISO-A.10-WEAK-HASH",
-            "evidence": {"source_code": "public void hash() {}", "graph_context": {}, "vector_context": []},
-            "catalog_entry": {"title": "Cryptography (Weak Hash)"},
-            "baseline_violations": [],
-        }
-
-        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-HASH")
-        self.assertEqual(out.get("status"), "FAIL")
-        self.assertTrue(str(out.get("error") or "").startswith("NO_FIX:"))
-
-    def test_preview_virtual_fix_preflights_unsupported_random_shape_without_llm_call(self):
-        svc_mod = self.service
-
-        llm_client = Mock(return_value="public void noop() { return; }")
+        llm_client = Mock(return_value=_structured_replace_method("public void noop() { return; }"))
         remediation = svc_mod.RemediationService(llm_client=llm_client)
         remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
             "violation": {"violation_id": "ISO-A.10-WEAK-RANDOM", "reason": "rng"},
@@ -242,34 +277,19 @@ class RemediationUtilsTests(unittest.TestCase):
         }
 
         out = remediation.preview_virtual_fix("ISO-A.10-WEAK-RANDOM")
-        self.assertEqual(out.get("status"), "FAIL")
-        self.assertTrue(str(out.get("error") or "").startswith("NO_FIX:"))
-        llm_client.assert_not_called()
-
-    def test_preview_virtual_fix_preflights_unsupported_crypto_shape_without_llm_call(self):
-        svc_mod = self.service
-
-        llm_client = Mock(return_value="public void noop() { return; }")
-        remediation = svc_mod.RemediationService(llm_client=llm_client)
-        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
-            "violation": {"violation_id": "ISO-A.10-WEAK-CRYPTO", "reason": "crypto"},
-            "target_method": "com.example.Foo.encrypt()",
-            "file_path": "Example.java",
-            "rule_id": "ISO-A.10-WEAK-CRYPTO",
-            "evidence": {"source_code": 'public void encrypt() { Cipher.getInstance(algorithm); }', "graph_context": {}, "vector_context": []},
-            "catalog_entry": {"title": "Cryptography (Weak Cipher)"},
-            "baseline_violations": [],
-        }
-
-        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-CRYPTO")
-        self.assertEqual(out.get("status"), "FAIL")
-        self.assertTrue(str(out.get("error") or "").startswith("NO_FIX:"))
+        self.assertEqual(out.get("status"), "NO_FIX")
+        self.assertEqual(out["generation"]["decision"], "no_fix")
+        self.assertEqual(out["generation"]["replacement_method_lines"], None)
         llm_client.assert_not_called()
 
     def test_preview_virtual_fix_allows_supported_random_shape(self):
         svc_mod = self.service
 
-        llm_client = Mock(return_value="public void random() { new java.security.SecureRandom().nextInt(); }")
+        llm_client = Mock(
+            return_value=_structured_replace_method(
+                "public void random() { new java.security.SecureRandom().nextInt(); }"
+            )
+        )
         remediation = svc_mod.RemediationService(llm_client=llm_client)
         remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
             "violation": {"violation_id": "ISO-A.10-WEAK-RANDOM", "reason": "rng"},
@@ -290,12 +310,18 @@ class RemediationUtilsTests(unittest.TestCase):
 
         self.assertEqual(out.get("status"), "OK")
         self.assertEqual(out.get("opa_status"), "PASS")
+        self.assertEqual(out["generation"]["decision"], "replace_method")
+        self.assertIsInstance(out["generation"]["replacement_method_lines"], list)
         llm_client.assert_called_once()
 
     def test_preview_virtual_fix_allows_guarded_crypto_literal_subcase(self):
         svc_mod = self.service
 
-        llm_client = Mock(return_value='public void encrypt() { Cipher.getInstance("AES/GCM/NoPadding"); }')
+        llm_client = Mock(
+            return_value=_structured_replace_method(
+                'public void encrypt() { Cipher.getInstance("AES/GCM/NoPadding"); }'
+            )
+        )
         remediation = svc_mod.RemediationService(llm_client=llm_client)
         remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
             "violation": {"violation_id": "ISO-A.10-WEAK-CRYPTO", "reason": "crypto"},
@@ -315,13 +341,100 @@ class RemediationUtilsTests(unittest.TestCase):
             out = remediation.preview_virtual_fix("ISO-A.10-WEAK-CRYPTO")
 
         self.assertEqual(out.get("status"), "OK")
-        self.assertEqual(out.get("opa_status"), "PASS")
+        self.assertEqual(out["generation"]["decision"], "replace_method")
         llm_client.assert_called_once()
 
-    def test_apply_fix_restores_original_file_on_verification_exception(self):
-        # Ensure dry_run restores the on-disk file even if verification (PolicyEvaluator) blows up.
-        from tempfile import TemporaryDirectory
+    def test_preview_virtual_fix_allows_structured_no_fix_from_model(self):
+        svc_mod = self.service
 
+        llm_client = Mock(return_value=_structured_no_fix("changing this cipher safely needs broader protocol context"))
+        remediation = svc_mod.RemediationService(llm_client=llm_client)
+        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+            "violation": {"violation_id": "ISO-A.10-WEAK-CRYPTO", "reason": "crypto"},
+            "target_method": "com.example.Foo.encrypt()",
+            "file_path": "Example.java",
+            "rule_id": "ISO-A.10-WEAK-CRYPTO",
+            "evidence": {
+                "source_code": 'public void encrypt() { Cipher.getInstance("DESede/ECB/PKCS5Padding"); }',
+                "graph_context": {},
+                "vector_context": [],
+            },
+            "catalog_entry": {"title": "Cryptography (Weak Cipher)"},
+            "baseline_violations": [],
+        }
+
+        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-CRYPTO")
+        self.assertEqual(out.get("status"), "NO_FIX")
+        self.assertEqual(out["generation"]["decision"], "no_fix")
+        self.assertIn("broader protocol context", out["generation"]["reason"])
+
+    def test_preview_virtual_fix_returns_generation_error_for_invalid_structured_output(self):
+        svc_mod = self.service
+
+        llm_client = Mock(return_value='{"decision":"replace_method","replacement_method_lines":["oops"],"reason":""}')
+        remediation = svc_mod.RemediationService(llm_client=llm_client)
+        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+            "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
+            "target_method": "com.example.Foo.hash()",
+            "file_path": "Example.java",
+            "rule_id": "ISO-A.10-WEAK-HASH",
+            "evidence": {"source_code": "public void hash() { }", "graph_context": {}, "vector_context": []},
+            "catalog_entry": {"title": "Cryptography (Weak Hash)"},
+            "baseline_violations": [],
+        }
+
+        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-HASH")
+        self.assertEqual(out.get("status"), "GENERATION_ERROR")
+        self.assertFalse(out["generation"]["raw_response_valid"])
+        self.assertIn("invalid_method_shape", out["error"])
+
+    def test_apply_fix_returns_generation_error_for_invalid_structured_output(self):
+        svc_mod = self.service
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "Example.java"
+            src_path.write_text("class Example { void hash() {} }\n", encoding="utf-8")
+
+            remediation = svc_mod.RemediationService(llm_client=lambda *_args, **_kwargs: "")
+            remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+                "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
+                "target_method": "com.example.Foo.hash()",
+                "file_path": src_path.as_posix(),
+                "rule_id": "ISO-A.10-WEAK-HASH",
+                "evidence": {"source_code": "public void hash() { }", "graph_context": {}, "vector_context": []},
+                "catalog_entry": {"title": "Cryptography (Weak Hash)"},
+                "baseline_violations": [],
+            }
+            remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
+            remediation.propose_full_method = (  # type: ignore[method-assign]
+                lambda *_args, **_kwargs: {
+                    "decision": "replace_method",
+                    "replacement_method_lines": None,
+                    "replacement_method_code": None,
+                    "reason": "",
+                    "schema_error": "invalid_java_syntax: expected \")\"",
+                    "generation": {
+                        "decision": "replace_method",
+                        "replacement_method_lines": None,
+                        "replacement_method_code": None,
+                        "reason": "",
+                        "raw_response_valid": False,
+                        "schema_error": "invalid_java_syntax: expected \")\"",
+                    },
+                    "raw_output": '{"decision":"replace_method"}',
+                }
+            )
+
+            out = remediation.apply_fix(
+                "ISO-A.10-WEAK-HASH",
+                target_method="com.example.Foo.hash()",
+                file_path=src_path.as_posix(),
+                mode="dry_run",
+                max_attempts=1,
+            )
+            self.assertEqual(out.get("status"), "GENERATION_ERROR")
+            self.assertIn("invalid_java_syntax", out.get("error", ""))
+
+    def test_apply_fix_restores_original_file_on_verification_exception(self):
         svc_mod = self.service
 
         with TemporaryDirectory() as tmp:
@@ -350,9 +463,19 @@ class RemediationUtilsTests(unittest.TestCase):
             remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
             remediation.propose_full_method = (  # type: ignore[method-assign]
                 lambda *_args, **_kwargs: {
-                    "updated_source_code": "public void doPost(...) { /* sha-256 */ }",
-                    "explanation": None,
-                    "parse_error": None,
+                    "decision": "replace_method",
+                    "replacement_method_lines": ["public void doPost(...) { /* sha-256 */ }"],
+                    "replacement_method_code": "public void doPost(...) { /* sha-256 */ }",
+                    "reason": None,
+                    "schema_error": None,
+                    "generation": {
+                        "decision": "replace_method",
+                        "replacement_method_lines": ["public void doPost(...) { /* sha-256 */ }"],
+                        "replacement_method_code": "public void doPost(...) { /* sha-256 */ }",
+                        "reason": "",
+                        "raw_response_valid": True,
+                        "schema_error": None,
+                    },
                     "raw_output": None,
                 }
             )
@@ -397,7 +520,7 @@ class RemediationUtilsTests(unittest.TestCase):
                     mode="dry_run",
                     max_attempts=1,
                 )
-                self.assertEqual(out.get("status"), "ERROR")
+                self.assertEqual(out.get("status"), "VERIFICATION_ERROR")
                 self.assertEqual(src_path.read_text(encoding="utf-8"), original_content)
             finally:
                 svc_mod.process_single_file_content = orig_psfc
@@ -407,6 +530,38 @@ class RemediationUtilsTests(unittest.TestCase):
         diff = self.service._unified_diff("a\nb", "a\nc", label="method")
         self.assertIn("-b", diff)
         self.assertIn("+c", diff)
+
+    def test_verification_summary_passes_when_target_rule_removed_and_only_baseline_manual_findings_remain(self):
+        summary = self.service._build_verification_summary(
+            "ISO-A.10-WEAK-RANDOM",
+            baseline=[
+                {"violation_id": "ISO-A.10-WEAK-RANDOM", "target_method": "m", "file_path": "f"},
+                {"violation_id": "ISO-A.8-CMD-INJECTION", "target_method": "m", "file_path": "f"},
+            ],
+            after=[
+                {"violation_id": "ISO-A.8-CMD-INJECTION", "target_method": "m", "file_path": "f"},
+            ],
+        )
+
+        self.assertEqual(summary["target_rule_status"], "PASS")
+        self.assertEqual(summary["overall_status"], "PASS")
+        self.assertEqual([v["violation_id"] for v in summary["remaining_violations"]], ["ISO-A.8-CMD-INJECTION"])
+        self.assertEqual(summary["new_violations"], [])
+
+    def test_verification_summary_fails_when_new_violation_is_introduced(self):
+        summary = self.service._build_verification_summary(
+            "ISO-A.10-WEAK-RANDOM",
+            baseline=[
+                {"violation_id": "ISO-A.10-WEAK-RANDOM", "target_method": "m", "file_path": "f"},
+            ],
+            after=[
+                {"violation_id": "ISO-A.8-CMD-INJECTION", "target_method": "m", "file_path": "f"},
+            ],
+        )
+
+        self.assertEqual(summary["target_rule_status"], "PASS")
+        self.assertEqual(summary["overall_status"], "FAIL")
+        self.assertEqual([v["violation_id"] for v in summary["new_violations"]], ["ISO-A.8-CMD-INJECTION"])
 
 
 if __name__ == "__main__":

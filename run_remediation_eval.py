@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run remediation success evaluation.")
     parser.add_argument(
         "--config",
-        default="configs/benchmark_selection.json",
+        default="configs/benchmark/remediation_hash_smoke.json",
         help="Benchmark selection config JSON (default: %(default)s)",
     )
     parser.add_argument(
@@ -186,6 +186,10 @@ def main() -> int:
                     "verification": verification,
                     "compilation": compilation,
                     "diff": apply_result.get("diff"),
+                    "generation": apply_result.get("generation"),
+                    "errors": apply_result.get("errors"),
+                    "attempt_count": apply_result.get("attempt_count"),
+                    "raw_capture_files": apply_result.get("raw_capture_files"),
                 }
             )
 

@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run citation success evaluation.")
     parser.add_argument(
         "--config",
-        default="configs/benchmark_selection.json",
+        default="configs/benchmark/baseline.json",
         help="Benchmark selection config JSON (default: %(default)s)",
     )
     parser.add_argument(

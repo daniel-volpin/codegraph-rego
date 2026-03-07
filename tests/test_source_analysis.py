@@ -47,6 +47,32 @@ class TestSourceAnalysis(unittest.TestCase):
         self.assertTrue(flags["insecure_random_detected"])
         self.assertTrue(flags["sha1prng_detected"])
 
+    def test_path_traversal_detected(self) -> None:
+        source = 'String fileName = base + request.getHeader("x"); new java.io.FileInputStream(new java.io.File(fileName));'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["path_traversal_detected"])
+
+    def test_command_injection_detected(self) -> None:
+        source = 'String cmd = "echo " + request.getHeader("x"); new ProcessBuilder().command(cmd);'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["command_injection_detected"])
+
+    def test_ldap_injection_detected(self) -> None:
+        source = 'String filter = "(&(uid=" + request.getHeader("x") + "))"; InitialDirContext idc = null; idc.search(base, filter, filters, sc);'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["ldap_injection_detected"])
+
+    def test_xpath_injection_detected(self) -> None:
+        source = 'String expr = "/Employees/Employee[@emplid=\'" + request.getHeader("x") + "\']"; XPathFactory.newInstance(); xp.evaluate(expr, xmlDocument);'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["xpath_injection_detected"])
+
+    def test_sql_prepare_call_flags(self) -> None:
+        source = 'java.sql.CallableStatement statement = connection.prepareCall(sql);'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_prepare_call_detected"])
+        self.assertTrue(flags["sql_callable_statement_detected"])
+
 
 if __name__ == "__main__":
     unittest.main()

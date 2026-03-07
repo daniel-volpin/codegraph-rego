@@ -114,6 +114,22 @@ def get_remediation_capability(
         unsupported_reason = (
             "SQL injection remains explanation-only because safe remediation usually requires cross-layer parameterization refactors."
         )
+    if any(candidate == "ISO-A.8-PATH-TRAVERSAL" for candidate in rule_id_variants(rule_id)):
+        unsupported_reason = (
+            "Path traversal remains manual-review because safe remediation depends on path policy, normalization, and authorization context."
+        )
+    if any(candidate == "ISO-A.8-CMD-INJECTION" for candidate in rule_id_variants(rule_id)):
+        unsupported_reason = (
+            "Command injection remains manual-review because safe remediation depends on shell semantics, argument boundaries, and platform-specific behavior."
+        )
+    if any(candidate == "ISO-A.8-LDAP-INJECTION" for candidate in rule_id_variants(rule_id)):
+        unsupported_reason = (
+            "LDAP injection remains manual-review because safe remediation depends on query semantics and directory-specific escaping behavior."
+        )
+    if any(candidate == "ISO-A.8-XPATH-INJECTION" for candidate in rule_id_variants(rule_id)):
+        unsupported_reason = (
+            "XPath injection remains manual-review because safe remediation depends on parser behavior and application-specific query semantics."
+        )
     if any(candidate == "ISO-A.9.4.1" for candidate in rule_id_variants(rule_id)):
         unsupported_reason = (
             "Access-control findings remain manual-review because endpoint semantics cannot be safely inferred from method-local evidence."
