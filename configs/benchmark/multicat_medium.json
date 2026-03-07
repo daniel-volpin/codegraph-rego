@@ -16,5 +16,5 @@
   "max_cases_per_category": 20,
   "seed": 42,
   "debug_fn_analysis": false,
-  "build_command": "mvn -q -DskipTests compile"
+  "build_command": "mvn -q -DskipTests -Dspotless.apply.skip=true -Dspotless.check.skip=true compile"
 }

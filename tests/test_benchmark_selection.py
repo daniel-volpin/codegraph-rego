@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from codegraph.evaluation.benchmark import (
     CategorySpec,
@@ -6,6 +8,7 @@ from codegraph.evaluation.benchmark import (
     GroundTruthRecord,
     coverage_report,
     select_testcases,
+    stage_benchmark_subset,
 )
 
 
@@ -68,6 +71,66 @@ class TestBenchmarkSelectionCoverage(unittest.TestCase):
         self.assertEqual(stats.available_cases, 20)
         self.assertEqual(stats.selected_cases, 5)
         self.assertTrue(stats.sampled)
+
+    def test_stage_benchmark_subset_copies_compile_scaffold(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            benchmark_root = root / "BenchmarkJava"
+            testcase_dir = benchmark_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "testcode"
+            helpers_dir = benchmark_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "helpers"
+            service_dir = benchmark_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "service" / "pojo"
+            resources_dir = benchmark_root / "src" / "main" / "resources"
+
+            testcase_dir.mkdir(parents=True)
+            helpers_dir.mkdir(parents=True)
+            service_dir.mkdir(parents=True)
+            resources_dir.mkdir(parents=True)
+
+            (benchmark_root / "pom.xml").write_text("<project />\n", encoding="utf-8")
+            (benchmark_root / "DevStyleHtml.prefs").write_text("html=true\n", encoding="utf-8")
+            (benchmark_root / "DevStyleXml.prefs").write_text("xml=true\n", encoding="utf-8")
+            (benchmark_root / ".mvn").mkdir(parents=True)
+            (resources_dir / "benchmark.properties").write_text("k=v\n", encoding="utf-8")
+            (helpers_dir / "Utils.java").write_text("class Utils {}\n", encoding="utf-8")
+            (service_dir / "Person.java").write_text("class Person {}\n", encoding="utf-8")
+            (testcase_dir / "BenchmarkTest00046.java").write_text("class BenchmarkTest00046 {}\n", encoding="utf-8")
+
+            dest_root = root / "staged"
+            staged = stage_benchmark_subset(benchmark_root, "src/main/java", ["BenchmarkTest00046"], dest_root)
+
+            self.assertIn("BenchmarkTest00046", staged)
+            self.assertTrue((dest_root / "pom.xml").is_file())
+            self.assertTrue((dest_root / "DevStyleHtml.prefs").is_file())
+            self.assertTrue((dest_root / "DevStyleXml.prefs").is_file())
+            self.assertTrue((dest_root / ".mvn").is_dir())
+            self.assertTrue((dest_root / "src" / "main" / "resources" / "benchmark.properties").is_file())
+            self.assertTrue(
+                (
+                    dest_root
+                    / "src"
+                    / "main"
+                    / "java"
+                    / "org"
+                    / "owasp"
+                    / "benchmark"
+                    / "helpers"
+                    / "Utils.java"
+                ).is_file()
+            )
+            self.assertTrue(
+                (
+                    dest_root
+                    / "src"
+                    / "main"
+                    / "java"
+                    / "org"
+                    / "owasp"
+                    / "benchmark"
+                    / "service"
+                    / "pojo"
+                    / "Person.java"
+                ).is_file()
+            )
 
 
 if __name__ == "__main__":

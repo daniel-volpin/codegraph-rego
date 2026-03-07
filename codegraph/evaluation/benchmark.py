@@ -319,6 +319,36 @@ def stage_benchmark_subset(
     staged: Dict[str, Path] = {}
     missing: List[str] = []
 
+    scaffold_entries = [
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "settings.gradle",
+        "settings.gradle.kts",
+        "mvnw",
+        "mvnw.cmd",
+        "gradlew",
+        "gradlew.bat",
+        ".mvn",
+        "gradle",
+        "DevStyleHtml.prefs",
+        "DevStyleXml.prefs",
+        "src/main/resources",
+        "src/main/java/org/owasp/benchmark/helpers",
+        "src/main/java/org/owasp/benchmark/service",
+    ]
+
+    for relative in scaffold_entries:
+        src = benchmark_root / relative
+        if not src.exists():
+            continue
+        dest = dest_root / relative
+        if src.is_dir():
+            shutil.copytree(src, dest, dirs_exist_ok=True)
+        else:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+
     for testcase_id in testcase_ids:
         matches = list(source_root.rglob(f"{testcase_id}.java"))
         if not matches:

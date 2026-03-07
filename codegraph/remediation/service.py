@@ -1,11 +1,12 @@
 """
 Virtual remediation preview.
 
-This module implements a closed-loop "virtual fix" flow for the thesis:
+This module implements a closed-loop remediation flow for the thesis:
 1) Fetch a violation + evidence from the existing policy evaluation.
-2) Ask an LLM to propose a full replacement method (no diffs).
-3) Build a lightweight virtual graph context from that proposed method.
-4) Re-run the same OPA/Rego policies on the virtual bundle.
+2) Ask an LLM to propose bounded edits against the exact target method.
+3) Reconstruct the updated method server-side.
+4) Build a lightweight virtual graph context from that updated method.
+5) Re-run the same OPA/Rego policies on the virtual bundle.
 
 The original codebase, Neo4j graph, and filesystem remain untouched.
 """
@@ -16,10 +17,10 @@ import difflib
 import json
 import logging
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
-import textwrap
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -51,7 +52,7 @@ _POLICY_CACHE: Dict[str, Any] = {
     "data": None,
 }
 _CACHE_TTL_SECONDS = 30.0
-_STRUCTURED_GENERATION_FIELDS = {"decision", "replacement_method_lines", "reason"}
+_STRUCTURED_GENERATION_FIELDS = {"decision", "edits", "reason"}
 _STRUCTURED_GENERATION_STOPS = ["<|im_end|>", "<|endoftext|>"]
 
 
@@ -108,7 +109,7 @@ def _normalize_generated_method_text(text: str) -> str:
     return normalized.strip()
 
 
-def _normalize_generated_method_lines(lines: Iterable[str]) -> List[str]:
+def _normalize_generated_lines(lines: Iterable[str]) -> List[str]:
     normalized_lines: List[str] = []
     for raw_line in lines:
         line = str(raw_line)
@@ -120,6 +121,68 @@ def _normalize_generated_method_lines(lines: Iterable[str]) -> List[str]:
     while normalized_lines and normalized_lines[-1].strip() == "":
         normalized_lines.pop()
     return normalized_lines
+
+
+def _detect_multiline_literal_issue(lines: Iterable[str]) -> Optional[str]:
+    in_block_comment = False
+    for line in lines:
+        in_string = False
+        in_char = False
+        escaped = False
+        index = 0
+        while index < len(line):
+            char = line[index]
+            nxt = line[index + 1] if index + 1 < len(line) else ""
+
+            if in_block_comment:
+                if char == "*" and nxt == "/":
+                    in_block_comment = False
+                    index += 2
+                    continue
+                index += 1
+                continue
+
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                index += 1
+                continue
+
+            if in_char:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == "'":
+                    in_char = False
+                index += 1
+                continue
+
+            if char == "/" and nxt == "/":
+                break
+            if char == "/" and nxt == "*":
+                in_block_comment = True
+                index += 2
+                continue
+            if char == '"':
+                in_string = True
+                index += 1
+                continue
+            if char == "'":
+                in_char = True
+                index += 1
+                continue
+            index += 1
+
+        if in_string:
+            return "invalid_java_syntax: multiline_string_literal"
+        if in_char:
+            return "invalid_java_syntax: multiline_char_literal"
+    return None
 
 
 def _extract_target_method_identity(target_method: Optional[str]) -> Tuple[Optional[str], Optional[int]]:
@@ -141,6 +204,10 @@ def _format_java_parse_error(exc: Exception) -> str:
     if detail:
         return f"{exc.__class__.__name__}: {detail}"
     return exc.__class__.__name__
+
+
+def _format_numbered_lines(lines: List[str]) -> str:
+    return "\n".join(f"{idx + 1}: {line}" for idx, line in enumerate(lines))
 
 
 def _parse_json_object_from_text(text: str) -> Optional[Dict[str, Any]]:
@@ -264,6 +331,34 @@ def _build_verification_summary(
         "remaining_violations": remaining_violations,
     }
 
+
+def _summarize_retry_error(error: str) -> str:
+    text = (error or "").strip()
+    lowered = text.lower()
+    if not text:
+        return "generation_error"
+    if "edit_span_out_of_bounds" in lowered:
+        return "edit_span_out_of_bounds"
+    if "edit_original_mismatch" in lowered:
+        return "edit_original_mismatch"
+    if "edit_spans_overlap" in lowered:
+        return "edit_spans_overlap"
+    if "invalid_java_syntax" in lowered:
+        return "invalid_java_syntax"
+    if "method_name_mismatch" in lowered:
+        return "method_name_mismatch"
+    if "parameter_count_mismatch" in lowered:
+        return "parameter_count_mismatch"
+    if "edits" in lowered:
+        return "empty_edits"
+    if "valid method replacement" in lowered or "replace method" in lowered or "apply_edits" in lowered:
+        return "replacement_not_found"
+    if "invalid_method_shape" in lowered:
+        return "invalid_method_shape"
+    if "access_modifier" in lowered:
+        return "missing_access_modifier"
+    return text.splitlines()[0][:160]
+
 class RemediationService:
     """Preview-only remediation using virtual OPA evaluation."""
 
@@ -378,6 +473,7 @@ class RemediationService:
             "rule_id": context.get("rule_id"),
             "generation": {
                 "decision": "no_fix",
+                "edits": [],
                 "replacement_method_lines": None,
                 "replacement_method_code": None,
                 "reason": reason,
@@ -393,6 +489,7 @@ class RemediationService:
     def _build_generation_payload(
         *,
         decision: Optional[str],
+        edits: Optional[List[Dict[str, Any]]],
         replacement_method_lines: Optional[List[str]],
         replacement_method_code: Optional[str],
         reason: Optional[str],
@@ -401,6 +498,7 @@ class RemediationService:
     ) -> Dict[str, Any]:
         return {
             "decision": decision,
+            "edits": edits,
             "replacement_method_lines": replacement_method_lines,
             "replacement_method_code": replacement_method_code,
             "reason": reason,
@@ -442,7 +540,7 @@ class RemediationService:
                 reason=preflight_reason,
             )
 
-        llm_output = self.propose_full_method(context)
+        llm_output = self.propose_method_edits(context)
         updated_source = llm_output.get("replacement_method_code")
         generation = llm_output.get("generation")
         decision = llm_output.get("decision")
@@ -456,12 +554,12 @@ class RemediationService:
             )
             return result
 
-        original_source = (context.get("evidence") or {}).get("source_code") or ""
+        original_source = context.get("exact_method_source") or (context.get("evidence") or {}).get("source_code") or ""
         diff = _unified_diff(original_source, updated_source or "", label="method")
         if not updated_source:
             return {
                 "status": "GENERATION_ERROR",
-                "error": schema_error or "generation_error: missing replacement_method_lines",
+                "error": schema_error or "generation_error: missing edits",
                 "violation_id": violation_id,
                 "target_method": context.get("target_method"),
                 "file_path": context.get("file_path"),
@@ -527,6 +625,7 @@ class RemediationService:
         mode: str = "dry_run",
         max_attempts: int = 2,
         raw_capture_dir: Optional[str] = None,
+        build_command: Optional[str] = None,
     ) -> Dict[str, Any]:
         max_attempts = max(1, max_attempts)
         context = self.get_violation_context(violation_id, target_method, file_path)
@@ -591,8 +690,9 @@ class RemediationService:
         generation_payload: Optional[Dict[str, Any]] = None
 
         for attempt in range(max_attempts):
-            llm_output = self.propose_full_method(context, previous_errors=attempt_errors)
+            llm_output = self.propose_method_edits(context, previous_errors=attempt_errors)
             updated_source = llm_output.get("replacement_method_code")
+            updated_source_lines = llm_output.get("replacement_method_lines")
             raw_output = llm_output.get("raw_output")
             generation_payload = llm_output.get("generation")
             if not updated_source:
@@ -608,9 +708,9 @@ class RemediationService:
                     return result
                 schema_error = llm_output.get("schema_error")
                 if schema_error:
-                    attempt_errors.append(str(schema_error))
+                    attempt_errors.append(_summarize_retry_error(str(schema_error)))
                 else:
-                    attempt_errors.append("generation_error: missing replacement_method_lines")
+                    attempt_errors.append("empty_edits")
                 if (
                     settings.remediation_raw_capture_enabled
                     and raw_output
@@ -626,11 +726,11 @@ class RemediationService:
                 continue
             try:
                 updated_content, original_method, updated_method = self._replace_method_in_source(
-                    original_content, updated_source, target_method
+                    original_content, updated_source_lines or [], target_method
                 )
                 break
             except ValueError as exc:
-                attempt_errors.append(str(exc))
+                attempt_errors.append(_summarize_retry_error(str(exc)))
                 continue
 
         if not updated_content or not updated_method or not original_method:
@@ -669,7 +769,7 @@ class RemediationService:
             with tempfile.TemporaryDirectory() as tmp:
                 temp_root, temp_file_path, temp_build_root = self._prepare_temp_workspace(Path(tmp), resolved_path)
                 temp_file_path.write_text(updated_content, encoding="utf-8")
-                compilation = self._compile_project(temp_build_root)
+                compilation = self._compile_project(temp_build_root, build_command=build_command)
 
                 try:
                     # Keep filesystem + graph in sync for verification. Policy evaluation derives
@@ -816,6 +916,17 @@ class RemediationService:
                         method,
                         evaluation.get("error"),
                     )
+            exact_method_source = None
+            numbered_method_source = None
+            resolved_path = self._resolve_file_path(violation.get("file_path") or "")
+            if resolved_path is not None and method:
+                try:
+                    file_source = resolved_path.read_text(encoding="utf-8")
+                    exact_lines, _, _, exact_snippet = self._extract_method_span(file_source, method)
+                    exact_method_source = exact_snippet
+                    numbered_method_source = _format_numbered_lines(exact_lines)
+                except Exception as exc:
+                    LOGGER.debug("Failed to extract exact method span for %s: %s", method, exc)
             return {
                 "violation": violation,
                 "target_method": violation.get("target_method") or violation.get("method"),
@@ -824,11 +935,13 @@ class RemediationService:
                 "evidence": evidence,
                 "catalog_entry": catalog_entry,
                 "baseline_violations": baseline_violations,
+                "exact_method_source": exact_method_source,
+                "numbered_method_source": numbered_method_source,
             }
         return None
 
     # --- LLM interaction --------------------------------------------------------
-    def propose_full_method(
+    def propose_method_edits(
         self, context: Dict[str, Any], previous_errors: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         rule_id = context.get("rule_id")
@@ -871,10 +984,15 @@ class RemediationService:
             )
         except TypeError:
             response = self._llm_client(messages)
-        parsed = self._parse_structured_generation_response(response, context.get("target_method"))
+        parsed = self._parse_structured_generation_response(
+            response,
+            target_method=context.get("target_method"),
+            original_method_lines=(context.get("exact_method_source") or "").splitlines(),
+        )
         parsed["raw_output"] = response
         parsed["generation"] = self._build_generation_payload(
             decision=parsed.get("decision"),
+            edits=parsed.get("edits"),
             replacement_method_lines=parsed.get("replacement_method_lines"),
             replacement_method_code=parsed.get("replacement_method_code"),
             reason=parsed.get("reason"),
@@ -884,12 +1002,18 @@ class RemediationService:
         return parsed
 
     @staticmethod
-    def _parse_structured_generation_response(response: Any, target_method: Optional[str] = None) -> Dict[str, Any]:
+    def _parse_structured_generation_response(
+        response: Any,
+        *,
+        target_method: Optional[str] = None,
+        original_method_lines: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         content = _strip_structured_stop_tokens(_extract_assistant_content(response))
         data = _parse_json_object_from_text(content)
         if data is None:
             return {
                 "decision": None,
+                "edits": None,
                 "replacement_method_lines": None,
                 "replacement_method_code": None,
                 "reason": None,
@@ -900,19 +1024,21 @@ class RemediationService:
         if set(data.keys()) != _STRUCTURED_GENERATION_FIELDS:
             return {
                 "decision": None,
+                "edits": None,
                 "replacement_method_lines": None,
                 "replacement_method_code": None,
                 "reason": None,
                 "raw_response_valid": False,
-                "schema_error": "schema_mismatch: expected decision/replacement_method_lines/reason",
+                "schema_error": "schema_mismatch: expected decision/edits/reason",
             }
 
         decision = data.get("decision")
-        replacement_method_lines = data.get("replacement_method_lines")
+        edits = data.get("edits")
         reason = data.get("reason")
-        if decision not in {"replace_method", "no_fix"}:
+        if decision not in {"apply_edits", "no_fix"}:
             return {
                 "decision": None,
+                "edits": None,
                 "replacement_method_lines": None,
                 "replacement_method_code": None,
                 "reason": None,
@@ -920,27 +1046,20 @@ class RemediationService:
                 "schema_error": "schema_mismatch: invalid_decision",
             }
 
-        if not isinstance(replacement_method_lines, list):
+        if not isinstance(edits, list):
             return {
                 "decision": None,
+                "edits": None,
                 "replacement_method_lines": None,
                 "replacement_method_code": None,
                 "reason": None,
                 "raw_response_valid": False,
-                "schema_error": "schema_mismatch: replacement_method_lines must be array",
-            }
-        if any(not isinstance(line, str) for line in replacement_method_lines):
-            return {
-                "decision": None,
-                "replacement_method_lines": None,
-                "replacement_method_code": None,
-                "reason": None,
-                "raw_response_valid": False,
-                "schema_error": "schema_mismatch: replacement_method_lines must contain strings",
+                "schema_error": "schema_mismatch: edits must be array",
             }
         if not isinstance(reason, str):
             return {
                 "decision": None,
+                "edits": None,
                 "replacement_method_lines": None,
                 "replacement_method_code": None,
                 "reason": None,
@@ -948,86 +1067,115 @@ class RemediationService:
                 "schema_error": "schema_mismatch: reason must be string",
             }
 
-        normalized_lines = _normalize_generated_method_lines(replacement_method_lines)
-        normalized_method = _normalize_generated_method_text("\n".join(normalized_lines))
         normalized_reason = reason.strip()
 
-        if decision == "replace_method":
-            if not normalized_lines or not normalized_method:
+        if decision == "apply_edits":
+            if not edits:
                 return {
-                    "decision": "replace_method",
+                    "decision": "apply_edits",
+                    "edits": None,
                     "replacement_method_lines": None,
                     "replacement_method_code": None,
                     "reason": "",
                     "raw_response_valid": False,
-                    "schema_error": "empty_replacement_lines",
+                    "schema_error": "empty_edits",
                 }
-            if "{" not in normalized_method or "}" not in normalized_method or not re.search(
-                r"\b(public|private|protected)\b", normalized_method
-            ):
+            if original_method_lines is None:
                 return {
-                    "decision": "replace_method",
-                    "replacement_method_lines": normalized_lines,
+                    "decision": "apply_edits",
+                    "edits": None,
+                    "replacement_method_lines": None,
                     "replacement_method_code": None,
                     "reason": "",
                     "raw_response_valid": False,
-                    "schema_error": "invalid_method_shape",
+                    "schema_error": "missing_original_method_context",
                 }
-            wrapped_method = f"class RemediationCandidate {{\n{normalized_method}\n}}"
+            normalized_edits: List[Dict[str, Any]] = []
+            for edit in edits:
+                if not isinstance(edit, dict):
+                    return {
+                        "decision": "apply_edits",
+                        "edits": None,
+                        "replacement_method_lines": None,
+                        "replacement_method_code": None,
+                        "reason": "",
+                        "raw_response_valid": False,
+                        "schema_error": "schema_mismatch: edit must be object",
+                    }
+                required_keys = {"start_line", "end_line", "original_lines", "replacement_lines"}
+                if set(edit.keys()) != required_keys:
+                    return {
+                        "decision": "apply_edits",
+                        "edits": None,
+                        "replacement_method_lines": None,
+                        "replacement_method_code": None,
+                        "reason": "",
+                        "raw_response_valid": False,
+                        "schema_error": "schema_mismatch: invalid_edit_shape",
+                    }
+                if not isinstance(edit.get("start_line"), int) or not isinstance(edit.get("end_line"), int):
+                    return {
+                        "decision": "apply_edits",
+                        "edits": None,
+                        "replacement_method_lines": None,
+                        "replacement_method_code": None,
+                        "reason": "",
+                        "raw_response_valid": False,
+                        "schema_error": "schema_mismatch: edit_line_bounds_must_be_int",
+                    }
+                original_lines = edit.get("original_lines")
+                replacement_lines = edit.get("replacement_lines")
+                if not isinstance(original_lines, list) or not isinstance(replacement_lines, list):
+                    return {
+                        "decision": "apply_edits",
+                        "edits": None,
+                        "replacement_method_lines": None,
+                        "replacement_method_code": None,
+                        "reason": "",
+                        "raw_response_valid": False,
+                        "schema_error": "schema_mismatch: edit_lines_must_be_array",
+                    }
+                if any(not isinstance(line, str) for line in original_lines + replacement_lines):
+                    return {
+                        "decision": "apply_edits",
+                        "edits": None,
+                        "replacement_method_lines": None,
+                        "replacement_method_code": None,
+                        "reason": "",
+                        "raw_response_valid": False,
+                        "schema_error": "schema_mismatch: edit_lines_must_contain_strings",
+                    }
+                normalized_edits.append(
+                    {
+                        "start_line": edit["start_line"],
+                        "end_line": edit["end_line"],
+                        "original_lines": _normalize_generated_lines(original_lines),
+                        "replacement_lines": _normalize_generated_lines(replacement_lines),
+                    }
+                )
+
             try:
-                parsed_wrapper = javalang.parse.parse(wrapped_method)
-                parsed_methods = [node for _, node in parsed_wrapper.filter(MethodDeclaration)]
-            except Exception as exc:
+                reconstructed_lines, reconstructed_method = RemediationService._apply_method_edits(
+                    list(original_method_lines),
+                    normalized_edits,
+                    str(target_method or ""),
+                )
+            except ValueError as exc:
                 return {
-                    "decision": "replace_method",
-                    "replacement_method_lines": normalized_lines,
+                    "decision": "apply_edits",
+                    "edits": normalized_edits,
+                    "replacement_method_lines": None,
                     "replacement_method_code": None,
                     "reason": "",
                     "raw_response_valid": False,
-                    "schema_error": f"invalid_java_syntax: {_format_java_parse_error(exc)}",
+                    "schema_error": str(exc),
                 }
-            if len(parsed_methods) != 1:
-                return {
-                    "decision": "replace_method",
-                    "replacement_method_lines": normalized_lines,
-                    "replacement_method_code": None,
-                    "reason": "",
-                    "raw_response_valid": False,
-                    "schema_error": "invalid_method_shape: expected single method declaration",
-                }
-            parsed_method = parsed_methods[0]
-            if not set(parsed_method.modifiers or set()).intersection({"public", "private", "protected"}):
-                return {
-                    "decision": "replace_method",
-                    "replacement_method_lines": normalized_lines,
-                    "replacement_method_code": None,
-                    "reason": "",
-                    "raw_response_valid": False,
-                    "schema_error": "invalid_method_shape: missing access_modifier",
-                }
-            expected_method_name, expected_parameter_count = _extract_target_method_identity(target_method)
-            if expected_method_name and parsed_method.name != expected_method_name:
-                return {
-                    "decision": "replace_method",
-                    "replacement_method_lines": normalized_lines,
-                    "replacement_method_code": None,
-                    "reason": "",
-                    "raw_response_valid": False,
-                    "schema_error": "method_name_mismatch",
-                }
-            if expected_parameter_count is not None and len(parsed_method.parameters or []) != expected_parameter_count:
-                return {
-                    "decision": "replace_method",
-                    "replacement_method_lines": normalized_lines,
-                    "replacement_method_code": None,
-                    "reason": "",
-                    "raw_response_valid": False,
-                    "schema_error": "parameter_count_mismatch",
-                }
+
             return {
                 "decision": decision,
-                "replacement_method_lines": normalized_lines,
-                "replacement_method_code": normalized_method,
+                "edits": normalized_edits,
+                "replacement_method_lines": reconstructed_lines,
+                "replacement_method_code": reconstructed_method,
                 "reason": "",
                 "raw_response_valid": True,
                 "schema_error": None,
@@ -1036,6 +1184,7 @@ class RemediationService:
         if not normalized_reason:
             return {
                 "decision": None,
+                "edits": None,
                 "replacement_method_lines": None,
                 "replacement_method_code": None,
                 "reason": None,
@@ -1044,7 +1193,8 @@ class RemediationService:
             }
         return {
             "decision": decision,
-            "replacement_method_lines": [],
+            "edits": [],
+            "replacement_method_lines": None,
             "replacement_method_code": None,
             "reason": normalized_reason,
             "raw_response_valid": True,
@@ -1224,7 +1374,7 @@ class RemediationService:
         return temp_root, temp_file_path, None
 
     @staticmethod
-    def _compile_project(build_root: Optional[Path]) -> Dict[str, Any]:
+    def _compile_project(build_root: Optional[Path], build_command: Optional[str] = None) -> Dict[str, Any]:
         if not build_root:
             return {
                 "attempted": False,
@@ -1243,7 +1393,9 @@ class RemediationService:
                 "skipped_reason": "No build system detected",
             }
 
-        if mvn_file.exists():
+        if build_command:
+            cmd = shlex.split(build_command)
+        elif mvn_file.exists():
             cmd = ["mvn", "-q", "-DskipTests", "compile"]
         else:
             gradlew = build_root / "gradlew"
@@ -1306,7 +1458,11 @@ class RemediationService:
         return all(cls._normalize_type_name(exp) == cls._normalize_type_name(act) for exp, act in zip(expected, actual))
 
     @classmethod
-    def _replace_method_in_source(cls, source: str, updated_method: str, target_method: str) -> Tuple[str, str, str]:
+    def _extract_method_span(
+        cls,
+        source: str,
+        target_method: str,
+    ) -> Tuple[List[str], int, int, str]:
         try:
             tree = javalang.parse.parse(source)
         except Exception as exc:  # pragma: no cover - parser guard
@@ -1349,12 +1505,73 @@ class RemediationService:
         if end_line is None:
             raise ValueError("Could not determine method end line for replacement")
 
-        original_snippet = "\n".join(source_lines[start_line - 1 : end_line])
-        indent = re.match(r"\s*", source_lines[start_line - 1]).group(0)
-        cleaned_updated = textwrap.dedent(updated_method).strip("\n")
-        updated_lines = [f"{indent}{line}" if line.strip() else line for line in cleaned_updated.splitlines()]
+        original_lines = source_lines[start_line - 1 : end_line]
+        original_snippet = "\n".join(original_lines)
+        return original_lines, start_line, end_line, original_snippet
+
+    @classmethod
+    def _apply_method_edits(
+        cls,
+        original_lines: List[str],
+        edits: List[Dict[str, Any]],
+        target_method: str,
+    ) -> Tuple[List[str], str]:
+        updated_lines = list(original_lines)
+        previous_end = 0
+        offset = 0
+        for edit in edits:
+            start_line = edit["start_line"]
+            end_line = edit["end_line"]
+            expected_original = edit["original_lines"]
+            replacement_lines = edit["replacement_lines"]
+
+            if start_line < 1 or end_line < start_line or end_line > len(original_lines):
+                raise ValueError("edit_span_out_of_bounds")
+            if start_line <= previous_end:
+                raise ValueError("edit_spans_overlap")
+
+            current_slice = original_lines[start_line - 1 : end_line]
+            if current_slice != expected_original:
+                raise ValueError("edit_original_mismatch")
+
+            adjusted_start = start_line - 1 + offset
+            adjusted_end = end_line + offset
+            updated_lines[adjusted_start:adjusted_end] = replacement_lines
+            offset += len(replacement_lines) - len(expected_original)
+            previous_end = end_line
+
         updated_snippet = "\n".join(updated_lines)
-        new_lines = source_lines[: start_line - 1] + updated_lines + source_lines[end_line:]
+        multiline_literal_issue = _detect_multiline_literal_issue(updated_lines)
+        if multiline_literal_issue:
+            raise ValueError(multiline_literal_issue)
+
+        wrapped_method = f"class RemediationCandidate {{\n{updated_snippet}\n}}"
+        try:
+            parsed_wrapper = javalang.parse.parse(wrapped_method)
+            parsed_methods = [node for _, node in parsed_wrapper.filter(MethodDeclaration)]
+        except Exception as exc:
+            raise ValueError(f"invalid_java_syntax: {_format_java_parse_error(exc)}") from exc
+
+        if len(parsed_methods) != 1:
+            raise ValueError("invalid_method_shape: expected single method declaration")
+        parsed_method = parsed_methods[0]
+        if not set(parsed_method.modifiers or set()).intersection({"public", "private", "protected"}):
+            raise ValueError("invalid_method_shape: missing access_modifier")
+
+        expected_method_name, expected_parameter_count = _extract_target_method_identity(target_method)
+        if expected_method_name and parsed_method.name != expected_method_name:
+            raise ValueError("method_name_mismatch")
+        if expected_parameter_count is not None and len(parsed_method.parameters or []) != expected_parameter_count:
+            raise ValueError("parameter_count_mismatch")
+
+        return updated_lines, updated_snippet
+
+    @classmethod
+    def _replace_method_in_source(cls, source: str, updated_method_lines: List[str], target_method: str) -> Tuple[str, str, str]:
+        source_lines = source.splitlines()
+        _, start_line, end_line, original_snippet = cls._extract_method_span(source, target_method)
+        updated_snippet = "\n".join(updated_method_lines)
+        new_lines = source_lines[: start_line - 1] + updated_method_lines + source_lines[end_line:]
         new_source = "\n".join(new_lines)
         return new_source, original_snippet, updated_snippet
 

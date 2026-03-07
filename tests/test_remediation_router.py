@@ -12,7 +12,15 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
             "status": "OK",
             "violation_id": "ISO-A.10-WEAK-HASH",
             "generation": {
-                "decision": "replace_method",
+                "decision": "apply_edits",
+                "edits": [
+                    {
+                        "start_line": 1,
+                        "end_line": 1,
+                        "original_lines": ["public void foo() { return; }"],
+                        "replacement_lines": ["public void foo() { return; }"],
+                    }
+                ],
                 "replacement_method_lines": ["public void foo() { return; }"],
                 "replacement_method_code": "public void foo() { return; }",
                 "reason": None,
@@ -31,7 +39,8 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body)
         self.assertEqual(payload["status"], "OK")
-        self.assertEqual(payload["generation"]["decision"], "replace_method")
+        self.assertEqual(payload["generation"]["decision"], "apply_edits")
+        self.assertEqual(payload["generation"]["edits"][0]["start_line"], 1)
         self.assertEqual(payload["generation"]["replacement_method_lines"], ["public void foo() { return; }"])
 
     @patch(
@@ -42,6 +51,7 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
             "error": "NO_FIX: broader protocol context required",
             "generation": {
                 "decision": "no_fix",
+                "edits": [],
                 "replacement_method_lines": None,
                 "replacement_method_code": None,
                 "reason": "broader protocol context required",
@@ -67,14 +77,15 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
         return_value={
             "status": "GENERATION_ERROR",
             "violation_id": "ISO-A.10-WEAK-HASH",
-            "error": "empty_replacement_lines",
+            "error": "empty_edits",
             "generation": {
                 "decision": None,
+                "edits": None,
                 "replacement_method_lines": None,
                 "replacement_method_code": None,
                 "reason": None,
                 "raw_response_valid": False,
-                "schema_error": "empty_replacement_lines",
+                "schema_error": "empty_edits",
             },
         },
     )
@@ -96,7 +107,15 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
             "violation_id": "ISO-A.10-WEAK-HASH",
             "error": "mvn test failed",
             "generation": {
-                "decision": "replace_method",
+                "decision": "apply_edits",
+                "edits": [
+                    {
+                        "start_line": 1,
+                        "end_line": 1,
+                        "original_lines": ["public void foo() { return; }"],
+                        "replacement_lines": ["public void foo() { return; }"],
+                    }
+                ],
                 "replacement_method_lines": ["public void foo() { return; }"],
                 "replacement_method_code": "public void foo() { return; }",
                 "reason": None,

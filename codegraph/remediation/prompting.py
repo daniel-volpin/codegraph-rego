@@ -34,6 +34,10 @@ class RemediationPromptTemplate:
 
     SOURCE_BEGIN = "BEGIN_SOURCE_SNIPPET"
     SOURCE_END = "END_SOURCE_SNIPPET"
+    METHOD_BEGIN = "BEGIN_EXACT_METHOD_SNIPPET"
+    METHOD_END = "END_EXACT_METHOD_SNIPPET"
+    NUMBERED_METHOD_BEGIN = "BEGIN_NUMBERED_METHOD_SNIPPET"
+    NUMBERED_METHOD_END = "END_NUMBERED_METHOD_SNIPPET"
 
     GRAPH_BEGIN = "BEGIN_GRAPH_CONTEXT_JSON"
     GRAPH_END = "END_GRAPH_CONTEXT_JSON"
@@ -50,22 +54,26 @@ class RemediationPromptTemplate:
             "You are a remediation agent for Java code.\n"
             "Use ONLY the evidence provided in the user message blocks.\n"
             "Preserve behavior and the method signature. Make the smallest change that satisfies the task.\n"
-            "Only return replace_method when you can produce a COMPLETE syntactically valid Java method.\n"
-            "If you cannot produce a complete valid method, return no_fix instead of a partial draft.\n"
-            "Preserve unchanged lines exactly when possible, including string literal escapes such as \\\\n.\n\n"
+            "Edit ONLY the target method. Do not invent helper methods, imports, fields, classes, or comments.\n"
+            "Work against the numbered exact method snippet provided by the user.\n"
+            "Return only the changed spans as edits. Do not rewrite unchanged lines.\n"
+            "If you cannot produce a safe minimal edit plan, return no_fix instead of a partial draft.\n"
+            "Preserve unchanged lines exactly, including indentation, string and character literals, escapes such as \\\\n, and fully qualified names already in use.\n\n"
             "Return a JSON object only with exactly these fields:\n"
-            "- decision: \"replace_method\" or \"no_fix\"\n"
-            "- replacement_method_lines: array of strings\n"
+            "- decision: \"apply_edits\" or \"no_fix\"\n"
+            "- edits: array of edit objects\n"
             "- reason: string\n\n"
-            "If decision is \"replace_method\", replacement_method_lines MUST contain the COMPLETE replacement method "
-            "with exactly one source line per array element, starting from annotations if present and then the access "
-            "modifier (public/private/protected), return type, method name, parameters, the opening brace '{', the "
-            "ENTIRE method body with ALL lines (both changed and unchanged), and the closing brace '}'.\n"
+            "Each edit object MUST have exactly these fields:\n"
+            "- start_line: integer, 1-based and relative to the numbered method snippet\n"
+            "- end_line: integer, inclusive and relative to the numbered method snippet\n"
+            "- original_lines: array of strings copied EXACTLY from the selected source span\n"
+            "- replacement_lines: array of strings for the replacement span\n\n"
+            "If decision is \"apply_edits\", edits MUST be ordered, non-overlapping, and contain at least one item.\n"
+            "Each replacement_lines entry MUST be a complete source line. Do not split one logical source line across multiple array entries.\n"
             "If decision is \"no_fix\", reason MUST explain why a safe minimal fix is not possible.\n"
-            "When a field does not apply, return an empty array for replacement_method_lines and an empty string for reason.\n"
-            "Do not put newline escape sequences inside a single string. Use one line per array element.\n\n"
-            "Before returning replace_method, ensure braces, parentheses, and string literals are balanced and the "
-            "method still includes the closing brace '}'.\n"
+            "When a field does not apply, return an empty array for edits and an empty string for reason.\n\n"
+            "Do not modify lines outside the returned edit spans.\n"
+            "Keep the exact method name, annotations, and parameter list unchanged unless a returned edit span explicitly includes them.\n"
             "Do not output markdown, code fences, diffs, prose, backticks, or any text outside the JSON object."
         )
 
@@ -136,7 +144,8 @@ class RemediationPromptTemplate:
 
         target_method = context.get("target_method") or context.get("method") or "unknown"
         file_path = context.get("file_path") or "unknown"
-        source_code = (evidence.get("source_code") or "").rstrip()
+        source_code = (context.get("exact_method_source") or evidence.get("source_code") or "").rstrip()
+        numbered_source = context.get("numbered_method_source") or ""
         graph_context = cls._build_graph_payload(evidence.get("graph_context") or {})
         vector_context = list(evidence.get("vector_context") or [])[:_MAX_VECTOR_CONTEXT_ITEMS]
 
@@ -156,6 +165,12 @@ class RemediationPromptTemplate:
         sections.extend([cls.CONTROL_BEGIN, control_json, cls.CONTROL_END])
         sections.append("")
         sections.extend([cls.SOURCE_BEGIN, source_code or "<empty>", cls.SOURCE_END])
+        if source_code:
+            sections.append("")
+            sections.extend([cls.METHOD_BEGIN, source_code, cls.METHOD_END])
+        if numbered_source:
+            sections.append("")
+            sections.extend([cls.NUMBERED_METHOD_BEGIN, numbered_source, cls.NUMBERED_METHOD_END])
         sections.append("")
         if any(graph_context.values()):
             sections.extend([cls.GRAPH_BEGIN, graph_json, cls.GRAPH_END])
@@ -199,17 +214,38 @@ def build_remediation_response_format() -> Dict[str, Any]:
                 "properties": {
                     "decision": {
                         "type": "string",
-                        "enum": ["replace_method", "no_fix"],
+                        "enum": ["apply_edits", "no_fix"],
                     },
-                    "replacement_method_lines": {
+                    "edits": {
                         "type": "array",
-                        "items": {"type": "string"},
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "start_line": {"type": "integer"},
+                                "end_line": {"type": "integer"},
+                                "original_lines": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "replacement_lines": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                            },
+                            "required": [
+                                "start_line",
+                                "end_line",
+                                "original_lines",
+                                "replacement_lines",
+                            ],
+                        },
                     },
                     "reason": {
                         "type": "string",
                     },
                 },
-                "required": ["decision", "replacement_method_lines", "reason"],
+                "required": ["decision", "edits", "reason"],
             },
         },
     }

@@ -10,15 +10,28 @@ except ImportError:  # pragma: no cover - environment guard
     javalang = None
 
 
-def _structured_replace_method(method_code: str | list[str]) -> str:
-    if isinstance(method_code, str):
-        method_lines = method_code.splitlines()
-    else:
-        method_lines = method_code
+def _structured_apply_edits(
+    *,
+    original_method: str | list[str],
+    replacement_method: str | list[str],
+    start_line: int = 1,
+    end_line: int | None = None,
+) -> str:
+    original_lines = original_method.splitlines() if isinstance(original_method, str) else list(original_method)
+    replacement_lines = replacement_method.splitlines() if isinstance(replacement_method, str) else list(replacement_method)
+    if end_line is None:
+        end_line = start_line + len(original_lines) - 1
     return json.dumps(
         {
-            "decision": "replace_method",
-            "replacement_method_lines": method_lines,
+            "decision": "apply_edits",
+            "edits": [
+                {
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "original_lines": original_lines,
+                    "replacement_lines": replacement_lines,
+                }
+            ],
             "reason": "",
         }
     )
@@ -28,7 +41,7 @@ def _structured_no_fix(reason: str) -> str:
     return json.dumps(
         {
             "decision": "no_fix",
-            "replacement_method_lines": [],
+            "edits": [],
             "reason": reason,
         }
     )
@@ -43,104 +56,204 @@ class RemediationUtilsTests(unittest.TestCase):
         cls.service = service
 
     def test_extract_json_block(self):
-        text = 'Here is output:\n```json\n{"decision":"no_fix","replacement_method_lines":[],"reason":"x"}\n```'
+        text = 'Here is output:\n```json\n{"decision":"no_fix","edits":[],"reason":"x"}\n```'
         extracted = self.service._extract_json_block(text)
-        self.assertEqual(extracted, '{"decision":"no_fix","replacement_method_lines":[],"reason":"x"}')
+        self.assertEqual(extracted, '{"decision":"no_fix","edits":[],"reason":"x"}')
 
-    def test_parse_structured_generation_replace_method(self):
-        raw = _structured_replace_method('public void foo() { System.out.println("ok"); }')
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+    def test_parse_structured_generation_apply_edits(self):
+        original = 'public void foo() { System.out.println("old"); }'
+        replacement = 'public void foo() { System.out.println("ok"); }'
+        raw = _structured_apply_edits(original_method=original, replacement_method=replacement)
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=original.splitlines(),
+        )
         self.assertTrue(parsed["raw_response_valid"])
-        self.assertEqual(parsed["decision"], "replace_method")
-        self.assertEqual(parsed["replacement_method_lines"], ['public void foo() { System.out.println("ok"); }'])
+        self.assertEqual(parsed["decision"], "apply_edits")
+        self.assertEqual(parsed["edits"][0]["start_line"], 1)
+        self.assertEqual(parsed["replacement_method_lines"], [replacement])
         self.assertIn('System.out.println("ok")', parsed["replacement_method_code"])
         self.assertEqual(parsed["reason"], "")
         self.assertIsNone(parsed["schema_error"])
 
     def test_parse_structured_generation_no_fix(self):
         raw = _structured_no_fix("safe minimal fix is not possible with the available context")
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=["public void foo() {}"],
+        )
         self.assertTrue(parsed["raw_response_valid"])
         self.assertEqual(parsed["decision"], "no_fix")
         self.assertEqual(parsed["reason"], "safe minimal fix is not possible with the available context")
         self.assertIsNone(parsed["replacement_method_code"])
-        self.assertEqual(parsed["replacement_method_lines"], [])
+        self.assertEqual(parsed["edits"], [])
 
     def test_parse_structured_generation_rejects_malformed_json(self):
-        raw = '{"decision":"replace_method","replacement_method_lines":["public void foo() { }"]'
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        raw = '{"decision":"apply_edits","edits":[]'
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=["public void foo() {}"],
+        )
         self.assertFalse(parsed["raw_response_valid"])
         self.assertTrue((parsed["schema_error"] or "").startswith("invalid_json"))
 
     def test_parse_structured_generation_rejects_missing_fields(self):
-        raw = '{"decision":"replace_method","replacement_method_lines":["public void foo() { }"]}'
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        raw = '{"decision":"apply_edits","edits":[]}'
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=["public void foo() {}"],
+        )
         self.assertFalse(parsed["raw_response_valid"])
         self.assertIn("schema_mismatch", parsed["schema_error"])
 
-    def test_parse_structured_generation_rejects_empty_replacement_lines(self):
-        raw = _structured_replace_method([])
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+    def test_parse_structured_generation_rejects_empty_edits(self):
+        raw = json.dumps({"decision": "apply_edits", "edits": [], "reason": ""})
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=["public void foo() {}"],
+        )
         self.assertFalse(parsed["raw_response_valid"])
-        self.assertEqual(parsed["schema_error"], "empty_replacement_lines")
+        self.assertEqual(parsed["schema_error"], "empty_edits")
 
     def test_parse_structured_generation_rejects_empty_no_fix_reason(self):
         raw = _structured_no_fix("   ")
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=["public void foo() {}"],
+        )
         self.assertFalse(parsed["raw_response_valid"])
         self.assertIn("no_fix requires reason", parsed["schema_error"])
 
-    def test_parse_structured_generation_rejects_non_string_lines(self):
+    def test_parse_structured_generation_rejects_non_string_edit_lines(self):
         raw = json.dumps(
             {
-                "decision": "replace_method",
-                "replacement_method_lines": ["public void foo() {", 123, "}"],
+                "decision": "apply_edits",
+                "edits": [
+                    {
+                        "start_line": 1,
+                        "end_line": 1,
+                        "original_lines": ["public void foo() {}"],
+                        "replacement_lines": ["public void foo() {", 123, "}"],
+                    }
+                ],
                 "reason": "",
             }
         )
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
-        self.assertFalse(parsed["raw_response_valid"])
-        self.assertIn("must contain strings", parsed["schema_error"])
-
-    def test_parse_structured_generation_rejects_non_method_replacement(self):
-        raw = _structured_replace_method('java.security.MessageDigest.getInstance("SHA-256");')
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.foo()")
-        self.assertFalse(parsed["raw_response_valid"])
-        self.assertEqual(parsed["schema_error"], "invalid_method_shape")
-
-    def test_parse_structured_generation_normalizes_embedded_newlines_in_line_entries(self):
-        raw = _structured_replace_method(
-            ['@Override\\npublic void hash() {', '    System.out.println("ok");', '}']
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=["public void foo() {}"],
         )
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.hash()")
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertIn("edit_lines_must_contain_strings", parsed["schema_error"])
+
+    def test_parse_structured_generation_rejects_original_mismatch(self):
+        raw = _structured_apply_edits(
+            original_method='public void foo() { System.out.println("old"); }',
+            replacement_method='public void foo() { System.out.println("ok"); }',
+        )
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=['public void foo() { System.out.println("DIFFERENT"); }'],
+        )
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertEqual(parsed["schema_error"], "edit_original_mismatch")
+
+    def test_parse_structured_generation_normalizes_embedded_newlines_in_edit_lines(self):
+        original = ['@Override', 'public void hash() {', '    System.out.println("old");', '}']
+        replacement = ['@Override\\npublic void hash() {', '    System.out.println("ok");', '}']
+        raw = _structured_apply_edits(
+            original_method=original,
+            replacement_method=replacement,
+            start_line=1,
+            end_line=4,
+        )
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.hash()",
+            original_method_lines=original,
+        )
         self.assertTrue(parsed["raw_response_valid"])
         self.assertIn("\npublic void hash()", parsed["replacement_method_code"])
         self.assertNotIn("\\n", parsed["replacement_method_code"])
 
     def test_parse_structured_generation_rejects_invalid_java_method_syntax(self):
-        raw = _structured_replace_method(
-            'public void hash() { System.out.println("oops"; }'
+        original = ['public void hash() {', '    System.out.println("old");', '}']
+        raw = _structured_apply_edits(
+            original_method=original,
+            replacement_method='public void hash() { System.out.println("oops"; }',
+            start_line=1,
+            end_line=3,
         )
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.hash()")
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.hash()",
+            original_method_lines=original,
+        )
         self.assertFalse(parsed["raw_response_valid"])
         self.assertIn("invalid_java_syntax", parsed["schema_error"])
 
+    def test_parse_structured_generation_rejects_multiline_string_literal(self):
+        original = [
+            "public void hash() {",
+            '    String x = "safe";',
+            "}",
+        ]
+        raw = _structured_apply_edits(
+            original_method=original,
+            replacement_method=[
+                "public void hash() {",
+                '    String x = "',
+                '";',
+                "}",
+            ],
+            start_line=1,
+            end_line=3,
+        )
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.hash()",
+            original_method_lines=original,
+        )
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertEqual(parsed["schema_error"], "invalid_java_syntax: multiline_string_literal")
+
     def test_parse_structured_generation_rejects_method_name_mismatch(self):
-        raw = _structured_replace_method("public void wrongName() { return; }")
-        parsed = self.service.RemediationService._parse_structured_generation_response(raw, "com.example.Foo.hash()")
+        original = ["public void hash() { return; }"]
+        raw = _structured_apply_edits(
+            original_method=original,
+            replacement_method="public void wrongName() { return; }",
+        )
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.hash()",
+            original_method_lines=original,
+        )
         self.assertFalse(parsed["raw_response_valid"])
         self.assertEqual(parsed["schema_error"], "method_name_mismatch")
 
     def test_parse_structured_generation_rejects_parameter_count_mismatch(self):
-        raw = _structured_replace_method("public void hash(String a) { return; }")
+        original = ["public void hash(HttpServletRequest a, HttpServletResponse b) { return; }"]
+        raw = _structured_apply_edits(
+            original_method=original,
+            replacement_method="public void hash(String a) { return; }",
+        )
         parsed = self.service.RemediationService._parse_structured_generation_response(
             raw,
-            "com.example.Foo.hash(HttpServletRequest,HttpServletResponse)",
+            target_method="com.example.Foo.hash(HttpServletRequest,HttpServletResponse)",
+            original_method_lines=original,
         )
         self.assertFalse(parsed["raw_response_valid"])
         self.assertEqual(parsed["schema_error"], "parameter_count_mismatch")
 
-    def test_propose_full_method_uses_structured_generation_contract(self):
+    def test_propose_method_edits_uses_structured_generation_contract(self):
         svc_mod = self.service
 
         captured = {}
@@ -148,8 +261,9 @@ class RemediationUtilsTests(unittest.TestCase):
         def capture_llm(messages, **kwargs):
             captured["messages"] = messages
             captured["kwargs"] = kwargs
-            return _structured_replace_method(
-                "public void hash() { java.security.MessageDigest.getInstance(\"SHA-256\"); }"
+            return _structured_apply_edits(
+                original_method='public void hash() { java.security.MessageDigest.getInstance("MD5"); }',
+                replacement_method='public void hash() { java.security.MessageDigest.getInstance("SHA-256"); }',
             )
 
         remediation = svc_mod.RemediationService(llm_client=capture_llm)
@@ -158,21 +272,21 @@ class RemediationUtilsTests(unittest.TestCase):
             "target_method": "com.example.Foo.hash()",
             "file_path": "Example.java",
             "rule_id": "ISO-A.10-WEAK-HASH",
-            "evidence": {"source_code": "public void hash() { }", "graph_context": {}, "vector_context": []},
+            "evidence": {"source_code": 'public void hash() { java.security.MessageDigest.getInstance("MD5"); }', "graph_context": {}, "vector_context": []},
             "catalog_entry": {"title": "Cryptography (Weak Hash)"},
             "baseline_violations": [],
+            "exact_method_source": 'public void hash() { java.security.MessageDigest.getInstance("MD5"); }',
+            "numbered_method_source": '1: public void hash() { java.security.MessageDigest.getInstance("MD5"); }',
         }
 
-        out = remediation.propose_full_method(context)
-        self.assertEqual(out["decision"], "replace_method")
+        out = remediation.propose_method_edits(context)
+        self.assertEqual(out["decision"], "apply_edits")
         self.assertTrue(out["generation"]["raw_response_valid"])
         self.assertEqual(captured["kwargs"]["response_format"]["type"], "json_schema")
         self.assertEqual(captured["kwargs"]["stop"], ["<|im_end|>", "<|endoftext|>"])
         self.assertIn("BEGIN_TASK_SPEC_JSON", captured["messages"][1]["content"])
-        self.assertEqual(
-            out["generation"]["replacement_method_lines"],
-            ['public void hash() { java.security.MessageDigest.getInstance("SHA-256"); }'],
-        )
+        self.assertIn("BEGIN_NUMBERED_METHOD_SNIPPET", captured["messages"][1]["content"])
+        self.assertEqual(out["generation"]["edits"][0]["start_line"], 1)
 
     def test_remediation_prompt_omits_empty_graph_and_vector_blocks(self):
         from codegraph.remediation.prompting import RemediationPromptTemplate, RemediationTaskSpec
@@ -201,8 +315,27 @@ class RemediationUtilsTests(unittest.TestCase):
         from codegraph.remediation.prompting import RemediationPromptTemplate
 
         prompt = RemediationPromptTemplate.system_prompt()
-        self.assertIn("Only return replace_method when you can produce a COMPLETE syntactically valid Java method", prompt)
-        self.assertIn("return no_fix instead of a partial draft", prompt)
+        self.assertIn("Return only the changed spans as edits", prompt)
+        self.assertIn("If you cannot produce a safe minimal edit plan, return no_fix", prompt)
+
+    def test_compile_project_honors_explicit_build_command(self):
+        with TemporaryDirectory() as tmp:
+            build_root = Path(tmp)
+            (build_root / "pom.xml").write_text("<project/>", encoding="utf-8")
+            with patch.object(self.service.subprocess, "run") as run_mock:
+                run_mock.return_value = Mock(returncode=0, stdout="", stderr="")
+                result = self.service.RemediationService._compile_project(
+                    build_root,
+                    build_command="mvn -q -DskipTests -Dspotless.skip=true compile",
+                )
+
+        self.assertTrue(result["attempted"])
+        self.assertTrue(result["success"])
+        run_mock.assert_called_once()
+        self.assertEqual(
+            run_mock.call_args.args[0],
+            ["mvn", "-q", "-DskipTests", "-Dspotless.skip=true", "compile"],
+        )
 
     def test_remediation_capability_matches_supported_rule_set(self):
         from codegraph.remediation.capabilities import (
@@ -244,7 +377,12 @@ class RemediationUtilsTests(unittest.TestCase):
     def test_preview_virtual_fix_rejects_unsupported_rule_without_llm_call(self):
         svc_mod = self.service
 
-        llm_client = Mock(return_value=_structured_replace_method("public void noop() { return; }"))
+        llm_client = Mock(
+            return_value=_structured_apply_edits(
+                original_method="public void noop() { return; }",
+                replacement_method="public void noop() { return; }",
+            )
+        )
         remediation = svc_mod.RemediationService(llm_client=llm_client)
         remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
             "violation": {"violation_id": "ISO-A.12.4.1", "reason": "logging"},
@@ -264,16 +402,23 @@ class RemediationUtilsTests(unittest.TestCase):
     def test_preview_virtual_fix_returns_no_fix_for_preflight_random_shape(self):
         svc_mod = self.service
 
-        llm_client = Mock(return_value=_structured_replace_method("public void noop() { return; }"))
+        llm_client = Mock(
+            return_value=_structured_apply_edits(
+                original_method="public void noop() { return; }",
+                replacement_method="public void noop() { return; }",
+            )
+        )
         remediation = svc_mod.RemediationService(llm_client=llm_client)
+        original_method = "public void random() { UUID.randomUUID(); }"
         remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
             "violation": {"violation_id": "ISO-A.10-WEAK-RANDOM", "reason": "rng"},
             "target_method": "com.example.Foo.random()",
             "file_path": "Example.java",
             "rule_id": "ISO-A.10-WEAK-RANDOM",
-            "evidence": {"source_code": "public void random() { UUID.randomUUID(); }", "graph_context": {}, "vector_context": []},
+            "evidence": {"source_code": original_method, "graph_context": {}, "vector_context": []},
             "catalog_entry": {"title": "Cryptography (Insecure Randomness)"},
             "baseline_violations": [],
+            "exact_method_source": original_method,
         }
 
         out = remediation.preview_virtual_fix("ISO-A.10-WEAK-RANDOM")
@@ -285,9 +430,11 @@ class RemediationUtilsTests(unittest.TestCase):
     def test_preview_virtual_fix_allows_supported_random_shape(self):
         svc_mod = self.service
 
+        original_method = "public void random() { new java.util.Random().nextInt(); }"
         llm_client = Mock(
-            return_value=_structured_replace_method(
-                "public void random() { new java.security.SecureRandom().nextInt(); }"
+            return_value=_structured_apply_edits(
+                original_method=original_method,
+                replacement_method="public void random() { new java.security.SecureRandom().nextInt(); }",
             )
         )
         remediation = svc_mod.RemediationService(llm_client=llm_client)
@@ -297,12 +444,13 @@ class RemediationUtilsTests(unittest.TestCase):
             "file_path": "Example.java",
             "rule_id": "ISO-A.10-WEAK-RANDOM",
             "evidence": {
-                "source_code": "public void random() { new java.util.Random().nextInt(); }",
+                "source_code": original_method,
                 "graph_context": {},
                 "vector_context": [],
             },
             "catalog_entry": {"title": "Cryptography (Insecure Randomness)"},
             "baseline_violations": [],
+            "exact_method_source": original_method,
         }
 
         with patch.object(svc_mod, "evaluate_bundle", return_value=[]):
@@ -310,16 +458,18 @@ class RemediationUtilsTests(unittest.TestCase):
 
         self.assertEqual(out.get("status"), "OK")
         self.assertEqual(out.get("opa_status"), "PASS")
-        self.assertEqual(out["generation"]["decision"], "replace_method")
+        self.assertEqual(out["generation"]["decision"], "apply_edits")
         self.assertIsInstance(out["generation"]["replacement_method_lines"], list)
         llm_client.assert_called_once()
 
     def test_preview_virtual_fix_allows_guarded_crypto_literal_subcase(self):
         svc_mod = self.service
 
+        original_method = 'public void encrypt() { Cipher.getInstance("DESede/ECB/PKCS5Padding"); }'
         llm_client = Mock(
-            return_value=_structured_replace_method(
-                'public void encrypt() { Cipher.getInstance("AES/GCM/NoPadding"); }'
+            return_value=_structured_apply_edits(
+                original_method=original_method,
+                replacement_method='public void encrypt() { Cipher.getInstance("AES/GCM/NoPadding"); }',
             )
         )
         remediation = svc_mod.RemediationService(llm_client=llm_client)
@@ -329,19 +479,20 @@ class RemediationUtilsTests(unittest.TestCase):
             "file_path": "Example.java",
             "rule_id": "ISO-A.10-WEAK-CRYPTO",
             "evidence": {
-                "source_code": 'public void encrypt() { Cipher.getInstance("DESede/ECB/PKCS5Padding"); }',
+                "source_code": original_method,
                 "graph_context": {},
                 "vector_context": [],
             },
             "catalog_entry": {"title": "Cryptography (Weak Cipher)"},
             "baseline_violations": [],
+            "exact_method_source": original_method,
         }
 
         with patch.object(svc_mod, "evaluate_bundle", return_value=[]):
             out = remediation.preview_virtual_fix("ISO-A.10-WEAK-CRYPTO")
 
         self.assertEqual(out.get("status"), "OK")
-        self.assertEqual(out["generation"]["decision"], "replace_method")
+        self.assertEqual(out["generation"]["decision"], "apply_edits")
         llm_client.assert_called_once()
 
     def test_preview_virtual_fix_allows_structured_no_fix_from_model(self):
@@ -371,22 +522,26 @@ class RemediationUtilsTests(unittest.TestCase):
     def test_preview_virtual_fix_returns_generation_error_for_invalid_structured_output(self):
         svc_mod = self.service
 
-        llm_client = Mock(return_value='{"decision":"replace_method","replacement_method_lines":["oops"],"reason":""}')
+        llm_client = Mock(
+            return_value='{"decision":"apply_edits","edits":[{"start_line":1,"end_line":1,"original_lines":["public void hash() { }"],"replacement_lines":["oops"]}],"reason":""}'
+        )
         remediation = svc_mod.RemediationService(llm_client=llm_client)
+        original_method = "public void hash() { }"
         remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
             "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
             "target_method": "com.example.Foo.hash()",
             "file_path": "Example.java",
             "rule_id": "ISO-A.10-WEAK-HASH",
-            "evidence": {"source_code": "public void hash() { }", "graph_context": {}, "vector_context": []},
+            "evidence": {"source_code": original_method, "graph_context": {}, "vector_context": []},
             "catalog_entry": {"title": "Cryptography (Weak Hash)"},
             "baseline_violations": [],
+            "exact_method_source": original_method,
         }
 
         out = remediation.preview_virtual_fix("ISO-A.10-WEAK-HASH")
         self.assertEqual(out.get("status"), "GENERATION_ERROR")
         self.assertFalse(out["generation"]["raw_response_valid"])
-        self.assertIn("invalid_method_shape", out["error"])
+        self.assertIn("invalid_java_syntax", out["error"])
 
     def test_apply_fix_returns_generation_error_for_invalid_structured_output(self):
         svc_mod = self.service
@@ -403,24 +558,27 @@ class RemediationUtilsTests(unittest.TestCase):
                 "evidence": {"source_code": "public void hash() { }", "graph_context": {}, "vector_context": []},
                 "catalog_entry": {"title": "Cryptography (Weak Hash)"},
                 "baseline_violations": [],
+                "exact_method_source": "public void hash() { }",
             }
             remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
-            remediation.propose_full_method = (  # type: ignore[method-assign]
+            remediation.propose_method_edits = (  # type: ignore[method-assign]
                 lambda *_args, **_kwargs: {
-                    "decision": "replace_method",
+                    "decision": "apply_edits",
+                    "edits": None,
                     "replacement_method_lines": None,
                     "replacement_method_code": None,
                     "reason": "",
                     "schema_error": "invalid_java_syntax: expected \")\"",
                     "generation": {
-                        "decision": "replace_method",
+                        "decision": "apply_edits",
+                        "edits": None,
                         "replacement_method_lines": None,
                         "replacement_method_code": None,
                         "reason": "",
                         "raw_response_valid": False,
                         "schema_error": "invalid_java_syntax: expected \")\"",
                     },
-                    "raw_output": '{"decision":"replace_method"}',
+                    "raw_output": '{"decision":"apply_edits"}',
                 }
             )
 
@@ -433,6 +591,15 @@ class RemediationUtilsTests(unittest.TestCase):
             )
             self.assertEqual(out.get("status"), "GENERATION_ERROR")
             self.assertIn("invalid_java_syntax", out.get("error", ""))
+            self.assertIn("invalid_java_syntax", out.get("errors", []))
+
+    def test_retry_error_summary_is_structural(self):
+        self.assertEqual(self.service._summarize_retry_error("invalid_java_syntax: JavaSyntaxError"), "invalid_java_syntax")
+        self.assertEqual(self.service._summarize_retry_error("method_name_mismatch"), "method_name_mismatch")
+        self.assertEqual(
+            self.service._summarize_retry_error("Failed to produce a valid method replacement"),
+            "replacement_not_found",
+        )
 
     def test_apply_fix_restores_original_file_on_verification_exception(self):
         svc_mod = self.service
@@ -459,17 +626,34 @@ class RemediationUtilsTests(unittest.TestCase):
                 },
                 "catalog_entry": {"title": "Cryptography (Weak Hash)"},
                 "baseline_violations": [],
+                "exact_method_source": 'public void doPost(...) { MessageDigest.getInstance("MD5"); }',
             }
             remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
-            remediation.propose_full_method = (  # type: ignore[method-assign]
+            remediation.propose_method_edits = (  # type: ignore[method-assign]
                 lambda *_args, **_kwargs: {
-                    "decision": "replace_method",
+                    "decision": "apply_edits",
+                    "edits": [
+                        {
+                            "start_line": 1,
+                            "end_line": 1,
+                            "original_lines": ['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
+                            "replacement_lines": ["public void doPost(...) { /* sha-256 */ }"],
+                        }
+                    ],
                     "replacement_method_lines": ["public void doPost(...) { /* sha-256 */ }"],
                     "replacement_method_code": "public void doPost(...) { /* sha-256 */ }",
                     "reason": None,
                     "schema_error": None,
                     "generation": {
-                        "decision": "replace_method",
+                        "decision": "apply_edits",
+                        "edits": [
+                            {
+                                "start_line": 1,
+                                "end_line": 1,
+                                "original_lines": ['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
+                                "replacement_lines": ["public void doPost(...) { /* sha-256 */ }"],
+                            }
+                        ],
                         "replacement_method_lines": ["public void doPost(...) { /* sha-256 */ }"],
                         "replacement_method_code": "public void doPost(...) { /* sha-256 */ }",
                         "reason": "",

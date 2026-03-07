@@ -129,7 +129,15 @@ export interface RemediationPreviewResponse {
 }
 
 export interface RemediationGenerationResult {
-  decision?: "replace_method" | "no_fix" | null;
+  decision?: "apply_edits" | "no_fix" | null;
+  edits?:
+    | {
+        start_line: number;
+        end_line: number;
+        original_lines: string[];
+        replacement_lines: string[];
+      }[]
+    | null;
   replacement_method_lines?: string[] | null;
   replacement_method_code?: string | null;
   reason?: string | null;

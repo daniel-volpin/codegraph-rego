@@ -59,24 +59,32 @@ source_weak_cipher if {
 }
 
 source_insecure_random if {
+  flags := input.analysis_flags
+  flags == null
   input.source_code != null
   src := lower(input.source_code)
   contains(src, random_ctor_pattern)
 }
 
 source_insecure_random if {
+  flags := input.analysis_flags
+  flags == null
   input.source_code != null
   src := lower(input.source_code)
   contains(src, math_random_pattern)
 }
 
 source_insecure_random if {
+  flags := input.analysis_flags
+  flags == null
   input.source_code != null
   src := lower(input.source_code)
   contains(src, threadlocal_random_pattern)
 }
 
 source_insecure_random if {
+  flags := input.analysis_flags
+  flags == null
   input.source_code != null
   src := lower(input.source_code)
   contains(src, sha1prng_pattern)
