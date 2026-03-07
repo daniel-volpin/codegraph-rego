@@ -25,6 +25,7 @@ import type {
   PolicyEvaluateResponse,
   PolicyExplanationStructured,
   PolicyExplainOneResponse,
+  RemediationCapability,
   RemediationApplyResponse,
   RemediationPreviewResponse,
 } from "../lib/types";
@@ -44,16 +45,30 @@ interface ViolationRow {
   filePath: string;
   reason: string;
   snippet: string;
+  remediation: RemediationCapability;
   raw: RawViolation;
-  autoRemediable: boolean;
+}
+
+interface ViolationGroupRow {
+  id: string;
+  ruleId: string;
+  severity: string;
+  findingCount: number;
+  fileCount: number;
+  autoFixableCount: number;
+  findings: ViolationRow[];
+}
+
+interface PersistedPolicyEvaluation {
+  data: PolicyEvaluateResponse;
+  savedAt: number;
 }
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 
-const AUTO_RULES = new Set(["ISO-A.10-WEAK-HASH", "ISO-A.10-WEAK-CRYPTO", "A.10-WEAK-HASH", "A.10-WEAK-CRYPTO"]);
-
 const asString = (value: unknown, fallback = "—") => (typeof value === "string" && value.trim() ? value : fallback);
+const asBoolean = (value: unknown, fallback = false) => (typeof value === "boolean" ? value : fallback);
 
 const basenameFromPath = (value: string) => {
   if (!value || value === "—") return value;
@@ -77,9 +92,22 @@ const compactTargetMethod = (value: string) => {
   return `${className}.${methodName}${suffix}`;
 };
 
+const normalizeRemediationCapability = (value: unknown): RemediationCapability => {
+  const record = asRecord(value);
+  return {
+    supported: asBoolean(record?.supported, false),
+    reason_code: asString(record?.reason_code ?? "unsupported_rule_for_auto_fix", "unsupported_rule_for_auto_fix"),
+    strategy: typeof record?.strategy === "string" ? record.strategy : null,
+    preview_available: asBoolean(record?.preview_available, false),
+    verify_available: asBoolean(record?.verify_available, false),
+    ui_apply_mode: record?.ui_apply_mode === "dry_run" ? "dry_run" : "dry_run",
+  };
+};
+
 const normalizeViolation = (item: RawViolation): ViolationRow => {
   const evidence = asRecord(item.evidence);
   const evidenceSnippet = evidence ? asString(evidence.source_code ?? "", "") : "";
+  const remediation = normalizeRemediationCapability(item.remediation);
   const ruleId = asString(item.violation_id ?? item.rule_id);
   const targetMethod = asString(item.target_method);
   const filePath = asString(item.file_path);
@@ -94,8 +122,8 @@ const normalizeViolation = (item: RawViolation): ViolationRow => {
     // Prefer an empty string over the "—" placeholder so we can render an explicit
     // "snippet unavailable" message in the UI.
     snippet: asString(item.code_snippet ?? evidenceSnippet ?? item.updated_source_code ?? "", ""),
+    remediation,
     raw: item,
-    autoRemediable: AUTO_RULES.has(ruleId),
   };
 };
 
@@ -103,6 +131,13 @@ const severityVariant = (severity: string): "destructive" | "warning" | "seconda
   if (severity === "HIGH") return "destructive";
   if (severity === "MEDIUM") return "warning";
   return "secondary";
+};
+
+const severityRank = (severity: string) => {
+  if (severity === "HIGH") return 3;
+  if (severity === "MEDIUM") return 2;
+  if (severity === "LOW") return 1;
+  return 0;
 };
 
 const formatCitationDisplay = (citation: string) => {
@@ -159,12 +194,90 @@ const renderStructuredExplanation = (payload: PolicyExplanationStructured) => {
   );
 };
 
+const remediationSummaryText = (capability: RemediationCapability) =>
+  capability.supported
+    ? "Preview suggests a fix without compilation. Verify fix (dry run) runs compile and policy re-checks without persisting changes."
+    : "Automatic remediation is currently available only for selected crypto findings. This rule requires manual review.";
+
+const POLICY_EVALUATION_STORAGE_KEY = "codegraph:policy:lastEvaluation";
+
+const readPersistedPolicyEvaluation = (): PersistedPolicyEvaluation | null => {
+  try {
+    const saved = localStorage.getItem(POLICY_EVALUATION_STORAGE_KEY);
+    if (!saved) return null;
+    const parsed = JSON.parse(saved) as Partial<PersistedPolicyEvaluation>;
+    if (!parsed || typeof parsed !== "object" || !parsed.data || typeof parsed.savedAt !== "number") {
+      return null;
+    }
+    return {
+      data: parsed.data as PolicyEvaluateResponse,
+      savedAt: parsed.savedAt,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const persistPolicyEvaluation = (data: PolicyEvaluateResponse) => {
+  try {
+    const payload: PersistedPolicyEvaluation = {
+      data,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(POLICY_EVALUATION_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore storage errors */
+  }
+};
+
+const groupViolationsByRule = (violations: ViolationRow[]): ViolationGroupRow[] => {
+  const groups = new Map<string, ViolationRow[]>();
+  for (const violation of violations) {
+    const key = violation.ruleId || "unknown-rule";
+    const current = groups.get(key);
+    if (current) {
+      current.push(violation);
+    } else {
+      groups.set(key, [violation]);
+    }
+  }
+
+  return Array.from(groups.entries()).map(([ruleId, findings]) => {
+    const sortedFindings = [...findings].sort((left, right) => {
+      const severityDiff = severityRank(right.severity) - severityRank(left.severity);
+      if (severityDiff !== 0) return severityDiff;
+      const fileDiff = left.filePath.localeCompare(right.filePath);
+      if (fileDiff !== 0) return fileDiff;
+      return left.targetMethod.localeCompare(right.targetMethod);
+    });
+
+    const fileCount = new Set(sortedFindings.map((finding) => finding.filePath)).size;
+    const autoFixableCount = sortedFindings.filter((finding) => finding.remediation.supported).length;
+    const highestSeverity = sortedFindings.reduce(
+      (current, finding) => (severityRank(finding.severity) > severityRank(current) ? finding.severity : current),
+      sortedFindings[0]?.severity ?? "LOW",
+    );
+
+    return {
+      id: ruleId,
+      ruleId,
+      severity: highestSeverity,
+      findingCount: sortedFindings.length,
+      fileCount,
+      autoFixableCount,
+      findings: sortedFindings,
+    };
+  });
+};
+
 type PendingAction = "explain" | "preview" | "apply";
 
 const PolicyPage = () => {
   const queryClient = useQueryClient();
+  const initialEvalSnapshotRef = useRef<PersistedPolicyEvaluation | null>(readPersistedPolicyEvaluation());
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
+  const [expandedFindingByGroup, setExpandedFindingByGroup] = useState<Record<string, string | null>>({});
   const [maxTotal, setMaxTotal] = useState(5);
   const [pendingAction, setPendingAction] = useState<Record<string, PendingAction>>({});
 
@@ -177,6 +290,12 @@ const PolicyPage = () => {
       delete next[id];
       return next;
     });
+  }, []);
+  const toggleFindingExpanded = useCallback((groupId: string, findingId: string) => {
+    setExpandedFindingByGroup((prev) => ({
+      ...prev,
+      [groupId]: prev[groupId] === findingId ? null : findingId,
+    }));
   }, []);
 
   // Cache per-violation side-results (preview/apply/explain) in React Query so they
@@ -223,7 +342,7 @@ const PolicyPage = () => {
 
   useQuery<PolicyCatalogResponse, Error>({ queryKey: ["policyCatalog"], queryFn: fetchPolicyCatalog });
 
-  const lastEvalToastAtRef = useRef(0);
+  const lastEvalToastAtRef = useRef(initialEvalSnapshotRef.current?.savedAt ?? 0);
   const lastEvalErrorToastAtRef = useRef(0);
 
   // Keep the last evaluation results in the React Query cache so they survive route navigation.
@@ -231,10 +350,17 @@ const PolicyPage = () => {
     queryKey: ["policyEvaluation:last"],
     queryFn: () => evaluatePolicies({ maxTotalViolations: maxTotal }),
     enabled: false,
+    initialData: initialEvalSnapshotRef.current?.data,
+    initialDataUpdatedAt: initialEvalSnapshotRef.current?.savedAt,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 6,
     retry: false,
   });
+
+  useEffect(() => {
+    if (!evalQuery.data) return;
+    persistPolicyEvaluation(evalQuery.data);
+  }, [evalQuery.data]);
 
   useEffect(() => {
     if (!evalQuery.dataUpdatedAt || !evalQuery.data) return;
@@ -319,24 +445,36 @@ const PolicyPage = () => {
     onError: (error: Error) => toast.error(`Apply failed: ${error.message}`),
   });
 
-  const data = useMemo(() => {
+  const findings = useMemo(() => {
     const result: PolicyEvaluateResponse | undefined = evalQuery.data;
     return (result?.violations ?? []).map((v) => normalizeViolation(v));
   }, [evalQuery.data]);
+
+  const data = useMemo(() => groupViolationsByRule(findings), [findings]);
+
+  const summary = useMemo(
+    () => ({
+      findingCount: findings.length,
+      ruleCount: data.length,
+      autoFixableCount: findings.filter((finding) => finding.remediation.supported).length,
+      manualReviewCount: findings.filter((finding) => !finding.remediation.supported).length,
+    }),
+    [data, findings],
+  );
 
   const colWidthClass = (colId: string) => {
     // Needs table-fixed on the table for these widths to be honored.
     // Use percentages so the table always fits the available main-content width.
     if (colId === "expander") return "w-[4%]";
-    if (colId === "ruleId") return "w-[20%]";
+    if (colId === "ruleId") return "w-[24%]";
     if (colId === "severity") return "w-[10%]";
-    if (colId === "targetMethod") return "w-[32%]";
-    if (colId === "filePath") return "w-[16%]";
-    if (colId === "status") return "w-[18%]";
+    if (colId === "findingCount") return "w-[12%]";
+    if (colId === "fileCount") return "w-[12%]";
+    if (colId === "status") return "w-[24%]";
     return "";
   };
 
-  const columns = useMemo<ColumnDef<ViolationRow>[]>(
+  const columns = useMemo<ColumnDef<ViolationGroupRow>[]>(
     () => [
       {
         id: "expander",
@@ -365,37 +503,21 @@ const PolicyPage = () => {
         cell: ({ row }) => <Badge variant={severityVariant(row.original.severity)}>{row.original.severity}</Badge>,
       },
       {
-        accessorKey: "targetMethod",
-        header: "Target Method",
-        cell: ({ row }) => {
-          const full = row.original.targetMethod;
-          const compact = compactTargetMethod(full);
-          return (
-            <span className="block min-w-0 truncate font-mono text-xs text-slate-800" title={full}>
-              {compact}
-            </span>
-          );
-        },
+        accessorKey: "findingCount",
+        header: "Findings",
+        cell: ({ row }) => <span className="text-sm text-slate-800">{row.original.findingCount}</span>,
       },
       {
-        accessorKey: "filePath",
-        header: "File",
-        cell: ({ row }) => {
-          const full = row.original.filePath;
-          const compact = basenameFromPath(full);
-          return (
-            <span className="block min-w-0 truncate font-mono text-xs text-slate-800" title={full}>
-              {compact}
-            </span>
-          );
-        },
+        accessorKey: "fileCount",
+        header: "Files",
+        cell: ({ row }) => <span className="text-sm text-slate-800">{row.original.fileCount}</span>,
       },
       {
         id: "status",
         header: "Remediation",
         cell: ({ row }) => (
-          <Badge variant={row.original.autoRemediable ? "success" : "secondary"}>
-            {row.original.autoRemediable ? "Auto-remediable" : "Manual fix required"}
+          <Badge variant={row.original.autoFixableCount > 0 ? "success" : "secondary"}>
+            {row.original.autoFixableCount > 0 ? `${row.original.autoFixableCount} auto-fixable` : "Manual review only"}
           </Badge>
         ),
       },
@@ -437,6 +559,25 @@ const PolicyPage = () => {
         </div>
       </Card>
 
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Findings</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.findingCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rules</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.ruleCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Auto-fixable</p>
+          <p className="mt-2 text-2xl font-semibold text-emerald-700">{summary.autoFixableCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manual review</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.manualReviewCount}</p>
+        </Card>
+      </div>
+
       <Card className="overflow-hidden">
         <div className="overflow-auto">
           <table className="w-full table-fixed border-collapse text-sm">
@@ -475,108 +616,183 @@ const PolicyPage = () => {
                     <tr className="border-t border-slate-100 bg-slate-50">
                       <td className="px-4 py-4" colSpan={columns.length}>
                         <div className="space-y-4">
-                          <p className="text-sm text-slate-700">{row.original.reason}</p>
-                          {(() => {
-                            const rowPending = pendingAction[row.original.id];
-                            const isDisabled = !!rowPending;
-                            return (
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={isDisabled}
-                                  title="Ask the LLM to explain this violation, its impact, and how to fix it"
-                                  onClick={() => explainMutation.mutate(row.original.raw)}
-                                >
-                                  {rowPending === "explain"
-                                    ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Explaining…</>
-                                    : <><Sparkles className="mr-1 h-4 w-4" /> Explain</>}
-                                </Button>
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  disabled={isDisabled}
-                                  title="Generate a proposed code fix and verify it against OPA policies — no files are modified"
-                                  onClick={() => previewMutation.mutate(row.original)}
-                                >
-                                  {rowPending === "preview"
-                                    ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Previewing…</>
-                                    : <>Preview (Dry Run)</>}
-                                </Button>
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  disabled={isDisabled}
-                                  title="Generate a fix, apply it to the source file, re-run OPA verification, and report results"
-                                  onClick={() => applyMutation.mutate(row.original)}
-                                >
-                                  {rowPending === "apply"
-                                    ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Applying…</>
-                                    : <>Apply + Verify</>}
-                                </Button>
-                              </div>
-                            );
-                          })()}
-
-                          {explainById[row.original.id]?.status === "ERROR" && explainById[row.original.id]?.error && (
-                            <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
-                              {explainById[row.original.id].error}
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">{row.original.ruleId}</p>
+                              <p className="text-sm text-slate-600">
+                                {row.original.findingCount} findings across {row.original.fileCount} files
+                              </p>
                             </div>
-                          )}
-
-                          {explainById[row.original.id]?.status === "OK" &&
-                            (explainById[row.original.id]?.explanation_structured ||
-                              explainById[row.original.id]?.explanation) &&
-                            (explainById[row.original.id]?.explanation_structured
-                              ? renderStructuredExplanation(explainById[row.original.id].explanation_structured!)
-                              : (
-                                <div className="prose prose-sm prose-indigo max-w-none rounded-md border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 break-words [&_pre]:whitespace-pre-wrap [&_code]:break-all">
-                                  <Markdown>{explainById[row.original.id].explanation!}</Markdown>
-                                </div>
-                              ))}
-
-                          <div className="rounded-lg border border-slate-200">
-                            <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-                              <span className="text-xs font-semibold uppercase text-slate-500">Code snippet</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(row.original.snippet || "");
-                                  toast.success("Code copied.");
-                                }}
-                              >
-                                <Copy className="mr-1 h-4 w-4" /> Copy
-                              </Button>
-                            </div>
-                            <CodeHighlight
-                              code={row.original.snippet || "// snippet unavailable"}
-                              language="java"
-                              wrapLongLines
-                              maxHeight={320}
-                            />
+                            <Badge variant={row.original.autoFixableCount > 0 ? "success" : "secondary"}>
+                              {row.original.autoFixableCount > 0
+                                ? `${row.original.autoFixableCount} auto-fixable`
+                                : "Manual review only"}
+                            </Badge>
                           </div>
 
-                          {/* Preview results */}
-                          {previewById[row.original.id]?.error && (
-                            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                              <strong>Preview error:</strong> {previewById[row.original.id].error}
-                            </div>
-                          )}
-                          {previewById[row.original.id]?.diff && (
-                            <div className="rounded-lg border border-slate-200">
-                              <div className="border-b border-slate-200 px-3 py-2">
-                                <span className="text-xs font-semibold uppercase text-slate-500">Remediation Diff</span>
-                              </div>
-                              <pre className="overflow-auto whitespace-pre-wrap break-words bg-white p-3 text-xs">{previewById[row.original.id].diff}</pre>
-                            </div>
-                          )}
-                          {!previewById[row.original.id]?.diff && previewById[row.original.id]?.explanation && (
-                            <div className="prose prose-sm max-w-none rounded-md border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 break-words">
-                              <strong>Preview:</strong>
-                              <Markdown>{previewById[row.original.id].explanation!}</Markdown>
-                            </div>
-                          )}
+                          <div className="space-y-3">
+                            {row.original.findings.map((finding) => {
+                              const rowPending = pendingAction[finding.id];
+                              const remediation = finding.remediation;
+                              const isBusy = !!rowPending;
+                              const previewDisabled = isBusy || !remediation.preview_available;
+                              const verifyDisabled = isBusy || !remediation.verify_available;
+                              const isFindingExpanded = expandedFindingByGroup[row.original.id] === finding.id;
+
+                              return (
+                                <div key={finding.id} className="rounded-lg border border-slate-200 bg-white">
+                                  <button
+                                    type="button"
+                                    className="flex w-full flex-wrap items-start justify-between gap-3 p-4 text-left"
+                                    onClick={() => toggleFindingExpanded(row.original.id, finding.id)}
+                                  >
+                                    <div className="flex min-w-0 items-start gap-3">
+                                      {isFindingExpanded ? (
+                                        <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                                      ) : (
+                                        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                                      )}
+                                      <div className="min-w-0">
+                                        <p className="truncate font-mono text-sm text-slate-900" title={finding.targetMethod}>
+                                          {compactTargetMethod(finding.targetMethod)}
+                                        </p>
+                                        <p className="mt-1 truncate font-mono text-xs text-slate-500" title={finding.filePath}>
+                                          {finding.filePath}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Badge variant={severityVariant(finding.severity)}>{finding.severity}</Badge>
+                                      <Badge variant={remediation.supported ? "success" : "secondary"}>
+                                        {remediation.supported ? "Auto-fix available" : "Auto-fix unavailable"}
+                                      </Badge>
+                                    </div>
+                                  </button>
+
+                                  {isFindingExpanded && (
+                                    <div className="border-t border-slate-200 p-4">
+                                      <div className="space-y-4">
+                                        <p className="text-sm text-slate-700">{finding.reason}</p>
+
+                                        <div className="flex flex-wrap gap-2">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={isBusy}
+                                            title="Generate a concise explanation of why this finding matters and how to address it."
+                                            onClick={() => explainMutation.mutate(finding.raw)}
+                                          >
+                                            {rowPending === "explain" ? (
+                                              <>
+                                                <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Explaining…
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Sparkles className="mr-1 h-4 w-4" /> Explain finding
+                                              </>
+                                            )}
+                                          </Button>
+                                          <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            disabled={previewDisabled}
+                                            title="Generate a proposed code change and check it virtually without compiling or modifying source files."
+                                            onClick={() => previewMutation.mutate(finding)}
+                                          >
+                                            {rowPending === "preview" ? (
+                                              <>
+                                                <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Previewing…
+                                              </>
+                                            ) : (
+                                              <>Preview suggested fix</>
+                                            )}
+                                          </Button>
+                                          <Button
+                                            variant="default"
+                                            size="sm"
+                                            disabled={verifyDisabled}
+                                            title="Run the full dry-run remediation pipeline: generate a fix, compile in a temp workspace, re-ingest, and re-check policies. No source files are persisted from the UI."
+                                            onClick={() => applyMutation.mutate(finding)}
+                                          >
+                                            {rowPending === "apply" ? (
+                                              <>
+                                                <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Applying…
+                                              </>
+                                            ) : (
+                                              <>Verify fix (dry run)</>
+                                            )}
+                                          </Button>
+                                        </div>
+
+                                        <p className="text-xs text-slate-500">{remediationSummaryText(remediation)}</p>
+
+                                        {explainById[finding.id]?.status === "ERROR" && explainById[finding.id]?.error && (
+                                          <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
+                                            {explainById[finding.id].error}
+                                          </div>
+                                        )}
+
+                                        {explainById[finding.id]?.status === "OK" &&
+                                          (explainById[finding.id]?.explanation_structured ||
+                                            explainById[finding.id]?.explanation) &&
+                                          (explainById[finding.id]?.explanation_structured ? (
+                                            renderStructuredExplanation(explainById[finding.id].explanation_structured!)
+                                          ) : (
+                                            <div className="prose prose-sm prose-indigo max-w-none rounded-md border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 break-words [&_pre]:whitespace-pre-wrap [&_code]:break-all">
+                                              <Markdown>{explainById[finding.id].explanation!}</Markdown>
+                                            </div>
+                                          ))}
+
+                                        <div className="rounded-lg border border-slate-200">
+                                          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+                                            <span className="text-xs font-semibold uppercase text-slate-500">Code snippet</span>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => {
+                                                navigator.clipboard.writeText(finding.snippet || "");
+                                                toast.success("Code copied.");
+                                              }}
+                                            >
+                                              <Copy className="mr-1 h-4 w-4" /> Copy
+                                            </Button>
+                                          </div>
+                                          <CodeHighlight
+                                            code={finding.snippet || "// snippet unavailable"}
+                                            language="java"
+                                            wrapLongLines
+                                            maxHeight={320}
+                                          />
+                                        </div>
+
+                                        {previewById[finding.id]?.error && (
+                                          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                            <strong>Preview error:</strong> {previewById[finding.id].error}
+                                          </div>
+                                        )}
+                                        {previewById[finding.id]?.diff && (
+                                          <div className="rounded-lg border border-slate-200">
+                                            <div className="border-b border-slate-200 px-3 py-2">
+                                              <span className="text-xs font-semibold uppercase text-slate-500">Remediation Diff</span>
+                                            </div>
+                                            <pre className="overflow-auto whitespace-pre-wrap break-words bg-white p-3 text-xs">
+                                              {previewById[finding.id].diff}
+                                            </pre>
+                                          </div>
+                                        )}
+                                        {!previewById[finding.id]?.diff && previewById[finding.id]?.explanation && (
+                                          <div className="prose prose-sm max-w-none rounded-md border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 break-words">
+                                            <strong>Preview:</strong>
+                                            <Markdown>{previewById[finding.id].explanation!}</Markdown>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -588,7 +804,7 @@ const PolicyPage = () => {
                   <td colSpan={columns.length} className="py-12 text-center">
                     <Scale className="mx-auto h-10 w-10 text-slate-300" />
                     <p className="mt-3 text-sm text-slate-500">
-                      No violations loaded yet. Run a policy evaluation to see results.
+                      No rule groups loaded yet. Run a policy evaluation to see results.
                     </p>
                   </td>
                 </tr>
