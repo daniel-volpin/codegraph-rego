@@ -35,6 +35,18 @@ class TestSourceAnalysis(unittest.TestCase):
         flags = analyze_crypto_indicators(source)
         self.assertFalse(flags["weak_cipher_detected"])
 
+    def test_insecure_random_constructor_detected(self) -> None:
+        source = "int token = new java.util.Random().nextInt();"
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["insecure_random_detected"])
+        self.assertFalse(flags["sha1prng_detected"])
+
+    def test_sha1prng_detected(self) -> None:
+        source = 'double value = java.security.SecureRandom.getInstance("SHA1PRNG").nextDouble();'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["insecure_random_detected"])
+        self.assertTrue(flags["sha1prng_detected"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -54,7 +54,16 @@ Request/response models: `api/models/`
   - `target_method: string`
   - `file_path: string`
   - `control_metadata: object|null`
-  - `remediation?: object` (`supported`, `reason_code`, `strategy`, `preview_available`, `verify_available`, `ui_apply_mode`)
+  - `remediation?: object`
+    - `supported: boolean`
+    - `support_tier: "full" | "guarded" | "manual"`
+    - `reason_code: string`
+    - `strategy: string|null`
+    - `preview_available: boolean`
+    - `verify_available: boolean`
+    - `ui_apply_mode: "dry_run"`
+    - `rationale: string`
+    - `safe_refusal_possible: boolean`
   - `evidence: object`
 
 ### `POST /policy/evaluate_with_llm`
@@ -70,7 +79,13 @@ Request/response models: `api/models/`
 ### `POST /policy/explain_one`
 - Router: `api/routers/policy.py`
 - Request JSON: `{ "violation_id": string, ... }` (full violation object)
-- Response HTTP `200`: `{ "explanation": string }`
+- Response HTTP `200`:
+  - `status: string`
+  - `explanation?: string`
+  - `explanation_structured?: { citation: string, why: string, fix: string }`
+  - `model?: string|null`
+  - `include_graph_context?: boolean`
+  - `error?: string|null`
 
 ### `POST /policy/reviews`
 - Router: `api/routers/policy.py`
@@ -125,4 +140,7 @@ All API calls are centralised in `frontend/src/lib/api.ts`.
 
 Notes:
 - The frontend should use `violation.remediation` metadata to decide whether automatic remediation actions are available.
-- Automatic remediation is intentionally limited to selected crypto findings; unsupported rules should be surfaced as unavailable rather than treated as failed auto-fixes.
+- Automatic remediation is intentionally tiered:
+  - `full`: bounded auto-fix and verify paths are available
+  - `guarded`: the UI should explain that `NO_FIX` is a valid safe outcome
+  - `manual`: explanation-first/manual review only

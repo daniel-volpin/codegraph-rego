@@ -25,6 +25,7 @@ random_ctor_pattern := "new random("
 math_random_pattern := "math.random("
 java_util_random_pattern := "java.util.random"
 threadlocal_random_pattern := "threadlocalrandom.current"
+sha1prng_pattern := "sha1prng"
 sql_execute_pattern := "executequery("
 sql_execute_update_pattern := "executeupdate("
 sql_execute_generic_pattern := "execute("
@@ -166,6 +167,17 @@ source_insecure_random if {
   contains(src, threadlocal_random_pattern)
 }
 
+source_insecure_random if {
+  input.source_code != null
+  src := lower(input.source_code)
+  contains(src, sha1prng_pattern)
+}
+
+analysis_insecure_random if {
+  flags := input.analysis_flags
+  flags.insecure_random_detected == true
+}
+
 calls_insecure_random if {
   calls := input.graph_context.calls
   calls != null
@@ -182,6 +194,11 @@ insecure_random if {
 insecure_random if {
   random_context
   calls_insecure_random
+}
+
+insecure_random if {
+  random_context
+  analysis_insecure_random
 }
 
 sql_source_exec if {

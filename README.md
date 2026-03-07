@@ -273,9 +273,35 @@ Current mapping includes:
 - `CWE-330` → `ISO-A.10-WEAK-RANDOM`
 - `CWE-89` → `ISO-A.8-SQL-INJECTION` (pragmatic mapping for evaluation; not a claim of perfect ISO alignment)
 
-Auto-remediation is intentionally scoped and does **not** cover SQL injection:
-- Supported: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-CRYPTO`
-- Unsupported: `ISO-A.10-WEAK-RANDOM`, `ISO-A.8-SQL-INJECTION`
+Auto-remediation is intentionally tiered:
+- Full support: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-RANDOM`
+- Guarded support: `ISO-A.10-WEAK-CRYPTO`
+- Manual review only: `ISO-A.8-SQL-INJECTION` and access-control findings such as `ISO-A.9.4.1`
+
+Guarded remediation may validly return `NO_FIX` when the method-local evidence is insufficient for a safe minimal transformation. That refusal is a safety feature, not a pipeline failure.
+
+### Benchmark-Centered Demo Pack
+
+The recommended live thesis/demo input is a curated OWASP Benchmark subset that shows the full framework story on one upload:
+
+- ingestion
+- graph-backed evidence
+- ISO-linked policy evaluation
+- structured explanation
+- bounded remediation
+- dry-run re-verification
+
+Generate it with:
+
+```bash
+python3 scripts/evaluation/build_benchmark_demo_pack.py \
+  --benchmark-root "$OWASP_BENCHMARK_ROOT" \
+  --output-dir demo/benchmark-framework-demo/build
+```
+
+The manifest and rationale for the selected benchmark cases live in:
+- `demo/benchmark-framework-demo/manifest.json`
+- `demo/benchmark-framework-demo/README.md`
 
 ---
 

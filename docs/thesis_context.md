@@ -17,8 +17,9 @@
 
 ## Scope
 - Main implementation target: JVM microservices, especially Java/Spring style codebases.
-- Main benchmark/evaluation target: OWASP Benchmark.
+- Main benchmark/evaluation target and primary demo substrate: OWASP Benchmark.
 - Core evaluated categories currently include weak crypto/hash, insecure randomness, and SQL injection-related checks.
+- Realistic sample apps such as JHipster are secondary qualitative case studies for upload/search/policy browsing, not the primary remediation evidence surface.
 
 ## Important Thesis Framing
 - Prefer the phrase `graph-based code understanding` or `graph-structured evidence`.
@@ -63,6 +64,9 @@
 - Detection benchmark is the foundation.
 - Explanation evaluation should measure grounded citations, not generic prose quality.
 - Remediation should be judged by fix success and re-verification, not only by patch appearance.
+- Benchmark-centered live demos should show both:
+  - bounded success on full-support categories
+  - explicit safe refusal on guarded categories when the evidence is insufficient
 - If a local LLM behaves badly, first look at:
   - output contract
   - stop behavior

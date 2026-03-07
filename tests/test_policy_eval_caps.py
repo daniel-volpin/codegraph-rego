@@ -232,6 +232,7 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
         bundles = [
             {"target_method": "m1", "file_path": "src/main/java/F1.java", "source_code": "", "graph_context": {}, "vector_context": []},
             {"target_method": "m2", "file_path": "src/main/java/F2.java", "source_code": "", "graph_context": {}, "vector_context": []},
+            {"target_method": "m3", "file_path": "src/main/java/F3.java", "source_code": "", "graph_context": {}, "vector_context": []},
         ]
 
         with (
@@ -240,6 +241,7 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
                 "codegraph.policy.integration._evaluate_bundle",
                 side_effect=[
                     [{"violation_id": "ISO-A.10-WEAK-HASH", "reason": "r1", "severity": "high"}],
+                    [{"violation_id": "ISO-A.10-WEAK-RANDOM", "reason": "r3", "severity": "high"}],
                     [{"violation_id": "ISO-A.9.4.1", "reason": "r2", "severity": "high"}],
                 ],
             ),
@@ -248,28 +250,49 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
 
         violations = result["violations"]
         supported = next(v for v in violations if v["violation_id"] == "ISO-A.10-WEAK-HASH")
+        random_supported = next(v for v in violations if v["violation_id"] == "ISO-A.10-WEAK-RANDOM")
         unsupported = next(v for v in violations if v["violation_id"] == "ISO-A.9.4.1")
 
         self.assertEqual(
             supported["remediation"],
             {
                 "supported": True,
+                "support_tier": "full",
                 "reason_code": "supported_rule_for_auto_fix",
                 "strategy": "llm_method_replacement",
                 "preview_available": True,
                 "verify_available": True,
                 "ui_apply_mode": "dry_run",
+                "rationale": "Bounded hash replacements such as MD5 to SHA-256 can be applied with minimal local edits.",
+                "safe_refusal_possible": False,
+            },
+        )
+        self.assertEqual(
+            random_supported["remediation"],
+            {
+                "supported": True,
+                "support_tier": "full",
+                "reason_code": "supported_rule_for_auto_fix",
+                "strategy": "llm_method_replacement",
+                "preview_available": True,
+                "verify_available": True,
+                "ui_apply_mode": "dry_run",
+                "rationale": "Local randomness upgrades can often be made safely with narrow replacements to SecureRandom-based APIs.",
+                "safe_refusal_possible": True,
             },
         )
         self.assertEqual(
             unsupported["remediation"],
             {
                 "supported": False,
+                "support_tier": "manual",
                 "reason_code": "unsupported_rule_for_auto_fix",
                 "strategy": None,
                 "preview_available": False,
                 "verify_available": False,
                 "ui_apply_mode": "dry_run",
+                "rationale": "Access-control findings remain manual-review because endpoint semantics cannot be safely inferred from method-local evidence.",
+                "safe_refusal_possible": False,
             },
         )
 

@@ -34,11 +34,14 @@ export interface PolicyEvaluateResponse {
 
 export interface RemediationCapability {
   supported: boolean;
+  support_tier: "full" | "guarded" | "manual";
   reason_code: string;
   strategy?: string | null;
   preview_available: boolean;
   verify_available: boolean;
   ui_apply_mode: "dry_run";
+  rationale: string;
+  safe_refusal_possible: boolean;
 }
 
 export interface PolicyExplainOneRequest {

@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 try:
     import javalang  # noqa: F401
@@ -98,14 +98,30 @@ class RemediationUtilsTests(unittest.TestCase):
             "ISO-A.10-WEAK-HASH",
             supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
         )
+        random_supported = get_remediation_capability(
+            "ISO-A.10-WEAK-RANDOM",
+            supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
+        )
+        guarded = get_remediation_capability(
+            "ISO-A.10-WEAK-CRYPTO",
+            supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
+        )
         unsupported = get_remediation_capability(
             "ISO-A.9.4.1",
             supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
         )
 
         self.assertTrue(supported.supported)
+        self.assertEqual(supported.support_tier, "full")
         self.assertEqual(supported.reason_code, "supported_rule_for_auto_fix")
+        self.assertTrue(random_supported.supported)
+        self.assertEqual(random_supported.support_tier, "full")
+        self.assertTrue(random_supported.safe_refusal_possible)
+        self.assertTrue(guarded.supported)
+        self.assertEqual(guarded.support_tier, "guarded")
+        self.assertTrue(guarded.safe_refusal_possible)
         self.assertFalse(unsupported.supported)
+        self.assertEqual(unsupported.support_tier, "manual")
         self.assertEqual(unsupported.reason_code, "unsupported_rule_for_auto_fix")
 
     def test_preview_virtual_fix_rejects_unsupported_rule_without_llm_call(self):
@@ -209,6 +225,98 @@ class RemediationUtilsTests(unittest.TestCase):
         out = remediation.preview_virtual_fix("ISO-A.10-WEAK-HASH")
         self.assertEqual(out.get("status"), "FAIL")
         self.assertTrue(str(out.get("error") or "").startswith("NO_FIX:"))
+
+    def test_preview_virtual_fix_preflights_unsupported_random_shape_without_llm_call(self):
+        svc_mod = self.service
+
+        llm_client = Mock(return_value="public void noop() { return; }")
+        remediation = svc_mod.RemediationService(llm_client=llm_client)
+        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+            "violation": {"violation_id": "ISO-A.10-WEAK-RANDOM", "reason": "rng"},
+            "target_method": "com.example.Foo.random()",
+            "file_path": "Example.java",
+            "rule_id": "ISO-A.10-WEAK-RANDOM",
+            "evidence": {"source_code": "public void random() { UUID.randomUUID(); }", "graph_context": {}, "vector_context": []},
+            "catalog_entry": {"title": "Cryptography (Insecure Randomness)"},
+            "baseline_violations": [],
+        }
+
+        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-RANDOM")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertTrue(str(out.get("error") or "").startswith("NO_FIX:"))
+        llm_client.assert_not_called()
+
+    def test_preview_virtual_fix_preflights_unsupported_crypto_shape_without_llm_call(self):
+        svc_mod = self.service
+
+        llm_client = Mock(return_value="public void noop() { return; }")
+        remediation = svc_mod.RemediationService(llm_client=llm_client)
+        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+            "violation": {"violation_id": "ISO-A.10-WEAK-CRYPTO", "reason": "crypto"},
+            "target_method": "com.example.Foo.encrypt()",
+            "file_path": "Example.java",
+            "rule_id": "ISO-A.10-WEAK-CRYPTO",
+            "evidence": {"source_code": 'public void encrypt() { Cipher.getInstance(algorithm); }', "graph_context": {}, "vector_context": []},
+            "catalog_entry": {"title": "Cryptography (Weak Cipher)"},
+            "baseline_violations": [],
+        }
+
+        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-CRYPTO")
+        self.assertEqual(out.get("status"), "FAIL")
+        self.assertTrue(str(out.get("error") or "").startswith("NO_FIX:"))
+        llm_client.assert_not_called()
+
+    def test_preview_virtual_fix_allows_supported_random_shape(self):
+        svc_mod = self.service
+
+        llm_client = Mock(return_value="public void random() { new java.security.SecureRandom().nextInt(); }")
+        remediation = svc_mod.RemediationService(llm_client=llm_client)
+        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+            "violation": {"violation_id": "ISO-A.10-WEAK-RANDOM", "reason": "rng"},
+            "target_method": "com.example.Foo.random()",
+            "file_path": "Example.java",
+            "rule_id": "ISO-A.10-WEAK-RANDOM",
+            "evidence": {
+                "source_code": "public void random() { new java.util.Random().nextInt(); }",
+                "graph_context": {},
+                "vector_context": [],
+            },
+            "catalog_entry": {"title": "Cryptography (Insecure Randomness)"},
+            "baseline_violations": [],
+        }
+
+        with patch.object(svc_mod, "evaluate_bundle", return_value=[]):
+            out = remediation.preview_virtual_fix("ISO-A.10-WEAK-RANDOM")
+
+        self.assertEqual(out.get("status"), "OK")
+        self.assertEqual(out.get("opa_status"), "PASS")
+        llm_client.assert_called_once()
+
+    def test_preview_virtual_fix_allows_guarded_crypto_literal_subcase(self):
+        svc_mod = self.service
+
+        llm_client = Mock(return_value='public void encrypt() { Cipher.getInstance("AES/GCM/NoPadding"); }')
+        remediation = svc_mod.RemediationService(llm_client=llm_client)
+        remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+            "violation": {"violation_id": "ISO-A.10-WEAK-CRYPTO", "reason": "crypto"},
+            "target_method": "com.example.Foo.encrypt()",
+            "file_path": "Example.java",
+            "rule_id": "ISO-A.10-WEAK-CRYPTO",
+            "evidence": {
+                "source_code": 'public void encrypt() { Cipher.getInstance("DESede/ECB/PKCS5Padding"); }',
+                "graph_context": {},
+                "vector_context": [],
+            },
+            "catalog_entry": {"title": "Cryptography (Weak Cipher)"},
+            "baseline_violations": [],
+        }
+
+        with patch.object(svc_mod, "evaluate_bundle", return_value=[]):
+            out = remediation.preview_virtual_fix("ISO-A.10-WEAK-CRYPTO")
+
+        self.assertEqual(out.get("status"), "OK")
+        self.assertEqual(out.get("opa_status"), "PASS")
+        llm_client.assert_called_once()
 
     def test_apply_fix_restores_original_file_on_verification_exception(self):
         # Ensure dry_run restores the on-disk file even if verification (PolicyEvaluator) blows up.

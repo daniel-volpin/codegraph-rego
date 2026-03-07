@@ -3,22 +3,50 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable
 
-DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS = frozenset(
-    {
-        "ISO-A.10-WEAK-HASH",
-        "ISO-A.10-WEAK-CRYPTO",
-    }
-)
+DEFAULT_REMEDIATION_RULE_MATRIX = {
+    "ISO-A.10-WEAK-HASH": {
+        "support_tier": "full",
+        "reason_code": "supported_rule_for_auto_fix",
+        "strategy": "llm_method_replacement",
+        "preview_available": True,
+        "verify_available": True,
+        "safe_refusal_possible": False,
+        "rationale": "Bounded hash replacements such as MD5 to SHA-256 can be applied with minimal local edits.",
+    },
+    "ISO-A.10-WEAK-RANDOM": {
+        "support_tier": "full",
+        "reason_code": "supported_rule_for_auto_fix",
+        "strategy": "llm_method_replacement",
+        "preview_available": True,
+        "verify_available": True,
+        "safe_refusal_possible": True,
+        "rationale": "Local randomness upgrades can often be made safely with narrow replacements to SecureRandom-based APIs.",
+    },
+    "ISO-A.10-WEAK-CRYPTO": {
+        "support_tier": "guarded",
+        "reason_code": "supported_rule_for_auto_fix",
+        "strategy": "llm_method_replacement",
+        "preview_available": True,
+        "verify_available": True,
+        "safe_refusal_possible": True,
+        "rationale": "Weak-cipher remediation is available only for explicit literal subcases where a safe minimal replacement is evident.",
+    },
+}
+
+DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS = frozenset(DEFAULT_REMEDIATION_RULE_MATRIX.keys())
 
 
 @dataclass(frozen=True)
 class RemediationCapability:
     supported: bool
+    support_tier: str
     reason_code: str
     strategy: str | None
     preview_available: bool
     verify_available: bool
     ui_apply_mode: str
+    rationale: str
+    safe_refusal_possible: bool
 
 
 def rule_id_variants(rule_id: str | None) -> list[str]:
@@ -43,24 +71,64 @@ def get_remediation_capability(
     *,
     supported_rule_ids: Iterable[str] | None = None,
 ) -> RemediationCapability:
-    supported_ids = set(supported_rule_ids or DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS)
-    supported = any(candidate in supported_ids for candidate in rule_id_variants(rule_id))
-    if supported:
-        return RemediationCapability(
-            supported=True,
-            reason_code="supported_rule_for_auto_fix",
-            strategy="llm_method_replacement",
-            preview_available=True,
-            verify_available=True,
-            ui_apply_mode="dry_run",
+    if supported_rule_ids is None:
+        supported_ids = set(DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS)
+        capability_map = dict(DEFAULT_REMEDIATION_RULE_MATRIX)
+    else:
+        supported_ids = set(supported_rule_ids)
+        capability_map = {
+            rule_id_value: dict(
+                DEFAULT_REMEDIATION_RULE_MATRIX.get(
+                    rule_id_value,
+                    {
+                        "support_tier": "full",
+                        "reason_code": "supported_rule_for_auto_fix",
+                        "strategy": "llm_method_replacement",
+                        "preview_available": True,
+                        "verify_available": True,
+                        "safe_refusal_possible": False,
+                        "rationale": "Automatic remediation is enabled for this supported rule.",
+                    },
+                )
+            )
+            for rule_id_value in supported_ids
+        }
+
+    for candidate in rule_id_variants(rule_id):
+        if candidate in supported_ids:
+            meta = capability_map.get(candidate, {})
+            return RemediationCapability(
+                supported=True,
+                support_tier=str(meta.get("support_tier") or "full"),
+                reason_code=str(meta.get("reason_code") or "supported_rule_for_auto_fix"),
+                strategy=str(meta.get("strategy")) if meta.get("strategy") is not None else None,
+                preview_available=bool(meta.get("preview_available", True)),
+                verify_available=bool(meta.get("verify_available", True)),
+                ui_apply_mode="dry_run",
+                rationale=str(meta.get("rationale") or "Automatic remediation is enabled for this supported rule."),
+                safe_refusal_possible=bool(meta.get("safe_refusal_possible", False)),
+            )
+
+    unsupported_reason = "Automatic remediation is not enabled for this rule because safe bounded transformations are not yet defined."
+    if any(candidate == "ISO-A.8-SQL-INJECTION" for candidate in rule_id_variants(rule_id)):
+        unsupported_reason = (
+            "SQL injection remains explanation-only because safe remediation usually requires cross-layer parameterization refactors."
         )
+    if any(candidate == "ISO-A.9.4.1" for candidate in rule_id_variants(rule_id)):
+        unsupported_reason = (
+            "Access-control findings remain manual-review because endpoint semantics cannot be safely inferred from method-local evidence."
+        )
+
     return RemediationCapability(
         supported=False,
+        support_tier="manual",
         reason_code="unsupported_rule_for_auto_fix",
         strategy=None,
         preview_available=False,
         verify_available=False,
         ui_apply_mode="dry_run",
+        rationale=unsupported_reason,
+        safe_refusal_possible=False,
     )
 
 

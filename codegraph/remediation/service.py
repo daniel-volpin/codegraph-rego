@@ -365,10 +365,25 @@ class RemediationService:
             ],
             "extra_examples": [],
         },
-        "ISO-A.10-WEAK-CRYPTO": {
-            "objective": "Replace weak or deprecated cipher usage with a strong alternative with minimal safe edits.",
+        "ISO-A.10-WEAK-RANDOM": {
+            "objective": "Replace insecure randomness usage with SecureRandom-based generation using minimal local edits.",
             "allowed_transformations": [
-                "Replace DES/RC4/AES-ECB patterns with a modern AEAD mode (prefer AES/GCM/NoPadding) only if the required IV/nonce/key context is already present in the method evidence.",
+                "Replace new Random() with new java.security.SecureRandom() without changing the surrounding method signature.",
+                "Replace Math.random() with a local java.security.SecureRandom().nextDouble() call when the randomness use is method-local.",
+                'Replace SecureRandom.getInstance("SHA1PRNG") with new java.security.SecureRandom() when no algorithm-specific behavior is required.',
+                "Replace ThreadLocalRandom.current() with a method-local java.security.SecureRandom instance when the randomness is used for security-sensitive values.",
+            ],
+            "non_goals": [
+                "Do not refactor logic across methods or introduce shared state.",
+                "Do not change the method signature.",
+                "Do not add unrelated security changes or logging.",
+            ],
+            "extra_examples": [],
+        },
+        "ISO-A.10-WEAK-CRYPTO": {
+            "objective": "Replace weak literal cipher usage with a strong alternative only when the method already contains enough local context for a safe minimal edit.",
+            "allowed_transformations": [
+                "Replace DES/RC4/AES-ECB literal patterns with a stronger cipher transformation while keeping edits local to the method evidence.",
                 "If a safe minimal fix is not possible with the given evidence, return NO_FIX.",
             ],
             "non_goals": [
@@ -400,6 +415,55 @@ class RemediationService:
                 return strategy
         return None
 
+    @classmethod
+    def _preflight_fixability_reason(cls, context: Dict[str, Any]) -> Optional[str]:
+        rule_id = str(context.get("rule_id") or "")
+        source_code = str(((context.get("evidence") or {}).get("source_code")) or "")
+        source_lower = source_code.lower()
+
+        if rule_id == "ISO-A.10-WEAK-CRYPTO":
+            weak_cipher_literals = (
+                "des/cbc/pkcs5padding",
+                "desede/ecb/pkcs5padding",
+                "aes/ecb/",
+                '"rc4"',
+                'cipher.getinstance("des")',
+                'cipher.getinstance("rc4")',
+            )
+            has_supported_literal = any(literal in source_lower for literal in weak_cipher_literals)
+            if not has_supported_literal or "cipher.getinstance" not in source_lower:
+                return (
+                    "weak-crypto remediation only supports explicit DES/RC4/AES-ECB literal subcases with local cipher context"
+                )
+
+        if rule_id == "ISO-A.10-WEAK-RANDOM":
+            supported_patterns = (
+                r"new\s+(?:java\.util\.)?random\s*\(",
+                r"(?:java\.lang\.)?math\s*\.\s*random\s*\(",
+                r"(?:java\.util\.concurrent\.)?threadlocalrandom\s*\.\s*current\s*\(",
+                r"(?:java\.security\.)?securerandom\s*\.\s*getinstance\s*\(\s*\"sha1prng\"\s*\)",
+            )
+            if not any(re.search(pattern, source_lower) for pattern in supported_patterns):
+                return (
+                    "weak-random remediation only supports local Random/Math.random/ThreadLocalRandom/SHA1PRNG replacements"
+                )
+
+        return None
+
+    @classmethod
+    def _build_no_fix_response(cls, *, violation_id: str, context: Dict[str, Any], reason: str, attempt_count: int | None = None) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "status": "FAIL",
+            "error": f"{cls._NO_FIX_PREFIX} {reason}",
+            "violation_id": violation_id,
+            "target_method": context.get("target_method"),
+            "file_path": context.get("file_path"),
+            "rule_id": context.get("rule_id"),
+        }
+        if attempt_count is not None:
+            payload["attempt_count"] = attempt_count
+        return payload
+
     def preview_virtual_fix(
         self,
         violation_id: str,
@@ -426,21 +490,27 @@ class RemediationService:
                 "file_path": context.get("file_path"),
             }
 
+        preflight_reason = self._preflight_fixability_reason(context)
+        if preflight_reason:
+            return self._build_no_fix_response(
+                violation_id=violation_id,
+                context=context,
+                reason=preflight_reason,
+            )
+
         llm_output = self.propose_full_method(context)
         updated_source = llm_output.get("updated_source_code")
         explanation = llm_output.get("explanation")
         parse_error = llm_output.get("parse_error")
         if isinstance(parse_error, str) and parse_error.startswith("no_fix:"):
             reason = parse_error[len("no_fix:") :].strip() or "no safe minimal fix available"
-            return {
-                "status": "FAIL",
-                "error": f"{self._NO_FIX_PREFIX} {reason}",
-                "violation_id": violation_id,
-                "target_method": context.get("target_method"),
-                "file_path": context.get("file_path"),
-                "rule_id": rule_id,
-                "explanation": explanation,
-            }
+            result = self._build_no_fix_response(
+                violation_id=violation_id,
+                context=context,
+                reason=reason,
+            )
+            result["explanation"] = explanation
+            return result
 
         original_source = (context.get("evidence") or {}).get("source_code") or ""
         diff = _unified_diff(original_source, updated_source or "", label="method")
@@ -544,6 +614,15 @@ class RemediationService:
                 "rule_id": context.get("rule_id"),
             }
 
+        preflight_reason = self._preflight_fixability_reason(context)
+        if preflight_reason:
+            return self._build_no_fix_response(
+                violation_id=violation_id,
+                context=context,
+                reason=preflight_reason,
+                attempt_count=0,
+            )
+
         resolved_path = self._resolve_file_path(file_path)
         if resolved_path is None:
             return {
@@ -573,16 +652,14 @@ class RemediationService:
                 parse_error = llm_output.get("parse_error")
                 if isinstance(parse_error, str) and parse_error.startswith("no_fix:"):
                     reason = parse_error[len("no_fix:") :].strip() or "no safe minimal fix available"
-                    return {
-                        "status": "FAIL",
-                        "error": f"{self._NO_FIX_PREFIX} {reason}",
-                        "violation_id": violation_id,
-                        "target_method": target_method,
-                        "file_path": file_path,
-                        "rule_id": rule_id,
-                        "attempt_count": attempt + 1,
-                        "errors": attempt_errors,
-                    }
+                    result = self._build_no_fix_response(
+                        violation_id=violation_id,
+                        context=context,
+                        reason=reason,
+                        attempt_count=attempt + 1,
+                    )
+                    result["errors"] = attempt_errors
+                    return result
                 if parse_error:
                     attempt_errors.append(str(parse_error))
                 else:

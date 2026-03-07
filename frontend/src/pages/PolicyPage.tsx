@@ -55,7 +55,9 @@ interface ViolationGroupRow {
   severity: string;
   findingCount: number;
   fileCount: number;
-  autoFixableCount: number;
+  fullSupportCount: number;
+  guardedSupportCount: number;
+  manualCount: number;
   findings: ViolationRow[];
 }
 
@@ -96,11 +98,17 @@ const normalizeRemediationCapability = (value: unknown): RemediationCapability =
   const record = asRecord(value);
   return {
     supported: asBoolean(record?.supported, false),
+    support_tier:
+      record?.support_tier === "full" || record?.support_tier === "guarded" || record?.support_tier === "manual"
+        ? record.support_tier
+        : "manual",
     reason_code: asString(record?.reason_code ?? "unsupported_rule_for_auto_fix", "unsupported_rule_for_auto_fix"),
     strategy: typeof record?.strategy === "string" ? record.strategy : null,
     preview_available: asBoolean(record?.preview_available, false),
     verify_available: asBoolean(record?.verify_available, false),
     ui_apply_mode: record?.ui_apply_mode === "dry_run" ? "dry_run" : "dry_run",
+    rationale: asString(record?.rationale ?? "Automatic remediation is not available for this rule.", "Automatic remediation is not available for this rule."),
+    safe_refusal_possible: asBoolean(record?.safe_refusal_possible, false),
   };
 };
 
@@ -195,9 +203,38 @@ const renderStructuredExplanation = (payload: PolicyExplanationStructured) => {
 };
 
 const remediationSummaryText = (capability: RemediationCapability) =>
-  capability.supported
-    ? "Preview suggests a fix without compilation. Verify fix (dry run) runs compile and policy re-checks without persisting changes."
-    : "Automatic remediation is currently available only for selected crypto findings. This rule requires manual review.";
+  capability.support_tier === "full"
+    ? "Preview suggests a bounded fix without compilation. Verify fix (dry run) runs compile and policy re-checks without persisting changes."
+    : capability.support_tier === "guarded"
+      ? "This rule supports guarded remediation. The system may safely return NO_FIX when a minimal secure change is not evident from method-local context."
+      : "This rule is explanation-first and remains manual review only. Automatic remediation is intentionally disabled for this category.";
+
+const remediationBadgeLabel = (capability: RemediationCapability) => {
+  if (capability.support_tier === "full") return "Auto-fix available";
+  if (capability.support_tier === "guarded") return "Auto-fix with safety checks";
+  return "Manual review required";
+};
+
+const remediationBadgeVariant = (capability: RemediationCapability): "success" | "secondary" => {
+  return capability.support_tier === "manual" ? "secondary" : "success";
+};
+
+const ruleGroupStatusLabel = (group: ViolationGroupRow) => {
+  if (group.fullSupportCount > 0 && group.guardedSupportCount > 0) {
+    return `${group.fullSupportCount} auto-fixable, ${group.guardedSupportCount} guarded`;
+  }
+  if (group.fullSupportCount > 0) {
+    return `${group.fullSupportCount} auto-fixable`;
+  }
+  if (group.guardedSupportCount > 0) {
+    return `${group.guardedSupportCount} with safety checks`;
+  }
+  return "Manual review only";
+};
+
+const ruleGroupStatusVariant = (group: ViolationGroupRow): "success" | "secondary" => {
+  return group.fullSupportCount > 0 || group.guardedSupportCount > 0 ? "success" : "secondary";
+};
 
 const POLICY_EVALUATION_STORAGE_KEY = "codegraph:policy:lastEvaluation";
 
@@ -252,7 +289,9 @@ const groupViolationsByRule = (violations: ViolationRow[]): ViolationGroupRow[] 
     });
 
     const fileCount = new Set(sortedFindings.map((finding) => finding.filePath)).size;
-    const autoFixableCount = sortedFindings.filter((finding) => finding.remediation.supported).length;
+    const fullSupportCount = sortedFindings.filter((finding) => finding.remediation.support_tier === "full").length;
+    const guardedSupportCount = sortedFindings.filter((finding) => finding.remediation.support_tier === "guarded").length;
+    const manualCount = sortedFindings.filter((finding) => finding.remediation.support_tier === "manual").length;
     const highestSeverity = sortedFindings.reduce(
       (current, finding) => (severityRank(finding.severity) > severityRank(current) ? finding.severity : current),
       sortedFindings[0]?.severity ?? "LOW",
@@ -264,7 +303,9 @@ const groupViolationsByRule = (violations: ViolationRow[]): ViolationGroupRow[] 
       severity: highestSeverity,
       findingCount: sortedFindings.length,
       fileCount,
-      autoFixableCount,
+      fullSupportCount,
+      guardedSupportCount,
+      manualCount,
       findings: sortedFindings,
     };
   });
@@ -456,8 +497,9 @@ const PolicyPage = () => {
     () => ({
       findingCount: findings.length,
       ruleCount: data.length,
-      autoFixableCount: findings.filter((finding) => finding.remediation.supported).length,
-      manualReviewCount: findings.filter((finding) => !finding.remediation.supported).length,
+      fullSupportCount: findings.filter((finding) => finding.remediation.support_tier === "full").length,
+      guardedSupportCount: findings.filter((finding) => finding.remediation.support_tier === "guarded").length,
+      manualReviewCount: findings.filter((finding) => finding.remediation.support_tier === "manual").length,
     }),
     [data, findings],
   );
@@ -516,8 +558,8 @@ const PolicyPage = () => {
         id: "status",
         header: "Remediation",
         cell: ({ row }) => (
-          <Badge variant={row.original.autoFixableCount > 0 ? "success" : "secondary"}>
-            {row.original.autoFixableCount > 0 ? `${row.original.autoFixableCount} auto-fixable` : "Manual review only"}
+          <Badge variant={ruleGroupStatusVariant(row.original)}>
+            {ruleGroupStatusLabel(row.original)}
           </Badge>
         ),
       },
@@ -559,7 +601,7 @@ const PolicyPage = () => {
         </div>
       </Card>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Findings</p>
           <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.findingCount}</p>
@@ -570,7 +612,11 @@ const PolicyPage = () => {
         </Card>
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Auto-fixable</p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-700">{summary.autoFixableCount}</p>
+          <p className="mt-2 text-2xl font-semibold text-emerald-700">{summary.fullSupportCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Guarded fixes</p>
+          <p className="mt-2 text-2xl font-semibold text-amber-700">{summary.guardedSupportCount}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manual review</p>
@@ -623,10 +669,8 @@ const PolicyPage = () => {
                                 {row.original.findingCount} findings across {row.original.fileCount} files
                               </p>
                             </div>
-                            <Badge variant={row.original.autoFixableCount > 0 ? "success" : "secondary"}>
-                              {row.original.autoFixableCount > 0
-                                ? `${row.original.autoFixableCount} auto-fixable`
-                                : "Manual review only"}
+                            <Badge variant={ruleGroupStatusVariant(row.original)}>
+                              {ruleGroupStatusLabel(row.original)}
                             </Badge>
                           </div>
 
@@ -663,8 +707,8 @@ const PolicyPage = () => {
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                       <Badge variant={severityVariant(finding.severity)}>{finding.severity}</Badge>
-                                      <Badge variant={remediation.supported ? "success" : "secondary"}>
-                                        {remediation.supported ? "Auto-fix available" : "Auto-fix unavailable"}
+                                      <Badge variant={remediationBadgeVariant(remediation)}>
+                                        {remediationBadgeLabel(remediation)}
                                       </Badge>
                                     </div>
                                   </button>
@@ -725,6 +769,7 @@ const PolicyPage = () => {
                                         </div>
 
                                         <p className="text-xs text-slate-500">{remediationSummaryText(remediation)}</p>
+                                        <p className="text-xs text-slate-500">{remediation.rationale}</p>
 
                                         {explainById[finding.id]?.status === "ERROR" && explainById[finding.id]?.error && (
                                           <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">

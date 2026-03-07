@@ -1,0 +1,34 @@
+{
+  "name": "benchmark-framework-demo",
+  "description": "Curated OWASP Benchmark subset for end-to-end framework demos.",
+  "testcases": [
+    {
+      "category_id": "hash-md5",
+      "rego_rule": "ISO-A.10-WEAK-HASH",
+      "testcase_id": "BenchmarkTest00046",
+      "expected_tier": "full",
+      "notes": "Direct MD5 digest usage for bounded replacement to SHA-256."
+    },
+    {
+      "category_id": "rng-insecure",
+      "rego_rule": "ISO-A.10-WEAK-RANDOM",
+      "testcase_id": "BenchmarkTest00083",
+      "expected_tier": "full",
+      "notes": "Direct java.util.Random usage for SecureRandom-based remediation."
+    },
+    {
+      "category_id": "crypto-md5",
+      "rego_rule": "ISO-A.10-WEAK-CRYPTO",
+      "testcase_id": "BenchmarkTest02023",
+      "expected_tier": "guarded",
+      "notes": "Literal DESede/ECB cipher setup suitable for guarded weak-crypto remediation."
+    },
+    {
+      "category_id": "sql-injection",
+      "rego_rule": "ISO-A.8-SQL-INJECTION",
+      "testcase_id": "BenchmarkTest00008",
+      "expected_tier": "manual",
+      "notes": "Known SQL injection true positive kept explanation-only for manual review."
+    }
+  ]
+}

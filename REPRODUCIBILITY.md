@@ -46,6 +46,24 @@ Interactive UI explains now use the same structured `citation` / `why` / `fix` r
 - full selected-category run: `configs/benchmark_selection.multicat_full.json`
 - remediation smoke: `configs/benchmark_selection.remediation_cwe328_smoke.json`
 
+## 4a. Build the Recommended Demo Upload
+For the live thesis/demo UI flow, use the curated OWASP Benchmark pack instead of a generic sample app:
+
+```bash
+python3 scripts/evaluation/build_benchmark_demo_pack.py \
+  --benchmark-root "$OWASP_BENCHMARK_ROOT" \
+  --output-dir demo/benchmark-framework-demo/build
+```
+
+This creates:
+- `demo/benchmark-framework-demo/build/benchmark-framework-demo/`
+- `demo/benchmark-framework-demo/build/benchmark-framework-demo.zip`
+
+The selected benchmark cases cover:
+- full remediation: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-RANDOM`
+- guarded remediation: `ISO-A.10-WEAK-CRYPTO`
+- explanation/manual-only: `ISO-A.8-SQL-INJECTION`
+
 ## 5. Run Detection
 ```bash
 python run_benchmark_eval.py \
@@ -102,6 +120,11 @@ python run_remediation_eval.py \
 - Detection is the baseline validity check.
 - Explanation evaluation is mainly about citation grounding, not prose quality.
 - Remediation is judged by fix success and re-verification, not just patch text.
+- Production-minded remediation is intentionally bounded:
+  - full support for weak hash and weak randomness
+  - guarded support for weak crypto
+  - explanation/manual-only for SQL injection and broad access-control findings
+- `NO_FIX` is an expected safe outcome for guarded remediation, not a crash.
 
 ## 10. Notes
 - Use `--reset-neo4j` for reproducible runs.
