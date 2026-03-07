@@ -254,7 +254,7 @@ def _build_verification_summary(
     target_rule_status = "PASS"
     if rule_id and rule_id in after_ids:
         target_rule_status = "FAIL"
-    overall_status = "PASS" if not after_list else "FAIL"
+    overall_status = "PASS" if target_rule_status == "PASS" and not new_violations else "FAIL"
     return {
         "target_rule_status": target_rule_status,
         "overall_status": overall_status,

@@ -49,7 +49,10 @@ class RemediationPromptTemplate:
         return (
             "You are a remediation agent for Java code.\n"
             "Use ONLY the evidence provided in the user message blocks.\n"
-            "Preserve behavior and the method signature. Make the smallest change that satisfies the task.\n\n"
+            "Preserve behavior and the method signature. Make the smallest change that satisfies the task.\n"
+            "Only return replace_method when you can produce a COMPLETE syntactically valid Java method.\n"
+            "If you cannot produce a complete valid method, return no_fix instead of a partial draft.\n"
+            "Preserve unchanged lines exactly when possible, including string literal escapes such as \\\\n.\n\n"
             "Return a JSON object only with exactly these fields:\n"
             "- decision: \"replace_method\" or \"no_fix\"\n"
             "- replacement_method_lines: array of strings\n"
@@ -61,6 +64,8 @@ class RemediationPromptTemplate:
             "If decision is \"no_fix\", reason MUST explain why a safe minimal fix is not possible.\n"
             "When a field does not apply, return an empty array for replacement_method_lines and an empty string for reason.\n"
             "Do not put newline escape sequences inside a single string. Use one line per array element.\n\n"
+            "Before returning replace_method, ensure braces, parentheses, and string literals are balanced and the "
+            "method still includes the closing brace '}'.\n"
             "Do not output markdown, code fences, diffs, prose, backticks, or any text outside the JSON object."
         )
 
@@ -152,9 +157,11 @@ class RemediationPromptTemplate:
         sections.append("")
         sections.extend([cls.SOURCE_BEGIN, source_code or "<empty>", cls.SOURCE_END])
         sections.append("")
-        sections.extend([cls.GRAPH_BEGIN, graph_json, cls.GRAPH_END])
-        sections.append("")
-        sections.extend([cls.VECTOR_BEGIN, vector_json, cls.VECTOR_END])
+        if any(graph_context.values()):
+            sections.extend([cls.GRAPH_BEGIN, graph_json, cls.GRAPH_END])
+            sections.append("")
+        if vector_context:
+            sections.extend([cls.VECTOR_BEGIN, vector_json, cls.VECTOR_END])
 
         errors_note = "\n".join(previous_errors or [])
         if errors_note:

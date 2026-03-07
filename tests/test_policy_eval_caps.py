@@ -80,6 +80,32 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
         self.assertEqual(len(snapshots), 1)
         self.assertEqual(snapshots[0]["signature"], "org.example.MainController.endpoint()")
 
+    def test_evaluate_bundle_does_not_flag_random_string_literals_as_insecure_random(self) -> None:
+        from codegraph.policy.integration import evaluate_bundle
+
+        bundle = {
+            "target_method": "org.owasp.benchmark.testcode.BenchmarkTest99999.doPost(HttpServletRequest,HttpServletResponse)",
+            "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest99999.java",
+            "source_code": 'response.getWriter().println("Weak Randomness Test java.util.Random.nextInt(int) executed");',
+            "graph_context": {"annotations": [], "uses_fields": [], "calls": [], "callers": []},
+            "analysis_flags": {
+                "md5_detected": False,
+                "weak_cipher_detected": False,
+                "insecure_random_detected": False,
+                "sha1prng_detected": False,
+                "path_traversal_detected": False,
+                "command_injection_detected": False,
+                "ldap_injection_detected": False,
+                "xpath_injection_detected": False,
+                "sql_prepare_call_detected": False,
+                "sql_callable_statement_detected": False,
+            },
+        }
+
+        violations = evaluate_bundle(bundle)
+        violation_ids = {v.get("violation_id") for v in violations}
+        self.assertNotIn("ISO-A.10-WEAK-RANDOM", violation_ids)
+
     @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
     @patch("codegraph.policy.integration.load_iso_rules", return_value={})
     @patch("codegraph.policy.integration.load_policy_catalog", return_value={})

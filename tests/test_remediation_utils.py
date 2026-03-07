@@ -174,6 +174,36 @@ class RemediationUtilsTests(unittest.TestCase):
             ['public void hash() { java.security.MessageDigest.getInstance("SHA-256"); }'],
         )
 
+    def test_remediation_prompt_omits_empty_graph_and_vector_blocks(self):
+        from codegraph.remediation.prompting import RemediationPromptTemplate, RemediationTaskSpec
+
+        prompt = RemediationPromptTemplate.build_user_prompt(
+            context={
+                "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
+                "target_method": "com.example.Foo.hash()",
+                "file_path": "Example.java",
+                "rule_id": "ISO-A.10-WEAK-HASH",
+                "evidence": {"source_code": "public void hash() {}", "graph_context": {}, "vector_context": []},
+                "catalog_entry": {"title": "Cryptography (Weak Hash)"},
+            },
+            spec=RemediationTaskSpec(
+                rule_id="ISO-A.10-WEAK-HASH",
+                objective="Replace MD5 with SHA-256",
+                allowed_transformations=[],
+                non_goals=[],
+            ),
+        )
+
+        self.assertNotIn(RemediationPromptTemplate.GRAPH_BEGIN, prompt)
+        self.assertNotIn(RemediationPromptTemplate.VECTOR_BEGIN, prompt)
+
+    def test_remediation_system_prompt_requires_complete_valid_method_or_no_fix(self):
+        from codegraph.remediation.prompting import RemediationPromptTemplate
+
+        prompt = RemediationPromptTemplate.system_prompt()
+        self.assertIn("Only return replace_method when you can produce a COMPLETE syntactically valid Java method", prompt)
+        self.assertIn("return no_fix instead of a partial draft", prompt)
+
     def test_remediation_capability_matches_supported_rule_set(self):
         from codegraph.remediation.capabilities import (
             DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS,
@@ -500,6 +530,38 @@ class RemediationUtilsTests(unittest.TestCase):
         diff = self.service._unified_diff("a\nb", "a\nc", label="method")
         self.assertIn("-b", diff)
         self.assertIn("+c", diff)
+
+    def test_verification_summary_passes_when_target_rule_removed_and_only_baseline_manual_findings_remain(self):
+        summary = self.service._build_verification_summary(
+            "ISO-A.10-WEAK-RANDOM",
+            baseline=[
+                {"violation_id": "ISO-A.10-WEAK-RANDOM", "target_method": "m", "file_path": "f"},
+                {"violation_id": "ISO-A.8-CMD-INJECTION", "target_method": "m", "file_path": "f"},
+            ],
+            after=[
+                {"violation_id": "ISO-A.8-CMD-INJECTION", "target_method": "m", "file_path": "f"},
+            ],
+        )
+
+        self.assertEqual(summary["target_rule_status"], "PASS")
+        self.assertEqual(summary["overall_status"], "PASS")
+        self.assertEqual([v["violation_id"] for v in summary["remaining_violations"]], ["ISO-A.8-CMD-INJECTION"])
+        self.assertEqual(summary["new_violations"], [])
+
+    def test_verification_summary_fails_when_new_violation_is_introduced(self):
+        summary = self.service._build_verification_summary(
+            "ISO-A.10-WEAK-RANDOM",
+            baseline=[
+                {"violation_id": "ISO-A.10-WEAK-RANDOM", "target_method": "m", "file_path": "f"},
+            ],
+            after=[
+                {"violation_id": "ISO-A.8-CMD-INJECTION", "target_method": "m", "file_path": "f"},
+            ],
+        )
+
+        self.assertEqual(summary["target_rule_status"], "PASS")
+        self.assertEqual(summary["overall_status"], "FAIL")
+        self.assertEqual([v["violation_id"] for v in summary["new_violations"]], ["ISO-A.8-CMD-INJECTION"])
 
 
 if __name__ == "__main__":

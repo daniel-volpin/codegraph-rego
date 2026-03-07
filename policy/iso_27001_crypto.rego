@@ -6,9 +6,8 @@ rc4_pattern := "cipher.getinstance(\"rc4"
 ecb_pattern := "cipher.getinstance(\"aes/ecb"
 random_ctor_pattern := "new random("
 math_random_pattern := "math.random("
-java_util_random_pattern := "java.util.random"
-threadlocal_random_pattern := "threadlocalrandom.current"
-sha1prng_pattern := "sha1prng"
+threadlocal_random_pattern := "threadlocalrandom.current("
+sha1prng_pattern := "securerandom.getinstance(\"sha1prng\")"
 
 random_context if {
   servlet_context
@@ -69,12 +68,6 @@ source_insecure_random if {
   input.source_code != null
   src := lower(input.source_code)
   contains(src, math_random_pattern)
-}
-
-source_insecure_random if {
-  input.source_code != null
-  src := lower(input.source_code)
-  contains(src, java_util_random_pattern)
 }
 
 source_insecure_random if {
