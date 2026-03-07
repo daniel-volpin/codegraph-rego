@@ -1516,29 +1516,53 @@ class RemediationService:
         edits: List[Dict[str, Any]],
         target_method: str,
     ) -> Tuple[List[str], str]:
+        def resolve_edit_span(
+            declared_start: int,
+            expected_original: List[str],
+        ) -> Tuple[int, int]:
+            expected_length = len(expected_original)
+            if declared_start < 1 or declared_start > len(original_lines) or expected_length == 0:
+                raise ValueError("edit_span_out_of_bounds")
+
+            direct_end = declared_start + expected_length - 1
+            if direct_end <= len(original_lines):
+                direct_slice = original_lines[declared_start - 1 : direct_end]
+                if direct_slice == expected_original:
+                    return declared_start, direct_end
+
+            search_start = max(1, declared_start - 1)
+            search_end = min(len(original_lines) - expected_length + 1, declared_start + 2)
+            matches: List[int] = []
+            for candidate_start in range(search_start, search_end + 1):
+                candidate_end = candidate_start + expected_length - 1
+                if original_lines[candidate_start - 1 : candidate_end] == expected_original:
+                    matches.append(candidate_start)
+
+            if len(matches) == 1:
+                candidate_start = matches[0]
+                return candidate_start, candidate_start + expected_length - 1
+            raise ValueError("edit_original_mismatch")
+
         updated_lines = list(original_lines)
         previous_end = 0
         offset = 0
         for edit in edits:
             start_line = edit["start_line"]
-            end_line = edit["end_line"]
             expected_original = edit["original_lines"]
             replacement_lines = edit["replacement_lines"]
 
-            if start_line < 1 or end_line < start_line or end_line > len(original_lines):
+            actual_start, actual_end = resolve_edit_span(start_line, expected_original)
+            declared_end = edit["end_line"]
+            if declared_end < start_line:
                 raise ValueError("edit_span_out_of_bounds")
-            if start_line <= previous_end:
+            if actual_start <= previous_end:
                 raise ValueError("edit_spans_overlap")
 
-            current_slice = original_lines[start_line - 1 : end_line]
-            if current_slice != expected_original:
-                raise ValueError("edit_original_mismatch")
-
-            adjusted_start = start_line - 1 + offset
-            adjusted_end = end_line + offset
+            adjusted_start = actual_start - 1 + offset
+            adjusted_end = actual_end + offset
             updated_lines[adjusted_start:adjusted_end] = replacement_lines
             offset += len(replacement_lines) - len(expected_original)
-            previous_end = end_line
+            previous_end = actual_end
 
         updated_snippet = "\n".join(updated_lines)
         multiline_literal_issue = _detect_multiline_literal_issue(updated_lines)

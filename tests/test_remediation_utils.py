@@ -166,6 +166,89 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertFalse(parsed["raw_response_valid"])
         self.assertEqual(parsed["schema_error"], "edit_original_mismatch")
 
+    def test_parse_structured_generation_accepts_declared_end_line_mismatch(self):
+        original = [
+            "@Override",
+            "public void foo() {",
+            '    System.out.println("old");',
+            "}",
+        ]
+        replacement = [
+            "@Override",
+            "public void foo() {",
+            '    System.out.println("ok");',
+            "}",
+        ]
+        raw = _structured_apply_edits(
+            original_method=original,
+            replacement_method=replacement,
+            start_line=1,
+            end_line=2,
+        )
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=original,
+        )
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertIn('System.out.println("ok")', parsed["replacement_method_code"])
+
+    def test_parse_structured_generation_accepts_unique_local_exact_match(self):
+        original = [
+            "@Override",
+            "public void foo() {",
+            '    System.out.println("old");',
+            "}",
+        ]
+        replacement = [
+            "@Override",
+            "public void foo() {",
+            '    System.out.println("ok");',
+            "}",
+        ]
+        raw = _structured_apply_edits(
+            original_method=original,
+            replacement_method=replacement,
+            start_line=2,
+            end_line=5,
+        )
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=original,
+        )
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertIn('System.out.println("ok")', parsed["replacement_method_code"])
+
+    def test_parse_structured_generation_rejects_ambiguous_local_exact_match(self):
+        raw = json.dumps(
+            {
+                "decision": "apply_edits",
+                "edits": [
+                    {
+                        "start_line": 1,
+                        "end_line": 1,
+                        "original_lines": ['    keep();'],
+                        "replacement_lines": ['    fix();'],
+                    }
+                ],
+                "reason": "",
+            }
+        )
+        original = [
+            "public void foo() {",
+            "    keep();",
+            "    keep();",
+            "}",
+        ]
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=original,
+        )
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertEqual(parsed["schema_error"], "edit_original_mismatch")
+
     def test_parse_structured_generation_normalizes_embedded_newlines_in_edit_lines(self):
         original = ['@Override', 'public void hash() {', '    System.out.println("old");', '}']
         replacement = ['@Override\\npublic void hash() {', '    System.out.println("ok");', '}']

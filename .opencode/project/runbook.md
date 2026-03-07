@@ -33,7 +33,7 @@ REMEDIATION_LLM_MODEL="qwen/qwen3-coder-30b" \
 LLM_ENABLE_THINKING=false \
 .venv/bin/python3 run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
-  --output-dir outputs/thesis_final_remediation_supported_medium \
+  --output-dir outputs/span_edit_supported_medium_v2 \
   --sample-size 60
 ```
 
@@ -48,6 +48,7 @@ LLM_ENABLE_THINKING=false \
 - Detection: `outputs/thesis_final_detection_full/`
 - Explanation: `outputs/thesis_final_explanation_full/`
 - Remediation: `outputs/thesis_final_remediation_supported_medium/`
+  - current best compile-backed reference: `outputs/span_edit_supported_medium_v2/`
 
 ## Done Means
 
@@ -57,6 +58,7 @@ LLM_ENABLE_THINKING=false \
   - `citation_metrics.json`, `citation_metrics.csv`, `table.md`
 - Remediation:
   - `remediation_metrics.json`, `remediation_metrics.csv`
+  - for product-gate evidence also check `summary.md`
 
 ## Skill / Agent Usage
 
