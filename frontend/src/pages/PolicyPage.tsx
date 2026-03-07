@@ -105,22 +105,59 @@ const severityVariant = (severity: string): "destructive" | "warning" | "seconda
   return "secondary";
 };
 
-const renderStructuredExplanation = (payload: PolicyExplanationStructured) => (
-  <div className="space-y-3 rounded-md border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Citation</p>
-      <p className="mt-1 break-words">{payload.citation}</p>
+const formatCitationDisplay = (citation: string) => {
+  const trimmed = citation.trim();
+  if (!trimmed) {
+    return { display: citation, full: citation };
+  }
+
+  const match = trimmed.match(/^(.*?)(:\d+(?:-\d+)?)$/);
+  const rawPath = match?.[1] ?? trimmed;
+  const suffix = match?.[2] ?? "";
+  const normalizedPath = rawPath.replace(/\\/g, "/");
+
+  let displayPath = normalizedPath;
+  const uploadedIndex = normalizedPath.indexOf("/uploaded_code/");
+  const srcIndex = normalizedPath.indexOf("/src/");
+
+  if (uploadedIndex >= 0) {
+    displayPath = normalizedPath.slice(uploadedIndex + 1);
+  } else if (srcIndex >= 0) {
+    displayPath = normalizedPath.slice(srcIndex + 1);
+  } else {
+    const parts = normalizedPath.split("/").filter(Boolean);
+    if (parts.length > 4) {
+      displayPath = parts.slice(-4).join("/");
+    }
+  }
+
+  return {
+    display: `${displayPath}${suffix}`,
+    full: trimmed,
+  };
+};
+
+const renderStructuredExplanation = (payload: PolicyExplanationStructured) => {
+  const citation = formatCitationDisplay(payload.citation);
+  return (
+    <div className="space-y-3 rounded-md border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Citation</p>
+        <p className="mt-1 break-words font-mono text-xs text-indigo-900" title={citation.full}>
+          {citation.display}
+        </p>
+      </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Why</p>
+        <p className="mt-1 break-words">{payload.why}</p>
+      </div>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Fix</p>
+        <p className="mt-1 break-words">{payload.fix}</p>
+      </div>
     </div>
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Why</p>
-      <p className="mt-1 break-words">{payload.why}</p>
-    </div>
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Fix</p>
-      <p className="mt-1 break-words">{payload.fix}</p>
-    </div>
-  </div>
-);
+  );
+};
 
 type PendingAction = "explain" | "preview" | "apply";
 
