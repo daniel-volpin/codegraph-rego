@@ -32,7 +32,7 @@ async def remediation_preview(payload: RemediationPreviewRequest):
         return JSONResponse(result, status_code=400)
     if status in {"NOT_FOUND"}:
         return JSONResponse(result, status_code=404)
-    if status in {"ERROR"}:
+    if status in {"ERROR", "GENERATION_ERROR", "REPLACEMENT_ERROR", "BUILD_ERROR", "VERIFICATION_ERROR"}:
         return JSONResponse(result, status_code=500)
     return JSONResponse(result, status_code=200)
 
@@ -51,6 +51,6 @@ async def remediation_apply(payload: RemediationApplyRequest):
         return JSONResponse(result, status_code=400)
     if status in {"NOT_FOUND"}:
         return JSONResponse(result, status_code=404)
-    if status in {"ERROR"}:
+    if status in {"ERROR", "GENERATION_ERROR", "REPLACEMENT_ERROR", "BUILD_ERROR", "VERIFICATION_ERROR"}:
         return JSONResponse(result, status_code=500)
     return JSONResponse(result, status_code=200)

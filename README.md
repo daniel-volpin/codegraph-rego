@@ -217,6 +217,12 @@ python3 scripts/search/hybrid_code_search.py "find insecure hash usage"
 - Flow: gather violation context → LLM proposes full method → build virtual graph context in memory → re-run OPA on the virtual bundle.
 - No filesystem edits, compilation, or Neo4j mutations; the suggestion is for human review/copy‑paste.
 - Requires `opa` on `PATH`, LiteLLM-configured LLM access, and Neo4j reachable for the initial evidence.
+- Remediation generation is schema-constrained:
+  - `decision`
+  - `replacement_method_lines`
+  - derived `replacement_method_code`
+  - `reason`
+  and preview/apply responses expose this under the additive `generation` field.
 - Automatic remediation is intentionally tiered:
   - full support: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-RANDOM`
   - guarded support: `ISO-A.10-WEAK-CRYPTO`
@@ -235,6 +241,10 @@ python3 scripts/search/hybrid_code_search.py "find insecure hash usage"
   - `dry_run` (default) restores the original file on disk and reverts the graph after verification.
   - `apply` persists the change back to the original file only when verification passes.
 - The current frontend uses `dry_run` only, so UI verification never persists source-file changes.
+- For remediation you can optionally override the shared explanation model with:
+  - `REMEDIATION_LLM_MODEL`
+  - `REMEDIATION_LLM_MAX_TOKENS`
+  - `REMEDIATION_LLM_TEMPERATURE`
 
 ---
 
@@ -269,15 +279,15 @@ Verify:
 For thesis metrics (Precision/Recall/F1, citation success, remediation success), use the CLI runners:
 
 ```bash
-python run_benchmark_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval --reset-neo4j
-python run_explanation_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval --reset-neo4j
-python run_remediation_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/remediation_eval --sample-size 10 --reset-neo4j
+python run_benchmark_eval.py --config configs/benchmark/baseline.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval --reset-neo4j
+python run_explanation_eval.py --config configs/benchmark/baseline.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval --reset-neo4j
+python run_remediation_eval.py --config configs/benchmark/remediation_hash_smoke.json --mapping configs/control_mapping.json --output-dir outputs/remediation_eval --sample-size 10 --reset-neo4j
 ```
 
 To run detection/explanation evaluation across multiple CWE categories (incl. `CWE-22`, `CWE-78`, `CWE-89`, `CWE-90`, `CWE-327`, `CWE-328`, `CWE-330`, and `CWE-643`), use:
 ```bash
-python run_benchmark_eval.py --config configs/benchmark_selection.multicat.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval_multicat --reset-neo4j
-python run_explanation_eval.py --config configs/benchmark_selection.multicat.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval_multicat --reset-neo4j
+python run_benchmark_eval.py --config configs/benchmark/expanded_eval.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval_multicat --reset-neo4j
+python run_explanation_eval.py --config configs/benchmark/multicat_medium.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval_multicat --reset-neo4j
 ```
 
 `run_remediation_eval.py` reuses the same apply/verify remediation service flow used by `/remediation/apply` (default `dry_run` mode) so evaluation behavior tracks production remediation logic.
@@ -286,10 +296,11 @@ Set `OWASP_BENCHMARK_ROOT` before running (or edit the template config):
 
 ```bash
 export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
-cp configs/benchmark_selection.example.json configs/benchmark_selection.json  # optional
 ```
 
 See `REPRODUCIBILITY.md` for full prerequisites, configuration, and output formats.
+
+Canonical benchmark configs now live under `configs/benchmark/`. Root-level `configs/benchmark_selection*.json` files remain only as legacy compatibility entrypoints for older notes and scripts.
 
 ### Covered Categories (OWASP Benchmark)
 This prototype uses a manual CWE → ISO-control → Rego mapping layer (see `configs/control_mapping.json`) to evaluate detectors against the OWASP Benchmark ground truth.

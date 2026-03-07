@@ -25,6 +25,10 @@ export LLM_API_BASE=http://localhost:1234/v1
 export LLM_API_KEY=lm-studio
 export LLM_MODEL=qwen/qwen3-8b
 export LLM_ENABLE_THINKING=false
+
+# Optional remediation-specific overrides
+export REMEDIATION_LLM_MODEL=qwen3.5-9b-mlx
+export REMEDIATION_LLM_MAX_TOKENS=1500
 ```
 
 ## 3. Recommended Explanation-Eval Defaults
@@ -41,12 +45,15 @@ The runner already enables:
 Interactive UI explains now use the same structured `citation` / `why` / `fix` response shape, so the frontend no longer depends on freeform model prose behaving well.
 
 ## 4. Choose a Config
-- small smoke: `configs/benchmark_selection.smoke_mixed.json`
-- medium thesis check: `configs/benchmark_selection.multicat_medium.json`
-- full selected-category run: `configs/benchmark_selection.multicat_full.json`
-- remediation smoke: `configs/benchmark_selection.remediation_cwe328_smoke.json`
-- benchmark demo upload prep: `configs/benchmark_selection.framework_demo.json`
-- expanded benchmark evaluation: `configs/benchmark_selection.expanded_eval.json`
+- small smoke: `configs/benchmark/smoke_mixed.json`
+- medium thesis check: `configs/benchmark/multicat_medium.json`
+- full selected-category run: `configs/benchmark/multicat_full.json`
+- remediation smoke: `configs/benchmark/remediation_hash_smoke.json`
+- bounded remediation refresh: `configs/benchmark/remediation_bounded_smoke.json`
+- benchmark demo upload prep: `configs/benchmark/framework_demo.json`
+- expanded benchmark evaluation: `configs/benchmark/expanded_eval.json`
+
+Canonical benchmark configs live under `configs/benchmark/`. Root-level `configs/benchmark_selection*.json` files are retained only for backwards compatibility with older notes or scripts.
 
 ## 4a. Build the Recommended Demo Upload
 For the live thesis/demo UI flow, use the curated OWASP Benchmark pack instead of a generic sample app:
@@ -71,7 +78,7 @@ For the UI thesis/demo, use the Policy page's `Framework demo focus` preset afte
 ## 5. Run Detection
 ```bash
 python run_benchmark_eval.py \
-  --config configs/benchmark_selection.multicat_medium.json \
+  --config configs/benchmark/multicat_medium.json \
   --mapping configs/control_mapping.json \
   --output-dir outputs/benchmark_eval_multicat_medium \
   --reset-neo4j
@@ -81,7 +88,7 @@ python run_benchmark_eval.py \
 ```bash
 LLM_CONCURRENCY=1 \
 python run_explanation_eval.py \
-  --config configs/benchmark_selection.multicat_medium.json \
+  --config configs/benchmark/multicat_medium.json \
   --mapping configs/control_mapping.json \
   --output-dir outputs/explanation_eval_multicat_medium \
   --evidence-mode lean \
@@ -92,10 +99,21 @@ python run_explanation_eval.py \
 ## 7. Run Remediation Evaluation
 ```bash
 python run_remediation_eval.py \
-  --config configs/benchmark_selection.remediation_cwe328_smoke.json \
+  --config configs/benchmark/remediation_hash_smoke.json \
   --mapping configs/control_mapping.json \
   --output-dir outputs/remediation_eval_cwe328_smoke \
   --sample-size 5 \
+  --reset-neo4j
+```
+
+For a bounded remediation refresh across full and guarded support tiers:
+
+```bash
+python run_remediation_eval.py \
+  --config configs/benchmark/remediation_bounded_smoke.json \
+  --mapping configs/control_mapping.json \
+  --output-dir outputs/remediation_eval_bounded_smoke \
+  --sample-size 3 \
   --reset-neo4j
 ```
 
@@ -129,6 +147,12 @@ python run_remediation_eval.py \
   - guarded support for weak crypto
   - explanation/manual-only for SQL injection, path traversal, command injection, LDAP injection, XPath injection, and broad access-control/logging findings
 - `NO_FIX` is an expected safe outcome for guarded remediation, not a crash.
+- Remediation preview/apply now use a strict structured generation contract:
+  - `decision`
+  - `replacement_method_lines`
+  - derived `replacement_method_code`
+  - `reason`
+  malformed generation payloads surface as `GENERATION_ERROR` rather than ambiguous parser failures.
 
 ## 10. Notes
 - Use `--reset-neo4j` for reproducible runs.
