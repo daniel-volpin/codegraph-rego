@@ -78,6 +78,27 @@ def _render_structured_explanation(content: str) -> str:
     return "\n".join(lines) if lines else text
 
 
+def _method_name_from_signature(signature: Any) -> str:
+    if not isinstance(signature, str):
+        return ""
+    text = signature.strip()
+    if not text:
+        return ""
+    return text.split(".")[-1].split("(")[0]
+
+
+def _explain_single_violation(violation: Dict[str, Any], *, model: str) -> Dict[str, Any]:
+    evidence = violation.get("evidence") if isinstance(violation, dict) else None
+    evidence = evidence if isinstance(evidence, dict) else {}
+    signature = violation.get("method") or violation.get("target_method") or evidence.get("target_method") or ""
+    method_name = _method_name_from_signature(signature)
+    file_path = violation.get("file_path") or evidence.get("file_path") or ""
+    snippet = _read_code_snippet(file_path, method_name)
+    messages = _build_prompt(violation, snippet)
+    explanation = _call_llm(messages, model=model)
+    return {"violation": violation, "snippet": snippet, "explanation": explanation}
+
+
 def explain_policy_violations(
     violations: List[Dict[str, Any]],
     *,
@@ -89,29 +110,12 @@ def explain_policy_violations(
     Violations are processed concurrently (LLM_CONCURRENCY threads).
     """
 
-    def _method_name_from_signature(signature: Any) -> str:
-        if not isinstance(signature, str):
-            return ""
-        text = signature.strip()
-        if not text:
-            return ""
-        return text.split(".")[-1].split("(")[0]
-
-    def _process_one(v: Dict[str, Any]) -> Dict[str, Any]:
-        evidence = v.get("evidence") if isinstance(v, dict) else None
-        evidence = evidence if isinstance(evidence, dict) else {}
-        signature = v.get("method") or v.get("target_method") or evidence.get("target_method") or ""
-        method_name = _method_name_from_signature(signature)
-        file_path = v.get("file_path") or evidence.get("file_path") or ""
-        snippet = _read_code_snippet(file_path, method_name)
-        messages = _build_prompt(v, snippet)
-        explanation = _call_llm(messages, model=model or LLM_MODEL)
-        return {"violation": v, "snippet": snippet, "explanation": explanation}
-
     subset = violations[:max_items]
     results: List[Dict[str, Any]] = [None] * len(subset)  # type: ignore[list-item]
     with ThreadPoolExecutor(max_workers=max(1, LLM_CONCURRENCY)) as pool:
-        future_to_idx = {pool.submit(_process_one, v): i for i, v in enumerate(subset)}
+        future_to_idx = {
+            pool.submit(_explain_single_violation, v, model=model or LLM_MODEL): i for i, v in enumerate(subset)
+        }
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
             results[idx] = future.result()

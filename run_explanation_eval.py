@@ -6,31 +6,23 @@ from __future__ import annotations
 
 import argparse
 import logging
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from time import perf_counter
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from time import perf_counter
+from typing import Any, Dict, List
 
 from codegraph.config import LLM_CONCURRENCY
-from codegraph.db import get_neo4j_driver
-from codegraph.evaluation.benchmark import (
-    coverage_report,
-    extract_testcase_id,
-    find_ground_truth_file,
-    inspect_ground_truth_schema,
-    load_ground_truth,
-    load_mapping_config,
-    load_selection_config,
-    select_testcases,
-    stage_benchmark_subset,
-)
 from codegraph.evaluation.explanation_runtime import ExplanationRuntime, utc_now_iso
 from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
-from codegraph.ingestion.service import ingest
+from codegraph.evaluation.pipeline import (
+    collect_category_violations,
+    group_violations_by_testcase as index_violations_by_testcase,
+    ingest_and_evaluate_subset,
+    load_benchmark_evaluation_context,
+    staged_benchmark_workspace,
+)
 from codegraph.llm.explanation_prompting import build_explanation_prompt
 from codegraph.llm.integration import generate_policy_explanation
-from codegraph.policy.integration import evaluate_policies
 
 LOGGER = logging.getLogger("codegraph.eval.explanation")
 
@@ -89,15 +81,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def clear_graph() -> None:
-    driver = get_neo4j_driver()
-    try:
-        with driver.session() as session:
-            session.run("MATCH (n) DETACH DELETE n").consume()
-    finally:
-        driver.close()
-
-
 def build_citation_tokens(violation: Dict[str, Any]) -> List[str]:
     evidence = violation.get("evidence") or {}
     tokens: List[str] = []
@@ -119,50 +102,6 @@ def build_citation_tokens(violation: Dict[str, Any]) -> List[str]:
 def has_citation(text: str, tokens: List[str]) -> bool:
     haystack = text.lower()
     return any(token.lower() in haystack for token in tokens if token)
-
-
-def group_violations_by_testcase(violations: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-    grouped: Dict[str, List[Dict[str, Any]]] = {}
-    for violation in violations:
-        testcase_id = extract_testcase_id(violation.get("target_method") or violation.get("file_path"))
-        if not testcase_id:
-            continue
-        grouped.setdefault(testcase_id, []).append(violation)
-    return grouped
-
-
-def build_category_violations_by_id(
-    *,
-    selected_category_ids: List[str],
-    categories_by_id: Dict[str, Any],
-    selection: Any,
-    violations_by_testcase: Dict[str, List[Dict[str, Any]]],
-) -> Dict[str, List[Dict[str, Any]]]:
-    category_violations_by_id: Dict[str, List[Dict[str, Any]]] = {}
-    for category_id in selected_category_ids:
-        spec = categories_by_id.get(category_id)
-        if not spec:
-            continue
-        records = selection.selected_by_category.get(category_id, [])
-        positive_testcases = {rec.testcase_id for rec in records if rec.label}
-        seen_keys: set[Tuple[str, str, str]] = set()
-        category_violations: List[Dict[str, Any]] = []
-        for testcase_id in positive_testcases:
-            for violation in violations_by_testcase.get(testcase_id, []):
-                if violation.get("violation_id") not in spec.rego_rules:
-                    continue
-                key = (
-                    str(violation.get("violation_id")),
-                    str(violation.get("target_method")),
-                    str(violation.get("file_path")),
-                )
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
-                category_violations.append(violation)
-        category_violations_by_id[category_id] = category_violations
-    return category_violations_by_id
-
 
 def _measure_prompt_chars(messages: List[Dict[str, str]]) -> int:
     return sum(len(message.get("content", "")) for message in messages)
@@ -208,25 +147,17 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = parse_args()
 
-    selection_cfg = load_selection_config(Path(args.config))
-    categories = load_mapping_config(Path(args.mapping))
-    benchmark_root = Path(selection_cfg["benchmark_root"])
-    truth_path = find_ground_truth_file(benchmark_root, selection_cfg.get("ground_truth_path"))
-    truth_schema = inspect_ground_truth_schema(truth_path)
-    truth_records = load_ground_truth(benchmark_root, truth_path.as_posix())
-    selection = select_testcases(truth_records, categories, selection_cfg)
-    selected_ids = selection.selected_testcase_ids
-    selected_category_ids = selection_cfg.get("categories") or [spec.id for spec in categories]
-    coverage_by_category = coverage_report(selection, selected_category_ids)
+    context = load_benchmark_evaluation_context(Path(args.config), Path(args.mapping))
+    selected_ids = context.selection.selected_testcase_ids
 
     output_dir = Path(args.output_dir)
     runtime = ExplanationRuntime(
         output_dir=output_dir,
-        benchmark_root=benchmark_root,
-        truth_path=truth_path,
-        truth_schema=truth_schema,
-        selection_cfg=selection_cfg,
-        coverage_by_category=coverage_by_category,
+        benchmark_root=context.benchmark_root,
+        truth_path=context.truth_path,
+        truth_schema=context.truth_schema,
+        selection_cfg=context.selection_cfg,
+        coverage_by_category=context.coverage_by_category,
         sample_per_category=args.sample_per_category,
         evidence_mode=args.evidence_mode,
         llm_max_tokens_eval=args.llm_max_tokens_eval,
@@ -236,66 +167,49 @@ def main() -> int:
         "selection",
         "Benchmark subset selected",
         selected_testcases=len(selected_ids),
-        selected_categories=selected_category_ids,
+        selected_categories=context.selected_category_ids,
     )
 
-    if args.workdir:
-        work_root = Path(args.workdir)
-        work_root.mkdir(parents=True, exist_ok=True)
-        temp_context = None
-    else:
-        temp_context = tempfile.TemporaryDirectory()
-        work_root = Path(temp_context.name)
-
-    try:
-        stage_benchmark_subset(
-            benchmark_root,
-            selection_cfg["java_relative_root"],
-            selected_ids,
-            work_root,
-        )
-        java_root = work_root / selection_cfg["java_relative_root"]
-
-        if args.reset_neo4j:
-            clear_graph()
-
+    with staged_benchmark_workspace(
+        benchmark_root=context.benchmark_root,
+        java_relative_root=context.selection_cfg["java_relative_root"],
+        testcase_ids=selected_ids,
+        workdir=args.workdir,
+    ) as workspace:
         runtime.write_stage_progress(
             "ingestion",
             "Ingesting selected benchmark subset into Neo4j",
             selected_testcases=len(selected_ids),
-            java_root=java_root.as_posix(),
+            java_root=workspace.java_root.as_posix(),
         )
-        LOGGER.info("Ingesting OWASP Benchmark subset from %s", java_root)
-        ingest(java_root.as_posix())
-
         runtime.write_stage_progress("policy_evaluation", "Evaluating policies via OPA/Rego")
-        LOGGER.info("Evaluating policies via OPA/Rego")
-        eval_result = evaluate_policies()
+        eval_result = ingest_and_evaluate_subset(
+            java_root=workspace.java_root,
+            reset_neo4j=args.reset_neo4j,
+            logger=LOGGER,
+        )
         if eval_result.get("error"):
             LOGGER.error("Policy evaluation failed: %s", eval_result["error"])
             runtime.write_stage_progress("policy_evaluation", "Policy evaluation failed", error=eval_result["error"])
             runtime.finalize(status="failed", metrics={})
             return 1
         violations = eval_result.get("violations") or []
-    finally:
-        if temp_context is not None:
-            temp_context.cleanup()
 
-    violations_by_testcase = group_violations_by_testcase(violations)
+    violations_by_testcase = index_violations_by_testcase(violations)
 
     metrics: Dict[str, Any] = {}
     samples_per_category: Dict[str, int] = {}
-    categories_by_id = {spec.id: spec for spec in categories}
+    categories_by_id = context.categories_by_id
     runtime.write_stage_progress(
         "violation_indexing",
         "Grouping policy violations by category",
         detected_violations=len(violations),
     )
 
-    category_violations_by_id = build_category_violations_by_id(
-        selected_category_ids=selected_category_ids,
+    category_violations_by_id = collect_category_violations(
+        selected_category_ids=context.selected_category_ids,
         categories_by_id=categories_by_id,
-        selection=selection,
+        selection=context.selection,
         violations_by_testcase=violations_by_testcase,
     )
     total_target_violations = sum(len(vios) for vios in category_violations_by_id.values())
@@ -304,7 +218,7 @@ def main() -> int:
 
     try:
         with ThreadPoolExecutor(max_workers=max(1, LLM_CONCURRENCY)) as pool:
-            for category_id in selected_category_ids:
+            for category_id in context.selected_category_ids:
                 spec = categories_by_id.get(category_id)
                 if not spec:
                     continue
@@ -324,8 +238,8 @@ def main() -> int:
                     "rate_with_context": 0.0,
                     "rate_without_context": 0.0,
                 }
-                if category_id in coverage_by_category:
-                    metrics[category_id].update(coverage_by_category[category_id])
+                if category_id in context.coverage_by_category:
+                    metrics[category_id].update(context.coverage_by_category[category_id])
 
                 for idx, violation in enumerate(category_violations, start=1):
                     tokens = build_citation_tokens(violation)
@@ -422,7 +336,7 @@ def main() -> int:
         runtime.close()
 
     rows: List[List[Any]] = []
-    for category_id in selected_category_ids:
+    for category_id in context.selected_category_ids:
         spec = categories_by_id.get(category_id)
         if not spec or category_id not in metrics:
             continue
@@ -448,11 +362,11 @@ def main() -> int:
 
     payload = {
         "generated_at": utc_now_iso(),
-        "benchmark_root": benchmark_root.as_posix(),
-        "ground_truth_file": truth_path.as_posix(),
-        "ground_truth_schema": truth_schema,
-        "selection": selection_cfg,
-        "coverage_by_category": coverage_by_category,
+        "benchmark_root": context.benchmark_root.as_posix(),
+        "ground_truth_file": context.truth_path.as_posix(),
+        "ground_truth_schema": context.truth_schema,
+        "selection": context.selection_cfg,
+        "coverage_by_category": context.coverage_by_category,
         "metrics": metrics,
         "sample_count": runtime.sample_count,
     }

@@ -7,27 +7,19 @@ from __future__ import annotations
 import argparse
 import logging
 import random
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
 from codegraph.api.services.remediation_service import apply_remediation
-from codegraph.db import get_neo4j_driver
-from codegraph.evaluation.benchmark import (
-    coverage_report,
-    extract_testcase_id,
-    find_ground_truth_file,
-    inspect_ground_truth_schema,
-    load_ground_truth,
-    load_mapping_config,
-    load_selection_config,
-    select_testcases,
-    stage_benchmark_subset,
+from codegraph.evaluation.pipeline import (
+    collect_category_violations,
+    group_violations_by_testcase,
+    ingest_and_evaluate_subset,
+    load_benchmark_evaluation_context,
+    staged_benchmark_workspace,
 )
 from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
-from codegraph.ingestion.service import ingest
-from codegraph.policy.integration import evaluate_policies
 
 LOGGER = logging.getLogger("codegraph.eval.remediation")
 
@@ -97,105 +89,48 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def clear_graph() -> None:
-    driver = get_neo4j_driver()
-    try:
-        with driver.session() as session:
-            session.run("MATCH (n) DETACH DELETE n").consume()
-    finally:
-        driver.close()
-
-
-def _build_candidate_violations(
-    violations: List[Dict[str, Any]],
-    selection_cfg: Dict[str, Any],
-    categories: List[Any],
-    selection: Any,
-) -> List[Dict[str, Any]]:
-    categories_by_id = {spec.id: spec for spec in categories}
-    selected_category_ids = selection_cfg.get("categories") or [spec.id for spec in categories]
-
-    violations_by_testcase: Dict[str, List[Dict[str, Any]]] = {}
-    for violation in violations:
-        testcase_id = extract_testcase_id(violation.get("target_method") or violation.get("file_path"))
-        if not testcase_id:
-            continue
-        violations_by_testcase.setdefault(testcase_id, []).append(violation)
-
-    candidates: List[Dict[str, Any]] = []
-    seen_keys: set[tuple[str, str, str]] = set()
-    for category_id in selected_category_ids:
-        spec = categories_by_id.get(category_id)
-        if not spec:
-            continue
-        records = selection.selected_by_category.get(category_id, [])
-        positive_testcases = {rec.testcase_id for rec in records if rec.label}
-        for testcase_id in positive_testcases:
-            for violation in violations_by_testcase.get(testcase_id, []):
-                if violation.get("violation_id") not in spec.rego_rules:
-                    continue
-                key = (
-                    str(violation.get("violation_id")),
-                    str(violation.get("target_method")),
-                    str(violation.get("file_path")),
-                )
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
-                candidate = dict(violation)
-                candidate["category"] = spec.label
-                candidates.append(candidate)
-    return candidates
-
-
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = parse_args()
 
-    selection_cfg = load_selection_config(Path(args.config))
-    categories = load_mapping_config(Path(args.mapping))
-    benchmark_root = Path(selection_cfg["benchmark_root"])
-    truth_path = find_ground_truth_file(benchmark_root, selection_cfg.get("ground_truth_path"))
-    truth_schema = inspect_ground_truth_schema(truth_path)
-    truth_records = load_ground_truth(benchmark_root, truth_path.as_posix())
-    selection = select_testcases(truth_records, categories, selection_cfg)
-    selected_ids = selection.selected_testcase_ids
-    selected_category_ids = selection_cfg.get("categories") or [spec.id for spec in categories]
-    coverage_by_category = coverage_report(selection, selected_category_ids)
+    context = load_benchmark_evaluation_context(Path(args.config), Path(args.mapping))
+    selected_ids = context.selection.selected_testcase_ids
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.workdir:
-        work_root = Path(args.workdir)
-        work_root.mkdir(parents=True, exist_ok=True)
-        temp_context = None
-    else:
-        temp_context = tempfile.TemporaryDirectory()
-        work_root = Path(temp_context.name)
-
-    try:
-        stage_benchmark_subset(
-            benchmark_root,
-            selection_cfg["java_relative_root"],
-            selected_ids,
-            work_root,
+    with staged_benchmark_workspace(
+        benchmark_root=context.benchmark_root,
+        java_relative_root=context.selection_cfg["java_relative_root"],
+        testcase_ids=selected_ids,
+        workdir=args.workdir,
+    ) as workspace:
+        eval_result = ingest_and_evaluate_subset(
+            java_root=workspace.java_root,
+            reset_neo4j=args.reset_neo4j,
+            logger=LOGGER,
         )
-        java_root = work_root / selection_cfg["java_relative_root"]
-
-        if args.reset_neo4j:
-            clear_graph()
-
-        LOGGER.info("Ingesting benchmark subset from %s", java_root)
-        ingest(java_root.as_posix())
-
-        eval_result = evaluate_policies()
         if eval_result.get("error"):
             LOGGER.error("Policy evaluation failed: %s", eval_result["error"])
             return 1
         violations = eval_result.get("violations") or []
 
-        candidates = _build_candidate_violations(violations, selection_cfg, categories, selection)
+        violations_by_testcase = group_violations_by_testcase(violations)
+        category_violations_by_id = collect_category_violations(
+            selected_category_ids=context.selected_category_ids,
+            categories_by_id=context.categories_by_id,
+            selection=context.selection,
+            violations_by_testcase=violations_by_testcase,
+        )
+        candidates: List[Dict[str, Any]] = []
+        for category_id in context.selected_category_ids:
+            spec = context.categories_by_id.get(category_id)
+            if not spec:
+                continue
+            for violation in category_violations_by_id.get(category_id, []):
+                candidate = dict(violation)
+                candidate["category"] = spec.label
+                candidates.append(candidate)
         if not candidates:
             LOGGER.warning("No candidate violations found for remediation evaluation.")
             return 1
@@ -253,9 +188,6 @@ def main() -> int:
                     "diff": apply_result.get("diff"),
                 }
             )
-    finally:
-        if temp_context is not None:
-            temp_context.cleanup()
 
     attempted = len(results)
     fix_success = sum(1 for item in results if item.get("policy_pass") is True)
@@ -270,11 +202,11 @@ def main() -> int:
 
     metrics = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "benchmark_root": benchmark_root.as_posix(),
-        "ground_truth_file": truth_path.as_posix(),
-        "ground_truth_schema": truth_schema,
-        "selection": selection_cfg,
-        "coverage_by_category": coverage_by_category,
+        "benchmark_root": context.benchmark_root.as_posix(),
+        "ground_truth_file": context.truth_path.as_posix(),
+        "ground_truth_schema": context.truth_schema,
+        "selection": context.selection_cfg,
+        "coverage_by_category": context.coverage_by_category,
         "mode": args.mode,
         "max_attempts": args.max_attempts,
         "attempted": attempted,
