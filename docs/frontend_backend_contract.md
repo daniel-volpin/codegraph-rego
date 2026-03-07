@@ -44,6 +44,11 @@ Request/response models: `api/models/`
 
 ### `GET /policy/evaluate`
 - Router: `api/routers/policy.py`
+- Query params:
+  - `max_bundles?: number`
+  - `max_total_violations?: number`
+  - `max_per_violation_id?: number`
+  - `rule_ids?: string[]` (repeat the parameter to filter server-side to an explicit rule subset)
 - Response:
   - HTTP `200` on success — object including at least `violations: Violation[]`
   - HTTP `500` on failure — `{ "error": string, ... }`
@@ -68,7 +73,7 @@ Request/response models: `api/models/`
 
 ### `POST /policy/evaluate_with_llm`
 - Router: `api/routers/policy.py`
-- Request JSON: `{ "limit": number, "model"?: string|null }`
+- Request JSON: `{ "limit": number, "model"?: string|null, "rule_ids"?: string[]|null }`
 - Response HTTP `200`: `{ "violations": Violation[], "enriched": object[] }`
 
 ### `GET /policy/catalog`
@@ -130,8 +135,8 @@ All API calls are centralised in `frontend/src/lib/api.ts`.
 | `fetchUploadStatus` | `GET /upload/status` | 1s polling while `complete: false` |
 | `fetchHealth` | `GET /health` | 15s polling; renders per-subsystem booleans |
 | `searchCode` | `POST /search` | JSON body `{"query": string}` |
-| `evaluatePolicies` | `GET /policy/evaluate` | Violations rendered using `violation_id/reason/...` fields |
-| `evaluatePoliciesWithLLM` | `POST /policy/evaluate_with_llm` | JSON body `{"limit", "model"}` |
+| `evaluatePolicies` | `GET /policy/evaluate` | Supports repeated `rule_ids` query params for benchmark/demo-focused server-side filtering |
+| `evaluatePoliciesWithLLM` | `POST /policy/evaluate_with_llm` | JSON body `{"limit", "model", "rule_ids"}` |
 | `fetchPolicyCatalog` | `GET /policy/catalog` | Renders catalog entries |
 | `explainOne` | `POST /policy/explain_one` | Single-violation LLM explanation |
 | `saveReview` / `fetchReviews` | `POST`/`GET /policy/reviews` | Triage review persistence |
@@ -140,6 +145,7 @@ All API calls are centralised in `frontend/src/lib/api.ts`.
 
 Notes:
 - The frontend should use `violation.remediation` metadata to decide whether automatic remediation actions are available.
+- The Policy page persists a view preset in local storage. `Framework demo focus` sends the benchmark-aligned `rule_ids` set to the backend instead of filtering findings only on the client.
 - Automatic remediation is intentionally tiered:
   - `full`: bounded auto-fix and verify paths are available
   - `guarded`: the UI should explain that `NO_FIX` is a valid safe outcome

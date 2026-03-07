@@ -18,7 +18,7 @@
 ## Scope
 - Main implementation target: JVM microservices, especially Java/Spring style codebases.
 - Main benchmark/evaluation target and primary demo substrate: OWASP Benchmark.
-- Core evaluated categories currently include weak crypto/hash, insecure randomness, and SQL injection-related checks.
+- Core evaluated categories currently include weak crypto/hash, insecure randomness, SQL injection, path traversal, command injection, LDAP injection, and XPath injection checks.
 - Realistic sample apps such as JHipster are secondary qualitative case studies for upload/search/policy browsing, not the primary remediation evidence surface.
 
 ## Important Thesis Framing
@@ -67,6 +67,7 @@
 - Benchmark-centered live demos should show both:
   - bounded success on full-support categories
   - explicit safe refusal on guarded categories when the evidence is insufficient
+  - explanation/manual-review coverage across multiple non-remediated benchmark families
 - If a local LLM behaves badly, first look at:
   - output contract
   - stop behavior

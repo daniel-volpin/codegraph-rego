@@ -33,12 +33,14 @@ async def policy_evaluate(
     max_bundles: int | None = Query(default=None, ge=1, le=5000),
     max_total_violations: int | None = Query(default=None),
     max_per_violation_id: int | None = Query(default=None),
+    rule_ids: list[str] | None = Query(default=None),
 ):
     try:
         result = evaluate_policies(
             max_bundles=max_bundles,
             max_total_violations=max_total_violations,
             max_per_violation_id=max_per_violation_id,
+            rule_ids=rule_ids,
         )
         status = 200 if "violations" in result or "opa_output" in result else 500
         return JSONResponse(result, status_code=status)
@@ -53,6 +55,7 @@ async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
         max_bundles=payload.max_bundles,
         max_total_violations=payload.max_total_violations,
         max_per_violation_id=payload.max_per_violation_id,
+        rule_ids=payload.rule_ids,
     )
     if "violations" not in res:
         return JSONResponse(res, status_code=500)

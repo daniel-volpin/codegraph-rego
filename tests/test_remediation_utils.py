@@ -110,6 +110,14 @@ class RemediationUtilsTests(unittest.TestCase):
             "ISO-A.9.4.1",
             supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
         )
+        sql_manual = get_remediation_capability(
+            "ISO-A.8-SQL-INJECTION",
+            supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
+        )
+        path_manual = get_remediation_capability(
+            "ISO-A.8-PATH-TRAVERSAL",
+            supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
+        )
 
         self.assertTrue(supported.supported)
         self.assertEqual(supported.support_tier, "full")
@@ -123,6 +131,8 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertFalse(unsupported.supported)
         self.assertEqual(unsupported.support_tier, "manual")
         self.assertEqual(unsupported.reason_code, "unsupported_rule_for_auto_fix")
+        self.assertIn("cross-layer parameterization", sql_manual.rationale)
+        self.assertIn("path policy", path_manual.rationale)
 
     def test_preview_virtual_fix_rejects_unsupported_rule_without_llm_call(self):
         svc_mod = self.service

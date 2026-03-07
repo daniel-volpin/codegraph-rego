@@ -68,6 +68,7 @@ Architecture notes:
 - `POST /search` (JSON body `{"query": "..."}`) → semantic hits + graph neighbours
 - `GET /policy/evaluate` → raw ISO control violations (OPA)  
 - `GET /policy/evaluate?max_bundles=500&max_total_violations=100&max_per_violation_id=25` → faster interactive scan (caps work per violation id + overall)  
+- `GET /policy/evaluate?rule_ids=ISO-A.10-WEAK-HASH&rule_ids=ISO-A.10-WEAK-RANDOM` → benchmark/demo-focused evaluation over an explicit rule subset  
 - `GET /policy/catalog` → catalog of controls, evidence requirements, and Rego rule mapping  
 - `POST /policy/evaluate_with_llm` (JSON body `{"limit": 5, "model": "..."}`) → violations + LLM guidance
 - `POST /policy/explain_one` (JSON body `{"violation": {...}, ...}`) → single-violation LLM explanation with both a compatibility string and structured `citation` / `why` / `fix` fields
@@ -88,7 +89,7 @@ The React / Vite SPA (port 5173 dev / 4173 preview) has five pages:
 | Home | `/` | Overview and system status |
 | Upload | `/upload` | ZIP upload with real-time ingestion progress |
 | Search | `/search` | Semantic query over method embeddings with interactive graph context |
-| Policy | `/policy` | Run ISO 27001 policy checks, browse violations, request LLM explanations, trigger Fix & Verify, and save triage reviews |
+| Policy | `/policy` | Run ISO 27001 policy checks, browse grouped violations, switch between all findings and the benchmark-focused demo preset, request LLM explanations, trigger Fix & Verify, and save triage reviews |
 | Settings | `/settings` | LLM provider / model / API base configuration |
 
 ---
@@ -130,7 +131,12 @@ For exact run artifacts, inspect the corresponding output directories under `out
 
 ## Policy Checks (OPA/Rego)
 
-`policy/iso_27001_access.rego` currently encodes access, logging, and cryptography checks using Neo4j method facts. Each rule id is described in `policy/catalog.json`, which records the normative reference, evidence fields, and the Rego rule that enforces it.
+The policy layer is split across focused Rego modules:
+- `policy/iso_27001_access.rego` for access-control and logging checks
+- `policy/iso_27001_crypto.rego` for weak hash / weak crypto / weak randomness checks
+- `policy/iso_27001_injection.rego` for benchmark-focused injection families such as SQLi, path traversal, command injection, LDAP injection, and XPath injection
+
+Each rule id is described in `policy/catalog.json`, which records the normative reference, evidence fields, and the Rego rule that enforces it.
 
 - **A.9.4.1 – Access control for applications**  
   Flags public HTTP endpoints missing security annotations such as `@PreAuthorize`, `@Secured`, `@RolesAllowed`, or `@DenyAll`.
@@ -143,6 +149,24 @@ For exact run artifacts, inspect the corresponding output directories under `out
 
 - **A.10 (ISO-A.10-WEAK-CRYPTO)**  
   Flags weak cipher usage such as `DES`, `RC4`, or `AES/ECB/*`.
+
+- **A.10 (ISO-A.10-WEAK-RANDOM)**  
+  Flags insecure randomness such as `java.util.Random`, `Math.random()`, or `SHA1PRNG` in security-sensitive code paths.
+
+- **A.8 (ISO-A.8-SQL-INJECTION)**  
+  Flags benchmark-style SQL injection sinks built from request-driven string concatenation, including `prepareStatement(...)` and `prepareCall(...)`.
+
+- **A.8 (ISO-A.8-PATH-TRAVERSAL)**  
+  Flags benchmark-style file/path construction from untrusted servlet input flowing into file system sinks.
+
+- **A.8 (ISO-A.8-CMD-INJECTION)**  
+  Flags command execution sinks such as `Runtime.exec(...)` and `ProcessBuilder` with user-controlled input.
+
+- **A.8 (ISO-A.8-LDAP-INJECTION)**  
+  Flags LDAP search/filter construction with untrusted input.
+
+- **A.8 (ISO-A.8-XPATH-INJECTION)**  
+  Flags XPath expression construction with untrusted input.
 
 Violations include the control id, method signature, file path, and a short reason.  
 Policy evaluation intentionally excludes Java files under `src/test/**` so thesis/demo findings stay focused on production-relevant application code.
@@ -193,7 +217,10 @@ python3 scripts/search/hybrid_code_search.py "find insecure hash usage"
 - Flow: gather violation context → LLM proposes full method → build virtual graph context in memory → re-run OPA on the virtual bundle.
 - No filesystem edits, compilation, or Neo4j mutations; the suggestion is for human review/copy‑paste.
 - Requires `opa` on `PATH`, LiteLLM-configured LLM access, and Neo4j reachable for the initial evidence.
-- Automatic remediation is intentionally limited to selected crypto findings (`ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-CRYPTO`). Other rules remain manual-review only.
+- Automatic remediation is intentionally tiered:
+  - full support: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-RANDOM`
+  - guarded support: `ISO-A.10-WEAK-CRYPTO`
+  - manual review only: SQL injection, path traversal, command injection, LDAP injection, XPath injection, and access-control/logging findings
 
 ## Remediation Apply & Verify (Temp Workspace)
 
@@ -247,7 +274,7 @@ python run_explanation_eval.py --config configs/benchmark_selection.json --mappi
 python run_remediation_eval.py --config configs/benchmark_selection.json --mapping configs/control_mapping.json --output-dir outputs/remediation_eval --sample-size 10 --reset-neo4j
 ```
 
-To run detection/explanation evaluation across multiple CWE categories (incl. `CWE-330` and `CWE-89`), use:
+To run detection/explanation evaluation across multiple CWE categories (incl. `CWE-22`, `CWE-78`, `CWE-89`, `CWE-90`, `CWE-327`, `CWE-328`, `CWE-330`, and `CWE-643`), use:
 ```bash
 python run_benchmark_eval.py --config configs/benchmark_selection.multicat.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval_multicat --reset-neo4j
 python run_explanation_eval.py --config configs/benchmark_selection.multicat.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval_multicat --reset-neo4j
@@ -272,11 +299,15 @@ Current mapping includes:
 - `CWE-328` → `ISO-A.10-WEAK-HASH`
 - `CWE-330` → `ISO-A.10-WEAK-RANDOM`
 - `CWE-89` → `ISO-A.8-SQL-INJECTION` (pragmatic mapping for evaluation; not a claim of perfect ISO alignment)
+- `CWE-22` → `ISO-A.8-PATH-TRAVERSAL` (pragmatic mapping for evaluation)
+- `CWE-78` → `ISO-A.8-CMD-INJECTION` (pragmatic mapping for evaluation)
+- `CWE-90` → `ISO-A.8-LDAP-INJECTION` (pragmatic mapping for evaluation)
+- `CWE-643` → `ISO-A.8-XPATH-INJECTION` (pragmatic mapping for evaluation)
 
 Auto-remediation is intentionally tiered:
 - Full support: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-RANDOM`
 - Guarded support: `ISO-A.10-WEAK-CRYPTO`
-- Manual review only: `ISO-A.8-SQL-INJECTION` and access-control findings such as `ISO-A.9.4.1`
+- Manual review only: `ISO-A.8-SQL-INJECTION`, `ISO-A.8-PATH-TRAVERSAL`, `ISO-A.8-CMD-INJECTION`, `ISO-A.8-LDAP-INJECTION`, `ISO-A.8-XPATH-INJECTION`, and access-control/logging findings such as `ISO-A.9.4.1`
 
 Guarded remediation may validly return `NO_FIX` when the method-local evidence is insufficient for a safe minimal transformation. That refusal is a safety feature, not a pipeline failure.
 
@@ -290,6 +321,7 @@ The recommended live thesis/demo input is a curated OWASP Benchmark subset that 
 - structured explanation
 - bounded remediation
 - dry-run re-verification
+- benchmark-focused rule filtering via the Policy page's `Framework demo focus` preset
 
 Generate it with:
 

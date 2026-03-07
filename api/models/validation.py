@@ -58,6 +58,7 @@ class PolicyEvaluateWithLLMRequest(BaseModel):
     max_bundles: Optional[int] = None
     max_total_violations: Optional[int] = None
     max_per_violation_id: Optional[int] = None
+    rule_ids: Optional[List[str]] = None
 
 
 class PolicyExplainOneRequest(BaseModel):

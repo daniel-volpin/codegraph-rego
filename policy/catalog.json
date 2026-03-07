@@ -71,7 +71,7 @@
       "title": "Cryptography (Weak Hash)",
       "reference": "ISO/IEC 27001:2022 A.10",
       "summary": "Cryptographic controls should avoid weak hash algorithms such as MD5.",
-      "rego_module": "policy/iso_27001_access.rego",
+      "rego_module": "policy/iso_27001_crypto.rego",
       "rego_rule": "violations",
       "evidence_fields": [
         "signature",
@@ -87,7 +87,7 @@
       "title": "Cryptography (Weak Cipher)",
       "reference": "ISO/IEC 27001:2022 A.10",
       "summary": "Cryptographic controls should avoid weak or deprecated ciphers and insecure modes.",
-      "rego_module": "policy/iso_27001_access.rego",
+      "rego_module": "policy/iso_27001_crypto.rego",
       "rego_rule": "violations",
       "evidence_fields": [
         "signature",
@@ -103,7 +103,7 @@
       "title": "Cryptography (Insecure Randomness)",
       "reference": "ISO/IEC 27001:2022 A.10",
       "summary": "Security-sensitive code should use cryptographically strong randomness rather than predictable PRNGs.",
-      "rego_module": "policy/iso_27001_access.rego",
+      "rego_module": "policy/iso_27001_crypto.rego",
       "rego_rule": "violations",
       "evidence_fields": [
         "signature",
@@ -118,13 +118,77 @@
       "title": "Secure Development (SQL Injection)",
       "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
       "summary": "Application code should prevent SQL injection by avoiding dynamic query construction with untrusted input.",
-      "rego_module": "policy/iso_27001_access.rego",
+      "rego_module": "policy/iso_27001_injection.rego",
       "rego_rule": "violations",
       "evidence_fields": [
         "signature",
         "file_path",
         "source_code",
         "called_signatures"
+      ]
+    },
+    {
+      "id": "ISO-A.8-PATH-TRAVERSAL",
+      "control": "A.8",
+      "title": "Secure Development (Path Traversal)",
+      "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "summary": "Application code should prevent path traversal by avoiding direct file path construction from untrusted input.",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "source_code",
+        "called_signatures",
+        "analysis_flags"
+      ]
+    },
+    {
+      "id": "ISO-A.8-CMD-INJECTION",
+      "control": "A.8",
+      "title": "Secure Development (Command Injection)",
+      "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "summary": "Application code should prevent command injection by avoiding shell or process command construction from untrusted input.",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "source_code",
+        "called_signatures",
+        "analysis_flags"
+      ]
+    },
+    {
+      "id": "ISO-A.8-LDAP-INJECTION",
+      "control": "A.8",
+      "title": "Secure Development (LDAP Injection)",
+      "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "summary": "Application code should prevent LDAP injection by avoiding concatenated LDAP filter construction with untrusted input.",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "source_code",
+        "called_signatures",
+        "analysis_flags"
+      ]
+    },
+    {
+      "id": "ISO-A.8-XPATH-INJECTION",
+      "control": "A.8",
+      "title": "Secure Development (XPath Injection)",
+      "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "summary": "Application code should prevent XPath injection by avoiding concatenated XPath expression construction with untrusted input.",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "source_code",
+        "called_signatures",
+        "analysis_flags"
       ]
     }
   ]

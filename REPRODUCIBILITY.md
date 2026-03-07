@@ -45,6 +45,8 @@ Interactive UI explains now use the same structured `citation` / `why` / `fix` r
 - medium thesis check: `configs/benchmark_selection.multicat_medium.json`
 - full selected-category run: `configs/benchmark_selection.multicat_full.json`
 - remediation smoke: `configs/benchmark_selection.remediation_cwe328_smoke.json`
+- benchmark demo upload prep: `configs/benchmark_selection.framework_demo.json`
+- expanded benchmark evaluation: `configs/benchmark_selection.expanded_eval.json`
 
 ## 4a. Build the Recommended Demo Upload
 For the live thesis/demo UI flow, use the curated OWASP Benchmark pack instead of a generic sample app:
@@ -62,7 +64,9 @@ This creates:
 The selected benchmark cases cover:
 - full remediation: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-RANDOM`
 - guarded remediation: `ISO-A.10-WEAK-CRYPTO`
-- explanation/manual-only: `ISO-A.8-SQL-INJECTION`
+- explanation/manual-only: `ISO-A.8-SQL-INJECTION`, `ISO-A.8-PATH-TRAVERSAL`, `ISO-A.8-CMD-INJECTION`, `ISO-A.8-LDAP-INJECTION`, `ISO-A.8-XPATH-INJECTION`
+
+For the UI thesis/demo, use the Policy page's `Framework demo focus` preset after upload. That preset sends an explicit `rule_ids` filter to the backend so the grouped table reflects the benchmark-aligned categories rather than the full servlet-heavy policy surface.
 
 ## 5. Run Detection
 ```bash
@@ -123,7 +127,7 @@ python run_remediation_eval.py \
 - Production-minded remediation is intentionally bounded:
   - full support for weak hash and weak randomness
   - guarded support for weak crypto
-  - explanation/manual-only for SQL injection and broad access-control findings
+  - explanation/manual-only for SQL injection, path traversal, command injection, LDAP injection, XPath injection, and broad access-control/logging findings
 - `NO_FIX` is an expected safe outcome for guarded remediation, not a crash.
 
 ## 10. Notes

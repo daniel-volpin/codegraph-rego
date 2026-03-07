@@ -30,17 +30,41 @@ The realistic Spring sample app remains useful for qualitative browsing and poli
   - Expected tier: `full`
   - Rationale: direct `new java.util.Random()` usage
 
-- `BenchmarkTest02023`
+- `BenchmarkTest00005`
   - Category: `crypto-md5`
   - Rule: `ISO-A.10-WEAK-CRYPTO`
   - Expected tier: `guarded`
-  - Rationale: explicit weak cipher literal (`DESede/ECB/PKCS5Padding`)
+  - Rationale: explicit weak cipher literal (`DES/CBC/PKCS5Padding`)
 
 - `BenchmarkTest00008`
   - Category: `sql-injection`
   - Rule: `ISO-A.8-SQL-INJECTION`
   - Expected tier: `manual`
   - Rationale: explanation-first benchmark positive with no automatic remediation support
+
+- `BenchmarkTest00001`
+  - Category: `path-traversal`
+  - Rule: `ISO-A.8-PATH-TRAVERSAL`
+  - Expected tier: `manual`
+  - Rationale: direct file path construction from cookie-derived input
+
+- `BenchmarkTest00006`
+  - Category: `command-injection`
+  - Rule: `ISO-A.8-CMD-INJECTION`
+  - Expected tier: `manual`
+  - Rationale: `ProcessBuilder` command assembled from untrusted header input
+
+- `BenchmarkTest00012`
+  - Category: `ldap-injection`
+  - Rule: `ISO-A.8-LDAP-INJECTION`
+  - Expected tier: `manual`
+  - Rationale: LDAP filter string concatenates untrusted header input
+
+- `BenchmarkTest00207`
+  - Category: `xpath-injection`
+  - Rule: `ISO-A.8-XPATH-INJECTION`
+  - Expected tier: `manual`
+  - Rationale: XPath expression concatenates untrusted header input
 
 ## Generate the demo pack
 

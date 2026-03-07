@@ -3,6 +3,7 @@ import {
   PolicyExplainOneRequest,
   PolicyExplainOneResponse,
   PolicyCatalogResponse,
+  PolicyEvaluateOptions,
   PolicyEvaluateResponse,
   PolicyReviewCreateRequest,
   PolicyReviewCreateResponse,
@@ -109,11 +110,7 @@ export async function searchCode(query: string): Promise<SearchResponse> {
   return handleResponse<SearchResponse>(response);
 }
 
-export async function evaluatePolicies(args?: {
-  maxBundles?: number;
-  maxTotalViolations?: number;
-  maxPerViolationId?: number;
-}): Promise<PolicyEvaluateResponse> {
+export async function evaluatePolicies(args?: PolicyEvaluateOptions): Promise<PolicyEvaluateResponse> {
   const params = new URLSearchParams();
   if (typeof args?.maxBundles === "number") {
     params.set("max_bundles", String(args.maxBundles));
@@ -123,6 +120,11 @@ export async function evaluatePolicies(args?: {
   }
   if (typeof args?.maxPerViolationId === "number") {
     params.set("max_per_violation_id", String(args.maxPerViolationId));
+  }
+  for (const ruleId of args?.ruleIds ?? []) {
+    if (ruleId.trim()) {
+      params.append("rule_ids", ruleId.trim());
+    }
   }
   const qs = params.toString();
   const response = await fetch(
@@ -142,6 +144,7 @@ export async function evaluatePoliciesWithLLM(payload: {
   maxBundles?: number;
   maxTotalViolations?: number;
   maxPerViolationId?: number;
+  ruleIds?: string[];
 }): Promise<PolicyEvaluateResponse> {
   const response = await fetch(`${API_BASE_URL}/policy/evaluate_with_llm`, {
     method: "POST",
@@ -155,6 +158,7 @@ export async function evaluatePoliciesWithLLM(payload: {
       max_bundles: payload.maxBundles,
       max_total_violations: payload.maxTotalViolations,
       max_per_violation_id: payload.maxPerViolationId,
+      rule_ids: payload.ruleIds,
     }),
   });
 

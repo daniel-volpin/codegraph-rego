@@ -71,6 +71,42 @@
       "object": "SQLQuery",
       "conditions": ["noInjection"],
       "description": "Application code should prevent SQL injection by avoiding dynamic SQL concatenation with untrusted input"
+    },
+    {
+      "standard": "ISO-27001",
+      "id": "A.8-PATH-TRAVERSAL",
+      "subject": "Developer",
+      "action": "Validate",
+      "object": "FilePath",
+      "conditions": ["safePathHandling"],
+      "description": "Application code should prevent path traversal by avoiding direct file path construction from untrusted input"
+    },
+    {
+      "standard": "ISO-27001",
+      "id": "A.8-CMD-INJECTION",
+      "subject": "Developer",
+      "action": "Validate",
+      "object": "CommandExecution",
+      "conditions": ["noShellInjection"],
+      "description": "Application code should prevent command injection by avoiding shell or process command construction from untrusted input"
+    },
+    {
+      "standard": "ISO-27001",
+      "id": "A.8-LDAP-INJECTION",
+      "subject": "Developer",
+      "action": "Validate",
+      "object": "LDAPQuery",
+      "conditions": ["safeDirectoryQuery"],
+      "description": "Application code should prevent LDAP injection by avoiding concatenated LDAP filter construction with untrusted input"
+    },
+    {
+      "standard": "ISO-27001",
+      "id": "A.8-XPATH-INJECTION",
+      "subject": "Developer",
+      "action": "Validate",
+      "object": "XPathQuery",
+      "conditions": ["safeXPathQuery"],
+      "description": "Application code should prevent XPath injection by avoiding concatenated XPath expression construction with untrusted input"
     }
   ]
 }

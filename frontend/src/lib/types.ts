@@ -32,6 +32,13 @@ export interface PolicyEvaluateResponse {
   error?: string;
 }
 
+export interface PolicyEvaluateOptions {
+  maxBundles?: number;
+  maxTotalViolations?: number;
+  maxPerViolationId?: number;
+  ruleIds?: string[];
+}
+
 export interface RemediationCapability {
   supported: boolean;
   support_tier: "full" | "guarded" | "manual";

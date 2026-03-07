@@ -21,6 +21,10 @@ The thesis/demo surface now uses a bounded remediation matrix:
   - `ISO-A.10-WEAK-CRYPTO`
 - Manual review only:
   - `ISO-A.8-SQL-INJECTION`
+  - `ISO-A.8-PATH-TRAVERSAL`
+  - `ISO-A.8-CMD-INJECTION`
+  - `ISO-A.8-LDAP-INJECTION`
+  - `ISO-A.8-XPATH-INJECTION`
   - access-control findings such as `ISO-A.9.4.1`
 
 This is intentional. "Production-ready" in this repo means deterministic support boundaries, auditable refusal behavior, and dry-run verification gates, not universal autonomous repair.
