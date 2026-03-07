@@ -81,7 +81,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run detection + explanation + remediation experiments.")
     parser.add_argument(
         "--config",
-        default="configs/benchmark_selection.multicat.json",
+        default="configs/benchmark/multicat_medium.json",
         help="Benchmark selection config JSON (default: %(default)s)",
     )
     parser.add_argument(
