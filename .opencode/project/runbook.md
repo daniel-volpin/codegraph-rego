@@ -58,11 +58,9 @@ LLM_ENABLE_THINKING=false \
 - Remediation:
   - `remediation_metrics.json`, `remediation_metrics.csv`
 
-## Local Agent / OpenCode Setup
+## Skill / Agent Usage
 
-- Enable LM Studio `Auto-Evict`.
-- Explanation and remediation may use different models.
-- Local OpenCode config should enable:
-  - `memory_local`
-  - `git_local_codegraph`
-- Keep local memory supplemental only; benchmark outputs stay in `outputs/`.
+- Use `benchmark-runner` or `@benchmark-operator` for running and interpreting benchmark workflows.
+- Use `policy-debugger` when detection results look wrong or noisy.
+- Use `remediation-evaluator` for supported remediation quality checks.
+- Use `thesis-results` for paper-ready summaries.
