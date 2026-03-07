@@ -22,16 +22,27 @@ Source: `outputs/thesis_final_explanation_full/table.md`
 - Overall `Citation@Context`: `0.8125`
 - Overall `Citation@NoContext`: `0.8125`
 
-## Remediation Supported Medium
+## Remediation Supported Medium (Compile-Backed Product Gate)
 
-Source: `outputs/thesis_final_remediation_supported_medium/remediation_metrics.json`
+Source: `outputs/span_edit_supported_medium_v2/summary.md`
 
-- Attempted supported cases: `17`
-- Successful: `6`
-- Success rate: `35.29%`
-- Build attempts: `0`
+- Attempted supported cases: `10`
+- Structured valid: `10`
+- Replacement applied: `10`
+- Policy fixed: `9`
+- Build attempted: `10`
+- Build success: `9`
+- Fully verified success rate: `90%`
+
+## Remediation Bounded Smoke
+
+Source: `outputs/span_edit_bounded_smoke_v2/summary.md`
+
+- Attempted supported cases: `3`
+- Fully verified success rate: `100%`
 
 ## Reading The Results
 
 - Detection and explanation are strong enough to support the benchmark-first thesis story.
-- Remediation is real and bounded, but still partial rather than universally reliable.
+- Compile-backed remediation is now real on the successful supported cases.
+- Remediation remains bounded and still has one known supported-medium failure on a weak-random semantic edit.

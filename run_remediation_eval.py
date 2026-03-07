@@ -166,6 +166,7 @@ def main() -> int:
                 mode=args.mode,
                 max_attempts=args.max_attempts,
                 raw_capture_dir=output_dir.as_posix(),
+                build_command=args.build_command or context.selection_cfg.get("build_command"),
             )
             verification = apply_result.get("verification") or {}
             compilation = apply_result.get("compilation") or {}
@@ -195,6 +196,13 @@ def main() -> int:
 
     attempted = len(results)
     fix_success = sum(1 for item in results if item.get("policy_pass") is True)
+    structured_valid = sum(
+        1
+        for item in results
+        if isinstance(item.get("generation"), dict) and item["generation"].get("raw_response_valid") is True
+    )
+    replacement_applied = sum(1 for item in results if item.get("patch_applied") is True)
+    policy_pass_count = sum(1 for item in results if item.get("policy_pass") is True)
     build_attempted = sum(
         1
         for item in results
@@ -215,6 +223,9 @@ def main() -> int:
         "max_attempts": args.max_attempts,
         "attempted": attempted,
         "fix_success": fix_success,
+        "structured_valid": structured_valid,
+        "replacement_applied": replacement_applied,
+        "policy_pass_count": policy_pass_count,
         "build_attempted": build_attempted,
         "build_success": build_success,
         "fix_success_rate": round(fix_rate, 4),
@@ -255,6 +266,9 @@ def main() -> int:
     table_rows = [
         ["Fix Success Rate", round(fix_rate, 4)],
         ["Build Success Rate", round(build_rate, 4)],
+        ["Structured Valid", structured_valid],
+        ["Replacement Applied", replacement_applied],
+        ["Policy Pass Count", policy_pass_count],
         ["Build Attempts", build_attempted],
         ["Attempted", attempted],
     ]
@@ -264,6 +278,25 @@ def main() -> int:
     else:
         table = render_markdown_table(headers, table_rows)
         (output_dir / "table.md").write_text(table, encoding="utf-8")
+
+    summary_lines = [
+        "# Remediation Summary",
+        "",
+        f"- Attempted: `{attempted}`",
+        f"- Structured valid: `{structured_valid}`",
+        f"- Replacement applied: `{replacement_applied}`",
+        f"- Policy fixed: `{policy_pass_count}`",
+        f"- Build attempted: `{build_attempted}`",
+        f"- Build success: `{build_success}`",
+        f"- Fully verified success rate: `{round(fix_rate, 4)}`",
+        f"- Build success rate: `{round(build_rate, 4)}`",
+        "",
+        "Interpretation:",
+        "- `Policy fixed` means the target rule was removed and no new violations were introduced.",
+        "- `Build success` means compilation was attempted and passed.",
+        "- `Fully verified` is the current remediation benchmark success metric.",
+    ]
+    (output_dir / "summary.md").write_text("\n".join(summary_lines), encoding="utf-8")
 
     LOGGER.info("Remediation evaluation complete. Outputs written to %s", output_dir)
     return 0

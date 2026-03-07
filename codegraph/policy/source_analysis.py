@@ -59,6 +59,80 @@ _SQL_PREPARE_CALL_RE = re.compile(r"prepareCall\s*\(", re.IGNORECASE)
 _SQL_CALLABLE_STATEMENT_RE = re.compile(r"CallableStatement", re.IGNORECASE)
 
 
+def _strip_comments_and_string_literals(source_code: str) -> str:
+    if not source_code:
+        return source_code
+
+    sanitized: list[str] = []
+    in_block_comment = False
+    in_string = False
+    in_char = False
+    escaped = False
+    quote_char = ""
+    index = 0
+
+    while index < len(source_code):
+        char = source_code[index]
+        nxt = source_code[index + 1] if index + 1 < len(source_code) else ""
+
+        if in_block_comment:
+            if char == "*" and nxt == "/":
+                sanitized.extend("  ")
+                in_block_comment = False
+                index += 2
+                continue
+            sanitized.append("\n" if char == "\n" else " ")
+            index += 1
+            continue
+
+        if in_string or in_char:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote_char:
+                if in_string:
+                    in_string = False
+                else:
+                    in_char = False
+            sanitized.append("\n" if char == "\n" else " ")
+            index += 1
+            continue
+
+        if char == "/" and nxt == "/":
+            sanitized.extend("  ")
+            index += 2
+            while index < len(source_code) and source_code[index] != "\n":
+                sanitized.append(" ")
+                index += 1
+            continue
+
+        if char == "/" and nxt == "*":
+            sanitized.extend("  ")
+            in_block_comment = True
+            index += 2
+            continue
+
+        if char == '"':
+            in_string = True
+            quote_char = '"'
+            sanitized.append(" ")
+            index += 1
+            continue
+
+        if char == "'":
+            in_char = True
+            quote_char = "'"
+            sanitized.append(" ")
+            index += 1
+            continue
+
+        sanitized.append(char)
+        index += 1
+
+    return "".join(sanitized)
+
+
 def analyze_policy_indicators(source_code: str) -> Dict[str, bool]:
     if not source_code:
         return {
@@ -106,7 +180,9 @@ def analyze_policy_indicators(source_code: str) -> Dict[str, bool]:
             weak_cipher_literal = True
             break
 
-    if any(pattern.search(source_code) for pattern in _INSECURE_RANDOM_PATTERNS):
+    source_without_literals = _strip_comments_and_string_literals(source_code)
+
+    if any(pattern.search(source_without_literals) for pattern in _INSECURE_RANDOM_PATTERNS):
         insecure_random_detected = True
 
     if _SHA1_PRNG_RE.search(source_code):

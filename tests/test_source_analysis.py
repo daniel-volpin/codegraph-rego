@@ -47,6 +47,16 @@ class TestSourceAnalysis(unittest.TestCase):
         self.assertTrue(flags["insecure_random_detected"])
         self.assertTrue(flags["sha1prng_detected"])
 
+    def test_math_random_string_literal_not_flagged(self) -> None:
+        source = 'response.getWriter().println("Weak Randomness Test java.lang.Math.random() executed");'
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["insecure_random_detected"])
+
+    def test_math_random_comment_not_flagged(self) -> None:
+        source = "// java.lang.Math.random() should not trigger here\nint x = 1;"
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["insecure_random_detected"])
+
     def test_path_traversal_detected(self) -> None:
         source = 'String fileName = base + request.getHeader("x"); new java.io.FileInputStream(new java.io.File(fileName));'
         flags = analyze_crypto_indicators(source)

@@ -113,8 +113,16 @@ class RemediationPreviewRequest(BaseModel):
     file_path: Optional[str] = None
 
 
+class RemediationEditResponse(BaseModel):
+    start_line: int
+    end_line: int
+    original_lines: List[str]
+    replacement_lines: List[str]
+
+
 class RemediationGenerationResponse(BaseModel):
-    decision: Optional[Literal["replace_method", "no_fix"]] = None
+    decision: Optional[Literal["apply_edits", "no_fix"]] = None
+    edits: Optional[List[RemediationEditResponse]] = None
     replacement_method_lines: Optional[List[str]] = None
     replacement_method_code: Optional[str] = None
     reason: Optional[str] = None
