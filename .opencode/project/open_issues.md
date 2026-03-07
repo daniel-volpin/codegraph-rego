@@ -10,7 +10,6 @@
 
 - Weak crypto is guarded and may still need safe refusal (`NO_FIX`) on harder cases.
 - Explanation quality is good overall, but some categories remain weaker than others.
-- Root-level legacy benchmark configs still exist for compatibility and can confuse operators if used accidentally.
 
 ## What Not To Overclaim
 

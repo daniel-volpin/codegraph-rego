@@ -8,7 +8,6 @@ Keep this file short. Detailed project context lives under `.opencode/project/`.
 
 - Primary workflow: ingest Java -> Neo4j graph -> OPA/Rego policy evaluation -> structured explanation -> bounded remediation -> re-verification.
 - Canonical benchmark configs live in `configs/benchmark/`.
-- Root-level `configs/benchmark_selection*.json` files are compatibility shims, not defaults.
 - Current benchmark scope:
   - `CWE-22` -> `ISO-A.8-PATH-TRAVERSAL`
   - `CWE-78` -> `ISO-A.8-CMD-INJECTION`

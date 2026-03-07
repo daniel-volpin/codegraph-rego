@@ -59,7 +59,7 @@ Interactive UI explains now use the same structured `citation` / `why` / `fix` r
 - benchmark demo upload prep: `configs/benchmark/framework_demo.json`
 - expanded benchmark evaluation: `configs/benchmark/expanded_eval.json`
 
-Canonical benchmark configs live under `configs/benchmark/`. Root-level `configs/benchmark_selection*.json` files are retained only for backwards compatibility with older notes or scripts.
+Canonical benchmark configs live under `configs/benchmark/`.
 
 ## 4a. Build the Recommended Demo Upload
 For the live thesis/demo UI flow, use the curated OWASP Benchmark pack instead of a generic sample app:

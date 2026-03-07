@@ -27,7 +27,6 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
 ## Canonical Configs
 
 - Canonical benchmark configs live in `configs/benchmark/`.
-- Root-level `configs/benchmark_selection*.json` are compatibility shims only.
 - Most important configs:
   - `baseline.json`
   - `multicat_medium.json`

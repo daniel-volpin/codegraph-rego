@@ -315,7 +315,7 @@ export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
 
 See `REPRODUCIBILITY.md` for full prerequisites, configuration, and output formats.
 
-Canonical benchmark configs now live under `configs/benchmark/`. Root-level `configs/benchmark_selection*.json` files remain only as legacy compatibility entrypoints for older notes and scripts.
+Canonical benchmark configs now live under `configs/benchmark/`.
 
 ### Covered Categories (OWASP Benchmark)
 This prototype uses a manual CWE → ISO-control → Rego mapping layer (see `configs/control_mapping.json`) to evaluate detectors against the OWASP Benchmark ground truth.
