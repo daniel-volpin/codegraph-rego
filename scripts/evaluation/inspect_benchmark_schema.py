@@ -28,7 +28,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    selection_cfg = load_selection_config(Path(args.config))
+    repo_root = Path(__file__).resolve().parents[2]
+    config_path = Path(args.config)
+    if not config_path.is_absolute():
+        config_path = (repo_root / config_path).resolve()
+
+    selection_cfg = load_selection_config(config_path)
     benchmark_root = Path(selection_cfg["benchmark_root"])
     truth_path = find_ground_truth_file(benchmark_root, selection_cfg.get("ground_truth_path"))
     schema = inspect_ground_truth_schema(truth_path)
@@ -36,7 +41,10 @@ def main() -> int:
     payload = json.dumps(schema, indent=2)
     print(payload)
     if args.output:
-        Path(args.output).write_text(payload, encoding="utf-8")
+        output_path = Path(args.output)
+        if not output_path.is_absolute():
+            output_path = (repo_root / output_path).resolve()
+        output_path.write_text(payload, encoding="utf-8")
     return 0
 
 

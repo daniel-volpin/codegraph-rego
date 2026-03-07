@@ -40,9 +40,7 @@ def _load_json(path: Path) -> Any:
 
 def _supported_remediation_rule_ids() -> List[str]:
     # Internal source-of-truth for "what can we remediate today".
-    from codegraph.remediation.service import (
-        RemediationService,
-    )  # local import (avoid import cost for non-remediation runs)
+    from codegraph.remediation.service import RemediationService
 
     return sorted([str(key) for key in RemediationService._FIX_STRATEGIES.keys()])  # pylint: disable=protected-access
 
@@ -137,7 +135,7 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = parse_args()
 
-    repo_root = Path(__file__).resolve().parent
+    repo_root = Path(__file__).resolve().parents[2]
     selection_path = (repo_root / args.config).resolve() if not os.path.isabs(args.config) else Path(args.config)
     mapping_path = (repo_root / args.mapping).resolve() if not os.path.isabs(args.mapping) else Path(args.mapping)
 
@@ -168,7 +166,7 @@ def main() -> int:
         commands_executed.append(" ".join(cmd))
         _run(cmd)
 
-    # Stage A: detection metrics
+    # Stage A: detection metrics.
     cmd = [
         sys.executable,
         str(repo_root / "run_benchmark_eval.py"),
@@ -185,7 +183,7 @@ def main() -> int:
         cmd.append("--reset-neo4j")
     add_and_run(cmd)
 
-    # Stage B: explanation metrics
+    # Stage B: explanation metrics.
     cmd = [
         sys.executable,
         str(repo_root / "run_explanation_eval.py"),
@@ -202,7 +200,7 @@ def main() -> int:
         cmd.append("--reset-neo4j")
     add_and_run(cmd)
 
-    # Stage C: remediation metrics (only for categories with supported remediation strategies)
+    # Stage C: remediation metrics (only for categories with supported remediation strategies).
     remediation_attempted, remediation_skipped = _partition_categories_for_remediation(selection_cfg, mapping_cfg)
     remediation_config_path: Path | None = None
     if remediation_attempted:
@@ -246,7 +244,7 @@ def main() -> int:
         "mapping_path": str(mapping_path),
         "owasp_root": os.environ.get("OWASP_BENCHMARK_ROOT"),
         "commands_executed": commands_executed,
-        "output_dirs": {k: str(v) for k, v in stage_dirs.items()},
+        "output_dirs": {key: str(value) for key, value in stage_dirs.items()},
         "remediation": {
             "supported_rule_ids": _supported_remediation_rule_ids(),
             "categories_attempted": remediation_attempted,

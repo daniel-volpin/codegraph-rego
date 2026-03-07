@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
-from codegraph.api.services.remediation_service import apply_remediation
+from codegraph.remediation.orchestration import apply_remediation
 from codegraph.evaluation.pipeline import (
     collect_category_violations,
     group_violations_by_testcase,

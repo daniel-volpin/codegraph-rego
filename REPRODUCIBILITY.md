@@ -12,7 +12,6 @@ This file is the shortest path to rerun the thesis evaluation pipeline on this b
 
 ## 2. Environment
 ```bash
-pip install uv
 uv sync
 source .venv/bin/activate
 
@@ -22,7 +21,7 @@ export NEO4J_PASS=your_password
 export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
 
 export LLM_PROVIDER=openai
-export LLM_API_BASE=http://127.0.0.1:1234/v1
+export LLM_API_BASE=http://localhost:1234/v1
 export LLM_API_KEY=lm-studio
 export LLM_MODEL=qwen/qwen3-8b
 export LLM_ENABLE_THINKING=false
@@ -105,6 +104,13 @@ python run_remediation_eval.py \
 ## 10. Notes
 - Use `--reset-neo4j` for reproducible runs.
 - Keep separate output directories for separate experiments.
+- Secondary operator utilities now live under `scripts/`:
+  - `scripts/ingestion/codebase_to_neo4j.py`
+  - `scripts/ingestion/build_code_embeddings.py`
+  - `scripts/search/hybrid_code_search.py`
+  - `scripts/policy/policy_eval_cli.py`
+  - `scripts/evaluation/inspect_benchmark_schema.py`
+  - `scripts/evaluation/run_experiments.py`
 - If the local LLM behaves badly, first inspect:
   - `progress.json`
   - `request_metrics.jsonl`

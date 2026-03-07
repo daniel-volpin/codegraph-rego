@@ -43,7 +43,7 @@ def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv)
     import codegraph.embedding.service as embedding_module
 
-    # override module-level constants so the service picks up CLI overrides
+    # Override module-level constants so the service picks up CLI overrides.
     embedding_module.NEO4J_URI = args.neo4j_uri
     embedding_module.NEO4J_USER = args.neo4j_user
     embedding_module.NEO4J_PASS = args.neo4j_pass

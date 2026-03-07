@@ -60,7 +60,7 @@ def main(argv: List[str] | None = None) -> int:
 
     from codegraph.search import service as search_service
 
-    # override module-level constants to honor CLI inputs
+    # Override module-level constants to honor CLI inputs.
     search_service.FAISS_INDEX_PATH = args.index_path
     search_service.SIGNATURE_MAP_PATH = args.legacy_signature_map
     search_service.SIGNATURE_MAP_PATH_FULL = args.signature_map
