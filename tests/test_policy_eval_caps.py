@@ -93,6 +93,50 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
         # must still respect both total and per-violation-id limits.
         self.assertEqual(mock_eval.call_count, len(bundles))
 
+    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
+    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
+    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
+    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
+    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
+    def test_policy_results_expose_top_level_code_snippet_fields(
+        self,
+        _mock_which,
+        _mock_resolve_catalog,
+        _mock_load_catalog,
+        _mock_load_rules,
+        _mock_catalog_entries,
+    ) -> None:
+        from codegraph.policy.integration import evaluate_policies
+
+        bundles = [
+            {
+                "target_method": "m1",
+                "file_path": "f1",
+                "source_code": "public void m1() {}",
+                "graph_context": {},
+                "vector_context": [],
+                "start_line": 10,
+                "end_line": 12,
+                "analysis_flags": {"md5_detected": False},
+            }
+        ]
+
+        with (
+            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
+            patch(
+                "codegraph.policy.integration._evaluate_bundle",
+                return_value=[{"violation_id": "A", "reason": "r", "severity": "high"}],
+            ),
+        ):
+            result = evaluate_policies()
+
+        violation = result["violations"][0]
+        self.assertEqual(violation["code_snippet"], "public void m1() {}")
+        self.assertTrue(violation["snippet_available"])
+        self.assertEqual(violation["snippet_start_line"], 10)
+        self.assertEqual(violation["snippet_end_line"], 12)
+        self.assertEqual(violation["evidence"]["source_code"], "public void m1() {}")
+
 
 if __name__ == "__main__":
     unittest.main()

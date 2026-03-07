@@ -47,6 +47,9 @@ interface ViolationRow {
   autoRemediable: boolean;
 }
 
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+
 const AUTO_RULES = new Set(["ISO-A.10-WEAK-HASH", "ISO-A.10-WEAK-CRYPTO", "A.10-WEAK-HASH", "A.10-WEAK-CRYPTO"]);
 
 const asString = (value: unknown, fallback = "—") => (typeof value === "string" && value.trim() ? value : fallback);
@@ -74,6 +77,8 @@ const compactTargetMethod = (value: string) => {
 };
 
 const normalizeViolation = (item: RawViolation): ViolationRow => {
+  const evidence = asRecord(item.evidence);
+  const evidenceSnippet = evidence ? asString(evidence.source_code ?? "", "") : "";
   const ruleId = asString(item.violation_id ?? item.rule_id);
   const targetMethod = asString(item.target_method);
   const filePath = asString(item.file_path);
@@ -87,7 +92,7 @@ const normalizeViolation = (item: RawViolation): ViolationRow => {
     reason: asString(item.reason ?? item.description),
     // Prefer an empty string over the "—" placeholder so we can render an explicit
     // "snippet unavailable" message in the UI.
-    snippet: asString(item.code_snippet ?? item.updated_source_code ?? "", ""),
+    snippet: asString(item.code_snippet ?? evidenceSnippet ?? item.updated_source_code ?? "", ""),
     raw: item,
     autoRemediable: AUTO_RULES.has(ruleId),
   };
