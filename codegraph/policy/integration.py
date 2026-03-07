@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
 from codegraph.policy.source_analysis import analyze_crypto_indicators
 from codegraph.db import get_neo4j_driver
+from codegraph.remediation.capabilities import remediation_capability_dict
 from codegraph.search.service import HybridSearchService
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -353,6 +354,7 @@ def _build_violation_response(
     bundle: Dict[str, Any],
     control_meta: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
+    violation_id = normalized.get("violation_id") or normalized.get("id")
     source_code = bundle.get("source_code", "") or ""
     start_line = bundle.get("start_line")
     end_line = bundle.get("end_line")
@@ -367,12 +369,13 @@ def _build_violation_response(
         "analysis_flags": bundle.get("analysis_flags", {}),
     }
     return {
-        "violation_id": normalized.get("violation_id") or normalized.get("id"),
+        "violation_id": violation_id,
         "target_method": bundle.get("target_method"),
         "file_path": bundle.get("file_path"),
         "reason": normalized.get("reason"),
         "severity": normalized.get("severity") or "high",
         "control_metadata": control_meta,
+        "remediation": remediation_capability_dict(str(violation_id) if violation_id else None),
         "code_snippet": source_code,
         "snippet_available": bool(source_code),
         "snippet_start_line": start_line,
