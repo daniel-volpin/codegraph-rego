@@ -29,6 +29,7 @@ class TestBenchmarkConfigLayout(unittest.TestCase):
             "framework_demo.json",
             "remediation_hash_smoke.json",
             "remediation_bounded_smoke.json",
+            "remediation_supported_medium.json",
         }
         actual = {path.name for path in benchmark_dir.glob("*.json")}
         self.assertTrue(expected.issubset(actual))
@@ -47,15 +48,21 @@ class TestBenchmarkConfigLayout(unittest.TestCase):
         self.assertEqual(set(full_payload["categories"]), EXPANDED_BENCHMARK_CATEGORIES)
         self.assertEqual(full_payload["max_cases_per_category"], 60)
 
-    def test_archive_contains_legacy_configs(self) -> None:
-        archive_dir = PROJECT_ROOT / "configs" / "archive"
-        expected = {
-            "benchmark_selection.example.json",
-            "benchmark_selection.multicat.json",
-            "benchmark_selection.pinned_33089.json",
-        }
-        actual = {path.name for path in archive_dir.glob("*.json")}
-        self.assertTrue(expected.issubset(actual))
+    def test_legacy_benchmark_selection_configs_are_absent(self) -> None:
+        configs_dir = PROJECT_ROOT / "configs"
+        legacy_paths = [
+            configs_dir / "benchmark_selection.example.json",
+            configs_dir / "benchmark_selection.multicat.json",
+            configs_dir / "benchmark_selection.pinned_33089.json",
+            configs_dir / "benchmark_selection.multicat_full.json",
+            configs_dir / "benchmark_selection.multicat_medium.json",
+            configs_dir / "benchmark_selection.framework_demo.json",
+            configs_dir / "benchmark_selection.expanded_eval.json",
+            configs_dir / "benchmark_selection.remediation_cwe328_smoke.json",
+            configs_dir / "benchmark_selection.smoke_mixed.json",
+        ]
+        for path in legacy_paths:
+            self.assertFalse(path.exists(), path.name)
 
 
 if __name__ == "__main__":
