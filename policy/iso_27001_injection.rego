@@ -81,14 +81,33 @@ sql_present if {
 }
 
 sql_injection_heuristic if {
+  flags := input.analysis_flags
+  flags.sql_dynamic_query_detected == true
+}
+
+sql_injection_heuristic if {
   servlet_context
   input.source_code != null
   sql_present
   src := lower(input.source_code)
-  contains(src, "+")
+  dynamic_source_construction(src)
   some kw in sql_keywords
   contains(src, kw)
   input_is_untrusted
+}
+
+dynamic_source_construction(src) if {
+  contains(src, "+")
+}
+
+dynamic_source_construction(src) if {
+  contains(src, ".append(")
+  contains(src, "stringbuilder")
+}
+
+dynamic_source_construction(src) if {
+  contains(src, ".append(")
+  contains(src, "stringbuffer")
 }
 
 path_traversal_heuristic if {
@@ -102,7 +121,7 @@ path_traversal_heuristic if {
   input.source_code != null
   src := lower(input.source_code)
   input_is_untrusted
-  contains(src, "+")
+  dynamic_source_construction(src)
   some kw in file_path_keywords
   contains(src, kw)
 }
@@ -118,7 +137,7 @@ command_injection_heuristic if {
   input.source_code != null
   src := lower(input.source_code)
   input_is_untrusted
-  contains(src, "+")
+  dynamic_source_construction(src)
   some kw in command_keywords
   contains(src, kw)
 }
@@ -134,7 +153,7 @@ ldap_injection_heuristic if {
   input.source_code != null
   src := lower(input.source_code)
   input_is_untrusted
-  contains(src, "+")
+  dynamic_source_construction(src)
   some kw in ldap_keywords
   contains(src, kw)
 }
@@ -150,7 +169,7 @@ xpath_injection_heuristic if {
   input.source_code != null
   src := lower(input.source_code)
   input_is_untrusted
-  contains(src, "+")
+  dynamic_source_construction(src)
   some kw in xpath_keywords
   contains(src, kw)
 }

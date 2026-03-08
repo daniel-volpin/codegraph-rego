@@ -4,15 +4,15 @@ Latest thesis-grade benchmark results on this repository state.
 
 ## Detection Full
 
-Source: `outputs/thesis_final_detection_full/table.md`
+Source: `outputs/detection_calibration_full_v1/table.md`
 
 - Overall:
-  - `TP=123`
-  - `FP=96`
-  - `FN=110`
-  - `Precision=0.5616`
-  - `Recall=0.5279`
-  - `F1=0.5442`
+  - `TP=125`
+  - `FP=97`
+  - `FN=108`
+  - `Precision=0.5631`
+  - `Recall=0.5365`
+  - `F1=0.5495`
 
 ## Explanation Full
 
@@ -45,4 +45,4 @@ Source: `outputs/span_edit_bounded_smoke_v2/summary.md`
 
 - Detection and explanation are strong enough to support the benchmark-first thesis story.
 - Compile-backed remediation is now real on the successful supported cases.
-- Remediation remains bounded and still has one known supported-medium failure on a weak-random semantic edit.
+- Remediation remains bounded and still has one known supported-medium failure, so the current supported-medium ceiling is `9/10`.
