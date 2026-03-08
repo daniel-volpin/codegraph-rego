@@ -94,6 +94,12 @@ sql_injection_heuristic if {
   some kw in sql_keywords
   contains(src, kw)
   input_is_untrusted
+  not safe_prepared_statement_shape(src)
+}
+
+safe_prepared_statement_shape(src) if {
+  contains(src, "preparestatement(")
+  contains(src, "?")
 }
 
 dynamic_source_construction(src) if {

@@ -34,18 +34,43 @@ _UNTRUSTED_INPUT_PATTERNS = (
     re.compile(r"getQueryString\s*\(", re.IGNORECASE),
     re.compile(r"getCookies\s*\(", re.IGNORECASE),
 )
+_SQL_UNTRUSTED_INPUT_PATTERNS = (
+    *_UNTRUSTED_INPUT_PATTERNS,
+    re.compile(r"getParameterMap\s*\(", re.IGNORECASE),
+    re.compile(r"getParameterValues\s*\(", re.IGNORECASE),
+    re.compile(r"getParameterNames\s*\(", re.IGNORECASE),
+    re.compile(r"getHeaders\s*\(", re.IGNORECASE),
+    re.compile(r"getTheParameter\s*\(", re.IGNORECASE),
+)
 _PATH_TRAVERSAL_PATTERNS = (
     re.compile(r"new\s+java\.io\.File\s*\(", re.IGNORECASE),
     re.compile(r"new\s+java\.io\.FileInputStream\s*\(", re.IGNORECASE),
+    re.compile(r"new\s+java\.io\.FileOutputStream\s*\(", re.IGNORECASE),
     re.compile(r"Files\s*\.\s*newInputStream\s*\(", re.IGNORECASE),
     re.compile(r"Paths\s*\.\s*get\s*\(", re.IGNORECASE),
     re.compile(r"new\s+java\.io\.FileReader\s*\(", re.IGNORECASE),
 )
+_PATH_DYNAMIC_CONSTRUCTION_PATTERNS = (
+    re.compile(r"\b(?:file|path|uri)\w*\s*=\s*[^;\n]*\+", re.IGNORECASE),
+    re.compile(
+        r"new\s+java\.io\.(?:File|FileInputStream|FileOutputStream|FileReader)\s*\([^;\n]*\+",
+        re.IGNORECASE,
+    ),
+    re.compile(r"new\s+java\.net\.URI\s*\([^;\n]*\+", re.IGNORECASE),
+)
+_PATH_DYNAMIC_ARGUMENT_PATTERNS = (
+    re.compile(r"new\s+java\.io\.File\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE),
+    re.compile(r"new\s+java\.io\.FileInputStream\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE),
+    re.compile(r"new\s+java\.io\.FileOutputStream\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE),
+    re.compile(r"new\s+java\.io\.FileReader\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE),
+    re.compile(r"Paths\s*\.\s*get\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE),
+)
 _CMDI_PATTERNS = (
-    re.compile(r"Runtime\s*\.\s*getRuntime\s*\(\s*\)\s*\.\s*exec\s*\(", re.IGNORECASE),
+    re.compile(r"\.exec\s*\(", re.IGNORECASE),
     re.compile(r"new\s+ProcessBuilder\s*\(", re.IGNORECASE),
     re.compile(r"\.command\s*\(", re.IGNORECASE),
 )
+_COMMAND_VARIABLE_EXEC_PATTERN = re.compile(r"\.exec\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE)
 _LDAP_PATTERNS = (
     re.compile(r"InitialDirContext", re.IGNORECASE),
     re.compile(r"DirContext", re.IGNORECASE),
@@ -56,10 +81,22 @@ _XPATH_PATTERNS = (
     re.compile(r"\.evaluate\s*\(", re.IGNORECASE),
 )
 _SQL_PREPARE_CALL_RE = re.compile(r"prepareCall\s*\(", re.IGNORECASE)
+_SQL_PREPARE_STATEMENT_RE = re.compile(r"prepareStatement\s*\(", re.IGNORECASE)
 _SQL_CALLABLE_STATEMENT_RE = re.compile(r"CallableStatement", re.IGNORECASE)
+_SQL_EXECUTE_CALL_PATTERNS = (
+    re.compile(r"\.executeQuery\s*\(", re.IGNORECASE),
+    re.compile(r"\.executeUpdate\s*\(", re.IGNORECASE),
+    re.compile(r"\.execute\s*\(", re.IGNORECASE),
+    re.compile(r"JDBCtemplate\s*\.\s*(?:execute|queryForMap|queryForRowSet|queryForList|update)\s*\(", re.IGNORECASE),
+)
 _STRING_BUILDER_RE = re.compile(r"String(?:Builder|Buffer)", re.IGNORECASE)
 _APPEND_CALL_RE = re.compile(r"\.append\s*\(", re.IGNORECASE)
 _ARRAY_LITERAL_RE = re.compile(r"\{[^{}]*[A-Za-z_][A-Za-z0-9_]*[^{}]*\}")
+_STRING_CONCAT_PATTERNS = (
+    re.compile(r'"[^"\n]*"\s*\+\s*[A-Za-z_(]', re.IGNORECASE),
+    re.compile(r"[A-Za-z_][A-Za-z0-9_.)]*\s*\+\s*\"[^\n]*\"", re.IGNORECASE),
+    re.compile(r"[A-Za-z_][A-Za-z0-9_.)]*\s*\+\s*[A-Za-z_][A-Za-z0-9_.(]*", re.IGNORECASE),
+)
 
 
 def _strip_comments_and_string_literals(source_code: str) -> str:
@@ -155,8 +192,11 @@ def analyze_policy_indicators(source_code: str) -> Dict[str, bool]:
         }
 
     untrusted_input_detected = any(pattern.search(source_code) for pattern in _UNTRUSTED_INPUT_PATTERNS)
+    sql_untrusted_input_detected = any(pattern.search(source_code) for pattern in _SQL_UNTRUSTED_INPUT_PATTERNS)
     builder_append_detected = bool(_STRING_BUILDER_RE.search(source_code) and _APPEND_CALL_RE.search(source_code))
-    dynamic_construction_detected = "+" in source_code or builder_append_detected
+    dynamic_construction_detected = builder_append_detected or any(
+        pattern.search(source_code) for pattern in _STRING_CONCAT_PATTERNS
+    )
     md5_literal = False
     md5_variable = False
     weak_cipher_literal = False
@@ -194,22 +234,24 @@ def analyze_policy_indicators(source_code: str) -> Dict[str, bool]:
         insecure_random_detected = True
         sha1prng_detected = True
 
+    path_dynamic_usage_detected = any(pattern.search(source_code) for pattern in _PATH_DYNAMIC_CONSTRUCTION_PATTERNS) or any(
+        pattern.search(source_code) for pattern in _PATH_DYNAMIC_ARGUMENT_PATTERNS
+    )
     path_traversal_detected = (
         untrusted_input_detected
         and any(pattern.search(source_code) for pattern in _PATH_TRAVERSAL_PATTERNS)
-        and (
-            dynamic_construction_detected
-            or ("new java.io.file(" in source_code.lower() and "(" in source_code)
-        )
+        and path_dynamic_usage_detected
     )
+    command_argument_detected = bool(_ARRAY_LITERAL_RE.search(source_code) or _COMMAND_VARIABLE_EXEC_PATTERN.search(source_code))
     command_injection_detected = (
         untrusted_input_detected
         and any(pattern.search(source_code) for pattern in _CMDI_PATTERNS)
-        and (dynamic_construction_detected or bool(_ARRAY_LITERAL_RE.search(source_code)))
+        and (dynamic_construction_detected or command_argument_detected)
     )
     ldap_injection_detected = (
         untrusted_input_detected
-        and all(pattern.search(source_code) for pattern in _LDAP_PATTERNS)
+        and any(pattern.search(source_code) for pattern in _LDAP_PATTERNS[:2])
+        and bool(_LDAP_PATTERNS[2].search(source_code))
         and dynamic_construction_detected
     )
     xpath_injection_detected = (
@@ -218,8 +260,14 @@ def analyze_policy_indicators(source_code: str) -> Dict[str, bool]:
         and dynamic_construction_detected
     )
     sql_prepare_call_detected = bool(_SQL_PREPARE_CALL_RE.search(source_code))
+    sql_prepare_statement_detected = bool(_SQL_PREPARE_STATEMENT_RE.search(source_code))
     sql_callable_statement_detected = bool(_SQL_CALLABLE_STATEMENT_RE.search(source_code))
-    sql_dynamic_query_detected = bool(untrusted_input_detected and sql_prepare_call_detected and dynamic_construction_detected)
+    sql_execution_detected = sql_prepare_call_detected or sql_prepare_statement_detected or any(
+        pattern.search(source_code) for pattern in _SQL_EXECUTE_CALL_PATTERNS
+    )
+    sql_dynamic_query_detected = bool(
+        sql_untrusted_input_detected and sql_execution_detected and dynamic_construction_detected
+    )
 
     md5_detected = md5_literal or md5_variable
     weak_cipher_detected = weak_cipher_literal

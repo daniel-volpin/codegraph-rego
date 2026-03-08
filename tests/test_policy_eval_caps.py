@@ -33,6 +33,17 @@ class _FakeDriver:
 
 
 class TestPolicyEvaluateCaps(unittest.TestCase):
+    @staticmethod
+    def _normalized_violation_ids(raw_output) -> set[str]:
+        from codegraph.policy.integration import normalize_violation_payload
+
+        if isinstance(raw_output, dict):
+            payloads = list(raw_output.keys())
+        else:
+            payloads = list(raw_output)
+        normalized = [normalize_violation_payload(item) for item in payloads]
+        return {item.get("violation_id") for item in normalized if item}
+
     def test_is_test_source_path_matches_src_test_only(self) -> None:
         from codegraph.policy.integration import _is_test_source_path
 
@@ -103,8 +114,70 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
         }
 
         violations = evaluate_bundle(bundle)
-        violation_ids = {v.get("violation_id") for v in violations}
+        violation_ids = self._normalized_violation_ids(violations)
         self.assertNotIn("ISO-A.10-WEAK-RANDOM", violation_ids)
+
+    def test_evaluate_bundle_does_not_use_sql_fallback_for_placeholder_prepared_statement(self) -> None:
+        from codegraph.policy.integration import evaluate_bundle
+
+        bundle = {
+            "target_method": "org.owasp.benchmark.testcode.BenchmarkTest99998.doPost(HttpServletRequest,HttpServletResponse)",
+            "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest99998.java",
+            "source_code": (
+                'String param = request.getParameter("x");'
+                'String sql = "SELECT * from USERS where USERNAME=? and PASSWORD=\'" + bar + "\'";'
+                "connection.prepareStatement(sql);"
+            ),
+            "graph_context": {"annotations": ["WebServlet"], "uses_fields": [], "calls": [], "callers": []},
+            "analysis_flags": {
+                "md5_detected": False,
+                "weak_cipher_detected": False,
+                "insecure_random_detected": False,
+                "sha1prng_detected": False,
+                "path_traversal_detected": False,
+                "command_injection_detected": False,
+                "ldap_injection_detected": False,
+                "xpath_injection_detected": False,
+                "sql_prepare_call_detected": False,
+                "sql_callable_statement_detected": False,
+                "sql_dynamic_query_detected": False,
+            },
+        }
+
+        violations = evaluate_bundle(bundle)
+        violation_ids = self._normalized_violation_ids(violations)
+        self.assertNotIn("ISO-A.8-SQL-INJECTION", violation_ids)
+
+    def test_evaluate_bundle_still_flags_sql_when_source_analysis_marks_dynamic_query(self) -> None:
+        from codegraph.policy.integration import evaluate_bundle
+
+        bundle = {
+            "target_method": "org.owasp.benchmark.testcode.BenchmarkTest99997.doPost(HttpServletRequest,HttpServletResponse)",
+            "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest99997.java",
+            "source_code": (
+                'String[] values = request.getParameterValues("x");'
+                'String sql = "SELECT * from USERS where USERNAME=? and PASSWORD=\'" + values[0] + "\'";'
+                "connection.prepareStatement(sql);"
+            ),
+            "graph_context": {"annotations": ["WebServlet"], "uses_fields": [], "calls": [], "callers": []},
+            "analysis_flags": {
+                "md5_detected": False,
+                "weak_cipher_detected": False,
+                "insecure_random_detected": False,
+                "sha1prng_detected": False,
+                "path_traversal_detected": False,
+                "command_injection_detected": False,
+                "ldap_injection_detected": False,
+                "xpath_injection_detected": False,
+                "sql_prepare_call_detected": False,
+                "sql_callable_statement_detected": False,
+                "sql_dynamic_query_detected": True,
+            },
+        }
+
+        violations = evaluate_bundle(bundle)
+        violation_ids = self._normalized_violation_ids(violations)
+        self.assertIn("ISO-A.8-SQL-INJECTION", violation_ids)
 
     @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
     @patch("codegraph.policy.integration.load_iso_rules", return_value={})
