@@ -50,6 +50,29 @@ LLM_ENABLE_THINKING=false \
 - Remediation: `outputs/thesis_final_remediation_supported_medium/`
   - current best compile-backed reference: `outputs/span_edit_supported_medium_v2/`
 
+## Reporting Summary
+
+Generate a compact thesis/PR/supervisor report from existing artifacts:
+
+```bash
+.venv/bin/python3 scripts/evaluation/report_benchmark_results.py \
+  --outputs-root outputs \
+  --output-dir outputs/reporting/latest
+```
+
+This writes:
+
+- `outputs/reporting/latest/report.json`
+- `outputs/reporting/latest/report.md`
+
+The default report compares:
+
+- thesis-final detection
+- thesis-final explanation
+- thesis-final remediation
+- current compile-backed supported remediation
+- current compile-backed bounded remediation
+
 ## Done Means
 
 - Detection:
