@@ -193,6 +193,34 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertTrue(parsed["raw_response_valid"])
         self.assertIn('System.out.println("ok")', parsed["replacement_method_code"])
 
+    def test_parse_structured_generation_accepts_indent_only_original_line_drift(self):
+        original = [
+            "public void hash() {",
+            '    java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");',
+            "}",
+        ]
+        raw = _structured_apply_edits(
+            original_method=[
+                "public void hash() {",
+                'java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");',
+                "}",
+            ],
+            replacement_method=[
+                "public void hash() {",
+                'java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");',
+                "}",
+            ],
+            start_line=1,
+            end_line=3,
+        )
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.hash()",
+            original_method_lines=original,
+        )
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertIn('MessageDigest.getInstance("SHA-256")', parsed["replacement_method_code"])
+
     def test_parse_structured_generation_accepts_unique_local_exact_match(self):
         original = [
             "@Override",
@@ -219,6 +247,92 @@ class RemediationUtilsTests(unittest.TestCase):
         )
         self.assertTrue(parsed["raw_response_valid"])
         self.assertIn('System.out.println("ok")', parsed["replacement_method_code"])
+
+    def test_parse_structured_generation_accepts_out_of_order_non_overlapping_edits(self):
+        raw = json.dumps(
+            {
+                "decision": "apply_edits",
+                "edits": [
+                    {
+                        "start_line": 4,
+                        "end_line": 4,
+                        "original_lines": ['    call("DES");'],
+                        "replacement_lines": ['    call("AES");'],
+                    },
+                    {
+                        "start_line": 2,
+                        "end_line": 2,
+                        "original_lines": ['    int size = 8;'],
+                        "replacement_lines": ['    int size = 16;'],
+                    },
+                ],
+                "reason": "",
+            }
+        )
+        original = [
+            "public void foo() {",
+            "    int size = 8;",
+            "    setup();",
+            '    call("DES");',
+            "}",
+        ]
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=original,
+        )
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertIn('int size = 16;', parsed["replacement_method_code"])
+        self.assertIn('call("AES");', parsed["replacement_method_code"])
+
+    def test_parse_structured_generation_merges_overlapping_exact_content_edits(self):
+        raw = json.dumps(
+            {
+                "decision": "apply_edits",
+                "edits": [
+                    {
+                        "start_line": 2,
+                        "end_line": 3,
+                        "original_lines": [
+                            "    int size = 8;",
+                            '    call("DES");',
+                        ],
+                        "replacement_lines": [
+                            "    int size = 16;",
+                            '    call("AES");',
+                        ],
+                    },
+                    {
+                        "start_line": 3,
+                        "end_line": 4,
+                        "original_lines": [
+                            '    call("DES");',
+                            "    finish();",
+                        ],
+                        "replacement_lines": [
+                            '    call("AES");',
+                            "    finish();",
+                        ],
+                    },
+                ],
+                "reason": "",
+            }
+        )
+        original = [
+            "public void foo() {",
+            "    int size = 8;",
+            '    call("DES");',
+            "    finish();",
+            "}",
+        ]
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=original,
+        )
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertIn('int size = 16;', parsed["replacement_method_code"])
+        self.assertIn('call("AES");', parsed["replacement_method_code"])
 
     def test_parse_structured_generation_rejects_ambiguous_local_exact_match(self):
         raw = json.dumps(
@@ -282,6 +396,59 @@ class RemediationUtilsTests(unittest.TestCase):
         )
         self.assertFalse(parsed["raw_response_valid"])
         self.assertIn("invalid_java_syntax", parsed["schema_error"])
+
+    def test_parse_structured_generation_rejects_random_terminal_method_drop(self):
+        original = [
+            "public void random() {",
+            "    float rand = new java.util.Random().nextFloat();",
+            "}",
+        ]
+        replacement = [
+            "public void random() {",
+            "    java.security.SecureRandom rand = new java.security.SecureRandom();",
+            "}",
+        ]
+        raw = _structured_apply_edits(
+            original_method=original,
+            replacement_method=replacement,
+            start_line=1,
+            end_line=3,
+        )
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.random()",
+            original_method_lines=original,
+            original_method_source="\n".join(original),
+            rule_id="ISO-A.10-WEAK-RANDOM",
+        )
+        self.assertFalse(parsed["raw_response_valid"])
+        self.assertEqual(parsed["schema_error"], "random_terminal_method_mismatch")
+
+    def test_parse_structured_generation_accepts_random_terminal_method_preserved(self):
+        original = [
+            "public void random() {",
+            "    float rand = new java.util.Random().nextFloat();",
+            "}",
+        ]
+        replacement = [
+            "public void random() {",
+            "    float rand = new java.security.SecureRandom().nextFloat();",
+            "}",
+        ]
+        raw = _structured_apply_edits(
+            original_method=original,
+            replacement_method=replacement,
+            start_line=1,
+            end_line=3,
+        )
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.random()",
+            original_method_lines=original,
+            original_method_source="\n".join(original),
+            rule_id="ISO-A.10-WEAK-RANDOM",
+        )
+        self.assertTrue(parsed["raw_response_valid"])
 
     def test_parse_structured_generation_rejects_multiline_string_literal(self):
         original = [

@@ -57,6 +57,9 @@ _XPATH_PATTERNS = (
 )
 _SQL_PREPARE_CALL_RE = re.compile(r"prepareCall\s*\(", re.IGNORECASE)
 _SQL_CALLABLE_STATEMENT_RE = re.compile(r"CallableStatement", re.IGNORECASE)
+_STRING_BUILDER_RE = re.compile(r"String(?:Builder|Buffer)", re.IGNORECASE)
+_APPEND_CALL_RE = re.compile(r"\.append\s*\(", re.IGNORECASE)
+_ARRAY_LITERAL_RE = re.compile(r"\{[^{}]*[A-Za-z_][A-Za-z0-9_]*[^{}]*\}")
 
 
 def _strip_comments_and_string_literals(source_code: str) -> str:
@@ -152,6 +155,8 @@ def analyze_policy_indicators(source_code: str) -> Dict[str, bool]:
         }
 
     untrusted_input_detected = any(pattern.search(source_code) for pattern in _UNTRUSTED_INPUT_PATTERNS)
+    builder_append_detected = bool(_STRING_BUILDER_RE.search(source_code) and _APPEND_CALL_RE.search(source_code))
+    dynamic_construction_detected = "+" in source_code or builder_append_detected
     md5_literal = False
     md5_variable = False
     weak_cipher_literal = False
@@ -190,19 +195,31 @@ def analyze_policy_indicators(source_code: str) -> Dict[str, bool]:
         sha1prng_detected = True
 
     path_traversal_detected = (
-        untrusted_input_detected and "+" in source_code and any(pattern.search(source_code) for pattern in _PATH_TRAVERSAL_PATTERNS)
+        untrusted_input_detected
+        and any(pattern.search(source_code) for pattern in _PATH_TRAVERSAL_PATTERNS)
+        and (
+            dynamic_construction_detected
+            or ("new java.io.file(" in source_code.lower() and "(" in source_code)
+        )
     )
     command_injection_detected = (
-        untrusted_input_detected and "+" in source_code and any(pattern.search(source_code) for pattern in _CMDI_PATTERNS)
+        untrusted_input_detected
+        and any(pattern.search(source_code) for pattern in _CMDI_PATTERNS)
+        and (dynamic_construction_detected or bool(_ARRAY_LITERAL_RE.search(source_code)))
     )
     ldap_injection_detected = (
-        untrusted_input_detected and "+" in source_code and all(pattern.search(source_code) for pattern in _LDAP_PATTERNS)
+        untrusted_input_detected
+        and all(pattern.search(source_code) for pattern in _LDAP_PATTERNS)
+        and dynamic_construction_detected
     )
     xpath_injection_detected = (
-        untrusted_input_detected and "+" in source_code and all(pattern.search(source_code) for pattern in _XPATH_PATTERNS)
+        untrusted_input_detected
+        and all(pattern.search(source_code) for pattern in _XPATH_PATTERNS)
+        and dynamic_construction_detected
     )
     sql_prepare_call_detected = bool(_SQL_PREPARE_CALL_RE.search(source_code))
     sql_callable_statement_detected = bool(_SQL_CALLABLE_STATEMENT_RE.search(source_code))
+    sql_dynamic_query_detected = bool(untrusted_input_detected and sql_prepare_call_detected and dynamic_construction_detected)
 
     md5_detected = md5_literal or md5_variable
     weak_cipher_detected = weak_cipher_literal
@@ -220,6 +237,7 @@ def analyze_policy_indicators(source_code: str) -> Dict[str, bool]:
         "xpath_injection_detected": xpath_injection_detected,
         "sql_prepare_call_detected": sql_prepare_call_detected,
         "sql_callable_statement_detected": sql_callable_statement_detected,
+        "sql_dynamic_query_detected": sql_dynamic_query_detected,
     }
 
 

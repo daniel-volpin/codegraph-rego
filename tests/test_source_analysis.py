@@ -67,10 +67,37 @@ class TestSourceAnalysis(unittest.TestCase):
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["command_injection_detected"])
 
+    def test_command_injection_builder_detected(self) -> None:
+        source = (
+            'StringBuilder cmd = new StringBuilder("echo ");'
+            'cmd.append(request.getHeader("x"));'
+            'Runtime.getRuntime().exec(cmd.toString());'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["command_injection_detected"])
+
     def test_ldap_injection_detected(self) -> None:
         source = 'String filter = "(&(uid=" + request.getHeader("x") + "))"; InitialDirContext idc = null; idc.search(base, filter, filters, sc);'
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["ldap_injection_detected"])
+
+    def test_xpath_injection_builder_detected(self) -> None:
+        source = (
+            'StringBuilder expr = new StringBuilder("/Employees/Employee[@emplid=\'");'
+            'expr.append(request.getHeader("x"));'
+            'expr.append("\']"); XPathFactory.newInstance(); xp.evaluate(expr.toString(), xmlDocument);'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["xpath_injection_detected"])
+
+    def test_sql_dynamic_query_detected(self) -> None:
+        source = (
+            'StringBuilder sql = new StringBuilder("select * from users where name = \'");'
+            'sql.append(request.getHeader("x"));'
+            'sql.append("\'"); connection.prepareCall(sql.toString());'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_dynamic_query_detected"])
 
     def test_xpath_injection_detected(self) -> None:
         source = 'String expr = "/Employees/Employee[@emplid=\'" + request.getHeader("x") + "\']"; XPathFactory.newInstance(); xp.evaluate(expr, xmlDocument);'

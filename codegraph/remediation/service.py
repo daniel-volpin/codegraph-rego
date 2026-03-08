@@ -199,6 +199,30 @@ def _extract_target_method_identity(target_method: Optional[str]) -> Tuple[Optio
     return method_name, len([part for part in params_block.split(",") if part.strip()])
 
 
+_RANDOM_TERMINAL_METHOD_RE = re.compile(
+    r"(?:new\s+(?:java\.util\.)?Random\s*\(\s*\)|(?:java\.lang\.)?Math\s*\.\s*random\s*\(\s*\)|"
+    r"(?:java\.util\.concurrent\.)?ThreadLocalRandom\s*\.\s*current\s*\(\s*\)|"
+    r"(?:java\.security\.)?SecureRandom\s*\.\s*getInstance\s*\(\s*\"SHA1PRNG\"\s*\))\s*\.\s*"
+    r"(next(?:Boolean|Bytes|Double|Float|Gaussian|Int|Long))\s*\(",
+    re.IGNORECASE,
+)
+
+
+def _expected_random_terminal_method(source_code: str) -> Optional[str]:
+    match = _RANDOM_TERMINAL_METHOD_RE.search(source_code or "")
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _random_terminal_method_present(source_code: str, method_name: str) -> bool:
+    pattern = re.compile(
+        rf"(?:new\s+java\.security\.SecureRandom\s*\(\s*\)|[A-Za-z_][A-Za-z0-9_]*?)\s*\.\s*{re.escape(method_name)}\s*\(",
+        re.IGNORECASE,
+    )
+    return bool(pattern.search(source_code or ""))
+
+
 def _format_java_parse_error(exc: Exception) -> str:
     detail = str(exc).strip()
     if detail:
@@ -988,6 +1012,8 @@ class RemediationService:
             response,
             target_method=context.get("target_method"),
             original_method_lines=(context.get("exact_method_source") or "").splitlines(),
+            original_method_source=context.get("exact_method_source"),
+            rule_id=context.get("rule_id"),
         )
         parsed["raw_output"] = response
         parsed["generation"] = self._build_generation_payload(
@@ -1007,6 +1033,8 @@ class RemediationService:
         *,
         target_method: Optional[str] = None,
         original_method_lines: Optional[List[str]] = None,
+        original_method_source: Optional[str] = None,
+        rule_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         content = _strip_structured_stop_tokens(_extract_assistant_content(response))
         data = _parse_json_object_from_text(content)
@@ -1160,6 +1188,12 @@ class RemediationService:
                     normalized_edits,
                     str(target_method or ""),
                 )
+                if str(rule_id or "") == "ISO-A.10-WEAK-RANDOM":
+                    expected_random_method = _expected_random_terminal_method(original_method_source or "")
+                    if expected_random_method and not _random_terminal_method_present(
+                        reconstructed_method, expected_random_method
+                    ):
+                        raise ValueError("random_terminal_method_mismatch")
             except ValueError as exc:
                 return {
                     "decision": "apply_edits",
@@ -1516,6 +1550,18 @@ class RemediationService:
         edits: List[Dict[str, Any]],
         target_method: str,
     ) -> Tuple[List[str], str]:
+        def lines_match_exact_or_indent_only(actual: List[str], expected: List[str]) -> bool:
+            if actual == expected:
+                return True
+            return [line.lstrip() for line in actual] == [line.lstrip() for line in expected]
+
+        def merge_overlap_lines(left: List[str], right: List[str]) -> Optional[List[str]]:
+            max_overlap = min(len(left), len(right))
+            for overlap in range(max_overlap, 0, -1):
+                if lines_match_exact_or_indent_only(left[-overlap:], right[:overlap]):
+                    return left + right[overlap:]
+            return None
+
         def resolve_edit_span(
             declared_start: int,
             expected_original: List[str],
@@ -1527,7 +1573,7 @@ class RemediationService:
             direct_end = declared_start + expected_length - 1
             if direct_end <= len(original_lines):
                 direct_slice = original_lines[declared_start - 1 : direct_end]
-                if direct_slice == expected_original:
+                if lines_match_exact_or_indent_only(direct_slice, expected_original):
                     return declared_start, direct_end
 
             search_start = max(1, declared_start - 1)
@@ -1535,7 +1581,9 @@ class RemediationService:
             matches: List[int] = []
             for candidate_start in range(search_start, search_end + 1):
                 candidate_end = candidate_start + expected_length - 1
-                if original_lines[candidate_start - 1 : candidate_end] == expected_original:
+                if lines_match_exact_or_indent_only(
+                    original_lines[candidate_start - 1 : candidate_end], expected_original
+                ):
                     matches.append(candidate_start)
 
             if len(matches) == 1:
@@ -1543,18 +1591,61 @@ class RemediationService:
                 return candidate_start, candidate_start + expected_length - 1
             raise ValueError("edit_original_mismatch")
 
-        updated_lines = list(original_lines)
-        previous_end = 0
-        offset = 0
+        resolved_edits: List[Dict[str, Any]] = []
         for edit in edits:
             start_line = edit["start_line"]
             expected_original = edit["original_lines"]
             replacement_lines = edit["replacement_lines"]
-
             actual_start, actual_end = resolve_edit_span(start_line, expected_original)
             declared_end = edit["end_line"]
             if declared_end < start_line:
                 raise ValueError("edit_span_out_of_bounds")
+            resolved_edits.append(
+                {
+                    "actual_start": actual_start,
+                    "actual_end": actual_end,
+                    "original_lines": expected_original,
+                    "replacement_lines": replacement_lines,
+                }
+            )
+
+        resolved_edits.sort(key=lambda item: (item["actual_start"], item["actual_end"]))
+
+        normalized_edits: List[Dict[str, Any]] = []
+        for edit in resolved_edits:
+            if not normalized_edits:
+                normalized_edits.append(edit)
+                continue
+            previous = normalized_edits[-1]
+            if edit["actual_start"] > previous["actual_end"] + 1:
+                normalized_edits.append(edit)
+                continue
+
+            overlap_in_source = previous["actual_end"] - edit["actual_start"] + 1
+            if overlap_in_source < 0:
+                merged_original = previous["original_lines"] + edit["original_lines"]
+                merged_replacement = previous["replacement_lines"] + edit["replacement_lines"]
+            else:
+                merged_original = merge_overlap_lines(previous["original_lines"], edit["original_lines"])
+                merged_replacement = merge_overlap_lines(previous["replacement_lines"], edit["replacement_lines"])
+                if merged_original is None or merged_replacement is None:
+                    raise ValueError("edit_spans_overlap")
+
+            normalized_edits[-1] = {
+                "actual_start": previous["actual_start"],
+                "actual_end": max(previous["actual_end"], edit["actual_end"]),
+                "original_lines": merged_original,
+                "replacement_lines": merged_replacement,
+            }
+
+        updated_lines = list(original_lines)
+        previous_end = 0
+        offset = 0
+        for edit in normalized_edits:
+            expected_original = edit["original_lines"]
+            replacement_lines = edit["replacement_lines"]
+            actual_start = edit["actual_start"]
+            actual_end = edit["actual_end"]
             if actual_start <= previous_end:
                 raise ValueError("edit_spans_overlap")
 

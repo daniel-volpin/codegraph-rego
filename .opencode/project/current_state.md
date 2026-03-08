@@ -52,4 +52,7 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
 - Compile-backed remediation is proven on the current supported benchmark subset:
   - bounded smoke: `3/3`
   - supported medium: `9/10`
+- Detection calibration improved the current full benchmark baseline:
+  - precision: `0.5631`
+  - recall: `0.5365`
 - Benchmark-first outputs are the authoritative evidence for current capability.
