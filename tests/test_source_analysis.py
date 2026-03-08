@@ -62,6 +62,29 @@ class TestSourceAnalysis(unittest.TestCase):
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
+    def test_path_traversal_file_output_stream_detected(self) -> None:
+        source = (
+            'String value = request.getHeader("x");'
+            'String fileName = base + value;'
+            "new java.io.FileOutputStream(fileName, false);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["path_traversal_detected"])
+
+    def test_path_traversal_two_arg_file_detected(self) -> None:
+        source = 'String bar = request.getHeader("x"); new java.io.File(bar, "/Test.txt");'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["path_traversal_detected"])
+
+    def test_classpath_file_read_not_flagged_as_path_traversal(self) -> None:
+        source = (
+            'String param = request.getCookies()[0].getValue();'
+            'new java.io.FileInputStream(org.owasp.benchmark.helpers.Utils.getFileFromClasspath("employees.xml", this.getClass().getClassLoader()));'
+            'String expression = "/Employees/Employee[@emplid=\'" + param + "\']";'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["path_traversal_detected"])
+
     def test_command_injection_detected(self) -> None:
         source = 'String cmd = "echo " + request.getHeader("x"); new ProcessBuilder().command(cmd);'
         flags = analyze_crypto_indicators(source)
@@ -72,6 +95,15 @@ class TestSourceAnalysis(unittest.TestCase):
             'StringBuilder cmd = new StringBuilder("echo ");'
             'cmd.append(request.getHeader("x"));'
             'Runtime.getRuntime().exec(cmd.toString());'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["command_injection_detected"])
+
+    def test_command_injection_exec_args_detected(self) -> None:
+        source = (
+            'String input = request.getHeader("x");'
+            'String[] args = new String[] {"sh", "-c", "ls " + input};'
+            "Runtime.getRuntime().exec(args);"
         )
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["command_injection_detected"])
@@ -95,6 +127,24 @@ class TestSourceAnalysis(unittest.TestCase):
             'StringBuilder sql = new StringBuilder("select * from users where name = \'");'
             'sql.append(request.getHeader("x"));'
             'sql.append("\'"); connection.prepareCall(sql.toString());'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_dynamic_query_detected"])
+
+    def test_sql_dynamic_query_jdbc_template_detected(self) -> None:
+        source = (
+            'String[] values = request.getParameterMap().get("x");'
+            'String sql = "select * from users where name = \'" + values[0] + "\'";'
+            "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.queryForRowSet(sql);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_dynamic_query_detected"])
+
+    def test_sql_dynamic_query_prepare_statement_detected(self) -> None:
+        source = (
+            'String[] values = request.getParameterValues("x");'
+            'String sql = "select * from users where username=? and password=\'" + values[0] + "\'";'
+            "connection.prepareStatement(sql);"
         )
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["sql_dynamic_query_detected"])
