@@ -5,6 +5,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+from codegraph.remediation.planning import RemediationPlan
+
 
 LOGGER = logging.getLogger(__name__)
 _MAX_VECTOR_CONTEXT_ITEMS = 8
@@ -45,6 +47,9 @@ class RemediationPromptTemplate:
     VECTOR_BEGIN = "BEGIN_VECTOR_CONTEXT_JSON"
     VECTOR_END = "END_VECTOR_CONTEXT_JSON"
 
+    PLAN_BEGIN = "BEGIN_REMEDIATION_PLAN_JSON"
+    PLAN_END = "END_REMEDIATION_PLAN_JSON"
+
     PREV_ERR_BEGIN = "BEGIN_PREVIOUS_ERRORS"
     PREV_ERR_END = "END_PREVIOUS_ERRORS"
 
@@ -60,8 +65,8 @@ class RemediationPromptTemplate:
             "If you cannot produce a safe minimal edit plan, return no_fix instead of a partial draft.\n"
             "Prefer a single contiguous edit span whenever possible. Only emit multiple edits when one span cannot express the safe change.\n"
             "Preserve unchanged lines exactly, including indentation, string and character literals, escapes such as \\\\n, and fully qualified names already in use.\n\n"
-            "When replacing insecure randomness, preserve the original terminal randomness API contract unless the edit span explicitly changes it.\n"
-            "Examples: nextFloat() must remain nextFloat(), nextLong() must remain nextLong(), nextInt(bound) must remain nextInt(bound), unless returning no_fix.\n\n"
+            "When the user provides a remediation plan block, treat every listed invariant as mandatory.\n"
+            "If the plan lists terminal invocation contracts, preserve each listed method name and arity unless returning no_fix.\n\n"
             "Return a JSON object only with exactly these fields:\n"
             "- decision: \"apply_edits\" or \"no_fix\"\n"
             "- edits: array of edit objects\n"
@@ -107,6 +112,16 @@ class RemediationPromptTemplate:
         )
 
     @classmethod
+    def format_plan_json(cls, plan: RemediationPlan) -> str:
+        return "\n".join(
+            [
+                cls.PLAN_BEGIN,
+                json.dumps(plan.to_prompt_payload(), indent=2, ensure_ascii=True, sort_keys=False),
+                cls.PLAN_END,
+            ]
+        )
+
+    @classmethod
     def _build_violation_payload(cls, context: Dict[str, Any]) -> Dict[str, Any]:
         violation = context.get("violation") or {}
         return {
@@ -145,6 +160,7 @@ class RemediationPromptTemplate:
     ) -> str:
         evidence = context.get("evidence") or {}
         catalog_entry = context.get("catalog_entry") or {}
+        plan = context.get("remediation_plan")
 
         target_method = context.get("target_method") or context.get("method") or "unknown"
         file_path = context.get("file_path") or "unknown"
@@ -163,6 +179,9 @@ class RemediationPromptTemplate:
         sections.append(f"TARGET_METHOD: {target_method}")
         sections.append("")
         sections.append(cls.format_task_spec_json(spec))
+        if isinstance(plan, RemediationPlan):
+            sections.append("")
+            sections.append(cls.format_plan_json(plan))
         sections.append("")
         sections.extend([cls.VIOLATION_BEGIN, violation_json, cls.VIOLATION_END])
         sections.append("")

@@ -49,13 +49,17 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
   - derived `replacement_method_code`
   - `reason`
 - Remediation now operates on the exact target method snippet and applies bounded span edits rather than regenerating whole methods.
+- Remediation now adds a small planning layer before generation:
+  - classify local transformation shape
+  - extract method-local invariants for value-producing invocation chains
+  - validate those invariants after span reconstruction
 - Remediation evaluation now writes live-progress artifacts during long runs:
   - `progress.json`
   - `results.jsonl`
   - `cases/<case-id>/`
 - Compile-backed remediation is proven on the current supported benchmark subset:
   - bounded smoke: `3/3`
-  - supported medium: `9/10`
+  - supported medium: `17/17`
 - Detection calibration improved the current full benchmark baseline:
   - precision: `0.5631`
   - recall: `0.5365`
