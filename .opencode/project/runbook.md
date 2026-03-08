@@ -81,6 +81,7 @@ The default report compares:
   - `citation_metrics.json`, `citation_metrics.csv`, `table.md`
 - Remediation:
   - `remediation_metrics.json`, `remediation_metrics.csv`
+  - live-progress artifacts during the run: `progress.json`, `results.jsonl`, `cases/<case-id>/`
   - for product-gate evidence also check `summary.md`
 
 ## Skill / Agent Usage
