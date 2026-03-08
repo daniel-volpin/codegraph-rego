@@ -39,6 +39,7 @@ from codegraph.policy.integration import (
     normalize_violation_payload,
 )
 from codegraph.remediation.capabilities import get_remediation_capability, rule_id_variants
+from codegraph.remediation.planning import build_remediation_plan, validate_remediation_plan
 from codegraph.remediation.prompting import (
     RemediationPromptTemplate,
     RemediationTaskSpec,
@@ -199,30 +200,6 @@ def _extract_target_method_identity(target_method: Optional[str]) -> Tuple[Optio
     return method_name, len([part for part in params_block.split(",") if part.strip()])
 
 
-_RANDOM_TERMINAL_METHOD_RE = re.compile(
-    r"(?:new\s+(?:java\.util\.)?Random\s*\(\s*\)|(?:java\.lang\.)?Math\s*\.\s*random\s*\(\s*\)|"
-    r"(?:java\.util\.concurrent\.)?ThreadLocalRandom\s*\.\s*current\s*\(\s*\)|"
-    r"(?:java\.security\.)?SecureRandom\s*\.\s*getInstance\s*\(\s*\"SHA1PRNG\"\s*\))\s*\.\s*"
-    r"(next(?:Boolean|Bytes|Double|Float|Gaussian|Int|Long))\s*\(",
-    re.IGNORECASE,
-)
-
-
-def _expected_random_terminal_method(source_code: str) -> Optional[str]:
-    match = _RANDOM_TERMINAL_METHOD_RE.search(source_code or "")
-    if not match:
-        return None
-    return match.group(1)
-
-
-def _random_terminal_method_present(source_code: str, method_name: str) -> bool:
-    pattern = re.compile(
-        rf"(?:new\s+java\.security\.SecureRandom\s*\(\s*\)|[A-Za-z_][A-Za-z0-9_]*?)\s*\.\s*{re.escape(method_name)}\s*\(",
-        re.IGNORECASE,
-    )
-    return bool(pattern.search(source_code or ""))
-
-
 def _format_java_parse_error(exc: Exception) -> str:
     detail = str(exc).strip()
     if detail:
@@ -373,6 +350,8 @@ def _summarize_retry_error(error: str) -> str:
         return "method_name_mismatch"
     if "parameter_count_mismatch" in lowered:
         return "parameter_count_mismatch"
+    if "plan_invariant_violation" in lowered:
+        return text.splitlines()[0][:160]
     if "edits" in lowered:
         return "empty_edits"
     if "valid method replacement" in lowered or "replace method" in lowered or "apply_edits" in lowered:
@@ -961,6 +940,7 @@ class RemediationService:
                 "baseline_violations": baseline_violations,
                 "exact_method_source": exact_method_source,
                 "numbered_method_source": numbered_method_source,
+                "remediation_plan": build_remediation_plan(exact_method_source or evidence.get("source_code") or ""),
             }
         return None
 
@@ -1013,6 +993,7 @@ class RemediationService:
             target_method=context.get("target_method"),
             original_method_lines=(context.get("exact_method_source") or "").splitlines(),
             original_method_source=context.get("exact_method_source"),
+            plan=context.get("remediation_plan"),
             rule_id=context.get("rule_id"),
         )
         parsed["raw_output"] = response
@@ -1034,8 +1015,11 @@ class RemediationService:
         target_method: Optional[str] = None,
         original_method_lines: Optional[List[str]] = None,
         original_method_source: Optional[str] = None,
+        plan: Any = None,
         rule_id: Optional[str] = None,
     ) -> Dict[str, Any]:
+        _ = original_method_source
+        _ = rule_id
         content = _strip_structured_stop_tokens(_extract_assistant_content(response))
         data = _parse_json_object_from_text(content)
         if data is None:
@@ -1188,12 +1172,9 @@ class RemediationService:
                     normalized_edits,
                     str(target_method or ""),
                 )
-                if str(rule_id or "") == "ISO-A.10-WEAK-RANDOM":
-                    expected_random_method = _expected_random_terminal_method(original_method_source or "")
-                    if expected_random_method and not _random_terminal_method_present(
-                        reconstructed_method, expected_random_method
-                    ):
-                        raise ValueError("random_terminal_method_mismatch")
+                plan_error = validate_remediation_plan(plan, reconstructed_method)
+                if plan_error:
+                    raise ValueError(plan_error)
             except ValueError as exc:
                 return {
                     "decision": "apply_edits",

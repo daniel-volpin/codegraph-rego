@@ -397,7 +397,48 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertFalse(parsed["raw_response_valid"])
         self.assertIn("invalid_java_syntax", parsed["schema_error"])
 
-    def test_parse_structured_generation_rejects_random_terminal_method_drop(self):
+    def test_build_remediation_plan_extracts_constructor_chain_contract(self):
+        from codegraph.remediation.planning import build_remediation_plan
+
+        original = "\n".join(
+            [
+                "public void random() {",
+                "    float rand = new java.util.Random().nextFloat();",
+                "}",
+            ]
+        )
+        plan = build_remediation_plan(original)
+
+        self.assertEqual(plan.transformation_class, "receiver_chain_upgrade")
+        self.assertEqual(len(plan.terminal_invocation_contracts), 1)
+        contract = plan.terminal_invocation_contracts[0]
+        self.assertEqual(contract.member, "nextFloat")
+        self.assertEqual(contract.arg_count, 0)
+        self.assertEqual(contract.occurrence_count, 1)
+        self.assertEqual(contract.source_kind, "constructor_chain")
+
+    def test_build_remediation_plan_extracts_factory_chain_contract(self):
+        from codegraph.remediation.planning import build_remediation_plan
+
+        original = "\n".join(
+            [
+                "public byte[] hash(byte[] input) throws Exception {",
+                '    return java.security.MessageDigest.getInstance("MD5").digest(input);',
+                "}",
+            ]
+        )
+        plan = build_remediation_plan(original)
+
+        self.assertEqual(plan.transformation_class, "receiver_chain_upgrade")
+        self.assertEqual(len(plan.terminal_invocation_contracts), 1)
+        contract = plan.terminal_invocation_contracts[0]
+        self.assertEqual(contract.member, "digest")
+        self.assertEqual(contract.arg_count, 1)
+        self.assertEqual(contract.source_kind, "factory_chain")
+
+    def test_parse_structured_generation_rejects_plan_invariant_drop(self):
+        from codegraph.remediation.planning import build_remediation_plan
+
         original = [
             "public void random() {",
             "    float rand = new java.util.Random().nextFloat();",
@@ -418,13 +459,17 @@ class RemediationUtilsTests(unittest.TestCase):
             raw,
             target_method="com.example.Foo.random()",
             original_method_lines=original,
-            original_method_source="\n".join(original),
-            rule_id="ISO-A.10-WEAK-RANDOM",
+            plan=build_remediation_plan("\n".join(original)),
         )
         self.assertFalse(parsed["raw_response_valid"])
-        self.assertEqual(parsed["schema_error"], "random_terminal_method_mismatch")
+        self.assertEqual(
+            parsed["schema_error"],
+            "plan_invariant_violation: missing_terminal_invocation:nextFloat/0",
+        )
 
-    def test_parse_structured_generation_accepts_random_terminal_method_preserved(self):
+    def test_parse_structured_generation_accepts_plan_invariant_preserved_via_local_variable(self):
+        from codegraph.remediation.planning import build_remediation_plan
+
         original = [
             "public void random() {",
             "    float rand = new java.util.Random().nextFloat();",
@@ -432,7 +477,8 @@ class RemediationUtilsTests(unittest.TestCase):
         ]
         replacement = [
             "public void random() {",
-            "    float rand = new java.security.SecureRandom().nextFloat();",
+            "    java.security.SecureRandom secureRandom = new java.security.SecureRandom();",
+            "    float rand = secureRandom.nextFloat();",
             "}",
         ]
         raw = _structured_apply_edits(
@@ -445,8 +491,7 @@ class RemediationUtilsTests(unittest.TestCase):
             raw,
             target_method="com.example.Foo.random()",
             original_method_lines=original,
-            original_method_source="\n".join(original),
-            rule_id="ISO-A.10-WEAK-RANDOM",
+            plan=build_remediation_plan("\n".join(original)),
         )
         self.assertTrue(parsed["raw_response_valid"])
 
@@ -517,16 +562,18 @@ class RemediationUtilsTests(unittest.TestCase):
             )
 
         remediation = svc_mod.RemediationService(llm_client=capture_llm)
+        exact_method_source = 'public void hash() { java.security.MessageDigest.getInstance("MD5"); }'
         context = {
             "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
             "target_method": "com.example.Foo.hash()",
             "file_path": "Example.java",
             "rule_id": "ISO-A.10-WEAK-HASH",
-            "evidence": {"source_code": 'public void hash() { java.security.MessageDigest.getInstance("MD5"); }', "graph_context": {}, "vector_context": []},
+            "evidence": {"source_code": exact_method_source, "graph_context": {}, "vector_context": []},
             "catalog_entry": {"title": "Cryptography (Weak Hash)"},
             "baseline_violations": [],
-            "exact_method_source": 'public void hash() { java.security.MessageDigest.getInstance("MD5"); }',
-            "numbered_method_source": '1: public void hash() { java.security.MessageDigest.getInstance("MD5"); }',
+            "exact_method_source": exact_method_source,
+            "numbered_method_source": "1: public void hash() { java.security.MessageDigest.getInstance(\"MD5\"); }",
+            "remediation_plan": svc_mod.build_remediation_plan(exact_method_source),
         }
 
         out = remediation.propose_method_edits(context)
@@ -535,6 +582,7 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertEqual(captured["kwargs"]["response_format"]["type"], "json_schema")
         self.assertEqual(captured["kwargs"]["stop"], ["<|im_end|>", "<|endoftext|>"])
         self.assertIn("BEGIN_TASK_SPEC_JSON", captured["messages"][1]["content"])
+        self.assertIn("BEGIN_REMEDIATION_PLAN_JSON", captured["messages"][1]["content"])
         self.assertIn("BEGIN_NUMBERED_METHOD_SNIPPET", captured["messages"][1]["content"])
         self.assertEqual(out["generation"]["edits"][0]["start_line"], 1)
 
@@ -567,6 +615,7 @@ class RemediationUtilsTests(unittest.TestCase):
         prompt = RemediationPromptTemplate.system_prompt()
         self.assertIn("Return only the changed spans as edits", prompt)
         self.assertIn("If you cannot produce a safe minimal edit plan, return no_fix", prompt)
+        self.assertIn("If the plan lists terminal invocation contracts", prompt)
 
     def test_compile_project_honors_explicit_build_command(self):
         with TemporaryDirectory() as tmp:
