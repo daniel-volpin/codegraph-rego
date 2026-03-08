@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import logging
 import random
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -19,7 +18,13 @@ from codegraph.evaluation.pipeline import (
     load_benchmark_evaluation_context,
     staged_benchmark_workspace,
 )
-from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
+from codegraph.evaluation.remediation_runtime import (
+    RemediationRuntime,
+    build_metrics_payload,
+    build_remediation_result,
+    build_skipped_result,
+    write_final_artifacts,
+)
 
 LOGGER = logging.getLogger("codegraph.eval.remediation")
 
@@ -98,205 +103,116 @@ def main() -> int:
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    with staged_benchmark_workspace(
+    runtime = RemediationRuntime(
+        output_dir=output_dir,
         benchmark_root=context.benchmark_root,
-        java_relative_root=context.selection_cfg["java_relative_root"],
-        testcase_ids=selected_ids,
-        workdir=args.workdir,
-    ) as workspace:
-        eval_result = ingest_and_evaluate_subset(
-            java_root=workspace.java_root,
-            reset_neo4j=args.reset_neo4j,
-            logger=LOGGER,
-        )
-        if eval_result.get("error"):
-            LOGGER.error("Policy evaluation failed: %s", eval_result["error"])
-            return 1
-        violations = eval_result.get("violations") or []
+        truth_path=context.truth_path,
+        truth_schema=context.truth_schema,
+        selection_cfg=context.selection_cfg,
+        coverage_by_category=context.coverage_by_category,
+        mode=args.mode,
+        max_attempts=args.max_attempts,
+    )
+    runtime.write_stage_progress(
+        "selection",
+        "Loaded benchmark remediation context",
+        selected_testcases=len(selected_ids),
+    )
+    completed = False
+    try:
+        with staged_benchmark_workspace(
+            benchmark_root=context.benchmark_root,
+            java_relative_root=context.selection_cfg["java_relative_root"],
+            testcase_ids=selected_ids,
+            workdir=args.workdir,
+        ) as workspace:
+            eval_result = ingest_and_evaluate_subset(
+                java_root=workspace.java_root,
+                reset_neo4j=args.reset_neo4j,
+                logger=LOGGER,
+            )
+            if eval_result.get("error"):
+                LOGGER.error("Policy evaluation failed: %s", eval_result["error"])
+                return 1
+            violations = eval_result.get("violations") or []
 
-        violations_by_testcase = group_violations_by_testcase(violations)
-        category_violations_by_id = collect_category_violations(
-            selected_category_ids=context.selected_category_ids,
-            categories_by_id=context.categories_by_id,
-            selection=context.selection,
-            violations_by_testcase=violations_by_testcase,
-        )
-        candidates: List[Dict[str, Any]] = []
-        for category_id in context.selected_category_ids:
-            spec = context.categories_by_id.get(category_id)
-            if not spec:
-                continue
-            for violation in category_violations_by_id.get(category_id, []):
-                candidate = dict(violation)
-                candidate["category"] = spec.label
-                candidates.append(candidate)
-        if not candidates:
-            LOGGER.warning("No candidate violations found for remediation evaluation.")
-            return 1
+            violations_by_testcase = group_violations_by_testcase(violations)
+            category_violations_by_id = collect_category_violations(
+                selected_category_ids=context.selected_category_ids,
+                categories_by_id=context.categories_by_id,
+                selection=context.selection,
+                violations_by_testcase=violations_by_testcase,
+            )
+            candidates: List[Dict[str, Any]] = []
+            for category_id in context.selected_category_ids:
+                spec = context.categories_by_id.get(category_id)
+                if not spec:
+                    continue
+                for violation in category_violations_by_id.get(category_id, []):
+                    candidate = dict(violation)
+                    candidate["category"] = spec.label
+                    candidates.append(candidate)
+            if not candidates:
+                LOGGER.warning("No candidate violations found for remediation evaluation.")
+                return 1
 
-        rng = random.Random(args.seed)
-        if len(candidates) > args.sample_size:
-            candidates = rng.sample(candidates, k=args.sample_size)
+            rng = random.Random(args.seed)
+            if len(candidates) > args.sample_size:
+                candidates = rng.sample(candidates, k=args.sample_size)
 
-        results: List[Dict[str, Any]] = []
-        for violation in candidates:
-            violation_id = violation.get("violation_id")
-            target_method = violation.get("target_method")
-            evidence = violation.get("evidence") or {}
-            file_path = evidence.get("file_path") or violation.get("file_path")
+            results: List[Dict[str, Any]] = []
+            runtime.begin(total_cases=len(candidates))
+            for violation in candidates:
+                case_id, case_dir = runtime.prepare_case(violation)
+                violation_id = violation.get("violation_id")
+                target_method = violation.get("target_method")
+                evidence = violation.get("evidence") or {}
+                file_path = evidence.get("file_path") or violation.get("file_path")
 
-            if not violation_id or not target_method or not file_path:
-                results.append(
-                    {
-                        "violation_id": violation_id,
-                        "target_method": target_method,
-                        "file_path": file_path,
-                        "status": "SKIPPED",
-                        "error": "missing_violation_fields",
-                        "category": violation.get("category"),
-                    }
+                if not violation_id or not target_method or not file_path:
+                    result = build_skipped_result(
+                        violation=violation,
+                        case_id=case_id,
+                        error="missing_violation_fields",
+                    )
+                    results.append(result)
+                    runtime.record_case(apply_result=result, result=result)
+                    continue
+
+                apply_result = apply_remediation(
+                    str(violation_id),
+                    target_method=str(target_method),
+                    file_path=str(file_path),
+                    mode=args.mode,
+                    max_attempts=args.max_attempts,
+                    raw_capture_dir=case_dir.as_posix(),
+                    build_command=args.build_command or context.selection_cfg.get("build_command"),
                 )
-                continue
+                result = build_remediation_result(
+                    violation=violation,
+                    apply_result=apply_result,
+                    case_id=case_id,
+                )
+                results.append(result)
+                runtime.record_case(apply_result=apply_result, result=result)
 
-            apply_result = apply_remediation(
-                str(violation_id),
-                target_method=str(target_method),
-                file_path=str(file_path),
-                mode=args.mode,
-                max_attempts=args.max_attempts,
-                raw_capture_dir=output_dir.as_posix(),
-                build_command=args.build_command or context.selection_cfg.get("build_command"),
-            )
-            verification = apply_result.get("verification") or {}
-            compilation = apply_result.get("compilation") or {}
-            target_rule_status = verification.get("target_rule_status")
-            policy_pass = apply_result.get("status") == "OK" and target_rule_status == "PASS"
-            build_pass = compilation.get("success") if compilation.get("attempted") else None
-            results.append(
-                {
-                    "violation_id": violation_id,
-                    "target_method": target_method,
-                    "file_path": file_path,
-                    "status": apply_result.get("status"),
-                    "error": apply_result.get("error"),
-                    "patch_applied": bool(apply_result.get("updated_source_code")),
-                    "policy_pass": policy_pass,
-                    "build_pass": build_pass,
-                    "category": violation.get("category"),
-                    "verification": verification,
-                    "compilation": compilation,
-                    "diff": apply_result.get("diff"),
-                    "generation": apply_result.get("generation"),
-                    "errors": apply_result.get("errors"),
-                    "attempt_count": apply_result.get("attempt_count"),
-                    "raw_capture_files": apply_result.get("raw_capture_files"),
-                }
-            )
-
-    attempted = len(results)
-    fix_success = sum(1 for item in results if item.get("policy_pass") is True)
-    structured_valid = sum(
-        1
-        for item in results
-        if isinstance(item.get("generation"), dict) and item["generation"].get("raw_response_valid") is True
-    )
-    replacement_applied = sum(1 for item in results if item.get("patch_applied") is True)
-    policy_pass_count = sum(1 for item in results if item.get("policy_pass") is True)
-    build_attempted = sum(
-        1
-        for item in results
-        if isinstance(item.get("compilation"), dict) and item["compilation"].get("attempted") is True
-    )
-    build_success = sum(1 for item in results if item.get("build_pass") is True)
-    fix_rate = fix_success / attempted if attempted else 0.0
-    build_rate = build_success / build_attempted if build_attempted else 0.0
-
-    metrics = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "benchmark_root": context.benchmark_root.as_posix(),
-        "ground_truth_file": context.truth_path.as_posix(),
-        "ground_truth_schema": context.truth_schema,
-        "selection": context.selection_cfg,
-        "coverage_by_category": context.coverage_by_category,
-        "mode": args.mode,
-        "max_attempts": args.max_attempts,
-        "attempted": attempted,
-        "fix_success": fix_success,
-        "structured_valid": structured_valid,
-        "replacement_applied": replacement_applied,
-        "policy_pass_count": policy_pass_count,
-        "build_attempted": build_attempted,
-        "build_success": build_success,
-        "fix_success_rate": round(fix_rate, 4),
-        "build_success_rate": round(build_rate, 4),
-        "legacy_build_command_arg": args.build_command,
-        "results": results,
-    }
-
-    write_json(output_dir / "remediation_metrics.json", metrics)
-    write_csv(
-        output_dir / "remediation_metrics.csv",
-        [
-            {
-                "violation_id": item.get("violation_id"),
-                "target_method": item.get("target_method"),
-                "status": item.get("status"),
-                "patch_applied": item.get("patch_applied"),
-                "policy_pass": item.get("policy_pass"),
-                "build_pass": item.get("build_pass"),
-                "category": item.get("category"),
-                "error": item.get("error"),
-            }
-            for item in results
-        ],
-        fieldnames=[
-            "violation_id",
-            "target_method",
-            "status",
-            "patch_applied",
-            "policy_pass",
-            "build_pass",
-            "category",
-            "error",
-        ],
-    )
-
-    headers = ["Metric", "Value"]
-    table_rows = [
-        ["Fix Success Rate", round(fix_rate, 4)],
-        ["Build Success Rate", round(build_rate, 4)],
-        ["Structured Valid", structured_valid],
-        ["Replacement Applied", replacement_applied],
-        ["Policy Pass Count", policy_pass_count],
-        ["Build Attempts", build_attempted],
-        ["Attempted", attempted],
-    ]
-    if args.table_format == "tex":
-        table = render_latex_table(headers, table_rows, caption="Remediation Success Metrics")
-        (output_dir / "table.tex").write_text(table, encoding="utf-8")
-    else:
-        table = render_markdown_table(headers, table_rows)
-        (output_dir / "table.md").write_text(table, encoding="utf-8")
-
-    summary_lines = [
-        "# Remediation Summary",
-        "",
-        f"- Attempted: `{attempted}`",
-        f"- Structured valid: `{structured_valid}`",
-        f"- Replacement applied: `{replacement_applied}`",
-        f"- Policy fixed: `{policy_pass_count}`",
-        f"- Build attempted: `{build_attempted}`",
-        f"- Build success: `{build_success}`",
-        f"- Fully verified success rate: `{round(fix_rate, 4)}`",
-        f"- Build success rate: `{round(build_rate, 4)}`",
-        "",
-        "Interpretation:",
-        "- `Policy fixed` means the target rule was removed and no new violations were introduced.",
-        "- `Build success` means compilation was attempted and passed.",
-        "- `Fully verified` is the current remediation benchmark success metric.",
-    ]
-    (output_dir / "summary.md").write_text("\n".join(summary_lines), encoding="utf-8")
+        metrics = build_metrics_payload(
+            benchmark_root=context.benchmark_root,
+            truth_path=context.truth_path,
+            truth_schema=context.truth_schema,
+            selection_cfg=context.selection_cfg,
+            coverage_by_category=context.coverage_by_category,
+            mode=args.mode,
+            max_attempts=args.max_attempts,
+            legacy_build_command_arg=args.build_command,
+            results=results,
+        )
+        write_final_artifacts(output_dir, metrics, table_format=args.table_format)
+        runtime.finalize(status="completed")
+        completed = True
+    finally:
+        if not completed:
+            runtime.finalize(status="failed")
 
     LOGGER.info("Remediation evaluation complete. Outputs written to %s", output_dir)
     return 0
