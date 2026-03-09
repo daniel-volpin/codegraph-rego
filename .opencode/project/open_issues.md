@@ -3,13 +3,17 @@
 ## Highest-Value Current Gaps
 
 - The prior supported-medium remediation quality gap is now closed on the current compile-backed benchmark rerun (`17/17`), but the same result still needs to hold across future model swaps and broader rule expansion.
-- Some benchmark families still use heuristic detection and can produce noise on broader codebases.
+- Detection quality is materially stronger on the calibrated benchmark rerun, but some benchmark families still use heuristic evidence and can produce noise on broader codebases.
 
 ## Known Bounded Risks
 
 - Weak crypto is guarded and may still need safe refusal (`NO_FIX`) on harder cases.
 - Explanation quality is good overall, but some categories remain weaker than others.
 - Remediation is still model-sensitive even with the stronger span-edit contract and generic planning layer.
+- Remaining detection weak spots are now concentrated rather than global:
+  - weak-hash recall
+  - command-injection recall
+  - path-traversal precision
 
 ## What Not To Overclaim
 
