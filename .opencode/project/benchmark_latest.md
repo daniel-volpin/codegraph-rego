@@ -24,15 +24,15 @@ Source: `outputs/thesis_final_explanation_full/table.md`
 
 ## Remediation Supported Medium (Compile-Backed Product Gate)
 
-Source: `outputs/span_edit_supported_medium_v2/summary.md`
+Source: `outputs/repro_supported_medium_main_2026-03-09_13-04-38/summary.md`
 
-- Attempted supported cases: `10`
-- Structured valid: `10`
-- Replacement applied: `10`
-- Policy fixed: `9`
-- Build attempted: `10`
-- Build success: `9`
-- Fully verified success rate: `90%`
+- Attempted supported cases: `17`
+- Structured valid: `16`
+- Replacement applied: `16`
+- Policy fixed: `16`
+- Build attempted: `16`
+- Build success: `16`
+- Fully verified success rate: `94.12%`
 
 ## Remediation Bounded Smoke
 
@@ -45,4 +45,4 @@ Source: `outputs/span_edit_bounded_smoke_v2/summary.md`
 
 - Detection and explanation are strong enough to support the benchmark-first thesis story.
 - Compile-backed remediation is now real on the successful supported cases.
-- Remediation remains bounded and still has one known supported-medium failure, so the current supported-medium ceiling is `9/10`.
+- Remediation remains bounded and still has one known supported-medium failure, so the current supported-medium ceiling on the latest rerun is `16/17`.
