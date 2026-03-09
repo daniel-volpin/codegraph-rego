@@ -156,20 +156,6 @@ path_traversal_heuristic if {
   not helper_safe_path
 }
 
-path_traversal_heuristic if {
-  servlet_context
-  input.source_code != null
-  flags := input.analysis_flags
-  flags != null
-  not flags.path_safe_constant_detected == true
-  src := lower(input.source_code)
-  input_is_untrusted
-  dynamic_source_construction(src)
-  some kw in file_path_keywords
-  contains(src, kw)
-  not helper_safe_path
-}
-
 command_injection_heuristic if {
   servlet_context
   flags := input.analysis_flags

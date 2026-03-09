@@ -164,6 +164,9 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
                 "sha1prng_detected": False,
                 "path_traversal_detected": False,
                 "path_safe_constant_detected": True,
+                "path_sink_uses_tainted_input": False,
+                "path_sink_uses_safe_constant": True,
+                "path_sink_uses_safe_resource_helper": False,
                 "command_injection_detected": False,
                 "ldap_injection_detected": False,
                 "xpath_injection_detected": False,
@@ -195,6 +198,9 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
                 "sha1prng_detected": False,
                 "path_traversal_detected": True,
                 "path_safe_constant_detected": False,
+                "path_sink_uses_tainted_input": True,
+                "path_sink_uses_safe_constant": False,
+                "path_sink_uses_safe_resource_helper": False,
                 "command_injection_detected": False,
                 "ldap_injection_detected": False,
                 "xpath_injection_detected": False,
@@ -207,6 +213,74 @@ class TestPolicyEvaluateCaps(unittest.TestCase):
                 "safe_constant_return_used_in_path_sink": True,
                 "safe_constant_return_used_in_ldap_filter": False,
                 "safe_constant_return_used_in_command_sink": False,
+            },
+        }
+
+        violations = evaluate_bundle(bundle)
+        violation_ids = self._normalized_violation_ids(violations)
+        self.assertNotIn("ISO-A.8-PATH-TRAVERSAL", violation_ids)
+
+    def test_evaluate_bundle_respects_safe_resource_path_flag(self) -> None:
+        from codegraph.policy.integration import evaluate_bundle
+
+        bundle = {
+            "target_method": "org.owasp.benchmark.testcode.BenchmarkTest99990.doPost(HttpServletRequest,HttpServletResponse)",
+            "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest99990.java",
+            "source_code": (
+                'String param = request.getHeader("x");'
+                'new java.io.FileInputStream(org.owasp.benchmark.helpers.Utils.getFileFromClasspath("employees.xml", this.getClass().getClassLoader()));'
+            ),
+            "graph_context": {"annotations": ["WebServlet"], "uses_fields": [], "calls": [], "callers": []},
+            "analysis_flags": {
+                "md5_detected": False,
+                "weak_cipher_detected": False,
+                "insecure_random_detected": False,
+                "sha1prng_detected": False,
+                "path_traversal_detected": False,
+                "path_safe_constant_detected": False,
+                "path_sink_uses_tainted_input": False,
+                "path_sink_uses_safe_constant": False,
+                "path_sink_uses_safe_resource_helper": True,
+                "command_injection_detected": False,
+                "ldap_injection_detected": False,
+                "xpath_injection_detected": False,
+                "sql_prepare_call_detected": False,
+                "sql_callable_statement_detected": False,
+            },
+        }
+
+        violations = evaluate_bundle(bundle)
+        violation_ids = self._normalized_violation_ids(violations)
+        self.assertNotIn("ISO-A.8-PATH-TRAVERSAL", violation_ids)
+
+    def test_evaluate_bundle_does_not_retrigger_path_source_fallback_when_flags_present(self) -> None:
+        from codegraph.policy.integration import evaluate_bundle
+
+        bundle = {
+            "target_method": "org.owasp.benchmark.testcode.BenchmarkTest99989.doPost(HttpServletRequest,HttpServletResponse)",
+            "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest99989.java",
+            "source_code": (
+                'String param = request.getHeader("x");'
+                'String bar = "alsosafe";'
+                'String fileName = base + bar;'
+                "new java.io.FileOutputStream(fileName);"
+            ),
+            "graph_context": {"annotations": ["WebServlet"], "uses_fields": [], "calls": [], "callers": []},
+            "analysis_flags": {
+                "md5_detected": False,
+                "weak_cipher_detected": False,
+                "insecure_random_detected": False,
+                "sha1prng_detected": False,
+                "path_traversal_detected": False,
+                "path_safe_constant_detected": True,
+                "path_sink_uses_tainted_input": False,
+                "path_sink_uses_safe_constant": True,
+                "path_sink_uses_safe_resource_helper": False,
+                "command_injection_detected": False,
+                "ldap_injection_detected": False,
+                "xpath_injection_detected": False,
+                "sql_prepare_call_detected": False,
+                "sql_callable_statement_detected": False,
             },
         }
 

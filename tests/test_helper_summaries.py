@@ -404,6 +404,55 @@ class TestDirectCallSummaryBuilder(unittest.TestCase):
         self.assertEqual(helper_summaries["safe_constant_return_vars"], ["bar"])
         self.assertTrue(helper_summaries["safe_constant_return_used_in_path_sink"])
 
+    def test_falls_back_to_same_file_helper_when_call_graph_is_missing(self) -> None:
+        builder = DirectCallSummaryBuilder()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_path = Path(tmpdir) / "BenchmarkTest01027.java"
+            source_path.write_text(
+                "\n".join(
+                    [
+                        "class BenchmarkTest01027 {",
+                        "  void doPost(String param) {",
+                        "    String bar = new Test().doSomething(param);",
+                        "    new java.io.File(bar);",
+                        "  }",
+                        "  class Test {",
+                        "    String doSomething(String param) {",
+                        "      int num = 106;",
+                        '      String bar = (7 * 18) + num > 200 ? "This_should_always_happen" : param;',
+                        "      return bar;",
+                        "    }",
+                        "  }",
+                        "}",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            method_snapshot = {
+                "class_fqn": "org.example.BenchmarkTest01027",
+                "file_path": source_path.as_posix(),
+                "calls": [],
+            }
+            method_index = {
+                "org.example.BenchmarkTest01027$Test.doSomething(java.lang.String)": {
+                    "signature": "org.example.BenchmarkTest01027$Test.doSomething(java.lang.String)",
+                    "class_fqn": "org.example.BenchmarkTest01027$Test",
+                    "name": "doSomething",
+                    "file_path": source_path.as_posix(),
+                    "start_line": 7,
+                    "end_line": 10,
+                }
+            }
+            helper_summaries = builder.build(
+                current_source='String bar = new Test().doSomething(param); new java.io.File(bar);',
+                method_snapshot=method_snapshot,
+                method_index=method_index,
+            )
+
+        self.assertEqual(helper_summaries["safe_constant_return_vars"], ["bar"])
+        self.assertTrue(helper_summaries["safe_constant_return_used_in_path_sink"])
+        self.assertEqual(helper_summaries["analyzed_call_count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
