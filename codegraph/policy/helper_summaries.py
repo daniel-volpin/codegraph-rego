@@ -219,6 +219,7 @@ class DirectCallSummaryBuilder:
                 method_name=method_name,
                 call_signatures=call_signatures,
                 current_class_fqn=method_snapshot.get("class_fqn"),
+                current_file_path=method_snapshot.get("file_path"),
                 method_index=method_index,
             )
             if not callee_snapshot:
@@ -246,11 +247,17 @@ class DirectCallSummaryBuilder:
         method_name: str,
         call_signatures: list[str],
         current_class_fqn: str | None,
+        current_file_path: str | None,
         method_index: Dict[str, Dict[str, Any]],
     ) -> Dict[str, Any] | None:
         candidates = [sig for sig in call_signatures if sig and _method_name_from_signature(sig) == method_name]
         if not candidates:
-            return None
+            return DirectCallSummaryBuilder._resolve_same_file_method(
+                method_name=method_name,
+                current_class_fqn=current_class_fqn,
+                current_file_path=current_file_path,
+                method_index=method_index,
+            )
         if len(candidates) == 1:
             return method_index.get(candidates[0])
         if current_class_fqn:
@@ -268,7 +275,40 @@ class DirectCallSummaryBuilder:
             snapshot = method_index.get(signature)
             if snapshot and snapshot.get("class_fqn") == current_class_fqn:
                 return snapshot
-        return method_index.get(candidates[0])
+        return method_index.get(candidates[0]) or DirectCallSummaryBuilder._resolve_same_file_method(
+            method_name=method_name,
+            current_class_fqn=current_class_fqn,
+            current_file_path=current_file_path,
+            method_index=method_index,
+        )
+
+    @staticmethod
+    def _resolve_same_file_method(
+        *,
+        method_name: str,
+        current_class_fqn: str | None,
+        current_file_path: str | None,
+        method_index: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Any] | None:
+        if not current_file_path:
+            return None
+        candidates = [
+            snapshot
+            for snapshot in method_index.values()
+            if snapshot.get("name") == method_name and snapshot.get("file_path") == current_file_path
+        ]
+        if not candidates:
+            return None
+        if current_class_fqn:
+            nested_prefix = f"{current_class_fqn}$"
+            for snapshot in candidates:
+                class_fqn = snapshot.get("class_fqn")
+                if isinstance(class_fqn, str) and class_fqn.startswith(nested_prefix):
+                    return snapshot
+            for snapshot in candidates:
+                if snapshot.get("class_fqn") == current_class_fqn:
+                    return snapshot
+        return candidates[0]
 
     @staticmethod
     def _read_method_source(method_snapshot: Dict[str, Any]) -> str:

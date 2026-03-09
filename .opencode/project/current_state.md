@@ -64,8 +64,14 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
   - source analysis split into smaller analyzers under `source_analysis_core.py`
   - one-hop helper-return summaries under `helper_summaries.py`
   - command detection distinguishes payload taint from env-only taint
+  - path detection now uses bounded sink-level path semantics with safe constant/resource suppression
+  - helper summary resolution now falls back to same-file nested helpers when graph call edges are missing
 - Detection calibration improved the current full benchmark baseline:
-  - precision: `0.6932`
-  - recall: `0.7854`
-  - F1: `0.7364`
+  - precision: `0.8357`
+  - recall: `0.7639`
+  - F1: `0.7982`
+- Path traversal is no longer a primary weak spot on the sampled full benchmark rerun:
+  - precision: `0.8571`
+  - recall: `0.8276`
+  - F1: `0.8421`
 - Benchmark-first outputs are the authoritative evidence for current capability.

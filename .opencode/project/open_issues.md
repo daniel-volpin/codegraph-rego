@@ -13,7 +13,8 @@
 - Remaining detection weak spots are now concentrated rather than global:
   - weak-hash recall
   - command-injection recall
-  - path-traversal precision
+  - SQL injection precision
+  - XPath coverage / balance
 
 ## What Not To Overclaim
 

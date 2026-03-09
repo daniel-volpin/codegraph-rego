@@ -84,6 +84,12 @@ DIRECT_PATH_UNTRUSTED_PATTERNS = (
     re.compile(r"Paths\s*\.\s*get\s*\([^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(", re.IGNORECASE),
     re.compile(r"\b(?:file|path|uri)\w*\s*=\s*[^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(", re.IGNORECASE),
 )
+PATH_SAFE_RESOURCE_PATTERNS = (
+    re.compile(r"Utils\s*\.\s*getFileFromClasspath\s*\(", re.IGNORECASE),
+    re.compile(r"getClass\s*\(\s*\)\s*\.\s*getClassLoader\s*\(\s*\)", re.IGNORECASE),
+    re.compile(r"\.getResourceAsStream\s*\(", re.IGNORECASE),
+    re.compile(r"\.getResource\s*\(", re.IGNORECASE),
+)
 CMDI_PATTERNS = (
     re.compile(r"\.exec\s*\(", re.IGNORECASE),
     re.compile(r"new\s+ProcessBuilder\s*\(", re.IGNORECASE),
@@ -135,6 +141,12 @@ STRING_BUILDER_RE = re.compile(r"String(?:Builder|Buffer)", re.IGNORECASE)
 APPEND_CALL_RE = re.compile(r"\.append\s*\(", re.IGNORECASE)
 ARRAY_LITERAL_RE = re.compile(r"\{[^{}]*[A-Za-z_][A-Za-z0-9_]*[^{}]*\}")
 SIMPLE_ASSIGNMENT_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+);", re.DOTALL)
+LIST_ADD_VALUE_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)\s*;', re.DOTALL)
+LIST_REMOVE_INDEX_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.remove\(\s*(\d+)\s*\)\s*;', re.DOTALL)
+LIST_GET_VALUE_RE = re.compile(
+    r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*(\d+)\s*\)\s*;',
+    re.DOTALL,
+)
 STRING_LITERAL_FULL_RE = re.compile(r'^"([^"\\]*(?:\\.[^"\\]*)*)"$', re.DOTALL)
 INT_LITERAL_FULL_RE = re.compile(r"^-?\d+$")
 CHAR_AT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\.charAt\((\d+)\)$")
@@ -336,6 +348,10 @@ class AssignmentStateAnalyzer:
         if collapsed_if_else != source_code:
             return self.analyze(collapsed_if_else, initial_tainted_vars=initial_tainted_vars)
 
+        collapsed_lists = self._resolve_selected_list_gets(source_code, string_constants, tainted_vars)
+        if collapsed_lists != source_code:
+            return self.analyze(collapsed_lists, initial_tainted_vars=initial_tainted_vars)
+
         collapsed = self._resolve_selected_switch_body(source_code, char_constants)
         if collapsed != source_code:
             return self.analyze(collapsed, initial_tainted_vars=initial_tainted_vars)
@@ -455,6 +471,53 @@ class AssignmentStateAnalyzer:
 
         return SWITCH_BLOCK_RE.sub(_replace, source_code)
 
+    @classmethod
+    def _resolve_selected_list_gets(
+        cls,
+        source_code: str,
+        string_constants: Dict[str, str],
+        tainted_vars: set[str],
+    ) -> str:
+        items: Dict[str, list[str]] = {}
+        for list_name, raw_value in LIST_ADD_VALUE_RE.findall(source_code):
+            resolved = cls._resolve_collection_expr(raw_value.strip(), string_constants, tainted_vars)
+            if resolved is not None:
+                items.setdefault(list_name, []).append(resolved)
+        for list_name, raw_index in LIST_REMOVE_INDEX_RE.findall(source_code):
+            values = items.get(list_name)
+            if values is None:
+                continue
+            index = int(raw_index)
+            if 0 <= index < len(values):
+                values.pop(index)
+
+        def _replace(match: re.Match[str]) -> str:
+            target_var, list_name, raw_index = match.groups()
+            values = items.get(list_name)
+            if values is None:
+                return match.group(0)
+            index = int(raw_index)
+            if not (0 <= index < len(values)):
+                return match.group(0)
+            return f"{target_var} = {values[index]};"
+
+        return LIST_GET_VALUE_RE.sub(_replace, source_code)
+
+    @staticmethod
+    def _resolve_collection_expr(
+        expr: str,
+        string_constants: Dict[str, str],
+        tainted_vars: set[str],
+    ) -> str | None:
+        literal_match = STRING_LITERAL_FULL_RE.match(expr)
+        if literal_match:
+            return expr
+        if expr in string_constants:
+            return f'"{string_constants[expr]}"'
+        if expr in tainted_vars:
+            return expr
+        return None
+
 
 class ConditionalAssignmentResolver:
     @staticmethod
@@ -477,6 +540,14 @@ class CommandAnalysis:
     command_exec_string_tainted: bool
     command_exec_args_tainted: bool
     command_env_only_tainted: bool
+
+
+@dataclass(frozen=True)
+class PathAnalysis:
+    path_sink_uses_tainted_input: bool
+    path_sink_uses_safe_constant: bool
+    path_sink_uses_safe_resource_helper: bool
+    path_traversal_detected: bool
 
 
 class CommandFlowAnalyzer:
@@ -641,14 +712,43 @@ class CommandFlowAnalyzer:
 
 class PathSafetyAnalyzer:
     def __init__(self) -> None:
-        self._assignment_analyzer = AssignmentStateAnalyzer()
+        self._assignment_analyzer = AssignmentStateAnalyzer(PATH_LDAP_UNTRUSTED_INPUT_PATTERNS)
+
+    def analyze(self, source_code: str) -> PathAnalysis:
+        state = self._assignment_analyzer.analyze(source_code)
+        sink_vars = self._sink_vars(source_code)
+        path_sink_uses_safe_constant = self._sink_uses_safe_constant(source_code, state, sink_vars)
+        path_sink_uses_safe_resource_helper = any(pattern.search(source_code) for pattern in PATH_SAFE_RESOURCE_PATTERNS)
+        path_sink_uses_tainted_input = self._sink_uses_tainted_input(source_code, state, sink_vars)
+        compatibility_path_signal = self._compatibility_path_signal(source_code, sink_vars)
+        path_traversal_detected = (
+            any(pattern.search(source_code) for pattern in PATH_TRAVERSAL_PATTERNS)
+            and (path_sink_uses_tainted_input or compatibility_path_signal)
+            and not path_sink_uses_safe_constant
+            and not path_sink_uses_safe_resource_helper
+        )
+        return PathAnalysis(
+            path_sink_uses_tainted_input=path_sink_uses_tainted_input,
+            path_sink_uses_safe_constant=path_sink_uses_safe_constant,
+            path_sink_uses_safe_resource_helper=path_sink_uses_safe_resource_helper,
+            path_traversal_detected=path_traversal_detected,
+        )
 
     def safe_constant_override_detected(self, source_code: str) -> bool:
-        state = self._assignment_analyzer.analyze(source_code)
+        return self.analyze(source_code).path_sink_uses_safe_constant
+
+    def sink_references_tainted_data(self, source_code: str) -> bool:
+        return self.analyze(source_code).path_sink_uses_tainted_input
+
+    @staticmethod
+    def _sink_vars(source_code: str) -> set[str]:
         sink_vars: set[str] = set()
         for pattern in PATH_SINK_VARIABLE_PATTERNS:
             for match in pattern.finditer(source_code):
                 sink_vars.add(match.group(1))
+        return sink_vars
+
+    def _sink_uses_safe_constant(self, source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:
         if not sink_vars:
             return False
         if sink_vars & set(state.string_constants):
@@ -664,13 +764,21 @@ class PathSafetyAnalyzer:
                 return True
         return False
 
-    def sink_references_tainted_data(self, source_code: str) -> bool:
-        state = self._assignment_analyzer.analyze(source_code)
-        for pattern in PATH_SINK_VARIABLE_PATTERNS:
-            for match in pattern.finditer(source_code):
-                if match.group(1) in state.tainted_vars:
-                    return True
-        return any(pattern.search(source_code) for pattern in DIRECT_PATH_UNTRUSTED_PATTERNS)
+    def _sink_uses_tainted_input(self, source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:
+        if any(pattern.search(source_code) for pattern in DIRECT_PATH_UNTRUSTED_PATTERNS):
+            return True
+        for sink_var in sink_vars:
+            if sink_var in state.tainted_vars:
+                return True
+        return False
+
+    @staticmethod
+    def _compatibility_path_signal(source_code: str, sink_vars: set[str]) -> bool:
+        if any(pattern.search(source_code) for pattern in DIRECT_PATH_UNTRUSTED_PATTERNS):
+            return True
+        has_dynamic_sink_shape = any(pattern.search(source_code) for pattern in PATH_DYNAMIC_ARGUMENT_PATTERNS)
+        has_dynamic_path_construction = any(pattern.search(source_code) for pattern in PATH_DYNAMIC_CONSTRUCTION_PATTERNS)
+        return bool(sink_vars) and (has_dynamic_sink_shape or has_dynamic_path_construction)
 
 
 class PolicyIndicatorAnalyzer:
@@ -690,6 +798,9 @@ class PolicyIndicatorAnalyzer:
             "sha1prng_detected": False,
             "path_traversal_detected": False,
             "path_safe_constant_detected": False,
+            "path_sink_uses_tainted_input": False,
+            "path_sink_uses_safe_constant": False,
+            "path_sink_uses_safe_resource_helper": False,
             "command_exec_string_tainted": False,
             "command_exec_args_tainted": False,
             "command_env_only_tainted": False,
@@ -750,16 +861,9 @@ class PolicyIndicatorAnalyzer:
         if SHA1_PRNG_RE.search(source_code):
             sha1prng_detected = True
 
-        path_dynamic_usage_detected = any(pattern.search(source_code) for pattern in PATH_DYNAMIC_CONSTRUCTION_PATTERNS) or any(
-            pattern.search(source_code) for pattern in PATH_DYNAMIC_ARGUMENT_PATTERNS
-        )
-        path_safe_constant_detected = self._path_safety.safe_constant_override_detected(source_code)
-        path_traversal_detected = (
-            path_ldap_untrusted_input_detected
-            and any(pattern.search(source_code) for pattern in PATH_TRAVERSAL_PATTERNS)
-            and path_dynamic_usage_detected
-            and not path_safe_constant_detected
-        )
+        path_analysis = self._path_safety.analyze(source_code)
+        path_safe_constant_detected = path_analysis.path_sink_uses_safe_constant
+        path_traversal_detected = path_ldap_untrusted_input_detected and path_analysis.path_traversal_detected
         command_analysis = self._command_flow.analyze(source_code)
         command_exec_string_tainted = command_analysis.command_exec_string_tainted
         command_exec_args_tainted = command_analysis.command_exec_args_tainted
@@ -798,6 +902,9 @@ class PolicyIndicatorAnalyzer:
             "sha1prng_detected": sha1prng_detected,
             "path_traversal_detected": path_traversal_detected,
             "path_safe_constant_detected": path_safe_constant_detected,
+            "path_sink_uses_tainted_input": path_analysis.path_sink_uses_tainted_input,
+            "path_sink_uses_safe_constant": path_analysis.path_sink_uses_safe_constant,
+            "path_sink_uses_safe_resource_helper": path_analysis.path_sink_uses_safe_resource_helper,
             "command_exec_string_tainted": command_exec_string_tainted,
             "command_exec_args_tainted": command_exec_args_tainted,
             "command_env_only_tainted": command_env_only_tainted,
