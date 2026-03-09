@@ -60,7 +60,12 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
 - Compile-backed remediation is proven on the current supported benchmark subset:
   - bounded smoke: `3/3`
   - supported medium: `17/17`
+- Detection calibration now uses a more maintainable evidence layer:
+  - source analysis split into smaller analyzers under `source_analysis_core.py`
+  - one-hop helper-return summaries under `helper_summaries.py`
+  - command detection distinguishes payload taint from env-only taint
 - Detection calibration improved the current full benchmark baseline:
-  - precision: `0.5631`
-  - recall: `0.5365`
+  - precision: `0.6932`
+  - recall: `0.7854`
+  - F1: `0.7364`
 - Benchmark-first outputs are the authoritative evidence for current capability.

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
+from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.db import get_neo4j_driver
 from codegraph.remediation.capabilities import remediation_capability_dict
@@ -34,6 +35,7 @@ _CATALOG_CACHE: Dict[str, Dict[str, Any]] | None = None
 _CATALOG_ENTRIES_CACHE: List[Dict[str, Any]] | None = None
 _ISO_RULES_CACHE: Dict[str, Any] | None = None
 _HYBRID_SEARCH: Optional[HybridSearchService] = None
+_HELPER_SUMMARY_BUILDER = DirectCallSummaryBuilder()
 
 
 def _load_hybrid_search() -> Optional[HybridSearchService]:
@@ -56,7 +58,7 @@ def _is_test_source_path(file_path: Any) -> bool:
 
 
 def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
-    global _CATALOG_CACHE, _CATALOG_ENTRIES_CACHE, raw
+    global _CATALOG_CACHE, _CATALOG_ENTRIES_CACHE
     if _CATALOG_CACHE is None or _CATALOG_ENTRIES_CACHE is None:
         try:
             with open(CATALOG_PATH, "r") as file:
@@ -145,10 +147,15 @@ def build_policy_input(*, max_bundles: int | None = None) -> Dict[str, Any]:
     # Build evidence bundles concurrently (file I/O + FAISS).
     # This is CPU/IO bound, so we use available CPU cores to maximize throughput.
     workers = min(32, (os.cpu_count() or 4) + 4)
+    method_index = {
+        snapshot["signature"]: snapshot
+        for snapshot in methods
+        if snapshot.get("signature")
+    }
     bundles: List[Dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
     with ThreadPoolExecutor(max_workers=workers) as pool:
         future_to_idx = {
-            pool.submit(build_evidence_bundle, m, hybrid_search): i
+            pool.submit(build_evidence_bundle, m, hybrid_search, method_index): i
             for i, m in enumerate(methods)
         }
         for future in as_completed(future_to_idx):
@@ -290,7 +297,9 @@ def _resolve_source_path(file_path: Optional[str]) -> Optional[Path]:
 
 
 def build_evidence_bundle(
-    method_snapshot: Dict[str, Any], search_service: Optional[HybridSearchService] = None
+    method_snapshot: Dict[str, Any],
+    search_service: Optional[HybridSearchService] = None,
+    method_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     file_path = method_snapshot.get("file_path")
     resolved_path = _resolve_source_path(file_path)
@@ -311,6 +320,15 @@ def build_evidence_bundle(
         "callers": method_snapshot.get("callers") or [],
     }
     analysis_flags = analyze_policy_indicators(source_code)
+    helper_summaries = (
+        _HELPER_SUMMARY_BUILDER.build(
+            current_source=source_code,
+            method_snapshot=method_snapshot,
+            method_index=method_index or {},
+        )
+        if method_index is not None
+        else {}
+    )
     vector_context: List[str] = []
     if search_service is not None:
         try:
@@ -329,6 +347,7 @@ def build_evidence_bundle(
         "graph_context": graph_context,
         "vector_context": vector_context,
         "analysis_flags": analysis_flags,
+        "helper_summaries": helper_summaries,
     }
 
 
@@ -367,6 +386,7 @@ def _build_violation_response(
         "start_line": start_line,
         "end_line": end_line,
         "analysis_flags": bundle.get("analysis_flags", {}),
+        "helper_summaries": bundle.get("helper_summaries", {}),
     }
     return {
         "violation_id": violation_id,

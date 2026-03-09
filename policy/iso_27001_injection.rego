@@ -116,42 +116,98 @@ dynamic_source_construction(src) if {
   contains(src, "stringbuffer")
 }
 
+helper_safe_path if {
+  helpers := input.helper_summaries
+  helpers.safe_constant_return_used_in_path_sink == true
+}
+
+helper_safe_ldap if {
+  helpers := input.helper_summaries
+  helpers.safe_constant_return_used_in_ldap_filter == true
+}
+
+helper_safe_command if {
+  helpers := input.helper_summaries
+  helpers.safe_constant_return_used_in_command_sink == true
+}
+
+helper_tainted_command if {
+  helpers := input.helper_summaries
+  helpers.tainted_return_used_in_command_sink == true
+}
+
 path_traversal_heuristic if {
   servlet_context
   flags := input.analysis_flags
   flags.path_traversal_detected == true
+  not helper_safe_path
 }
 
 path_traversal_heuristic if {
   servlet_context
   input.source_code != null
+  flags := input.analysis_flags
+  flags == null
   src := lower(input.source_code)
   input_is_untrusted
   dynamic_source_construction(src)
   some kw in file_path_keywords
   contains(src, kw)
+  not helper_safe_path
+}
+
+path_traversal_heuristic if {
+  servlet_context
+  input.source_code != null
+  flags := input.analysis_flags
+  flags != null
+  not flags.path_safe_constant_detected == true
+  src := lower(input.source_code)
+  input_is_untrusted
+  dynamic_source_construction(src)
+  some kw in file_path_keywords
+  contains(src, kw)
+  not helper_safe_path
 }
 
 command_injection_heuristic if {
   servlet_context
   flags := input.analysis_flags
-  flags.command_injection_detected == true
+  flags.command_exec_string_tainted == true
+  not helper_safe_command
+}
+
+command_injection_heuristic if {
+  servlet_context
+  flags := input.analysis_flags
+  flags.command_exec_args_tainted == true
+  not helper_safe_command
+}
+
+command_injection_heuristic if {
+  servlet_context
+  helper_tainted_command
+  not helper_safe_command
 }
 
 command_injection_heuristic if {
   servlet_context
   input.source_code != null
+  flags := input.analysis_flags
+  flags == null
   src := lower(input.source_code)
   input_is_untrusted
   dynamic_source_construction(src)
   some kw in command_keywords
   contains(src, kw)
+  not helper_safe_command
 }
 
 ldap_injection_heuristic if {
   servlet_context
   flags := input.analysis_flags
   flags.ldap_injection_detected == true
+  not helper_safe_ldap
 }
 
 ldap_injection_heuristic if {
@@ -162,6 +218,7 @@ ldap_injection_heuristic if {
   dynamic_source_construction(src)
   some kw in ldap_keywords
   contains(src, kw)
+  not helper_safe_ldap
 }
 
 xpath_injection_heuristic if {

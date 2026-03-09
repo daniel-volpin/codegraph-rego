@@ -82,14 +82,6 @@ source_insecure_random if {
   contains(src, threadlocal_random_pattern)
 }
 
-source_insecure_random if {
-  flags := input.analysis_flags
-  flags == null
-  input.source_code != null
-  src := lower(input.source_code)
-  contains(src, sha1prng_pattern)
-}
-
 analysis_insecure_random if {
   flags := input.analysis_flags
   flags.insecure_random_detected == true
