@@ -222,8 +222,14 @@ def apply_method_edits(
             return candidate_start, candidate_start + expected_length - 1
         raise ValueError("edit_original_mismatch")
 
+    effective_edits = [
+        edit for edit in edits if list(edit["original_lines"]) != list(edit["replacement_lines"])
+    ]
+    if not effective_edits:
+        raise ValueError("empty_edits")
+
     resolved_edits: list[dict[str, Any]] = []
-    for edit in edits:
+    for edit in effective_edits:
         start_line = edit["start_line"]
         expected_original = edit["original_lines"]
         replacement_lines = edit["replacement_lines"]
@@ -248,19 +254,14 @@ def apply_method_edits(
             normalized_edits.append(edit)
             continue
         previous = normalized_edits[-1]
-        if edit["actual_start"] > previous["actual_end"] + 1:
+        if edit["actual_start"] > previous["actual_end"]:
             normalized_edits.append(edit)
             continue
 
-        overlap_in_source = previous["actual_end"] - edit["actual_start"] + 1
-        if overlap_in_source < 0:
-            merged_original = previous["original_lines"] + edit["original_lines"]
-            merged_replacement = previous["replacement_lines"] + edit["replacement_lines"]
-        else:
-            merged_original = merge_overlap_lines(previous["original_lines"], edit["original_lines"])
-            merged_replacement = merge_overlap_lines(previous["replacement_lines"], edit["replacement_lines"])
-            if merged_original is None or merged_replacement is None:
-                raise ValueError("edit_spans_overlap")
+        merged_original = merge_overlap_lines(previous["original_lines"], edit["original_lines"])
+        merged_replacement = merge_overlap_lines(previous["replacement_lines"], edit["replacement_lines"])
+        if merged_original is None or merged_replacement is None:
+            raise ValueError("edit_spans_overlap")
 
         normalized_edits[-1] = {
             "actual_start": previous["actual_start"],

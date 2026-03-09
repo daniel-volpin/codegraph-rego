@@ -285,6 +285,93 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertIn('int size = 16;', parsed["replacement_method_code"])
         self.assertIn('call("AES");', parsed["replacement_method_code"])
 
+    def test_parse_structured_generation_accepts_adjacent_non_overlapping_edits(self):
+        raw = json.dumps(
+            {
+                "decision": "apply_edits",
+                "edits": [
+                    {
+                        "start_line": 2,
+                        "end_line": 2,
+                        "original_lines": ['    byte[] iv = random.generateSeed(8);'],
+                        "replacement_lines": ['    byte[] iv = random.generateSeed(12);'],
+                    },
+                    {
+                        "start_line": 3,
+                        "end_line": 4,
+                        "original_lines": [
+                            '    javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("DES/CBC/PKCS5Padding");',
+                            '    javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance("DES").generateKey();',
+                        ],
+                        "replacement_lines": [
+                            '    javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");',
+                            '    javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance("AES").generateKey();',
+                        ],
+                    },
+                ],
+                "reason": "",
+            }
+        )
+        original = [
+            "public void foo() throws Exception {",
+            "    byte[] iv = random.generateSeed(8);",
+            '    javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("DES/CBC/PKCS5Padding");',
+            '    javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance("DES").generateKey();',
+            "}",
+        ]
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=original,
+        )
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertIn('generateSeed(12)', parsed["replacement_method_code"])
+        self.assertIn('Cipher.getInstance("AES/GCM/NoPadding")', parsed["replacement_method_code"])
+
+    def test_parse_structured_generation_ignores_exact_noop_edits(self):
+        raw = json.dumps(
+            {
+                "decision": "apply_edits",
+                "edits": [
+                    {
+                        "start_line": 2,
+                        "end_line": 2,
+                        "original_lines": ['    int size = 8;'],
+                        "replacement_lines": ['    int size = 16;'],
+                    },
+                    {
+                        "start_line": 3,
+                        "end_line": 3,
+                        "original_lines": ['    call("DES");'],
+                        "replacement_lines": ['    call("AES");'],
+                    },
+                    {
+                        "start_line": 4,
+                        "end_line": 4,
+                        "original_lines": ["    finish();"],
+                        "replacement_lines": ["    finish();"],
+                    },
+                ],
+                "reason": "",
+            }
+        )
+        original = [
+            "public void foo() {",
+            "    int size = 8;",
+            '    call("DES");',
+            "    finish();",
+            "}",
+        ]
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="com.example.Foo.foo()",
+            original_method_lines=original,
+        )
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertIn("int size = 16;", parsed["replacement_method_code"])
+        self.assertIn('call("AES");', parsed["replacement_method_code"])
+        self.assertIn("finish();", parsed["replacement_method_code"])
+
     def test_parse_structured_generation_merges_overlapping_exact_content_edits(self):
         raw = json.dumps(
             {
@@ -362,6 +449,111 @@ class RemediationUtilsTests(unittest.TestCase):
         )
         self.assertFalse(parsed["raw_response_valid"])
         self.assertEqual(parsed["schema_error"], "edit_original_mismatch")
+
+    def test_parse_structured_generation_accepts_benchmarktest01017_tail_noop_payload(self):
+        raw = json.dumps(
+            {
+                "decision": "apply_edits",
+                "edits": [
+                    {
+                        "start_line": 27,
+                        "end_line": 28,
+                        "original_lines": [
+                            "javax.crypto.Cipher c =",
+                            '                    javax.crypto.Cipher.getInstance("DES/CBC/PKCS5Padding", "SunJCE");',
+                        ],
+                        "replacement_lines": [
+                            "javax.crypto.Cipher c =",
+                            '                    javax.crypto.Cipher.getInstance("AES/GCM/NoPadding", "SunJCE");',
+                        ],
+                    },
+                    {
+                        "start_line": 30,
+                        "end_line": 30,
+                        "original_lines": [
+                            '            javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance("DES").generateKey();'
+                        ],
+                        "replacement_lines": [
+                            '            javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance("AES").generateKey();'
+                        ],
+                    },
+                    {
+                        "start_line": 24,
+                        "end_line": 24,
+                        "original_lines": ["        byte[] iv = random.generateSeed(8); // DES requires 8 byte keys"],
+                        "replacement_lines": ["        byte[] iv = random.generateSeed(12); // AES-GCM requires 12 byte IV"],
+                    },
+                    {
+                        "start_line": 31,
+                        "end_line": 32,
+                        "original_lines": [
+                            "            java.security.spec.AlgorithmParameterSpec paramSpec =",
+                            "                    new javax.crypto.spec.IvParameterSpec(iv);",
+                        ],
+                        "replacement_lines": [
+                            "            java.security.spec.AlgorithmParameterSpec paramSpec =",
+                            "                    new javax.crypto.spec.GCMParameterSpec(128, iv);",
+                        ],
+                    },
+                    {
+                        "start_line": 33,
+                        "end_line": 33,
+                        "original_lines": ["            c.init(javax.crypto.Cipher.ENCRYPT_MODE, key, paramSpec);"],
+                        "replacement_lines": ["            c.init(javax.crypto.Cipher.ENCRYPT_MODE, key, paramSpec);"],
+                    },
+                    {
+                        "start_line": 118,
+                        "end_line": 118,
+                        "original_lines": [
+                            '        response.getWriter().println("Crypto Test javax.crypto.Cipher.getInstance(java.lang.String,java.lang.String) executed");'
+                        ],
+                        "replacement_lines": [
+                            '        response.getWriter().println("Crypto Test javax.crypto.Cipher.getInstance(java.lang.String,java.lang.String) executed");'
+                        ],
+                    },
+                    {
+                        "start_line": 116,
+                        "end_line": 117,
+                        "original_lines": [
+                            '        response.getWriter().println("Crypto Test javax.crypto.Cipher.getInstance(java.lang.String,java.lang.String) executed");',
+                            "    } // end doPost",
+                        ],
+                        "replacement_lines": [
+                            '        response.getWriter().println("Crypto Test javax.crypto.Cipher.getInstance(java.lang.String,java.lang.String) executed");',
+                            "    } // end doPost",
+                        ],
+                    },
+                ],
+                "reason": "",
+            }
+        )
+        original = [
+            "public void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {",
+            *[f"        // filler {idx}" for idx in range(2, 24)],
+            "        byte[] iv = random.generateSeed(8); // DES requires 8 byte keys",
+            "        javax.crypto.Cipher before = null;",
+            "            javax.crypto.Cipher c =",
+            '                    javax.crypto.Cipher.getInstance("DES/CBC/PKCS5Padding", "SunJCE");',
+            "            // Prepare the cipher to encrypt",
+            '            javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance("DES").generateKey();',
+            "            java.security.spec.AlgorithmParameterSpec paramSpec =",
+            "                    new javax.crypto.spec.IvParameterSpec(iv);",
+            "            c.init(javax.crypto.Cipher.ENCRYPT_MODE, key, paramSpec);",
+            *[f"        // filler {idx}" for idx in range(34, 116)],
+            "        response.getWriter()",
+            "                .println(",
+            '                        "Crypto Test javax.crypto.Cipher.getInstance(java.lang.String,java.lang.String) executed");',
+            "    }",
+        ]
+        parsed = self.service.RemediationService._parse_structured_generation_response(
+            raw,
+            target_method="org.owasp.benchmark.testcode.BenchmarkTest01017.doPost(HttpServletRequest,HttpServletResponse)",
+            original_method_lines=original,
+        )
+        self.assertTrue(parsed["raw_response_valid"])
+        self.assertIn('Cipher.getInstance("AES/GCM/NoPadding", "SunJCE")', parsed["replacement_method_code"])
+        self.assertIn('KeyGenerator.getInstance("AES")', parsed["replacement_method_code"])
+        self.assertIn("GCMParameterSpec(128, iv)", parsed["replacement_method_code"])
 
     def test_parse_structured_generation_normalizes_embedded_newlines_in_edit_lines(self):
         original = ['@Override', 'public void hash() {', '    System.out.println("old");', '}']

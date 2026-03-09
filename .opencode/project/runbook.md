@@ -48,7 +48,7 @@ LLM_ENABLE_THINKING=false \
 - Detection: `outputs/thesis_final_detection_full/`
 - Explanation: `outputs/thesis_final_explanation_full/`
 - Remediation: `outputs/thesis_final_remediation_supported_medium/`
-  - current best compile-backed reference: `outputs/repro_supported_medium_main_2026-03-09_13-04-38/`
+  - current best compile-backed reference: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
 
 ## Reporting Summary
 
