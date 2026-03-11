@@ -57,6 +57,7 @@ tmp_bundle.json
 
 # Tooling / editor noise
 copilot-context/
+.github/copilot-instructions.md
 .vscode/
 .idea/
 *.swp
