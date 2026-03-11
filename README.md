@@ -100,21 +100,30 @@ The React / Vite SPA (port 5173 dev / 4173 preview) has five pages:
 
 Benchmarked against the [OWASP Benchmark v1.2](https://owasp.org/www-project-benchmark/) using the dedicated detection, explanation, and remediation runners. See [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md) for exact commands and expected artifacts.
 
-Current validated explanation-eval setup on this branch:
+Authoritative benchmark-backed thesis baselines on this repository state:
+- detection: `outputs/detection_calibration_path_precision_v4/`
+  - precision `0.8357`
+  - recall `0.7639`
+  - F1 `0.7982`
+- explanation: `outputs/thesis_final_explanation_full/`
+  - surfaced true positives evaluated: `112`
+  - `Citation@Context=0.8125`
+  - `Citation@NoContext=0.8125`
+- remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
+  - compile-backed supported remediation: `17/17` fully verified
+
+Current validated explanation-eval setup for local reruns:
 - `evidence_mode=lean`
 - `llm_max_tokens_eval=192`
 - `LLM_CONCURRENCY=1`
 - structured JSON-schema output for explanation generation
 - explicit stop sequences for local Qwen/LM Studio requests
 
-Latest medium explanation validation on this branch:
-- categories: `crypto-md5`, `hash-md5`, `rng-insecure`, `sql-injection`
-- total positives evaluated: `57`
-- citation success:
-  - `with_context`: `1.00`
-  - `without_context`: `0.8947`
+Reference and transferability runs are intentionally kept separate from those thesis baselines:
+- `outputs/final_full_remediation_current_main/` is a regression/reference remediation run, not the thesis headline baseline.
+- real-world case studies live under `outputs/case_study_spring_petclinic/` and `outputs/case_study_gs_securing_web/`; they validate workflow transferability, not the primary benchmark claim surface.
 
-For exact run artifacts, inspect the corresponding output directories under `outputs/` rather than treating the README as a pinned results ledger.
+For exact run artifacts, inspect the cited output directories under `outputs/` rather than treating the README as the normative results ledger.
 
 ---
 
