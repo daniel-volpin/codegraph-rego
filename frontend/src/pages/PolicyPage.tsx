@@ -74,13 +74,6 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
 const asString = (value: unknown, fallback = "—") => (typeof value === "string" && value.trim() ? value : fallback);
 const asBoolean = (value: unknown, fallback = false) => (typeof value === "boolean" ? value : fallback);
 
-const basenameFromPath = (value: string) => {
-  if (!value || value === "—") return value;
-  const normalized = value.replace(/\\/g, "/");
-  const last = normalized.split("/").filter(Boolean).pop();
-  return last?.trim() ? last : value;
-};
-
 const compactTargetMethod = (value: string) => {
   if (!value || value === "—") return value;
 

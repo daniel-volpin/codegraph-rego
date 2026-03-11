@@ -86,7 +86,7 @@ For the UI thesis/demo, use the Policy page's `Framework demo focus` preset afte
 python run_benchmark_eval.py \
   --config configs/benchmark/multicat_full.json \
   --mapping configs/control_mapping.json \
-  --output-dir outputs/thesis_final_detection_full \
+  --output-dir outputs/detection_calibration_path_precision_v4 \
   --reset-neo4j
 ```
 
@@ -107,7 +107,7 @@ python run_explanation_eval.py \
 python run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
   --mapping configs/control_mapping.json \
-  --output-dir outputs/thesis_final_remediation_supported_medium \
+  --output-dir outputs/repro_supported_medium_branch_benchmarktest01017_fix \
   --sample-size 60 \
   --reset-neo4j
 ```
