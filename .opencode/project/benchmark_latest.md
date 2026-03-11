@@ -36,6 +36,7 @@ Source: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/summary.md
 - Build attempted: `17`
 - Build success: `17`
 - Fully verified success rate: `100%`
+- Current-main regression reference: `outputs/final_full_remediation_current_main/summary.md` (`9/10`)
 
 ## Remediation Bounded Smoke
 
@@ -50,3 +51,16 @@ Source: `outputs/span_edit_bounded_smoke_v2/summary.md`
 - Detection is now stronger because path findings are driven by bounded sink semantics plus one-hop helper summaries instead of broad fallback heuristics.
 - Compile-backed remediation is now real on the successful supported cases.
 - Remediation remains bounded, but the current supported-medium compile-backed rerun now reaches `17/17`.
+
+## Real-World Case Studies
+
+Source: `outputs/reporting/baseline_freeze_v0_2_0/report.md`
+
+- `spring_petclinic`
+  - ingest, search, policy evaluation, and explanation validated cleanly
+  - first surfaced finding comes from the uploaded PetClinic workspace path
+  - no bounded remediation category surfaced
+- `gs_securing_web`
+  - ingest and search validated cleanly
+  - upload-scope graph isolation is now correct; no stale PetClinic/benchmark findings remain
+  - no policy findings surfaced, which is an acceptable transferability outcome

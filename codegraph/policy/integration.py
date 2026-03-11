@@ -136,10 +136,18 @@ def load_iso_rules() -> Dict[str, Any]:
     return _ISO_RULES_CACHE or {}
 
 
-def build_policy_input(*, max_bundles: int | None = None) -> Dict[str, Any]:
+def build_policy_input(
+    *,
+    max_bundles: int | None = None,
+    workspace_root: str | None = None,
+) -> Dict[str, Any]:
     driver = get_neo4j_driver()
     try:
-        methods = _fetch_methods_with_context(driver, max_bundles=max_bundles)
+        methods = _fetch_methods_with_context(
+            driver,
+            max_bundles=max_bundles,
+            workspace_root=workspace_root,
+        )
     finally:
         driver.close()
     hybrid_search = _load_hybrid_search()
@@ -168,14 +176,25 @@ def build_policy_input(*, max_bundles: int | None = None) -> Dict[str, Any]:
     }
 
 
-def _fetch_methods_with_context(driver, *, max_bundles: int | None = None) -> List[Dict[str, Any]]:
-    cypher = (
-        "MATCH (m:Method) "
+def _fetch_methods_with_context(
+    driver,
+    *,
+    max_bundles: int | None = None,
+    workspace_root: str | None = None,
+) -> List[Dict[str, Any]]:
+    cypher = "MATCH (m:Method) "
+    params: Dict[str, Any] = {}
+    if workspace_root:
+        cypher += " WHERE m.file_path STARTS WITH $workspace_root "
+        params["workspace_root"] = workspace_root
+    cypher += (
         "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
         "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
         "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
         "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
         "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
+    )
+    cypher += (
         "RETURN coalesce(m.full_signature, m.signature) AS signature, "
         "       m.name AS name, "
         "       m.file_path AS file_path, "
@@ -195,7 +214,6 @@ def _fetch_methods_with_context(driver, *, max_bundles: int | None = None) -> Li
         "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
         "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
     )
-    params: Dict[str, Any] = {}
     if isinstance(max_bundles, int) and max_bundles > 0:
         cypher += " LIMIT $max_bundles"
         params["max_bundles"] = max_bundles
@@ -410,6 +428,7 @@ def evaluate_policies(
     max_total_violations: int | None = None,
     max_per_violation_id: int | None = None,
     rule_ids: List[str] | None = None,
+    workspace_root: str | None = None,
 ) -> Dict[str, Any]:
     if not shutil.which("opa"):
         return {
@@ -417,7 +436,7 @@ def evaluate_policies(
             "hint": "Install OPA: https://www.openpolicyagent.org/docs/latest/#running-opa",
         }
 
-    policy_input = build_policy_input(max_bundles=max_bundles)
+    policy_input = build_policy_input(max_bundles=max_bundles, workspace_root=workspace_root)
     bundles = policy_input.get("bundles") or []
     catalog = load_policy_catalog()
     rules_catalog = load_iso_rules()
@@ -482,6 +501,7 @@ def evaluate_policies(
                     "max_total_violations": max_total_violations,
                     "max_per_violation_id": max_per_violation_id,
                     "rule_ids": sorted(allowed_rule_ids) if allowed_rule_ids else None,
+                    "workspace_root": workspace_root,
                 },
                 "violation_counts_by_id": violation_counts_by_id,
             }

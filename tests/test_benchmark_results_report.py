@@ -24,7 +24,7 @@ def _write_json(path: Path, payload: dict) -> None:
 def test_build_report_summarizes_default_style_runs(tmp_path: Path) -> None:
     outputs_root = tmp_path / "outputs"
     _write_json(
-        outputs_root / "thesis_final_detection_full" / "metrics.json",
+        outputs_root / "detection_calibration_path_precision_v4" / "metrics.json",
         {
             "generated_at": "2026-03-07T18:05:09+00:00",
             "selection": {"categories": ["a"], "max_cases_per_category": 60, "seed": 11},
@@ -72,51 +72,51 @@ def test_build_report_summarizes_default_style_runs(tmp_path: Path) -> None:
         },
     )
     _write_json(
-        outputs_root / "thesis_final_remediation_supported_medium" / "remediation_metrics.json",
+        outputs_root / "repro_supported_medium_branch_benchmarktest01017_fix" / "remediation_metrics.json",
         {
             "generated_at": "2026-03-07T19:47:45+00:00",
             "selection": {"categories": ["a"], "max_cases_per_category": 60, "seed": 11},
             "coverage_by_category": {"a": {"sampled": True}},
             "attempted": 4,
             "fix_success": 2,
-            "build_attempted": 0,
-            "build_success": 0,
+            "build_attempted": 4,
+            "build_success": 4,
             "fix_success_rate": 0.5,
-            "build_success_rate": 0.0,
+            "build_success_rate": 1.0,
             "results": [
                 {
                     "status": "OK",
                     "policy_pass": True,
                     "patch_applied": True,
-                    "build_pass": None,
+                    "build_pass": True,
                     "generation": {"decision": "replace_method", "raw_response_valid": True},
                 },
                 {
                     "status": "OK",
                     "policy_pass": True,
                     "patch_applied": True,
-                    "build_pass": None,
+                    "build_pass": True,
                     "generation": {"decision": "replace_method", "raw_response_valid": True},
                 },
                 {
                     "status": "GENERATION_ERROR",
                     "policy_pass": False,
                     "patch_applied": False,
-                    "build_pass": None,
+                    "build_pass": False,
                     "generation": {"decision": "replace_method", "raw_response_valid": False},
                 },
                 {
                     "status": "GENERATION_ERROR",
                     "policy_pass": False,
                     "patch_applied": False,
-                    "build_pass": None,
+                    "build_pass": False,
                     "generation": {"decision": "replace_method", "raw_response_valid": False},
                 },
             ],
         },
     )
     _write_json(
-        outputs_root / "span_edit_supported_medium_v2" / "remediation_metrics.json",
+        outputs_root / "final_full_remediation_current_main" / "remediation_metrics.json",
         {
             "generated_at": "2026-03-07T23:43:44+00:00",
             "selection": {"categories": ["a"], "max_cases_per_category": 60, "seed": 11},
@@ -208,9 +208,10 @@ def test_build_report_summarizes_default_style_runs(tmp_path: Path) -> None:
 
     assert report["runs"][0]["summary"]["f1"] == 0.75
     assert report["runs"][1]["summary"]["citation_rate_with_context"] == 0.8333
-    assert comparisons["current_supported_compile_backed"]["delta"]["fix_success_rate_points"] == 25.0
-    assert comparisons["current_bounded_compile_backed"]["delta"]["build_success_rate_points"] == 100.0
-    assert any("compile verification" in item["text"] for item in report["headlines"])
+    assert comparisons["current_main_supported_regression"]["delta"]["fix_success_rate_points"] == 25.0
+    assert comparisons["current_bounded_compile_backed"]["delta"]["build_success_rate_points"] == 0.0
+    assert any("fully verified compile-backed fixes" in item["text"] for item in report["headlines"])
+    assert report["case_studies"] == []
 
 
 def test_remediation_summary_derives_counts_for_legacy_outputs(tmp_path: Path) -> None:
