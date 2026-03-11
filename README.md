@@ -1,106 +1,38 @@
-# CodeGraph — Java Code Knowledge Graph & ISO 27001 Compliance Checker
+# CodeGraph
 
-CodeGraph is a FastAPI + React system for turning a Java/Spring codebase into a queryable knowledge graph, semantic search index, and ISO 27001 policy evaluation pipeline. This branch keeps the validated thesis evaluation flow while organizing the repository around clearer backend boundaries:
+CodeGraph is a benchmark-backed JVM security and compliance framework. Its primary proof surface is **OWASP Benchmark**. Real-world applications are used as secondary workflow case studies, not as the main scientific evidence.
 
-- **Ingestion** – parses Java sources with `javalang`, stores classes/methods in Neo4j, and links `DECLARES`, `CALLS`, `USES`, `EXTENDS`, `IMPLEMENTS`, and `NESTED_IN` relationships.
-- **Semantic search** – embeds method snippets with Sentence Transformers, saves a FAISS index, and performs hybrid search with graph-context enrichment.
-- **Policy evaluation** – builds OPA/Rego evidence bundles from Neo4j facts to enforce ISO 27001 controls, with optional LiteLLM-powered explanations (with and without graph context).
-- **Remediation** – LLM "Fix & Verify" loop that proposes patches, applies them in a temp workspace, re-ingests to Neo4j, and re-runs OPA to validate the fix.
-- **Evaluation pipeline** – OWASP Benchmark v1.2 integration for Precision/Recall/F1, LLM explanation citation success (ablation), and remediation fix-rate metrics.
-- **API surface** – `/upload`, `/search`, `/policy/evaluate`, `/policy/evaluate_with_llm`, `/policy/explain_one`, `/policy/reviews`, `/remediation/preview`, `/remediation/apply`, and `/health`.
+## What It Does
 
----
+CodeGraph ingests Java code into Neo4j, evaluates OPA/Rego policies, produces structured explanations, and performs bounded remediation with re-verification.
 
-## Repository Layout
+Core flow:
+- ingest Java into a graph
+- evaluate ISO-aligned security rules
+- explain surfaced findings with structured `citation / why / fix`
+- attempt bounded remediation where supported
+- re-verify the result
 
-- `app.py` – stable FastAPI entrypoint for `uvicorn app:app`
-- `api/` – HTTP routers and request/response models
-- `codegraph/` – backend domain logic and orchestration
-- `run_benchmark_eval.py`, `run_explanation_eval.py`, `run_remediation_eval.py` – validated thesis evaluation runners
-- `scripts/` – secondary operator utilities such as ingestion/search/policy helpers
-- `docs/architecture/` – repository structure and artifact policy notes for maintainers/reviewers
+## Benchmark Scope
 
-Architecture notes:
-- [docs/architecture/repo-layout.md](docs/architecture/repo-layout.md)
-- [docs/architecture/artifact-policy.md](docs/architecture/artifact-policy.md)
+Current benchmark-backed categories:
+- `CWE-22` → `ISO-A.8-PATH-TRAVERSAL`
+- `CWE-78` → `ISO-A.8-CMD-INJECTION`
+- `CWE-89` → `ISO-A.8-SQL-INJECTION`
+- `CWE-90` → `ISO-A.8-LDAP-INJECTION`
+- `CWE-327` → `ISO-A.10-WEAK-CRYPTO`
+- `CWE-328` → `ISO-A.10-WEAK-HASH`
+- `CWE-330` → `ISO-A.10-WEAK-RANDOM`
+- `CWE-643` → `ISO-A.8-XPATH-INJECTION`
 
----
+Remediation support tiers:
+- `full`: weak hash, weak random
+- `guarded`: weak crypto
+- `manual`: injection families and access/logging rules
 
-## Quick Start
+## Authoritative Baselines
 
-1. **Prerequisites**
-   - Python 3.10+
-   - Neo4j 5.x reachable at `bolt://127.0.0.1:7687`
-   - OPA CLI on `PATH` (only needed for policy evaluation)
-   - Internet access on first run to download the embedding model
-
-2. **Install dependencies**
-
-   ```bash
-   make install
-   # This syncs backend dependencies with uv and installs frontend dependencies with yarn.
-   ```
-
-3. **Configure**
-   - Copy `.env.example` to `.env` (optional but recommended).
-   - Set overrides as needed:
-     - `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASS`
-     - `JAVA_ROOT_DIR` (defaults to `<repo>/uploaded_code`)
-     - `INDEX_DIR`, `EMBEDDING_MODEL_NAME`
-     - `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_API_BASE` for LiteLLM routing
-     - `LLM_MODEL_TTL_SECONDS` and `REMEDIATION_LLM_MODEL_TTL_SECONDS` for LM Studio model eviction hints
-     - `UI_REVIEW_STORE_PATH` to override where UI triage reviews are appended (default: `outputs/policy_ui_reviews/reviews.jsonl`)
-   - If you are using LM Studio for multiple local models, enable `Auto-Evict` in LM Studio. CodeGraph now sends per-request TTL hints so explanation/remediation models can unload when idle instead of remaining resident together.
-
-4. **Ingest & embed (one-time per codebase change)**
-
-   ```bash
-   export JAVA_ROOT_DIR=/abs/path/to/project/src/main/java  # optional if using defaults
-   python3 scripts/ingestion/codebase_to_neo4j.py      # parses Java, writes graph to Neo4j
-   python3 scripts/ingestion/build_code_embeddings.py  # builds FAISS index + signature maps
-   ```
-
-5. **Run the API**
-
-   ```bash
-   make dev
-   # Runs both backend (port 8000) and frontend (port 5173) in parallel.
-   ```
-
-- `POST /search` (JSON body `{"query": "..."}`) → semantic hits + graph neighbours
-- `GET /policy/evaluate` → raw ISO control violations (OPA)  
-- `GET /policy/evaluate?max_bundles=500&max_total_violations=100&max_per_violation_id=25` → faster interactive scan (caps work per violation id + overall)  
-- `GET /policy/evaluate?rule_ids=ISO-A.10-WEAK-HASH&rule_ids=ISO-A.10-WEAK-RANDOM` → benchmark/demo-focused evaluation over an explicit rule subset  
-- `GET /policy/catalog` → catalog of controls, evidence requirements, and Rego rule mapping  
-- `POST /policy/evaluate_with_llm` (JSON body `{"limit": 5, "model": "..."}`) → violations + LLM guidance
-- `POST /policy/explain_one` (JSON body `{"violation": {...}, ...}`) → single-violation LLM explanation with both a compatibility string and structured `citation` / `why` / `fix` fields
-- `POST /policy/reviews` (JSON body) → save a triage/review record
-- `GET /policy/reviews?violation_key=...&limit=N` → list saved reviews  
-- `POST /upload` (zip file) → safe extraction, ingestion, embedding rebuild
-- `GET /upload/status` → poll ingestion progress  
-- `GET /health` → readiness check for Neo4j, FAISS, signature map, model, OPA
-
----
-
-## Frontend Pages
-
-The React / Vite SPA (port 5173 dev / 4173 preview) has five pages:
-
-| Page | Route | Description |
-|---|---|---|
-| Home | `/` | Overview and system status |
-| Upload | `/upload` | ZIP upload with real-time ingestion progress |
-| Search | `/search` | Semantic query over method embeddings with interactive graph context |
-| Policy | `/policy` | Run ISO 27001 policy checks, browse grouped violations, switch between all findings and the benchmark-focused demo preset, request LLM explanations, trigger Fix & Verify, and save triage reviews |
-| Settings | `/settings` | LLM provider / model / API base configuration |
-
----
-
-## Evaluation Status
-
-Benchmarked against the [OWASP Benchmark v1.2](https://owasp.org/www-project-benchmark/) using the dedicated detection, explanation, and remediation runners. See [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md) for exact commands and expected artifacts.
-
-Authoritative benchmark-backed thesis baselines on this repository state:
+Use these as the thesis benchmark baselines for this repository state:
 - detection: `outputs/detection_calibration_path_precision_v4/`
   - precision `0.8357`
   - recall `0.7639`
@@ -112,306 +44,67 @@ Authoritative benchmark-backed thesis baselines on this repository state:
 - remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
   - compile-backed supported remediation: `17/17` fully verified
 
-Current validated explanation-eval setup for local reruns:
-- `evidence_mode=lean`
-- `llm_max_tokens_eval=192`
-- `LLM_CONCURRENCY=1`
-- structured JSON-schema output for explanation generation
-- explicit stop sequences for local Qwen/LM Studio requests
+Keep these separate from:
+- `outputs/final_full_remediation_current_main/`, which is a regression/reference run
+- `outputs/case_study_spring_petclinic/` and `outputs/case_study_gs_securing_web/`, which are transferability case studies
 
-Reference and transferability runs are intentionally kept separate from those thesis baselines:
-- `outputs/final_full_remediation_current_main/` is a regression/reference remediation run, not the thesis headline baseline.
-- real-world case studies live under `outputs/case_study_spring_petclinic/` and `outputs/case_study_gs_securing_web/`; they validate workflow transferability, not the primary benchmark claim surface.
+## Quick Start
 
-For exact run artifacts, inspect the cited output directories under `outputs/` rather than treating the README as the normative results ledger.
+Prerequisites:
+- Python 3.10+
+- Neo4j 5.x
+- OPA on `PATH`
+- Java + Maven for benchmark/remediation verification
 
----
+Install:
+
+```bash
+make install
+```
+
+Run the app:
+
+```bash
+make dev
+```
+
+Key endpoints:
+- `POST /upload`
+- `POST /search`
+- `GET /policy/evaluate`
+- `POST /policy/evaluate_with_llm`
+- `POST /policy/explain_one`
+- `POST /remediation/preview`
+- `POST /remediation/apply`
+- `GET /health`
+
+## Reproducibility
+
+Use [REPRODUCIBILITY.md](./REPRODUCIBILITY.md) for the shortest path to rerun the benchmark pipeline.
+
+Use [.opencode/project/runbook.md](./.opencode/project/runbook.md) for:
+- the current authoritative output directories
+- reporting commands
+- which runs should be cited versus treated as reference-only
+
+## Repo Layout
+
+- [app.py](./app.py): FastAPI entrypoint
+- [api](./api): HTTP routers and request/response models
+- [codegraph](./codegraph): backend domain logic
+- [configs/benchmark](./configs/benchmark): canonical benchmark configs
+- [policy](./policy): OPA/Rego rules and catalog
+- [scripts](./scripts): evaluation and operator utilities
+- [docs/architecture](./docs/architecture): architecture notes
+
+## Notes
+
+- Use `codegraph.config.settings`; do not read env vars ad hoc in new backend code.
+- Keep `policy/catalog.json` aligned with Rego rules.
+- Benchmark claims should cite `outputs/`, not README prose.
+- Real-world case studies should not be presented as the primary evidence surface.
 
 ## Citation & License
 
-- Cite the repository using [`CITATION.cff`](./CITATION.cff).
+- Cite the repository using [CITATION.cff](./CITATION.cff).
 - This repository is licensed under the [MIT License](./LICENSE).
-
----
-
-## Configuration Reference
-
-
-- `config.py` centralises defaults and auto-loads `.env` when `python-dotenv` is available.
-- Output artifacts live in `INDEX_DIR` (default `index/`):
-  - `code_embeddings.index`, `embedding_full_signature_map.json`, `embedding_signature_map.json` (legacy), `embedding_metadata.json`.
-- Neo4j constraints (created idempotently in `db.ensure_constraints()`):
-  - `CONSTRAINT class_fqn_unique IF NOT EXISTS FOR (c:Class) REQUIRE c.fqn IS UNIQUE`
-  - `CONSTRAINT method_signature_unique IF NOT EXISTS FOR (m:Method) REQUIRE m.signature IS UNIQUE`
-  - `INDEX method_full_signature_index IF NOT EXISTS FOR (m:Method) ON (m.full_signature)`
-
----
-
-## Policy Checks (OPA/Rego)
-
-The policy layer is split across focused Rego modules:
-- `policy/iso_27001_access.rego` for access-control and logging checks
-- `policy/iso_27001_crypto.rego` for weak hash / weak crypto / weak randomness checks
-- `policy/iso_27001_injection.rego` for benchmark-focused injection families such as SQLi, path traversal, command injection, LDAP injection, and XPath injection
-
-Each rule id is described in `policy/catalog.json`, which records the normative reference, evidence fields, and the Rego rule that enforces it.
-
-- **A.9.4.1 – Access control for applications**  
-  Flags public HTTP endpoints missing security annotations such as `@PreAuthorize`, `@Secured`, `@RolesAllowed`, or `@DenyAll`.
-
-- **A.12.4.1 – Event logging**  
-  Flags critical operations (mutation endpoints or verbs like `create`, `update`, `delete`) that show no evidence of logging (no logging/audit annotations and no calls to logger-style methods).
-
-- **A.10 (ISO-A.10-WEAK-HASH)**  
-  Flags weak hash usage such as `MessageDigest.getInstance("MD5")`.
-
-- **A.10 (ISO-A.10-WEAK-CRYPTO)**  
-  Flags weak cipher usage such as `DES`, `RC4`, or `AES/ECB/*`.
-
-- **A.10 (ISO-A.10-WEAK-RANDOM)**  
-  Flags insecure randomness such as `java.util.Random`, `Math.random()`, or `SHA1PRNG` in security-sensitive code paths.
-
-- **A.8 (ISO-A.8-SQL-INJECTION)**  
-  Flags benchmark-style SQL injection sinks built from request-driven string concatenation, including `prepareStatement(...)` and `prepareCall(...)`.
-
-- **A.8 (ISO-A.8-PATH-TRAVERSAL)**  
-  Flags benchmark-style file/path construction from untrusted servlet input flowing into file system sinks.
-
-- **A.8 (ISO-A.8-CMD-INJECTION)**  
-  Flags command execution sinks such as `Runtime.exec(...)` and `ProcessBuilder` with user-controlled input.
-
-- **A.8 (ISO-A.8-LDAP-INJECTION)**  
-  Flags LDAP search/filter construction with untrusted input.
-
-- **A.8 (ISO-A.8-XPATH-INJECTION)**  
-  Flags XPath expression construction with untrusted input.
-
-Violations include the control id, method signature, file path, and a short reason.  
-Policy evaluation intentionally excludes Java files under `src/test/**` so thesis/demo findings stay focused on production-relevant application code.
-
-The Explain UI/API path returns structured `citation`, `why`, and `fix` output for direct rendering, while also keeping a plain-text compatibility field for older clients.
-
-Run locally with:
-
-```bash
-python3 -m codegraph.policy.integration      # CLI summary
-curl http://localhost:8000/policy/evaluate   # API endpoint
-```
-
-Add or adjust rules by editing files under `policy/`; OPA automatically loads every `.rego` file in that directory. Update `policy/catalog.json` alongside any new controls so evaluation responses and documentation stay traceable.
-
----
-
-## LLM Enrichment
-
-- `codegraph/llm/integration.py` reads nearby source lines for each violation and asks an LLM model for concise remediation advice.
-- Works with OpenAI and LM Studio via environment variables defined in `config.py`.
-- Failures return a descriptive placeholder so API responses stay stable during misconfiguration or outages.
-
----
-
-## Hybrid Search Workflow
-
-1. `scripts/ingestion/codebase_to_neo4j.py` discovers classes, methods, constructors, annotations, modifiers, file paths, and relationships.
-2. `scripts/ingestion/build_code_embeddings.py` extracts method snippets, encodes them with `SentenceTransformer`, and builds a cosine FAISS index plus signature maps.
-3. `scripts/search/hybrid_code_search.py` lazily reloads the index/signature map on modification, embeds queries, retrieves semantic hits, and enriches results with two-hop Neo4j neighbourhoods.
-4. `app.py` exposes `/search`, reusing the cached loaders to keep latency low.
-
-Try it from the CLI:
-
-```bash
-python3 scripts/search/hybrid_code_search.py "find insecure hash usage"
-```
-
----
-
-## Remediation Preview (Virtual Fix)
-
-- API endpoint:
-  - `POST /remediation/preview` with `{"violation_id": "ISO-A.9.4.1"}` → returns a preview-only remediation:
-    - LLM-proposed full replacement method (`updated_source_code`)
-    - Short explanation
-    - OPA verdict for the same rule (`opa_status`: `PASS`/`FAIL`) plus verification breakdown + diff
-- Flow: gather violation context → LLM proposes full method → build virtual graph context in memory → re-run OPA on the virtual bundle.
-- No filesystem edits, compilation, or Neo4j mutations; the suggestion is for human review/copy‑paste.
-- Requires `opa` on `PATH`, LiteLLM-configured LLM access, and Neo4j reachable for the initial evidence.
-- Remediation generation is schema-constrained:
-  - `decision`
-  - `replacement_method_lines`
-  - derived `replacement_method_code`
-  - `reason`
-  and preview/apply responses expose this under the additive `generation` field.
-- Automatic remediation is intentionally tiered:
-  - full support: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-RANDOM`
-  - guarded support: `ISO-A.10-WEAK-CRYPTO`
-  - manual review only: SQL injection, path traversal, command injection, LDAP injection, XPath injection, and access-control/logging findings
-
-## Remediation Apply & Verify (Temp Workspace)
-
-- API endpoint:
-  - `POST /remediation/apply` with `{"violation_id": "ISO-A.9.4.1", "mode": "dry_run"}` → runs a temp workspace fix loop:
-    1. Baseline method-level OPA evaluation (before).
-    2. LLM proposes a replacement method grounded in evidence.
-    3. Apply the replacement in a temp workspace and (best effort) compile.
-    4. Re-ingest the modified file into Neo4j and re-run OPA for verification.
-    5. Return a structured response including diff, updated source, and verification summary.
-- `mode` controls persistence:
-  - `dry_run` (default) restores the original file on disk and reverts the graph after verification.
-  - `apply` persists the change back to the original file only when verification passes.
-- The current frontend uses `dry_run` only, so UI verification never persists source-file changes.
-- For remediation you can optionally override the shared explanation model with:
-  - `REMEDIATION_LLM_MODEL`
-  - `REMEDIATION_LLM_MAX_TOKENS`
-  - `REMEDIATION_LLM_TEMPERATURE`
-  - `REMEDIATION_LLM_MODEL_TTL_SECONDS`
-- For local LM Studio runs, prefer a coding-focused remediation model and validate it with `scripts/evaluation/run_remediation_model_bakeoff.py` before promoting it as the remediation default.
-
----
-
-## Run & Verify Locally
-
-1) **Backend**
-```bash
-make install               # syncs backend (uv) + frontend (yarn) deps
-uv run uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
-```
-Verify:
-- `curl http://localhost:8000/health` → all subsystems should be `true` (OPA requires binary on PATH).
-- `curl http://localhost:8000/policy/evaluate` → returns violations or empty list.
-- `curl -X POST http://localhost:8000/remediation/preview -H "Content-Type: application/json" -d '{"violation_id":"<ID>"}'` → returns a virtual fix preview with OPA PASS/FAIL.
-- `curl -X POST http://localhost:8000/remediation/apply -H "Content-Type: application/json" -d '{"violation_id":"<ID>","mode":"dry_run"}'` → runs apply & verify in a temp workspace (dry-run by default).
-
-2) **Frontend**
-```bash
-cd frontend
-yarn install
-yarn build
-yarn preview --host --port 4173
-```
-Verify:
-- Open `http://localhost:4173` (or the preview host) → navigate to Policy page.
-- Run “Evaluate Policies”, then click “Fix & Verify” on a violation; the card should update with agent state, diff, and verification result.
-
----
-
-## Benchmark Evaluation Pipeline
-
-For thesis metrics (Precision/Recall/F1, citation success, remediation success), use the CLI runners:
-
-```bash
-python run_benchmark_eval.py --config configs/benchmark/baseline.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval --reset-neo4j
-python run_explanation_eval.py --config configs/benchmark/baseline.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval --reset-neo4j
-python run_remediation_eval.py --config configs/benchmark/remediation_hash_smoke.json --mapping configs/control_mapping.json --output-dir outputs/remediation_eval --sample-size 10 --reset-neo4j
-```
-
-To run detection/explanation evaluation across multiple CWE categories (incl. `CWE-22`, `CWE-78`, `CWE-89`, `CWE-90`, `CWE-327`, `CWE-328`, `CWE-330`, and `CWE-643`), use:
-```bash
-python run_benchmark_eval.py --config configs/benchmark/expanded_eval.json --mapping configs/control_mapping.json --output-dir outputs/benchmark_eval_multicat --reset-neo4j
-python run_explanation_eval.py --config configs/benchmark/multicat_medium.json --mapping configs/control_mapping.json --output-dir outputs/explanation_eval_multicat --reset-neo4j
-```
-
-`run_remediation_eval.py` reuses the same apply/verify remediation service flow used by `/remediation/apply` (default `dry_run` mode) so evaluation behavior tracks production remediation logic.
-
-To compare local remediation models on the same bounded benchmark subset:
-
-```bash
-python scripts/evaluation/run_remediation_model_bakeoff.py \
-  --models qwen/qwen3-coder-30b qwen3.5-27b \
-  --config configs/benchmark/remediation_bounded_smoke.json \
-  --output-dir outputs/remediation_model_bakeoff \
-  --sample-size 3 \
-  --reset-neo4j
-```
-
-Set `OWASP_BENCHMARK_ROOT` before running (or edit the template config):
-
-```bash
-export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
-```
-
-See `REPRODUCIBILITY.md` for full prerequisites, configuration, and output formats.
-
-Canonical benchmark configs now live under `configs/benchmark/`.
-
-### Covered Categories (OWASP Benchmark)
-This prototype uses a manual CWE → ISO-control → Rego mapping layer (see `configs/control_mapping.json`) to evaluate detectors against the OWASP Benchmark ground truth.
-
-Current mapping includes:
-- `CWE-327` → `ISO-A.10-WEAK-CRYPTO`
-- `CWE-328` → `ISO-A.10-WEAK-HASH`
-- `CWE-330` → `ISO-A.10-WEAK-RANDOM`
-- `CWE-89` → `ISO-A.8-SQL-INJECTION` (pragmatic mapping for evaluation; not a claim of perfect ISO alignment)
-- `CWE-22` → `ISO-A.8-PATH-TRAVERSAL` (pragmatic mapping for evaluation)
-- `CWE-78` → `ISO-A.8-CMD-INJECTION` (pragmatic mapping for evaluation)
-- `CWE-90` → `ISO-A.8-LDAP-INJECTION` (pragmatic mapping for evaluation)
-- `CWE-643` → `ISO-A.8-XPATH-INJECTION` (pragmatic mapping for evaluation)
-
-Auto-remediation is intentionally tiered:
-- Full support: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-RANDOM`
-- Guarded support: `ISO-A.10-WEAK-CRYPTO`
-- Manual review only: `ISO-A.8-SQL-INJECTION`, `ISO-A.8-PATH-TRAVERSAL`, `ISO-A.8-CMD-INJECTION`, `ISO-A.8-LDAP-INJECTION`, `ISO-A.8-XPATH-INJECTION`, and access-control/logging findings such as `ISO-A.9.4.1`
-
-Guarded remediation may validly return `NO_FIX` when the method-local evidence is insufficient for a safe minimal transformation. That refusal is a safety feature, not a pipeline failure.
-
-### Benchmark-Centered Demo Pack
-
-The recommended live thesis/demo input is a curated OWASP Benchmark subset that shows the full framework story on one upload:
-
-- ingestion
-- graph-backed evidence
-- ISO-linked policy evaluation
-- structured explanation
-- bounded remediation
-- dry-run re-verification
-- benchmark-focused rule filtering via the Policy page's `Framework demo focus` preset
-
-Generate it with:
-
-```bash
-python3 scripts/evaluation/build_benchmark_demo_pack.py \
-  --benchmark-root "$OWASP_BENCHMARK_ROOT" \
-  --output-dir demo/benchmark-framework-demo/build
-```
-
-The manifest and rationale for the selected benchmark cases live in:
-- `demo/benchmark-framework-demo/manifest.json`
-- `demo/benchmark-framework-demo/README.md`
-
----
-
-## Useful Cypher Queries
-
-```cypher
-// Classes and declared methods
-MATCH (cls:Class)-[:DECLARES]->(m:Method)
-RETURN cls.fqn AS class, m.signature AS method
-LIMIT 20;
-
-// Call graph fan-out
-MATCH (caller:Method)-[:CALLS]->(callee:Method)
-RETURN caller.signature AS caller, collect(callee.signature) AS callees
-LIMIT 20;
-
-// Public endpoints missing security annotations (matches policy rule)
-MATCH (m:Method)
-WHERE 'public' IN m.modifiers AND any(ann IN m.annotations WHERE ann ENDS WITH 'Mapping')
-  AND none(ann IN m.annotations WHERE ann IN ['PreAuthorize','Secured','RolesAllowed','DenyAll'])
-RETURN m.signature, m.file_path;
-```
-
----
-
-## Troubleshooting
-
-- **FAISS / Torch on macOS** – prefer the `conda-forge` build (`conda install faiss-cpu -c conda-forge`) if pip wheels fail.
-- **Neo4j connectivity** – ensure the database is running, credentials match `.env`, and use `bolt://127.0.0.1:7687` to avoid IPv6 issues.
-- **OPA missing** – install via Homebrew (`brew install opa`) or download from the [OPA releases](https://www.openpolicyagent.org/docs/latest/#running-opa).
-- **LLM errors** – verify `LLM_PROVIDER`, `LLM_API_BASE`, and `LLM_API_KEY`; failures fall back to explanatory placeholders in responses.
-- **Cold start latency** – the API preloads the FAISS index and embedding model on startup; rebuild embeddings after any new ingestion to keep results fresh.
-
----
-
-## Security Notes
-
-- ZIP uploads use path traversal guards during extraction.
-- CORS is wide open for local development; tighten `allow_origins` before deploying.
