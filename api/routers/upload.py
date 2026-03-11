@@ -6,7 +6,7 @@ import zipfile
 import aiofiles
 
 from codegraph.ingestion.utils import safe_extract_zip, find_java_root
-from codegraph.ingestion.service import ingest
+from codegraph.ingestion.service import ingest, purge_workspace_entities
 from codegraph.embedding.service import EmbeddingService
 from api.models.validation import UploadResponse, UploadStatusResponse
 from codegraph.config import UPLOAD_DIR
@@ -51,6 +51,8 @@ async def upload_zip(file: UploadFile = File(...)):
         error_progress("Java root directory not found in uploaded ZIP.")
         return JSONResponse(content={"error": "Java root directory not found in uploaded ZIP."}, status_code=400)
     try:
+        update_progress("upload", "Resetting uploaded graph…", 20.0)
+        purge_workspace_entities(os.path.abspath(UPLOAD_DIR))
         ingest(java_root, progress_callback=update_progress, sync=True)
         EmbeddingService.build_embeddings(progress_callback=update_progress)
     except Exception as exc:

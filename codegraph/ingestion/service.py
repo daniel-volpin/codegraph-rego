@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
@@ -13,6 +14,9 @@ from neo4j import GraphDatabase
 from codegraph.config import NEO4J_PASS, NEO4J_URI, NEO4J_USER
 from codegraph.db import ensure_constraints
 from codegraph.ingestion.models import FieldEntity, MethodEntity
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _line_from_position(position: Optional[Tuple[int, int]]) -> Optional[int]:
@@ -727,6 +731,35 @@ def _purge_file_entities(file_path: str) -> None:
             session.run(
                 "MATCH (f:Field {file_path: $path}) DETACH DELETE f",
                 path=file_path,
+            ).consume()
+    finally:
+        driver.close()
+
+
+def purge_workspace_entities(root_dir: str) -> None:
+    """
+    Remove all file-backed graph entities under a workspace root.
+
+    This is used by the interactive upload workflow so a new uploaded project
+    fully replaces the prior `uploaded_code` workspace in Neo4j without
+    resetting unrelated benchmark or staged-evaluation graphs.
+    """
+
+    workspace_root = os.path.abspath(root_dir)
+    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+    LOGGER.info("Purging graph entities under workspace root %s", workspace_root)
+    try:
+        with driver.session() as session:
+            session.run(
+                "MATCH (m:Method) WHERE m.file_path STARTS WITH $prefix DETACH DELETE m",
+                prefix=workspace_root,
+            ).consume()
+            session.run(
+                "MATCH (f:Field) WHERE f.file_path STARTS WITH $prefix DETACH DELETE f",
+                prefix=workspace_root,
+            ).consume()
+            session.run(
+                "MATCH (a:Annotation) WHERE NOT EXISTS { MATCH (:Method)-[:ANNOTATED_WITH]->(a) } DETACH DELETE a"
             ).consume()
     finally:
         driver.close()

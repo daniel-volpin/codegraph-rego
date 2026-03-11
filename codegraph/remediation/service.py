@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import difflib
 import logging
+import os
 import re
 import subprocess
 import tempfile
@@ -583,11 +584,12 @@ class RemediationService:
         target_method: Optional[str] = None,
         file_path: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
+        workspace_root = os.path.abspath(settings.upload_dir)
         return gather_violation_context(
             violation_id,
             target_method=target_method,
             file_path=file_path,
-            evaluate_policies_fn=evaluate_policies,
+            evaluate_policies_fn=lambda: evaluate_policies(workspace_root=workspace_root),
             load_policy_catalog_fn=load_policy_catalog,
             policy_evaluator_cls=PolicyEvaluator,
             resolve_file_path_fn=self._resolve_file_path,

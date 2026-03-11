@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -1237,6 +1238,27 @@ class RemediationUtilsTests(unittest.TestCase):
         self.assertEqual(summary["target_rule_status"], "PASS")
         self.assertEqual(summary["overall_status"], "FAIL")
         self.assertEqual([v["violation_id"] for v in summary["new_violations"]], ["ISO-A.8-CMD-INJECTION"])
+
+    @patch("codegraph.remediation.service.gather_violation_context", return_value={"rule_id": "ISO-A.10-WEAK-HASH"})
+    @patch("codegraph.remediation.service.evaluate_policies", return_value={"violations": []})
+    def test_get_violation_context_scopes_policy_evaluation_to_upload_dir(
+        self,
+        mock_evaluate_policies,
+        mock_gather_context,
+    ):
+        remediation = self.service.RemediationService(llm_client=lambda _messages, **_: "")
+
+        result = remediation.get_violation_context("ISO-A.10-WEAK-HASH")
+
+        self.assertEqual(result, {"rule_id": "ISO-A.10-WEAK-HASH"})
+        evaluate_fn = mock_gather_context.call_args.kwargs["evaluate_policies_fn"]
+        evaluate_fn()
+        from codegraph.config import settings
+
+        self.assertEqual(
+            mock_evaluate_policies.call_args.kwargs["workspace_root"],
+            os.path.abspath(settings.upload_dir),
+        )
 
 
 if __name__ == "__main__":

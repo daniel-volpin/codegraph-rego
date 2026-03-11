@@ -9,6 +9,19 @@ from typing import Any
 
 
 DEFAULT_OUTPUT_DIR = "outputs/reporting/latest"
+SUPPORT_TIERS = {
+    "full": ["ISO-A.10-WEAK-HASH", "ISO-A.10-WEAK-RANDOM"],
+    "guarded": ["ISO-A.10-WEAK-CRYPTO"],
+    "manual": [
+        "ISO-A.8-SQL-INJECTION",
+        "ISO-A.8-PATH-TRAVERSAL",
+        "ISO-A.8-CMD-INJECTION",
+        "ISO-A.8-LDAP-INJECTION",
+        "ISO-A.8-XPATH-INJECTION",
+        "ISO-A.9.4.1",
+        "ISO-A.12.4.1",
+    ],
+}
 
 
 @dataclass(frozen=True)
@@ -24,26 +37,26 @@ DEFAULT_RUN_SPECS = [
     RunSpec(
         run_id="thesis_final_detection",
         stage="detection",
-        label="Thesis Final Detection",
-        path="thesis_final_detection_full",
+        label="Authoritative Detection Baseline",
+        path="detection_calibration_path_precision_v4",
     ),
     RunSpec(
         run_id="thesis_final_explanation",
         stage="explanation",
-        label="Thesis Final Explanation",
+        label="Authoritative Explanation Baseline",
         path="thesis_final_explanation_full",
     ),
     RunSpec(
         run_id="thesis_final_remediation",
         stage="remediation",
-        label="Thesis Final Remediation",
-        path="thesis_final_remediation_supported_medium",
+        label="Authoritative Supported Remediation",
+        path="repro_supported_medium_branch_benchmarktest01017_fix",
     ),
     RunSpec(
-        run_id="current_supported_compile_backed",
+        run_id="current_main_supported_regression",
         stage="remediation",
-        label="Current Supported Compile-Backed",
-        path="span_edit_supported_medium_v2",
+        label="Current Main Supported Remediation",
+        path="final_full_remediation_current_main",
         compare_to="thesis_final_remediation",
     ),
     RunSpec(
@@ -69,11 +82,13 @@ def build_report(outputs_root: Path, specs: list[RunSpec]) -> dict[str, Any]:
     run_summaries = [summarize_run(outputs_root, spec) for spec in specs]
     comparisons = build_comparisons(run_summaries)
     return {
-        "report_version": 1,
+        "report_version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "outputs_root": str(outputs_root.resolve()),
+        "support_tiers": SUPPORT_TIERS,
         "runs": run_summaries,
         "comparisons": comparisons,
+        "case_studies": load_case_studies(outputs_root),
         "headlines": build_headlines(run_summaries, comparisons),
     }
 
@@ -219,7 +234,7 @@ def build_headlines(run_summaries: list[dict[str, Any]], comparisons: list[dict[
             {
                 "audiences": ["thesis", "pr", "supervisor", "product"],
                 "text": (
-                    "Thesis-final detection reports precision "
+                    "Authoritative benchmark detection reports precision "
                     f"{summary['precision']:.4f}, recall {summary['recall']:.4f}, and F1 {summary['f1']:.4f} "
                     f"across {summary['support']} selected benchmark cases."
                 ),
@@ -233,7 +248,7 @@ def build_headlines(run_summaries: list[dict[str, Any]], comparisons: list[dict[
             {
                 "audiences": ["thesis", "pr", "supervisor"],
                 "text": (
-                    "Thesis-final explanation evaluation reaches Citation@Context "
+                    "Authoritative benchmark explanation reaches Citation@Context "
                     f"{summary['citation_rate_with_context']:.4f} and Citation@NoContext "
                     f"{summary['citation_rate_without_context']:.4f} across {summary['surfaced_tp_count']} "
                     "surfaced true positives."
@@ -248,9 +263,9 @@ def build_headlines(run_summaries: list[dict[str, Any]], comparisons: list[dict[
             {
                 "audiences": ["thesis", "supervisor", "product"],
                 "text": (
-                    "Thesis-final remediation remains policy-only: "
-                    f"{summary['fix_success']}/{summary['attempted']} fixes succeeded "
-                    f"({summary['fix_success_rate']:.4f}), with no compile verification attempted."
+                    "Authoritative benchmark remediation reaches "
+                    f"{summary['build_success']}/{summary['attempted']} fully verified compile-backed fixes "
+                    f"({summary['build_success_rate']:.4f})."
                 ),
             }
         )
@@ -278,11 +293,19 @@ def build_headlines(run_summaries: list[dict[str, Any]], comparisons: list[dict[
 
 
 def render_markdown(report: dict[str, Any]) -> str:
+    support_tiers = dict(SUPPORT_TIERS)
+    support_tiers.update(report.get("support_tiers") or {})
     lines = [
         "# Benchmark Reporting Summary",
         "",
         f"- Generated at: `{report['generated_at']}`",
         f"- Outputs root: `{report['outputs_root']}`",
+        "",
+        "## Support Tiers",
+        "",
+        f"- Full: `{', '.join(support_tiers['full'])}`",
+        f"- Guarded: `{', '.join(support_tiers['guarded'])}`",
+        f"- Manual: `{', '.join(support_tiers['manual'])}`",
         "",
         "## Headline Summary",
         "",
@@ -303,6 +326,21 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.extend(render_comparison_table(report["comparisons"]))
     else:
         lines.append("- No comparable runs were available.")
+    case_studies = report.get("case_studies") or []
+    lines.extend(["", "## Case Study Observations", ""])
+    if case_studies:
+        for item in case_studies:
+            lines.append(f"### {item.get('name', 'Unnamed Case Study')}")
+            lines.append("")
+            lines.append(f"- Status: `{item.get('status', 'unknown')}`")
+            if item.get("repo"):
+                lines.append(f"- Source: `{item['repo']}`")
+            if item.get("observations"):
+                for obs in item["observations"]:
+                    lines.append(f"- {obs}")
+            lines.append("")
+    else:
+        lines.append("- No case-study observations have been recorded yet.")
     lines.append("")
     return "\n".join(lines)
 
@@ -334,6 +372,17 @@ def artifact_path_for_run(outputs_root: Path, spec: RunSpec) -> Path:
 def load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def load_case_studies(outputs_root: Path) -> list[dict[str, Any]]:
+    index_path = outputs_root / "case_studies" / "index.json"
+    if not index_path.exists():
+        return []
+    payload = load_json(index_path)
+    case_studies = payload.get("case_studies")
+    if not isinstance(case_studies, list):
+        return []
+    return [item for item in case_studies if isinstance(item, dict)]
 
 
 def base_summary(spec: RunSpec, artifact_path: Path, payload: dict[str, Any]) -> dict[str, Any]:
