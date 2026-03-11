@@ -38,6 +38,14 @@ Source: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/summary.md
 - Fully verified success rate: `100%`
 - Current-main regression reference: `outputs/final_full_remediation_current_main/summary.md` (`9/10`)
 
+## Authoritative vs Reference Runs
+
+- Cite the following as the current benchmark-backed baseline:
+  - detection: `outputs/detection_calibration_path_precision_v4/`
+  - explanation: `outputs/thesis_final_explanation_full/`
+  - remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
+- Treat `outputs/final_full_remediation_current_main/` as a later regression/reference run, not the thesis headline remediation result.
+
 ## Remediation Bounded Smoke
 
 Source: `outputs/span_edit_bounded_smoke_v2/summary.md`

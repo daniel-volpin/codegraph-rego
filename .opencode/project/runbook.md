@@ -62,8 +62,8 @@ Generate a compact thesis/PR/supervisor report from existing artifacts:
 
 This writes:
 
-- `outputs/reporting/latest/report.json`
-- `outputs/reporting/latest/report.md`
+- `outputs/reporting/baseline_freeze_v0_2_0/report.json`
+- `outputs/reporting/baseline_freeze_v0_2_0/report.md`
 
 The default report compares:
 
@@ -72,6 +72,14 @@ The default report compares:
 - authoritative compile-backed supported remediation
 - current-main remediation regression reference
 - current compile-backed bounded remediation
+
+## Which Results To Cite
+
+- For benchmark-backed baseline claims, cite:
+  - `outputs/detection_calibration_path_precision_v4/`
+  - `outputs/thesis_final_explanation_full/`
+  - `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
+- Treat `outputs/final_full_remediation_current_main/` as a regression/reference run, not the headline remediation baseline.
 
 ## Real-World Case Studies
 

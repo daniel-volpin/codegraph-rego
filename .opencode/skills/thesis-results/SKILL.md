@@ -9,9 +9,11 @@ Primary references:
 - `.opencode/project/benchmark_latest.md`
 - `.opencode/project/current_state.md`
 - `.opencode/project/open_issues.md`
+- `outputs/reporting/baseline_freeze_v0_2_0/report.md`
 
 Rules:
 - Use benchmark outputs, not memory, as the authoritative source.
+- Prefer the consolidated baseline report when it covers the question, then drill into raw output folders only if needed.
 - Separate:
   - detection breadth
   - explanation quality

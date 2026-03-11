@@ -80,6 +80,7 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
   - explanation: `outputs/thesis_final_explanation_full/`
   - remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
 - The later `outputs/final_full_remediation_current_main/` rerun (`9/10`) remains a useful regression reference, not the thesis headline baseline.
-- Real-world validation is now cleanly separated from benchmark evidence:
+- Real-world validation is now completed and cleanly separated from benchmark evidence:
   - `outputs/case_study_spring_petclinic/` validates ingest, policy evaluation, and explanation on a realistic Spring application.
   - `outputs/case_study_gs_securing_web/` validates a second Spring target with a clean upload-scoped graph and no surfaced policy findings.
+- Interactive `/upload` now isolates the uploaded workspace graph before ingest, so a new ZIP replaces prior uploaded-project graph state without affecting benchmark workspaces.
