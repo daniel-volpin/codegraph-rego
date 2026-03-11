@@ -127,6 +127,13 @@ For exact run artifacts, inspect the cited output directories under `outputs/` r
 
 ---
 
+## Citation & License
+
+- Cite the repository using [`CITATION.cff`](./CITATION.cff).
+- This repository is licensed under the [MIT License](./LICENSE).
+
+---
+
 ## Configuration Reference
 
 

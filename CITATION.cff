@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+title: CodeGraph
+message: "If you use this repository, please cite it using the metadata in this file."
+type: software
+authors:
+  - family-names: Volpin
+    given-names: Daniel
+repository-code: "https://github.com/daniel-volpin/codegraph-rego"
+license: MIT
+version: 0.1.0
+date-released: 2026-03-11
+abstract: "Benchmark-backed JVM security and compliance framework built around OWASP Benchmark, Neo4j, OPA/Rego, structured explanation, and bounded remediation."
