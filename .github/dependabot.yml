@@ -1,0 +1,111 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Amsterdam"
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "python"
+      - "dependabot"
+    commit-message:
+      prefix: "deps(py)"
+    groups:
+      python-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:10"
+      timezone: "Europe/Amsterdam"
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "frontend"
+      - "dependabot"
+    commit-message:
+      prefix: "deps(ui)"
+    groups:
+      frontend-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:20"
+      timezone: "Europe/Amsterdam"
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "ci"
+      - "dependabot"
+    commit-message:
+      prefix: "deps(ci)"
+    groups:
+      actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:30"
+      timezone: "Europe/Amsterdam"
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "dependabot"
+    commit-message:
+      prefix: "deps(docker-backend)"
+    groups:
+      docker-backend-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:40"
+      timezone: "Europe/Amsterdam"
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "dependabot"
+    commit-message:
+      prefix: "deps(docker-frontend)"
+    groups:
+      docker-frontend-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
