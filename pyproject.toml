@@ -16,7 +16,7 @@ dependencies = [
     "sentence-transformers==2.7.0",
     "faiss-cpu==1.8.0.post1",
     "numpy==1.26.4",
-    "neo4j==5.23.1",
+    "neo4j==6.1.0",
     "javalang==0.13.0",
     "pydantic>=1.10,<2",
     "python-dotenv==1.0.1",
