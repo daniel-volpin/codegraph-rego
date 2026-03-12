@@ -11,7 +11,7 @@ authors = [
 dependencies = [
     "fastapi==0.112.2",
     "uvicorn==0.30.6",
-    "aiofiles==24.1.0",
+    "aiofiles==25.1.0",
     "python-multipart==0.0.22",
     "sentence-transformers==2.7.0",
     "faiss-cpu==1.8.0.post1",
