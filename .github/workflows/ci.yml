@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NEO4J_PASS: test-password
+      UV_CACHE_DIR: ~/.cache/uv
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -28,14 +29,23 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
 
+      - name: Cache uv and virtualenv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            .venv
+          key: uv-${{ runner.os }}-py311-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-py311-
+
       - name: Install backend dependencies
-        run: uv sync
+        run: uv sync --locked
 
       - name: Install OPA
-        run: |
-          curl -L -o /usr/local/bin/opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
-          chmod +x /usr/local/bin/opa
-          opa version
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
 
       - name: Run backend lint
         run: uv run ruff check codegraph api scripts tests
