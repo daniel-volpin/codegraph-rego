@@ -5,6 +5,7 @@ from typing import Any, List, Literal, Optional
 class UploadResponse(BaseModel):
     status: str
     java_root: Optional[str] = None
+    java_roots: List[str] = Field(default_factory=list)
     error: Optional[str] = None
 
 

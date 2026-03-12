@@ -1,7 +1,9 @@
-.PHONY: install dev test lint format docker-up docker-down clean help
+.PHONY: install backend-dev dev test lint format neo4j-up neo4j-down docker-up docker-down clean help
 
 # Default target
 .DEFAULT_GOAL := help
+
+DOCKER_COMPOSE ?= $(shell if command -v docker >/dev/null 2>&1; then printf '%s' 'docker compose'; elif command -v podman >/dev/null 2>&1; then printf '%s' 'podman compose'; fi)
 
 install: ## Install dependencies using uv and yarn
 	@echo "Installing backend dependencies..."
@@ -9,13 +11,31 @@ install: ## Install dependencies using uv and yarn
 	@echo "Installing frontend dependencies..."
 	@cd frontend && yarn install
 
+backend-dev: ## Start Neo4j via Docker Compose and run the backend locally
+	@DOCKER_COMPOSE_CMD="$(DOCKER_COMPOSE)" ./scripts/start_backend_dev.sh
+
 dev: ## Run the application in development mode (backend + frontend)
 	@echo "Starting development servers..."
-	@# Trap SIGINT to kill child processes on Ctrl+C
-	@trap 'kill 0' SIGINT; \
-	uv run uvicorn app:app --host 0.0.0.0 --port 8000 & \
-	cd frontend && yarn dev --port 5173 & \
-	wait
+	@backend_pid=''; frontend_pid=''; \
+	trap 'status=$$?; trap - INT TERM EXIT; if [ -n "$$backend_pid" ]; then kill "$$backend_pid" 2>/dev/null || true; fi; if [ -n "$$frontend_pid" ]; then kill "$$frontend_pid" 2>/dev/null || true; fi; wait "$$backend_pid" 2>/dev/null || true; wait "$$frontend_pid" 2>/dev/null || true; exit $$status' INT TERM EXIT; \
+	DOCKER_COMPOSE_CMD="$(DOCKER_COMPOSE)" ./scripts/start_backend_dev.sh & backend_pid=$$!; \
+	cd frontend && yarn dev --port 5173 & frontend_pid=$$!; \
+	while kill -0 "$$backend_pid" 2>/dev/null && kill -0 "$$frontend_pid" 2>/dev/null; do \
+		sleep 1; \
+	done; \
+	backend_status=0; frontend_status=0; backend_exited=0; frontend_exited=0; \
+	if ! kill -0 "$$backend_pid" 2>/dev/null; then backend_exited=1; wait "$$backend_pid" || backend_status=$$?; fi; \
+	if ! kill -0 "$$frontend_pid" 2>/dev/null; then frontend_exited=1; wait "$$frontend_pid" || frontend_status=$$?; fi; \
+	if [ "$$backend_exited" -eq 1 ]; then \
+		if [ "$$backend_status" -eq 0 ]; then backend_status=1; fi; \
+		echo "Backend development process exited with status $$backend_status." >&2; \
+		exit "$$backend_status"; \
+	fi; \
+	if [ "$$frontend_exited" -eq 1 ]; then \
+		if [ "$$frontend_status" -eq 0 ]; then frontend_status=1; fi; \
+		echo "Frontend development process exited with status $$frontend_status." >&2; \
+		exit "$$frontend_status"; \
+	fi
 
 test: ## Run backend tests
 	@uv run pytest
@@ -32,11 +52,17 @@ format: ## Format code (ruff for backend, prettier for frontend)
 	@echo "Formatting frontend..."
 	@cd frontend && npx prettier --write "src/**/*.{ts,tsx,css}"
 
+neo4j-up: ## Start the local Neo4j dependency only
+	@$(DOCKER_COMPOSE) up -d neo4j
+
+neo4j-down: ## Stop the local Neo4j dependency
+	@$(DOCKER_COMPOSE) stop neo4j
+
 docker-up: ## Start Docker Compose services
-	@docker-compose up -d --build
+	@$(DOCKER_COMPOSE) up -d --build
 
 docker-down: ## Stop Docker Compose services
-	@docker-compose down
+	@$(DOCKER_COMPOSE) down
 
 clean: ## Remove build artifacts and temporary files
 	@echo "Removing Python caches..."
