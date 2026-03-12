@@ -1,6 +1,7 @@
 export interface UploadResponse {
   status: string;
   java_root?: string | null;
+  java_roots?: string[];
   error?: string | null;
 }
 
