@@ -9,8 +9,8 @@ authors = [
     { name = "Daniel Volpin" },
 ]
 dependencies = [
-    "fastapi==0.112.2",
-    "uvicorn==0.30.6",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.6",
     "aiofiles==25.1.0",
     "python-multipart==0.0.22",
     "sentence-transformers==5.3.0",
@@ -18,9 +18,10 @@ dependencies = [
     "numpy==1.26.4",
     "neo4j==6.1.0",
     "javalang==0.13.0",
-    "pydantic>=1.10,<3",
-    "python-dotenv==1.0.1",
-    "litellm==1.35.7",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.2.0",
+    "litellm>=1.56.0",
 ]
 
 [project.urls]
