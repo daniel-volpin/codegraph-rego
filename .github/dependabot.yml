@@ -12,8 +12,6 @@ updates:
     target-branch: "main"
     labels:
       - "dependencies"
-      - "python"
-      - "dependabot"
     commit-message:
       prefix: "deps(py)"
     groups:
@@ -34,8 +32,6 @@ updates:
     target-branch: "main"
     labels:
       - "dependencies"
-      - "frontend"
-      - "dependabot"
     commit-message:
       prefix: "deps(ui)"
     groups:
@@ -56,8 +52,6 @@ updates:
     target-branch: "main"
     labels:
       - "dependencies"
-      - "ci"
-      - "dependabot"
     commit-message:
       prefix: "deps(ci)"
     groups:
@@ -78,8 +72,6 @@ updates:
     target-branch: "main"
     labels:
       - "dependencies"
-      - "docker"
-      - "dependabot"
     commit-message:
       prefix: "deps(docker-backend)"
     groups:
@@ -100,8 +92,6 @@ updates:
     target-branch: "main"
     labels:
       - "dependencies"
-      - "docker"
-      - "dependabot"
     commit-message:
       prefix: "deps(docker-frontend)"
     groups:
