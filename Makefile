@@ -38,7 +38,7 @@ dev: ## Run the application in development mode (backend + frontend)
 	fi
 
 test: ## Run backend tests
-	@uv run pytest
+	@uv run python -m pytest -q
 
 lint: ## Run linting (ruff for backend, eslint for frontend)
 	@echo "Linting backend..."
