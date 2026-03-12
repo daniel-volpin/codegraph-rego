@@ -1,0 +1,16 @@
+name: Dependency Review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    if: github.event.repository.private == false || vars.ENABLE_GHAS_WORKFLOWS == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Review dependencies
+        uses: actions/dependency-review-action@v4
