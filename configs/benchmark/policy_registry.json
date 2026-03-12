@@ -1,0 +1,270 @@
+{
+  "rules": [
+    {
+      "id": "ISO-A.9.4.1",
+      "alias_ids": ["ISO-27001-A.9.4.1"],
+      "control": "A.9.4.1",
+      "title": "Access Control for Applications",
+      "reference": "ISO/IEC 27001:2022 A.9.4.1",
+      "summary": "Public endpoints should enforce access control and authentication policies.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": ["signature", "annotations", "modifiers", "file_path"],
+      "iso_rule": {
+        "standard": "ISO-27001",
+        "id": "A.9.4.1",
+        "subject": "User",
+        "action": "Access",
+        "object": "Service",
+        "conditions": ["isAuthenticated"],
+        "description": "Access to application endpoints must be controlled and require authentication"
+      }
+    },
+    {
+      "id": "ISO-A.12.4.1",
+      "alias_ids": ["ISO-27001-A.12.4.1"],
+      "control": "A.12.4.1",
+      "title": "Event Logging",
+      "reference": "ISO/IEC 27001:2022 A.12.4.1",
+      "summary": "Security events should be logged to record actions that could affect information security.",
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "evidence_fields": ["signature", "annotations", "modifiers", "file_path", "called_signatures"],
+      "iso_rule": {
+        "standard": "ISO-27001",
+        "id": "A.12.4.1",
+        "subject": "System",
+        "action": "Log",
+        "object": "SecurityEvent",
+        "conditions": ["auditTrail"],
+        "description": "Event logging should capture actions affecting information security"
+      }
+    },
+    {
+      "id": "ISO-A.10-WEAK-HASH",
+      "control": "A.10",
+      "title": "Cryptography (Weak Hash)",
+      "reference": "ISO/IEC 27001:2022 A.10",
+      "summary": "Cryptographic controls should avoid weak hash algorithms such as MD5.",
+      "rego_module": "policy/iso_27001_crypto.rego",
+      "rego_rule": "violations",
+      "evidence_fields": ["signature", "file_path", "called_signatures", "source_code", "analysis_flags"],
+      "iso_rule": {
+        "standard": "ISO-27001",
+        "id": "A.10-WEAK-HASH",
+        "subject": "System",
+        "action": "Protect",
+        "object": "HashAlgorithm",
+        "conditions": ["strongHash"],
+        "description": "Cryptographic controls should avoid weak hash algorithms such as MD5"
+      }
+    },
+    {
+      "id": "ISO-A.10-WEAK-CRYPTO",
+      "control": "A.10",
+      "title": "Cryptography (Weak Cipher)",
+      "reference": "ISO/IEC 27001:2022 A.10",
+      "summary": "Cryptographic controls should avoid weak or deprecated ciphers and insecure modes.",
+      "rego_module": "policy/iso_27001_crypto.rego",
+      "rego_rule": "violations",
+      "evidence_fields": ["signature", "file_path", "called_signatures", "source_code", "analysis_flags"],
+      "iso_rule": {
+        "standard": "ISO-27001",
+        "id": "A.10-WEAK-CRYPTO",
+        "subject": "System",
+        "action": "Protect",
+        "object": "CipherAlgorithm",
+        "conditions": ["strongCipher"],
+        "description": "Cryptographic controls should avoid weak ciphers and insecure modes"
+      }
+    },
+    {
+      "id": "ISO-A.10-WEAK-RANDOM",
+      "control": "A.10",
+      "title": "Cryptography (Insecure Randomness)",
+      "reference": "ISO/IEC 27001:2022 A.10",
+      "summary": "Security-sensitive code should use cryptographically strong randomness rather than predictable PRNGs.",
+      "rego_module": "policy/iso_27001_crypto.rego",
+      "rego_rule": "violations",
+      "evidence_fields": ["signature", "file_path", "called_signatures", "source_code"],
+      "iso_rule": {
+        "standard": "ISO-27001",
+        "id": "A.10-WEAK-RANDOM",
+        "subject": "System",
+        "action": "Protect",
+        "object": "Randomness",
+        "conditions": ["secureRandom"],
+        "description": "Security-sensitive code should avoid predictable randomness sources (e.g., java.util.Random)"
+      }
+    },
+    {
+      "id": "ISO-A.8-SQL-INJECTION",
+      "control": "A.8",
+      "title": "Secure Development (SQL Injection)",
+      "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "summary": "Application code should prevent SQL injection by avoiding dynamic query construction with untrusted input.",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "evidence_fields": ["signature", "file_path", "source_code", "called_signatures"],
+      "iso_rule": {
+        "standard": "ISO-27001",
+        "id": "A.8-SQL-INJECTION",
+        "subject": "Developer",
+        "action": "Validate",
+        "object": "SQLQuery",
+        "conditions": ["noInjection"],
+        "description": "Application code should prevent SQL injection by avoiding dynamic SQL concatenation with untrusted input"
+      }
+    },
+    {
+      "id": "ISO-A.8-PATH-TRAVERSAL",
+      "control": "A.8",
+      "title": "Secure Development (Path Traversal)",
+      "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "summary": "Application code should prevent path traversal by avoiding direct file path construction from untrusted input.",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "evidence_fields": ["signature", "file_path", "source_code", "called_signatures", "analysis_flags"],
+      "iso_rule": {
+        "standard": "ISO-27001",
+        "id": "A.8-PATH-TRAVERSAL",
+        "subject": "Developer",
+        "action": "Validate",
+        "object": "FilePath",
+        "conditions": ["safePathHandling"],
+        "description": "Application code should prevent path traversal by avoiding direct file path construction from untrusted input"
+      }
+    },
+    {
+      "id": "ISO-A.8-CMD-INJECTION",
+      "control": "A.8",
+      "title": "Secure Development (Command Injection)",
+      "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "summary": "Application code should prevent command injection by avoiding shell or process command construction from untrusted input.",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "evidence_fields": ["signature", "file_path", "source_code", "called_signatures", "analysis_flags"],
+      "iso_rule": {
+        "standard": "ISO-27001",
+        "id": "A.8-CMD-INJECTION",
+        "subject": "Developer",
+        "action": "Validate",
+        "object": "CommandExecution",
+        "conditions": ["noShellInjection"],
+        "description": "Application code should prevent command injection by avoiding shell or process command construction from untrusted input"
+      }
+    },
+    {
+      "id": "ISO-A.8-LDAP-INJECTION",
+      "control": "A.8",
+      "title": "Secure Development (LDAP Injection)",
+      "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "summary": "Application code should prevent LDAP injection by avoiding concatenated LDAP filter construction with untrusted input.",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "evidence_fields": ["signature", "file_path", "source_code", "called_signatures", "analysis_flags"],
+      "iso_rule": {
+        "standard": "ISO-27001",
+        "id": "A.8-LDAP-INJECTION",
+        "subject": "Developer",
+        "action": "Validate",
+        "object": "LDAPQuery",
+        "conditions": ["safeDirectoryQuery"],
+        "description": "Application code should prevent LDAP injection by avoiding concatenated LDAP filter construction with untrusted input"
+      }
+    },
+    {
+      "id": "ISO-A.8-XPATH-INJECTION",
+      "control": "A.8",
+      "title": "Secure Development (XPath Injection)",
+      "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "summary": "Application code should prevent XPath injection by avoiding concatenated XPath expression construction with untrusted input.",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "evidence_fields": ["signature", "file_path", "source_code", "called_signatures", "analysis_flags"],
+      "iso_rule": {
+        "standard": "ISO-27001",
+        "id": "A.8-XPATH-INJECTION",
+        "subject": "Developer",
+        "action": "Validate",
+        "object": "XPathQuery",
+        "conditions": ["safeXPathQuery"],
+        "description": "Application code should prevent XPath injection by avoiding concatenated XPath expression construction with untrusted input"
+      }
+    }
+  ],
+  "categories": [
+    {
+      "category_id": "crypto-md5",
+      "label": "Crypto (CWE-327)",
+      "cwes": ["CWE-327"],
+      "rego_rule_ids": ["ISO-A.10-WEAK-CRYPTO"],
+      "control_ids": ["A.10"],
+      "remediation_tier": "guarded",
+      "framework_demo": true
+    },
+    {
+      "category_id": "hash-md5",
+      "label": "Hash (CWE-328)",
+      "cwes": ["CWE-328"],
+      "rego_rule_ids": ["ISO-A.10-WEAK-HASH"],
+      "control_ids": ["A.10"],
+      "remediation_tier": "full",
+      "framework_demo": true
+    },
+    {
+      "category_id": "rng-insecure",
+      "label": "Randomness (CWE-330)",
+      "cwes": ["CWE-330"],
+      "rego_rule_ids": ["ISO-A.10-WEAK-RANDOM"],
+      "control_ids": ["A.10"],
+      "remediation_tier": "full",
+      "framework_demo": true
+    },
+    {
+      "category_id": "sql-injection",
+      "label": "SQL Injection (CWE-89)",
+      "cwes": ["CWE-89"],
+      "rego_rule_ids": ["ISO-A.8-SQL-INJECTION"],
+      "control_ids": ["A.8"],
+      "remediation_tier": "manual",
+      "framework_demo": true
+    },
+    {
+      "category_id": "path-traversal",
+      "label": "Path Traversal (CWE-22)",
+      "cwes": ["CWE-22"],
+      "rego_rule_ids": ["ISO-A.8-PATH-TRAVERSAL"],
+      "control_ids": ["A.8"],
+      "remediation_tier": "manual",
+      "framework_demo": true
+    },
+    {
+      "category_id": "command-injection",
+      "label": "Command Injection (CWE-78)",
+      "cwes": ["CWE-78"],
+      "rego_rule_ids": ["ISO-A.8-CMD-INJECTION"],
+      "control_ids": ["A.8"],
+      "remediation_tier": "manual",
+      "framework_demo": true
+    },
+    {
+      "category_id": "ldap-injection",
+      "label": "LDAP Injection (CWE-90)",
+      "cwes": ["CWE-90"],
+      "rego_rule_ids": ["ISO-A.8-LDAP-INJECTION"],
+      "control_ids": ["A.8"],
+      "remediation_tier": "manual",
+      "framework_demo": true
+    },
+    {
+      "category_id": "xpath-injection",
+      "label": "XPath Injection (CWE-643)",
+      "cwes": ["CWE-643"],
+      "rego_rule_ids": ["ISO-A.8-XPATH-INJECTION"],
+      "control_ids": ["A.8"],
+      "remediation_tier": "manual",
+      "framework_demo": true
+    }
+  ]
+}

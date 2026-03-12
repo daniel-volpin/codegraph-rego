@@ -3,35 +3,38 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable
 
-DEFAULT_REMEDIATION_RULE_MATRIX = {
-    "ISO-A.10-WEAK-HASH": {
-        "support_tier": "full",
-        "reason_code": "supported_rule_for_auto_fix",
-        "strategy": "llm_method_replacement",
-        "preview_available": True,
-        "verify_available": True,
-        "safe_refusal_possible": False,
-        "rationale": "Bounded hash replacements such as MD5 to SHA-256 can be applied with minimal local edits.",
-    },
-    "ISO-A.10-WEAK-RANDOM": {
-        "support_tier": "full",
-        "reason_code": "supported_rule_for_auto_fix",
-        "strategy": "llm_method_replacement",
-        "preview_available": True,
-        "verify_available": True,
-        "safe_refusal_possible": True,
-        "rationale": "Local randomness upgrades can often be made safely with narrow replacements to SecureRandom-based APIs.",
-    },
-    "ISO-A.10-WEAK-CRYPTO": {
-        "support_tier": "guarded",
-        "reason_code": "supported_rule_for_auto_fix",
-        "strategy": "llm_method_replacement",
-        "preview_available": True,
-        "verify_available": True,
-        "safe_refusal_possible": True,
-        "rationale": "Weak-cipher remediation is available only for explicit literal subcases where a safe minimal replacement is evident.",
-    },
+from codegraph.benchmark_registry import load_policy_registry
+
+SUPPORTED_RULE_RATIONALES = {
+    "ISO-A.10-WEAK-HASH": "Bounded hash replacements such as MD5 to SHA-256 can be applied with minimal local edits.",
+    "ISO-A.10-WEAK-RANDOM": "Local randomness upgrades can often be made safely with narrow replacements to SecureRandom-based APIs.",
+    "ISO-A.10-WEAK-CRYPTO": "Weak-cipher remediation is available only for explicit literal subcases where a safe minimal replacement is evident.",
 }
+SAFE_REFUSAL_RULE_IDS = frozenset({"ISO-A.10-WEAK-RANDOM", "ISO-A.10-WEAK-CRYPTO"})
+
+
+def _build_default_remediation_rule_matrix() -> dict[str, dict[str, Any]]:
+    matrix: dict[str, dict[str, Any]] = {}
+    for category in load_policy_registry().categories:
+        if category.remediation_tier not in {"full", "guarded"}:
+            continue
+        for rule_id in category.rego_rule_ids:
+            matrix[rule_id] = {
+                "support_tier": category.remediation_tier,
+                "reason_code": "supported_rule_for_auto_fix",
+                "strategy": "llm_method_replacement",
+                "preview_available": True,
+                "verify_available": True,
+                "safe_refusal_possible": rule_id in SAFE_REFUSAL_RULE_IDS,
+                "rationale": SUPPORTED_RULE_RATIONALES.get(
+                    rule_id,
+                    "Automatic remediation is enabled for this supported rule.",
+                ),
+            }
+    return matrix
+
+
+DEFAULT_REMEDIATION_RULE_MATRIX = _build_default_remediation_rule_matrix()
 
 DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS = frozenset(DEFAULT_REMEDIATION_RULE_MATRIX.keys())
 

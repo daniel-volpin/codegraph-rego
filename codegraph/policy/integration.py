@@ -16,6 +16,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from codegraph.benchmark_registry import (
+    iso_rules_payload_from_registry,
+    policy_catalog_entries_from_registry,
+    policy_catalog_payload_from_registry,
+)
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.source_analysis import analyze_policy_indicators
@@ -60,19 +65,7 @@ def _is_test_source_path(file_path: Any) -> bool:
 def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
     global _CATALOG_CACHE, _CATALOG_ENTRIES_CACHE
     if _CATALOG_CACHE is None or _CATALOG_ENTRIES_CACHE is None:
-        try:
-            with open(CATALOG_PATH, "r") as file:
-                raw = json.load(file)
-        except FileNotFoundError:
-            raw = []
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Failed to parse policy catalog at {CATALOG_PATH}: {exc}") from exc
-        if isinstance(raw, dict):
-            entries = raw.get("controls", [])
-        elif isinstance(raw, list):
-            entries = raw
-        else:
-            entries = []
+        entries = policy_catalog_entries_from_registry()
         catalog_lookup: Dict[str, Dict[str, Any]] = {}
         catalog_entries: List[Dict[str, Any]] = []
         for entry in entries:
@@ -128,12 +121,15 @@ def _resolve_catalog_entry(violation_id: Any, catalog: Dict[str, Dict[str, Any]]
 def load_iso_rules() -> Dict[str, Any]:
     global _ISO_RULES_CACHE
     if _ISO_RULES_CACHE is None:
-        try:
-            with open(ISO_RULES_PATH, "r") as file:
-                _ISO_RULES_CACHE = json.load(file) or {}
-        except FileNotFoundError:
-            _ISO_RULES_CACHE = {}
+        _ISO_RULES_CACHE = iso_rules_payload_from_registry()
     return _ISO_RULES_CACHE or {}
+
+
+def get_policy_catalog_payload() -> Dict[str, Any]:
+    payload = policy_catalog_payload_from_registry()
+    payload["controls"] = get_policy_catalog_entries()
+    payload["rules"] = load_iso_rules().get("rules", [])
+    return payload
 
 
 def build_policy_input(

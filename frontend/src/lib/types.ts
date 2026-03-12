@@ -108,8 +108,28 @@ export interface PolicyCatalogEntry {
   [key: string]: unknown;
 }
 
+export interface PolicyRuleEntry {
+  id?: string;
+  standard?: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
+export interface PolicyBenchmarkCategory {
+  category_id: string;
+  label: string;
+  cwes: string[];
+  rego_rule_ids: string[];
+  control_ids: string[];
+  remediation_tier: "full" | "guarded" | "manual";
+  framework_demo: boolean;
+}
+
 export interface PolicyCatalogResponse {
   controls: PolicyCatalogEntry[];
+  rules: PolicyRuleEntry[];
+  benchmark_categories: PolicyBenchmarkCategory[];
+  framework_demo_rule_ids: string[];
   error?: string;
 }
 

@@ -22,6 +22,8 @@ class CategorySpec:
     cwes: List[str]
     rego_rules: List[str]
     iso_controls: List[str] = field(default_factory=list)
+    remediation_tier: str = "manual"
+    framework_demo: bool = False
 
 
 @dataclass
@@ -103,11 +105,13 @@ def load_mapping_config(path: Path) -> List[CategorySpec]:
             continue
         specs.append(
             CategorySpec(
-                id=str(entry.get("id") or entry.get("name")),
-                label=str(entry.get("label") or entry.get("name") or entry.get("id")),
+                id=str(entry.get("category_id") or entry.get("id") or entry.get("name")),
+                label=str(entry.get("label") or entry.get("name") or entry.get("category_id") or entry.get("id")),
                 cwes=[_normalize_cwe(cwe) for cwe in entry.get("cwes", []) if cwe],
-                rego_rules=[str(rule) for rule in entry.get("rego_rules", []) if rule],
-                iso_controls=[str(ctrl) for ctrl in entry.get("iso_controls", []) if ctrl],
+                rego_rules=[str(rule) for rule in (entry.get("rego_rule_ids") or entry.get("rego_rules") or []) if rule],
+                iso_controls=[str(ctrl) for ctrl in (entry.get("control_ids") or entry.get("iso_controls") or []) if ctrl],
+                remediation_tier=str(entry.get("remediation_tier") or "manual"),
+                framework_demo=bool(entry.get("framework_demo", False)),
             )
         )
     return specs

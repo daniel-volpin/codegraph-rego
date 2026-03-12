@@ -4,10 +4,13 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from codegraph.benchmark_registry import framework_demo_category_ids, framework_demo_rule_ids, policy_catalog_payload_from_registry
+
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1] / "scripts" / "evaluation" / "build_benchmark_demo_pack.py"
 )
+MANIFEST_PATH = Path(__file__).resolve().parents[1] / "demo" / "benchmark-framework-demo" / "manifest.json"
 
 
 def _load_script_module():
@@ -20,6 +23,24 @@ def _load_script_module():
 
 
 class BenchmarkDemoPackTests(unittest.TestCase):
+    def test_framework_demo_manifest_matches_registry_and_api_payload(self) -> None:
+        payload = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        testcases = payload.get("testcases", [])
+        manifest_rule_ids = [entry["rego_rule"] for entry in testcases if isinstance(entry, dict)]
+        manifest_category_ids = [entry["category_id"] for entry in testcases if isinstance(entry, dict)]
+
+        self.assertEqual(sorted(set(manifest_rule_ids)), sorted(framework_demo_rule_ids()))
+        self.assertEqual(sorted(set(manifest_category_ids)), sorted(framework_demo_category_ids()))
+
+        api_payload = policy_catalog_payload_from_registry()
+        self.assertEqual(api_payload["framework_demo_rule_ids"], framework_demo_rule_ids())
+        demo_categories = {
+            entry["category_id"]
+            for entry in api_payload["benchmark_categories"]
+            if entry.get("framework_demo")
+        }
+        self.assertEqual(demo_categories, set(framework_demo_category_ids()))
+
     def test_build_demo_pack_copies_selected_assets_and_creates_zip(self) -> None:
         module = _load_script_module()
 

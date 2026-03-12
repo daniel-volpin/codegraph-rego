@@ -1,0 +1,243 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, List, Literal
+
+
+RegistryTier = Literal["full", "guarded", "manual"]
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_POLICY_REGISTRY_PATH = PROJECT_ROOT / "configs" / "benchmark" / "policy_registry.json"
+
+
+@dataclass(frozen=True)
+class PolicyRuleSpec:
+    id: str
+    control: str
+    title: str
+    reference: str
+    summary: str
+    rego_module: str
+    rego_rule: str
+    evidence_fields: tuple[str, ...]
+    standard: str
+    iso_rule_id: str
+    subject: str
+    action: str
+    object: str
+    conditions: tuple[str, ...]
+    description: str
+    alias_ids: tuple[str, ...] = ()
+
+    def as_catalog_entry(self) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "id": self.id,
+            "control": self.control,
+            "title": self.title,
+            "reference": self.reference,
+            "summary": self.summary,
+            "rego_module": self.rego_module,
+            "rego_rule": self.rego_rule,
+            "evidence_fields": list(self.evidence_fields),
+        }
+        if self.alias_ids:
+            payload["alias_ids"] = list(self.alias_ids)
+        return payload
+
+    def as_iso_rule_entry(self) -> Dict[str, Any]:
+        return {
+            "standard": self.standard,
+            "id": self.iso_rule_id,
+            "subject": self.subject,
+            "action": self.action,
+            "object": self.object,
+            "conditions": list(self.conditions),
+            "description": self.description,
+        }
+
+
+@dataclass(frozen=True)
+class BenchmarkCategorySpec:
+    category_id: str
+    label: str
+    cwes: tuple[str, ...]
+    rego_rule_ids: tuple[str, ...]
+    control_ids: tuple[str, ...]
+    remediation_tier: RegistryTier
+    framework_demo: bool
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "category_id": self.category_id,
+            "label": self.label,
+            "cwes": list(self.cwes),
+            "rego_rule_ids": list(self.rego_rule_ids),
+            "control_ids": list(self.control_ids),
+            "remediation_tier": self.remediation_tier,
+            "framework_demo": self.framework_demo,
+        }
+
+
+@dataclass(frozen=True)
+class PolicyRegistry:
+    rules: tuple[PolicyRuleSpec, ...]
+    categories: tuple[BenchmarkCategorySpec, ...]
+
+
+def _read_registry(path: Path) -> Dict[str, Any]:
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError(f"Policy registry at {path} must be a JSON object.")
+    return payload
+
+
+def _parse_rules(entries: Any) -> tuple[PolicyRuleSpec, ...]:
+    if not isinstance(entries, list):
+        raise ValueError("Policy registry must define a 'rules' list.")
+    specs: List[PolicyRuleSpec] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        iso_rule = entry.get("iso_rule") or {}
+        if not isinstance(iso_rule, dict):
+            raise ValueError("Each rule entry must include an 'iso_rule' object.")
+        specs.append(
+            PolicyRuleSpec(
+                id=str(entry.get("id") or ""),
+                control=str(entry.get("control") or ""),
+                title=str(entry.get("title") or ""),
+                reference=str(entry.get("reference") or ""),
+                summary=str(entry.get("summary") or ""),
+                rego_module=str(entry.get("rego_module") or ""),
+                rego_rule=str(entry.get("rego_rule") or ""),
+                evidence_fields=tuple(str(field) for field in (entry.get("evidence_fields") or []) if field),
+                standard=str(iso_rule.get("standard") or ""),
+                iso_rule_id=str(iso_rule.get("id") or ""),
+                subject=str(iso_rule.get("subject") or ""),
+                action=str(iso_rule.get("action") or ""),
+                object=str(iso_rule.get("object") or ""),
+                conditions=tuple(str(item) for item in (iso_rule.get("conditions") or []) if item),
+                description=str(iso_rule.get("description") or ""),
+                alias_ids=tuple(str(item) for item in (entry.get("alias_ids") or []) if item),
+            )
+        )
+    return tuple(specs)
+
+
+def _parse_categories(entries: Any) -> tuple[BenchmarkCategorySpec, ...]:
+    if not isinstance(entries, list):
+        raise ValueError("Policy registry must define a 'categories' list.")
+    specs: List[BenchmarkCategorySpec] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        tier = str(entry.get("remediation_tier") or "manual")
+        if tier not in {"full", "guarded", "manual"}:
+            raise ValueError(f"Unknown remediation tier: {tier}")
+        specs.append(
+            BenchmarkCategorySpec(
+                category_id=str(entry.get("category_id") or entry.get("id") or ""),
+                label=str(entry.get("label") or entry.get("category_id") or entry.get("id") or ""),
+                cwes=tuple(str(item) for item in (entry.get("cwes") or []) if item),
+                rego_rule_ids=tuple(str(item) for item in (entry.get("rego_rule_ids") or entry.get("rego_rules") or []) if item),
+                control_ids=tuple(str(item) for item in (entry.get("control_ids") or entry.get("iso_controls") or []) if item),
+                remediation_tier=tier,
+                framework_demo=bool(entry.get("framework_demo", False)),
+            )
+        )
+    return tuple(specs)
+
+
+def _validate_registry(registry: PolicyRegistry) -> PolicyRegistry:
+    rule_ids = {spec.id for spec in registry.rules}
+    missing = sorted(
+        rule_id
+        for category in registry.categories
+        for rule_id in category.rego_rule_ids
+        if rule_id not in rule_ids
+    )
+    if missing:
+        raise ValueError(f"Policy registry categories reference unknown rule ids: {missing}")
+    return registry
+
+
+@lru_cache(maxsize=4)
+def load_policy_registry(path: str | None = None) -> PolicyRegistry:
+    registry_path = Path(path).resolve() if path else DEFAULT_POLICY_REGISTRY_PATH.resolve()
+    payload = _read_registry(registry_path)
+    registry = PolicyRegistry(
+        rules=_parse_rules(payload.get("rules")),
+        categories=_parse_categories(payload.get("categories")),
+    )
+    return _validate_registry(registry)
+
+
+def benchmark_category_payloads(path: str | None = None) -> List[Dict[str, Any]]:
+    return [category.as_dict() for category in load_policy_registry(path).categories]
+
+
+def benchmark_category_rule_ids(path: str | None = None) -> List[str]:
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for category in load_policy_registry(path).categories:
+        for rule_id in category.rego_rule_ids:
+            if rule_id in seen:
+                continue
+            seen.add(rule_id)
+            ordered.append(rule_id)
+    return ordered
+
+
+def framework_demo_rule_ids(path: str | None = None) -> List[str]:
+    seen: set[str] = set()
+    ordered: List[str] = []
+    for category in load_policy_registry(path).categories:
+        if not category.framework_demo:
+            continue
+        for rule_id in category.rego_rule_ids:
+            if rule_id in seen:
+                continue
+            seen.add(rule_id)
+            ordered.append(rule_id)
+    return ordered
+
+
+def framework_demo_category_ids(path: str | None = None) -> List[str]:
+    return [category.category_id for category in load_policy_registry(path).categories if category.framework_demo]
+
+
+def remediation_tier_by_rule_id(path: str | None = None) -> Dict[str, RegistryTier]:
+    mapping: Dict[str, RegistryTier] = {}
+    for category in load_policy_registry(path).categories:
+        for rule_id in category.rego_rule_ids:
+            mapping[rule_id] = category.remediation_tier
+    return mapping
+
+
+def supported_remediation_rule_ids(path: str | None = None) -> List[str]:
+    return [
+        rule_id
+        for rule_id, tier in remediation_tier_by_rule_id(path).items()
+        if tier in {"full", "guarded"}
+    ]
+
+
+def policy_catalog_entries_from_registry(path: str | None = None) -> List[Dict[str, Any]]:
+    return [rule.as_catalog_entry() for rule in load_policy_registry(path).rules]
+
+
+def iso_rules_payload_from_registry(path: str | None = None) -> Dict[str, Any]:
+    return {"rules": [rule.as_iso_rule_entry() for rule in load_policy_registry(path).rules]}
+
+
+def policy_catalog_payload_from_registry(path: str | None = None) -> Dict[str, Any]:
+    return {
+        "controls": policy_catalog_entries_from_registry(path),
+        "rules": iso_rules_payload_from_registry(path).get("rules", []),
+        "benchmark_categories": benchmark_category_payloads(path),
+        "framework_demo_rule_ids": framework_demo_rule_ids(path),
+    }

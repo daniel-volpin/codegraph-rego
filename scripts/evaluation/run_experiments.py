@@ -16,6 +16,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from codegraph.benchmark_registry import supported_remediation_rule_ids
+from codegraph.evaluation.benchmark import load_mapping_config
+
 
 LOGGER = logging.getLogger("codegraph.eval.experiments")
 
@@ -39,33 +42,21 @@ def _load_json(path: Path) -> Any:
 
 
 def _supported_remediation_rule_ids() -> List[str]:
-    # Internal source-of-truth for "what can we remediate today".
-    from codegraph.remediation.service import RemediationService
-
-    return sorted([str(key) for key in RemediationService._FIX_STRATEGIES.keys()])  # pylint: disable=protected-access
+    return sorted(supported_remediation_rule_ids())
 
 
 def _partition_categories_for_remediation(
     selection_cfg: Dict[str, Any],
-    mapping_cfg: Dict[str, Any],
+    mapping_path: Path,
 ) -> Tuple[List[str], List[Dict[str, str]]]:
     selected_category_ids = selection_cfg.get("categories") or []
-    supported_rules = set(_supported_remediation_rule_ids())
-
-    categories = mapping_cfg.get("categories", []) if isinstance(mapping_cfg, dict) else []
-    by_id: Dict[str, Dict[str, Any]] = {}
-    for entry in categories:
-        if isinstance(entry, dict) and entry.get("id"):
-            by_id[str(entry["id"])] = entry
+    by_id = {spec.id: spec for spec in load_mapping_config(mapping_path)}
 
     attempted: List[str] = []
     skipped: List[Dict[str, str]] = []
     for category_id in selected_category_ids:
         spec = by_id.get(str(category_id))
-        rego_rules = []
-        if isinstance(spec, dict):
-            rego_rules = [str(rule) for rule in (spec.get("rego_rules") or []) if rule]
-        if any(rule in supported_rules for rule in rego_rules):
+        if spec and spec.remediation_tier in {"full", "guarded"}:
             attempted.append(str(category_id))
         else:
             skipped.append(
@@ -86,7 +77,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mapping",
-        default="configs/control_mapping.json",
+        default="configs/benchmark/policy_registry.json",
         help="Control/CWE/Rego mapping JSON (default: %(default)s)",
     )
     parser.add_argument(
@@ -158,8 +149,6 @@ def main() -> int:
         path.mkdir(parents=True, exist_ok=True)
 
     selection_cfg = _load_json(selection_path)
-    mapping_cfg = _load_json(mapping_path)
-
     commands_executed: List[str] = []
 
     def add_and_run(cmd: List[str]) -> None:
@@ -201,7 +190,7 @@ def main() -> int:
     add_and_run(cmd)
 
     # Stage C: remediation metrics (only for categories with supported remediation strategies).
-    remediation_attempted, remediation_skipped = _partition_categories_for_remediation(selection_cfg, mapping_cfg)
+    remediation_attempted, remediation_skipped = _partition_categories_for_remediation(selection_cfg, mapping_path)
     remediation_config_path: Path | None = None
     if remediation_attempted:
         remediation_config_path = exp_dir / "selection_for_remediation.json"

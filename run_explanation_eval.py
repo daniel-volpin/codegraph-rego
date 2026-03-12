@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mapping",
-        default="configs/control_mapping.json",
+        default="configs/benchmark/policy_registry.json",
         help="Control/CWE/Rego mapping JSON (default: %(default)s)",
     )
     parser.add_argument(

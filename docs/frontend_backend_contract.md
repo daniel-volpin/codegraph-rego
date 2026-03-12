@@ -82,8 +82,13 @@ Request/response models: `api/models/`
 
 ### `GET /policy/catalog`
 - Router: `api/routers/policy.py`
-- Response HTTP `200`: `{ "controls": object[] }`
-- Catalog source: `policy/catalog.json`
+- Response HTTP `200`:
+  - `controls: object[]`
+  - `rules: object[]`
+  - `benchmark_categories: object[]`
+  - `framework_demo_rule_ids: string[]`
+- Runtime source: `configs/benchmark/policy_registry.json`
+- Compatibility snapshots: `policy/catalog.json`, `policy/iso_rules.json`
 
 ### `POST /policy/explain_one`
 - Router: `api/routers/policy.py`

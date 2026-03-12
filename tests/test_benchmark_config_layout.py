@@ -30,11 +30,13 @@ class TestBenchmarkConfigLayout(unittest.TestCase):
             "remediation_hash_smoke.json",
             "remediation_bounded_smoke.json",
             "remediation_supported_medium.json",
+            "policy_registry.json",
         }
         actual = {path.name for path in benchmark_dir.glob("*.json")}
         self.assertTrue(expected.issubset(actual))
 
-        for name in expected:
+        selection_configs = expected - {"policy_registry.json"}
+        for name in selection_configs:
             payload = load_selection_config(benchmark_dir / name)
             self.assertIn("benchmark_root", payload)
             self.assertIn("categories", payload)

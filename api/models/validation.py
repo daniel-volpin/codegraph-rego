@@ -49,7 +49,10 @@ class PolicyEvaluateResponse(BaseModel):
 
 
 class PolicyCatalogResponse(BaseModel):
-    controls: list
+    controls: List[dict] = Field(default_factory=list)
+    rules: List[dict] = Field(default_factory=list)
+    benchmark_categories: List[dict] = Field(default_factory=list)
+    framework_demo_rule_ids: List[str] = Field(default_factory=list)
     error: Optional[str] = None
 
 

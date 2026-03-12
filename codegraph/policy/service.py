@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from codegraph.config import settings
-from codegraph.policy.integration import evaluate_policies, get_policy_catalog_entries
+from codegraph.policy.integration import evaluate_policies, get_policy_catalog_payload
 
 
 def evaluate(
@@ -28,6 +28,6 @@ def evaluate(
     )
 
 
-def catalog() -> List[Dict[str, Any]]:
-    """Return policy catalog entries for UI consumption."""
-    return get_policy_catalog_entries()
+def catalog() -> Dict[str, Any]:
+    """Return policy catalog metadata for UI consumption."""
+    return get_policy_catalog_payload()

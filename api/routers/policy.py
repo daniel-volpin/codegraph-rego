@@ -11,7 +11,7 @@ from api.models.validation import (
     PolicyReviewCreateResponse,
     PolicyReviewListResponse,
 )
-from codegraph.policy.service import evaluate as evaluate_policies, catalog as get_policy_catalog_entries
+from codegraph.policy.service import evaluate as evaluate_policies, catalog as get_policy_catalog_payload
 from codegraph.llm.integration import (
     explain_policy_violations,
     generate_policy_explanation_structured,
@@ -190,9 +190,12 @@ async def policy_list_reviews(
 @router.get("/policy/catalog", response_model=PolicyCatalogResponse)
 async def policy_catalog():
     try:
-        controls = get_policy_catalog_entries()
+        payload = get_policy_catalog_payload()
+        controls = payload.get("controls", [])
         controls_sorted = sorted(controls, key=lambda item: item.get("control") or item.get("id") or "")
-        return JSONResponse({"controls": controls_sorted})
+        response = dict(payload)
+        response["controls"] = controls_sorted
+        return JSONResponse(response)
     except Exception as exc:
         logger.error(f"Policy catalog error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)

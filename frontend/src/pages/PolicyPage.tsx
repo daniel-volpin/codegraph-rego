@@ -251,7 +251,7 @@ const ruleGroupStatusVariant = (group: ViolationGroupRow): "success" | "secondar
   return group.fullSupportCount > 0 || group.guardedSupportCount > 0 ? "success" : "secondary";
 };
 
-const FRAMEWORK_DEMO_RULE_IDS = [
+const LEGACY_FRAMEWORK_DEMO_RULE_IDS = [
   "ISO-A.10-WEAK-HASH",
   "ISO-A.10-WEAK-RANDOM",
   "ISO-A.10-WEAK-CRYPTO",
@@ -310,6 +310,8 @@ const persistPolicyEvaluation = (data: PolicyEvaluateResponse, preset: PolicyVie
     /* ignore storage errors */
   }
 };
+
+const uniqueRuleIds = (ruleIds: string[]) => Array.from(new Set(ruleIds.filter((ruleId) => ruleId.trim())));
 
 const groupViolationsByRule = (violations: ViolationRow[]): ViolationGroupRow[] => {
   const groups = new Map<string, ViolationRow[]>();
@@ -411,8 +413,23 @@ const PolicyPage = () => {
 
   const previewById = previewByIdQuery.data;
   const explainById = explainByIdQuery.data;
+  const policyCatalogQuery = useQuery<PolicyCatalogResponse, Error>({
+    queryKey: ["policyCatalog"],
+    queryFn: fetchPolicyCatalog,
+  });
+  const frameworkDemoRuleIds = useMemo(() => {
+    const explicit = uniqueRuleIds(policyCatalogQuery.data?.framework_demo_rule_ids ?? []);
+    if (explicit.length > 0) return explicit;
 
-  useQuery<PolicyCatalogResponse, Error>({ queryKey: ["policyCatalog"], queryFn: fetchPolicyCatalog });
+    const derivedFromCategories = uniqueRuleIds(
+      (policyCatalogQuery.data?.benchmark_categories ?? [])
+        .filter((category) => category.framework_demo)
+        .flatMap((category) => category.rego_rule_ids ?? []),
+    );
+    if (derivedFromCategories.length > 0) return derivedFromCategories;
+
+    return LEGACY_FRAMEWORK_DEMO_RULE_IDS;
+  }, [policyCatalogQuery.data?.benchmark_categories, policyCatalogQuery.data?.framework_demo_rule_ids]);
 
   const lastEvalToastAtRef = useRef(initialEvalSnapshotRef.current[viewPreset]?.savedAt ?? 0);
   const lastEvalErrorToastAtRef = useRef(0);
@@ -422,7 +439,7 @@ const PolicyPage = () => {
     queryKey: ["policyEvaluation:last", viewPreset],
     queryFn: () =>
       evaluatePolicies({
-        ruleIds: viewPreset === "framework_demo" ? FRAMEWORK_DEMO_RULE_IDS : undefined,
+        ruleIds: viewPreset === "framework_demo" ? frameworkDemoRuleIds : undefined,
       }),
     enabled: false,
     initialData: initialEvalSnapshotRef.current[viewPreset]?.data,
@@ -431,6 +448,14 @@ const PolicyPage = () => {
     gcTime: 1000 * 60 * 60 * 6,
     retry: false,
   });
+
+  const frameworkDemoReady = viewPreset !== "framework_demo" || frameworkDemoRuleIds.length > 0;
+  const frameworkDemoScopeSource =
+    (policyCatalogQuery.data?.framework_demo_rule_ids?.length ?? 0) > 0
+      ? "catalog"
+      : (policyCatalogQuery.data?.benchmark_categories?.some((category) => category.framework_demo) ?? false)
+        ? "benchmark_categories"
+        : "legacy_fallback";
 
   useEffect(() => {
     if (!evalQuery.data) return;
@@ -704,13 +729,23 @@ const PolicyPage = () => {
                 <p className="mt-2 text-xs text-slate-500">
                   Filter findings to one uploaded module while keeping the active upload workspace unchanged.
                 </p>
+                {viewPreset === "framework_demo" && policyCatalogQuery.isError && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    Framework demo metadata could not be loaded from the backend. Falling back to the legacy thesis demo rule set.
+                  </p>
+                )}
+                {viewPreset === "framework_demo" && !policyCatalogQuery.isLoading && frameworkDemoScopeSource === "legacy_fallback" && !policyCatalogQuery.isError && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    Backend demo metadata is unavailable on this server response. Using the legacy thesis demo rule set for compatibility.
+                  </p>
+                )}
               </div>
             </div>
           </div>
           <div className="flex lg:justify-end lg:self-center">
             <Button
               onClick={() => evalQuery.refetch()}
-              disabled={evalQuery.isFetching}
+              disabled={evalQuery.isFetching || !frameworkDemoReady || policyCatalogQuery.isLoading}
               title={
                 viewPreset === "framework_demo"
                   ? "Evaluate only the benchmark-aligned framework demo categories."
@@ -723,6 +758,8 @@ const PolicyPage = () => {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   {viewPreset === "framework_demo" ? "Running demo scan..." : "Running full scan..."}
                 </>
+              ) : policyCatalogQuery.isLoading && viewPreset === "framework_demo" ? (
+                "Loading demo scope..."
               ) : (
                 viewPreset === "framework_demo" ? "Run Framework Demo Scan" : "Run Full Policy Scan"
               )}

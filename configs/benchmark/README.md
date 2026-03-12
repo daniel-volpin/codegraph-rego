@@ -1,5 +1,6 @@
 # Canonical Benchmark Configs
 
+- `policy_registry.json` - canonical thesis policy registry for CWE, Rego, control, remediation-tier, and framework-demo mapping
 - `baseline.json` – narrow baseline coverage (`crypto-md5`, `hash-md5`)
 - `smoke_mixed.json` – small pinned smoke run for fast detection checks
 - `multicat_medium.json` – medium sampled thesis evaluation set

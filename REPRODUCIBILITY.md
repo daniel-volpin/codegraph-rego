@@ -85,7 +85,7 @@ For the UI thesis/demo, use the Policy page's `Framework demo focus` preset afte
 ```bash
 python run_benchmark_eval.py \
   --config configs/benchmark/multicat_full.json \
-  --mapping configs/control_mapping.json \
+  --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/detection_calibration_path_precision_v4 \
   --reset-neo4j
 ```
@@ -95,7 +95,7 @@ python run_benchmark_eval.py \
 LLM_CONCURRENCY=1 \
 python run_explanation_eval.py \
   --config configs/benchmark/multicat_full.json \
-  --mapping configs/control_mapping.json \
+  --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/thesis_final_explanation_full \
   --evidence-mode lean \
   --llm-max-tokens-eval 192 \
@@ -106,7 +106,7 @@ python run_explanation_eval.py \
 ```bash
 python run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
-  --mapping configs/control_mapping.json \
+  --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/repro_supported_medium_branch_benchmarktest01017_fix \
   --sample-size 60 \
   --reset-neo4j
@@ -119,7 +119,7 @@ For a bounded remediation refresh across full and guarded support tiers:
 ```bash
 python run_remediation_eval.py \
   --config configs/benchmark/remediation_bounded_smoke.json \
-  --mapping configs/control_mapping.json \
+  --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/remediation_eval_bounded_smoke \
   --sample-size 3 \
   --reset-neo4j

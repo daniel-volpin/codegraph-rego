@@ -7,12 +7,23 @@ from codegraph.evaluation.benchmark import (
     CoverageStats,
     GroundTruthRecord,
     coverage_report,
+    load_mapping_config,
     select_testcases,
     stage_benchmark_subset,
 )
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 
 class TestBenchmarkSelectionCoverage(unittest.TestCase):
+    def test_policy_registry_categories_drive_cwe_selection(self) -> None:
+        categories = load_mapping_config(PROJECT_ROOT / "configs" / "benchmark" / "policy_registry.json")
+        by_id = {category.id: category for category in categories}
+        self.assertEqual(by_id["sql-injection"].cwes, ["CWE-89"])
+        self.assertEqual(by_id["hash-md5"].rego_rules, ["ISO-A.10-WEAK-HASH"])
+        self.assertEqual(by_id["crypto-md5"].remediation_tier, "guarded")
+        self.assertTrue(by_id["xpath-injection"].framework_demo)
+
     def test_full_selection_no_sampling_limit_returns_all_cases(self) -> None:
         records = [
             GroundTruthRecord(testcase_id=f"BenchmarkTest{idx:05d}", cwe="CWE-89", label=bool(idx % 2))
