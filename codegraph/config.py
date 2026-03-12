@@ -1,5 +1,6 @@
 from typing import Optional
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -26,8 +27,8 @@ class Settings(BaseSettings):
     neo4j_pass: str = Field(..., description="Neo4j password")
     llm_provider: str = Field("openai", description="LLM provider")
     llm_model: str = Field("gpt-4o-mini", description="LLM model")
-    llm_api_base: str = Field(None, description="LLM API base")
-    llm_api_key: str = Field(None, description="LLM API key")
+    llm_api_base: Optional[str] = Field(None, description="LLM API base")
+    llm_api_key: Optional[str] = Field(None, description="LLM API key")
     llm_temperature: float = Field(0.2, description="LLM temperature")
     llm_enable_thinking: bool = Field(
         True,
@@ -82,44 +83,7 @@ class Settings(BaseSettings):
         description="Append-only JSONL store for UI triage/review records.",
     )
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        fields = {
-            "index_dir": {"env": "INDEX_DIR"},
-            "faiss_index_path": {"env": "FAISS_INDEX_PATH"},
-            "signature_map_path": {"env": "SIGNATURE_MAP_PATH"},
-            "signature_map_path_full": {"env": "SIGNATURE_MAP_PATH_FULL"},
-            "embedding_metadata_path": {"env": "EMBEDDING_METADATA_PATH"},
-            "embedding_cache_path": {"env": "EMBEDDING_CACHE_PATH"},
-            "embedding_model_name": {"env": "EMBEDDING_MODEL_NAME"},
-            "upload_dir": {"env": "UPLOAD_DIR"},
-            "java_root_dir": {"env": "JAVA_ROOT_DIR"},
-            "upload_max_archive_size_bytes": {"env": "UPLOAD_MAX_ARCHIVE_SIZE_BYTES"},
-            "upload_max_member_size_bytes": {"env": "UPLOAD_MAX_MEMBER_SIZE_BYTES"},
-            "upload_max_extracted_size_bytes": {"env": "UPLOAD_MAX_EXTRACTED_SIZE_BYTES"},
-            "upload_max_archive_entries": {"env": "UPLOAD_MAX_ARCHIVE_ENTRIES"},
-            "upload_max_compression_ratio": {"env": "UPLOAD_MAX_COMPRESSION_RATIO"},
-            "neo4j_uri": {"env": "NEO4J_URI"},
-            "neo4j_user": {"env": "NEO4J_USER"},
-            "neo4j_pass": {"env": "NEO4J_PASS"},
-            "llm_provider": {"env": "LLM_PROVIDER"},
-            "llm_model": {"env": "LLM_MODEL"},
-            "llm_api_base": {"env": "LLM_API_BASE"},
-            "llm_api_key": {"env": "LLM_API_KEY"},
-            "llm_temperature": {"env": "LLM_TEMPERATURE"},
-            "llm_enable_thinking": {"env": "LLM_ENABLE_THINKING"},
-            "llm_max_tokens_explanation": {"env": "LLM_MAX_TOKENS_EXPLANATION"},
-            "llm_max_tokens_remediation": {"env": "LLM_MAX_TOKENS_REMEDIATION"},
-            "llm_model_ttl_seconds": {"env": "LLM_MODEL_TTL_SECONDS"},
-            "remediation_llm_model": {"env": "REMEDIATION_LLM_MODEL"},
-            "remediation_llm_max_tokens": {"env": "REMEDIATION_LLM_MAX_TOKENS"},
-            "remediation_llm_temperature": {"env": "REMEDIATION_LLM_TEMPERATURE"},
-            "remediation_llm_model_ttl_seconds": {"env": "REMEDIATION_LLM_MODEL_TTL_SECONDS"},
-            "llm_concurrency": {"env": "LLM_CONCURRENCY"},
-            "remediation_raw_capture_enabled": {"env": "REMEDIATION_RAW_CAPTURE_ENABLED"},
-            "ui_review_store_path": {"env": "UI_REVIEW_STORE_PATH"},
-        }
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()
