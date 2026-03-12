@@ -19,8 +19,12 @@ Request/response models: `api/models/`
 ### `POST /upload`
 - Router: `api/routers/upload.py`
 - Request: `multipart/form-data` with `file` (must be a `.zip`)
+- Behavior:
+  - streams the archive to disk instead of buffering the entire upload in memory
+  - rejects archives that exceed configured size, entry-count, extraction-size, or compression-ratio limits
+  - discovers all `src/main/java` roots in the uploaded workspace and ingests them in deterministic sorted order
 - Response:
-  - HTTP `200`: `{ "status": string, "java_root": string|null }`
+  - HTTP `200`: `{ "status": string, "java_root": string|null, "java_roots": string[] }`
   - HTTP `400`/`500`: `{ "error": string }`
 
 ### `GET /upload/status`
@@ -146,6 +150,7 @@ All API calls are centralised in `frontend/src/lib/api.ts`.
 Notes:
 - The frontend should use `violation.remediation` metadata to decide whether automatic remediation actions are available.
 - The Policy page persists a view preset in local storage. `Framework demo focus` sends the benchmark-aligned `rule_ids` set to the backend instead of filtering findings only on the client.
+- Multi-module uploads remain a single active workspace. The Upload page surfaces all detected Java roots, and the Policy page can filter findings by module without introducing a separate project switcher.
 - Automatic remediation is intentionally tiered:
   - `full`: bounded auto-fix and verify paths are available
   - `guarded`: the UI should explain that `NO_FIX` is a valid safe outcome

@@ -68,6 +68,20 @@ Run the app:
 make dev
 ```
 
+`make dev` now starts the local Neo4j dependency with Docker Compose, waits for it to become healthy, and then launches the backend and frontend. You no longer need Neo4j Desktop running for the normal local development flow.
+
+If Docker is unavailable and Podman is installed, the Make targets automatically fall back to `podman compose`. You can still override the compose command explicitly if you want:
+
+```bash
+make dev DOCKER_COMPOSE="podman compose"
+```
+
+If you only want the backend:
+
+```bash
+make backend-dev
+```
+
 Key endpoints:
 - `POST /upload`
 - `POST /search`
