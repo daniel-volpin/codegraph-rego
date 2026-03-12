@@ -8,6 +8,11 @@ import { toast } from "sonner";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import {
+  deriveModuleLabel,
+  relativeToUploadedWorkspace,
+  uniqueSortedModuleLabels,
+} from "../lib/workspace";
 
 const UploadPage = () => {
   const queryClient = useQueryClient();
@@ -134,6 +139,8 @@ const UploadPage = () => {
 
   const progressValue = status ? Math.min(Math.max(status.progress, 0), 100) : 0;
   const isProcessing = uploadMutation.isPending || (status ? !status.complete : false);
+  const detectedRoots = result?.java_roots?.length ? result.java_roots : result?.java_root ? [result.java_root] : [];
+  const detectedModules = uniqueSortedModuleLabels(detectedRoots);
 
   const statusTone = status?.error || status?.phase === "error"
     ? "destructive"
@@ -205,10 +212,34 @@ const UploadPage = () => {
           <p className={`text-sm font-medium ${result.error ? "text-rose-700" : "text-emerald-700"}`}>
             {result.error ? `Upload failed: ${result.error}` : "Codebase processed successfully."}
           </p>
-          {!result.error && result.java_root && (
-            <p className="mt-2 break-all text-sm text-slate-700">
-              Detected Java root: <code className="rounded bg-white px-1 py-0.5">{result.java_root}</code>
-            </p>
+          {!result.error && detectedRoots.length > 0 && (
+            <div className="mt-3 space-y-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Detected modules</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {detectedModules.map((moduleLabel) => (
+                    <Badge key={moduleLabel} variant="secondary">
+                      {moduleLabel}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Detected Java roots</p>
+                <div className="mt-2 space-y-2">
+                  {detectedRoots.map((root) => (
+                    <p key={root} className="break-all text-sm text-slate-700">
+                      <span className="mr-2 inline-flex min-w-[7rem] rounded bg-white px-2 py-0.5 text-xs font-medium text-slate-600">
+                        {deriveModuleLabel(root)}
+                      </span>
+                      <code className="rounded bg-white px-1 py-0.5">
+                        {relativeToUploadedWorkspace(root)}
+                      </code>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </Card>
       )}

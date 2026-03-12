@@ -28,11 +28,17 @@ import type {
   RemediationCapability,
   RemediationApplyResponse,
   RemediationPreviewResponse,
+  UploadResponse,
 } from "../lib/types";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 import CodeHighlight from "../components/ui/CodeHighlight";
+import {
+  deriveModuleLabel,
+  relativeToUploadedWorkspace,
+  uniqueSortedModuleLabels,
+} from "../lib/workspace";
 
 type RawViolation = Record<string, unknown>;
 
@@ -40,6 +46,7 @@ interface ViolationRow {
   id: string;
   ruleId: string;
   severity: string;
+  module: string;
   targetMethod: string;
   filePath: string;
   reason: string;
@@ -67,6 +74,7 @@ interface PersistedPolicyEvaluation {
 }
 
 type PolicyViewPreset = "all" | "framework_demo";
+const LAST_UPLOAD_STORAGE_KEY = "codegraph:lastUpload";
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -119,6 +127,7 @@ const normalizeViolation = (item: RawViolation): ViolationRow => {
     id: `${ruleId}:${targetMethod}:${filePath}`,
     ruleId,
     severity,
+    module: deriveModuleLabel(filePath),
     targetMethod,
     filePath,
     reason: asString(item.reason ?? item.description),
@@ -143,6 +152,18 @@ const severityRank = (severity: string) => {
   return 0;
 };
 
+const readUploadedModules = (): string[] => {
+  try {
+    const raw = localStorage.getItem(LAST_UPLOAD_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as UploadResponse;
+    const roots = parsed.java_roots?.length ? parsed.java_roots : parsed.java_root ? [parsed.java_root] : [];
+    return uniqueSortedModuleLabels(roots.filter(Boolean));
+  } catch {
+    return [];
+  }
+};
+
 const formatCitationDisplay = (citation: string) => {
   const trimmed = citation.trim();
   if (!trimmed) {
@@ -155,11 +176,10 @@ const formatCitationDisplay = (citation: string) => {
   const normalizedPath = rawPath.replace(/\\/g, "/");
 
   let displayPath = normalizedPath;
-  const uploadedIndex = normalizedPath.indexOf("/uploaded_code/");
   const srcIndex = normalizedPath.indexOf("/src/");
 
-  if (uploadedIndex >= 0) {
-    displayPath = normalizedPath.slice(uploadedIndex + 1);
+  if (normalizedPath.includes("/uploaded_code/") || normalizedPath.startsWith("uploaded_code/")) {
+    displayPath = relativeToUploadedWorkspace(normalizedPath);
   } else if (srcIndex >= 0) {
     displayPath = normalizedPath.slice(srcIndex + 1);
   } else {
@@ -348,6 +368,8 @@ const PolicyPage = () => {
   const [expanded, setExpanded] = useState<ExpandedState>({});
   const [expandedFindingByGroup, setExpandedFindingByGroup] = useState<Record<string, string | null>>({});
   const [viewPreset, setViewPreset] = useState<PolicyViewPreset>(initialViewPreset);
+  const [uploadedModules, setUploadedModules] = useState<string[]>(() => readUploadedModules());
+  const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [pendingAction, setPendingAction] = useState<Record<string, PendingAction>>({});
 
   const markPending = useCallback((id: string, action: PendingAction) => {
@@ -422,6 +444,10 @@ const PolicyPage = () => {
       /* ignore storage errors */
     }
   }, [viewPreset]);
+
+  useEffect(() => {
+    setUploadedModules(readUploadedModules());
+  }, []);
 
   useEffect(() => {
     if (!evalQuery.dataUpdatedAt || !evalQuery.data) return;
@@ -511,18 +537,42 @@ const PolicyPage = () => {
     return (result?.violations ?? []).map((v) => normalizeViolation(v));
   }, [evalQuery.data]);
 
-  const data = useMemo(() => groupViolationsByRule(findings), [findings]);
+  const availableModules = useMemo(
+    () => uniqueSortedModuleLabels([...uploadedModules, ...findings.map((finding) => finding.filePath)]),
+    [findings, uploadedModules],
+  );
+
+  useEffect(() => {
+    if (moduleFilter !== "all" && !availableModules.includes(moduleFilter)) {
+      setModuleFilter("all");
+    }
+  }, [availableModules, moduleFilter]);
+
+  const filteredFindings = useMemo(
+    () => (moduleFilter === "all" ? findings : findings.filter((finding) => finding.module === moduleFilter)),
+    [findings, moduleFilter],
+  );
+  const visibleModules = useMemo(() => {
+    if (moduleFilter === "all") {
+      return availableModules;
+    }
+    return availableModules.includes(moduleFilter) ? [moduleFilter] : [];
+  }, [availableModules, moduleFilter]);
+
+  const data = useMemo(() => groupViolationsByRule(filteredFindings), [filteredFindings]);
 
   const summary = useMemo(
     () => ({
-      findingCount: findings.length,
+      findingCount: filteredFindings.length,
       ruleCount: data.length,
-      fullSupportCount: findings.filter((finding) => finding.remediation.support_tier === "full").length,
-      guardedSupportCount: findings.filter((finding) => finding.remediation.support_tier === "guarded").length,
-      manualReviewCount: findings.filter((finding) => finding.remediation.support_tier === "manual").length,
+      moduleCount: visibleModules.length,
+      fullSupportCount: filteredFindings.filter((finding) => finding.remediation.support_tier === "full").length,
+      guardedSupportCount: filteredFindings.filter((finding) => finding.remediation.support_tier === "guarded").length,
+      manualReviewCount: filteredFindings.filter((finding) => finding.remediation.support_tier === "manual").length,
     }),
-    [data, findings],
+    [data.length, filteredFindings, visibleModules.length],
   );
+  const hasEvaluationResult = Boolean(evalQuery.data || evalQuery.dataUpdatedAt);
 
   const colWidthClass = (colId: string) => {
     // Needs table-fixed on the table for these widths to be honored.
@@ -604,33 +654,55 @@ const PolicyPage = () => {
     <div className="space-y-4">
       <Card className="p-6">
         <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_auto] lg:items-center">
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-slate-600">View mode</label>
-            <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={viewPreset === "framework_demo"}
-                aria-label="Toggle framework demo focus"
-                onClick={() => setViewPreset((current) => (current === "all" ? "framework_demo" : "all"))}
-                className={`relative inline-flex h-7 w-14 items-center rounded-full border transition-colors ${
-                  viewPreset === "framework_demo"
-                    ? "border-indigo-600 bg-indigo-600"
-                    : "border-slate-300 bg-slate-200"
-                }`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                    viewPreset === "framework_demo" ? "translate-x-8" : "translate-x-1"
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-600">View mode</label>
+              <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={viewPreset === "framework_demo"}
+                  aria-label="Toggle framework demo focus"
+                  onClick={() => setViewPreset((current) => (current === "all" ? "framework_demo" : "all"))}
+                  className={`relative inline-flex h-7 w-14 items-center rounded-full border transition-colors ${
+                    viewPreset === "framework_demo"
+                      ? "border-indigo-600 bg-indigo-600"
+                      : "border-slate-300 bg-slate-200"
                   }`}
-                />
-              </button>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900">Framework demo focus</p>
-                <p className="text-xs text-slate-500">
-                  {viewPreset === "framework_demo"
-                    ? "On. Show only the benchmark-aligned framework categories."
-                    : "Off. Show the full policy surface for the current upload."}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                      viewPreset === "framework_demo" ? "translate-x-8" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900">Framework demo focus</p>
+                  <p className="text-xs text-slate-500">
+                    {viewPreset === "framework_demo"
+                      ? "On. Show only the benchmark-aligned framework categories."
+                      : "Off. Show the full policy surface for the current upload."}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-600">Module filter</label>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <select
+                  value={moduleFilter}
+                  onChange={(event) => setModuleFilter(event.target.value)}
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                >
+                  <option value="all">All modules</option>
+                  {availableModules.map((module) => (
+                    <option key={module} value={module}>
+                      {module}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-500">
+                  Filter findings to one uploaded module while keeping the active upload workspace unchanged.
                 </p>
               </div>
             </div>
@@ -659,7 +731,7 @@ const PolicyPage = () => {
         </div>
       </Card>
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-6">
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Findings</p>
           <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.findingCount}</p>
@@ -667,6 +739,10 @@ const PolicyPage = () => {
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rules</p>
           <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.ruleCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Modules</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.moduleCount}</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Auto-fixable</p>
@@ -766,6 +842,9 @@ const PolicyPage = () => {
                                         <p className="mt-1 truncate font-mono text-xs text-slate-500" title={finding.filePath}>
                                           {finding.filePath}
                                         </p>
+                                        <div className="mt-2">
+                                          <Badge variant="secondary">{finding.module}</Badge>
+                                        </div>
                                       </div>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
@@ -912,7 +991,9 @@ const PolicyPage = () => {
                   <td colSpan={columns.length} className="py-12 text-center">
                     <Scale className="mx-auto h-10 w-10 text-slate-300" />
                     <p className="mt-3 text-sm text-slate-500">
-                      No rule groups loaded yet. Run a policy evaluation to see results.
+                      {hasEvaluationResult
+                        ? "No rule groups matched the current policy scan."
+                        : "No rule groups loaded yet. Run a policy evaluation to see results."}
                     </p>
                   </td>
                 </tr>

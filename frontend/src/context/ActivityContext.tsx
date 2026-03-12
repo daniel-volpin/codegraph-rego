@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   useReducer,
@@ -58,18 +59,29 @@ function activityReducer(state: ActivityState, action: Action): ActivityState {
 
 export const ActivityProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(activityReducer, {});
+  const upsert = useCallback((activity: Activity) => {
+    dispatch({ type: "upsert", activity });
+  }, []);
+  const clear = useCallback((key: string) => {
+    dispatch({ type: "clear", key });
+  }, []);
+  const reset = useCallback(() => {
+    dispatch({ type: "reset" });
+  }, []);
+  const activities = useMemo(
+    () =>
+      Object.values(state).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [state],
+  );
 
   const value = useMemo<ActivityContextValue>(() => {
-    const activities = Object.values(state).sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt),
-    );
     return {
       activities,
-      upsert: (activity) => dispatch({ type: "upsert", activity }),
-      clear: (key) => dispatch({ type: "clear", key }),
-      reset: () => dispatch({ type: "reset" }),
+      upsert,
+      clear,
+      reset,
     };
-  }, [state]);
+  }, [activities, clear, reset, upsert]);
 
   return (
     <ActivityContext.Provider value={value}>
