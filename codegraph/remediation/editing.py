@@ -99,10 +99,10 @@ def resolve_file_path(file_path: str) -> Path | None:
     path = Path(file_path)
     if path.is_file():
         return path
-    java_root = Path(settings.java_root_dir)
-    if not java_root.is_absolute():
-        java_root = _PROJECT_ROOT / java_root
-    candidate = java_root / file_path
+    workspace_root = Path(settings.upload_dir)
+    if not workspace_root.is_absolute():
+        workspace_root = _PROJECT_ROOT / workspace_root
+    candidate = workspace_root / file_path
     if candidate.is_file():
         return candidate
     candidate = _PROJECT_ROOT / file_path

@@ -8,10 +8,17 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
 
+class UploadValidationError(ValueError):
+    """Raised when an uploaded archive violates validation limits."""
+
+
 def safe_extract_zip(
     zip_file: zipfile.ZipFile,
     dest_dir: str,
     max_file_size: int = 50 * 1024 * 1024,
+    max_total_size: int = 500 * 1024 * 1024,
+    max_entries: int = 10_000,
+    max_compression_ratio: float = 100.0,
     allowed_exts: Optional[list[str]] = None,
 ) -> None:
     """
@@ -22,11 +29,16 @@ def safe_extract_zip(
         max_file_size: Maximum allowed file size in bytes (default 50MB).
         allowed_exts: List of allowed file extensions (e.g., ['.java', '.kt', '.xml']). If None, allow all.
     Raises:
-        ValueError: If a file exceeds size limit or has a forbidden extension.
+        UploadValidationError: If the archive exceeds configured safety limits.
     """
     dest_root = os.path.realpath(dest_dir)
     allowed_exts = allowed_exts or []
-    for member in zip_file.infolist():
+    members = zip_file.infolist()
+    if len(members) > max_entries:
+        raise UploadValidationError(f"Archive contains too many entries ({len(members)} > {max_entries})")
+
+    extracted_total = 0
+    for member in members:
         member_path = os.path.realpath(os.path.join(dest_dir, member.filename))
         if not member_path.startswith(dest_root + os.sep) and member_path != dest_root:
             logger.warning(f"Skipping suspicious entry: {member.filename}")
@@ -34,33 +46,52 @@ def safe_extract_zip(
         if member.is_dir():
             os.makedirs(member_path, exist_ok=True)
         else:
-            # Security: file size limit
             if member.file_size > max_file_size:
                 logger.error(f"File {member.filename} exceeds size limit ({member.file_size} bytes)")
-                raise ValueError(f"File {member.filename} exceeds size limit")
-            # Security: extension check
+                raise UploadValidationError(f"File {member.filename} exceeds size limit")
+
+            compressed_size = member.compress_size
+            if compressed_size == 0:
+                if member.file_size > 0:
+                    raise UploadValidationError(f"File {member.filename} has an invalid compression ratio")
+            else:
+                compression_ratio = member.file_size / compressed_size
+                if compression_ratio > max_compression_ratio:
+                    raise UploadValidationError(
+                        f"File {member.filename} exceeds compression ratio limit ({compression_ratio:.2f} > {max_compression_ratio})"
+                    )
+
             ext = os.path.splitext(member.filename)[1].lower()
             if allowed_exts and ext not in allowed_exts:
                 logger.warning(f"Skipping file with forbidden extension: {member.filename}")
                 continue
+
+            extracted_total += member.file_size
+            if extracted_total > max_total_size:
+                raise UploadValidationError(
+                    f"Archive exceeds total extracted size limit ({extracted_total} > {max_total_size})"
+                )
+
             os.makedirs(os.path.dirname(member_path), exist_ok=True)
             with zip_file.open(member, "r") as src, open(member_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
-            # Only log extraction at debug level
             logger.debug(f"Extracted: {member.filename}")
 
 
-def find_java_root(base: str) -> Optional[str]:
+def find_java_roots(base: str) -> list[str]:
     """
-    Locate a Java source root (src/main/java) within the uploaded folder.
+    Locate all Java source roots (src/main/java) within the uploaded folder.
     Args:
         base: Base directory to search.
     Returns:
-        Path to Java root if found, else None.
+        Sorted absolute paths to Java roots.
     """
+    roots: list[str] = []
     for root, dirs, files in os.walk(base):
         if root.replace(os.sep, "/").endswith("src/main/java"):
-            logger.debug(f"Java root found: {root}")
-            return root
-    logger.warning("No Java root found; using base directory.")
-    return None
+            logger.debug("Java root found: %s", root)
+            roots.append(os.path.abspath(root))
+    roots.sort(key=lambda path: os.path.relpath(path, base).replace(os.sep, "/"))
+    if not roots:
+        logger.warning("No Java roots found in uploaded archive.")
+    return roots

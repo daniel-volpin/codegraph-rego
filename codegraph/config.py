@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     embedding_model_name: str = Field("all-MiniLM-L6-v2", description="Embedding model name")
     upload_dir: str = Field("uploaded_code", description="Upload directory")
     java_root_dir: str = Field("uploaded_code", description="Java root directory")
+    upload_max_archive_size_bytes: int = Field(100 * 1024 * 1024, description="Maximum uploaded ZIP size")
+    upload_max_member_size_bytes: int = Field(50 * 1024 * 1024, description="Maximum uncompressed ZIP member size")
+    upload_max_extracted_size_bytes: int = Field(
+        500 * 1024 * 1024, description="Maximum total uncompressed bytes extracted from a ZIP"
+    )
+    upload_max_archive_entries: int = Field(10_000, description="Maximum number of entries allowed in a ZIP")
+    upload_max_compression_ratio: float = Field(100.0, description="Maximum allowed ZIP compression ratio per member")
     neo4j_uri: str = Field("bolt://localhost:7687", description="Neo4j URI")
     neo4j_user: str = Field("neo4j", description="Neo4j user")
     neo4j_pass: str = Field(..., description="Neo4j password")
@@ -88,6 +95,11 @@ class Settings(BaseSettings):
             "embedding_model_name": {"env": "EMBEDDING_MODEL_NAME"},
             "upload_dir": {"env": "UPLOAD_DIR"},
             "java_root_dir": {"env": "JAVA_ROOT_DIR"},
+            "upload_max_archive_size_bytes": {"env": "UPLOAD_MAX_ARCHIVE_SIZE_BYTES"},
+            "upload_max_member_size_bytes": {"env": "UPLOAD_MAX_MEMBER_SIZE_BYTES"},
+            "upload_max_extracted_size_bytes": {"env": "UPLOAD_MAX_EXTRACTED_SIZE_BYTES"},
+            "upload_max_archive_entries": {"env": "UPLOAD_MAX_ARCHIVE_ENTRIES"},
+            "upload_max_compression_ratio": {"env": "UPLOAD_MAX_COMPRESSION_RATIO"},
             "neo4j_uri": {"env": "NEO4J_URI"},
             "neo4j_user": {"env": "NEO4J_USER"},
             "neo4j_pass": {"env": "NEO4J_PASS"},
@@ -122,6 +134,11 @@ EMBEDDING_CACHE_PATH = settings.embedding_cache_path
 EMBEDDING_MODEL_NAME = settings.embedding_model_name
 UPLOAD_DIR = settings.upload_dir
 JAVA_ROOT_DIR = settings.java_root_dir
+UPLOAD_MAX_ARCHIVE_SIZE_BYTES = settings.upload_max_archive_size_bytes
+UPLOAD_MAX_MEMBER_SIZE_BYTES = settings.upload_max_member_size_bytes
+UPLOAD_MAX_EXTRACTED_SIZE_BYTES = settings.upload_max_extracted_size_bytes
+UPLOAD_MAX_ARCHIVE_ENTRIES = settings.upload_max_archive_entries
+UPLOAD_MAX_COMPRESSION_RATIO = settings.upload_max_compression_ratio
 NEO4J_URI = settings.neo4j_uri
 NEO4J_USER = settings.neo4j_user
 NEO4J_PASS = settings.neo4j_pass

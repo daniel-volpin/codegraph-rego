@@ -19,6 +19,10 @@ from codegraph.ingestion.models import FieldEntity, MethodEntity
 LOGGER = logging.getLogger(__name__)
 
 
+class IngestionError(RuntimeError):
+    """Raised when ingestion cannot complete successfully."""
+
+
 def _line_from_position(position: Optional[Tuple[int, int]]) -> Optional[int]:
     if not position:
         return None
@@ -642,6 +646,11 @@ def ingest(
 ) -> None:
     java_root_dir = os.path.abspath(java_root_dir)
     print(f"📦 Parsing Java project at: {java_root_dir}")
+    if not os.path.isdir(java_root_dir):
+        print(f"[ERROR] JAVA_ROOT_DIR does not exist: {java_root_dir}")
+        if progress_callback:
+            progress_callback("error", f"JAVA_ROOT_DIR does not exist: {java_root_dir}", 100.0)
+        raise IngestionError(f"JAVA_ROOT_DIR does not exist: {java_root_dir}")
     if progress_callback:
         progress_callback("connecting", "Checking Neo4j availability…", 10.0)
     try:
@@ -660,7 +669,7 @@ def ingest(
         print(f"          - Original error: {exc}")
         if progress_callback:
             progress_callback("error", f"Neo4j connection failed: {exc}", 100.0)
-        return
+        raise IngestionError(f"Neo4j connection failed: {exc}") from exc
 
     try:
         ensure_constraints()
@@ -669,11 +678,6 @@ def ingest(
 
     if progress_callback:
         progress_callback("parsing", "Scanning Java sources…", 15.0)
-    if not os.path.isdir(java_root_dir):
-        print(f"[ERROR] JAVA_ROOT_DIR does not exist: {java_root_dir}")
-        if progress_callback:
-            progress_callback("error", f"JAVA_ROOT_DIR does not exist: {java_root_dir}", 100.0)
-        return
 
     all_data = collect_code_structure(java_root_dir, progress_callback=progress_callback)
     print("✅ Ingesting into Neo4j...")
