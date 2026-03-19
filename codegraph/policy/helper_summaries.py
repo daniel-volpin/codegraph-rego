@@ -46,6 +46,13 @@ PATH_DIRECT_USAGE_TEMPLATE = (
 )
 XPATH_ASSIGNMENT_TEMPLATE = r"\b(?:expr|expression|query|xpath)\w*\s*=\s*[^;]*\b%s\b"
 XPATH_USAGE_TEMPLATE = r"(?:\.evaluate\s*\(\s*[^,;)]*\b%s\b|\.compile\s*\(\s*[^;)]*\b%s\b)"
+SQL_ASSIGNMENT_TEMPLATE = r"\bsql\w*\s*=\s*[^;]*\b%s\b"
+SQL_USAGE_TEMPLATE = (
+    r"(?:prepareStatement\s*\(\s*[^,;)]*\b%s\b"
+    r"|prepareCall\s*\(\s*[^,;)]*\b%s\b"
+    r"|execute(?:Query|Update)?\s*\(\s*[^,;)]*\b%s\b"
+    r"|JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|update|batchUpdate)\s*\(\s*[^,;)]*\b%s\b)"
+)
 COMMAND_ASSIGNMENT_TEMPLATE = r"\b(?:cmd|command)\w*\s*=\s*[^;]*\b%s\b"
 COMMAND_USAGE_TEMPLATE = r"(?:\.exec\s*\(\s*[^,;)]*\b%s\b|\.command\s*\([^;)]*\b%s\b|new\s+ProcessBuilder\s*\([^;)]*\b%s\b)"
 COMMAND_LIST_USAGE_RE = re.compile(
@@ -239,8 +246,10 @@ class DirectCallSummaryBuilder:
             "safe_constant_return_used_in_path_sink": self._vars_used_in_path_sink(current_source, safe_vars),
             "safe_constant_return_used_in_ldap_filter": self._vars_used_in_template(current_source, safe_vars, FILTER_ASSIGNMENT_TEMPLATE),
             "safe_constant_return_used_in_xpath_query": self._vars_used_in_xpath(current_source, safe_vars),
+            "safe_constant_return_used_in_sql_query": self._vars_used_in_sql(current_source, safe_vars),
             "safe_constant_return_used_in_command_sink": self._vars_used_in_command(current_source, safe_vars),
             "tainted_return_used_in_xpath_query": self._vars_used_in_xpath(current_source, tainted_vars),
+            "tainted_return_used_in_sql_query": self._vars_used_in_sql(current_source, tainted_vars),
             "tainted_return_used_in_command_sink": self._vars_used_in_command(current_source, tainted_vars),
             "analyzed_call_count": len(safe_vars) + len(tainted_vars),
         }
@@ -358,6 +367,20 @@ class DirectCallSummaryBuilder:
             if re.search(XPATH_ASSIGNMENT_TEMPLATE % re.escape(var), source_code, re.IGNORECASE):
                 return True
             if re.search(XPATH_USAGE_TEMPLATE % (re.escape(var), re.escape(var)), source_code, re.IGNORECASE):
+                return True
+        return False
+
+    @staticmethod
+    def _vars_used_in_sql(source_code: str, vars_to_check: list[str]) -> bool:
+        for var in vars_to_check:
+            if re.search(SQL_ASSIGNMENT_TEMPLATE % re.escape(var), source_code, re.IGNORECASE):
+                return True
+            if re.search(
+                SQL_USAGE_TEMPLATE
+                % (re.escape(var), re.escape(var), re.escape(var), re.escape(var)),
+                source_code,
+                re.IGNORECASE,
+            ):
                 return True
         return False
 

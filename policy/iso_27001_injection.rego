@@ -83,11 +83,19 @@ sql_present if {
 sql_injection_heuristic if {
   flags := input.analysis_flags
   flags.sql_dynamic_query_detected == true
+  not helper_safe_sql
+}
+
+sql_injection_heuristic if {
+  servlet_context
+  helper_tainted_sql
+  not helper_safe_sql
 }
 
 sql_injection_heuristic if {
   servlet_context
   input.source_code != null
+  flags := input.analysis_flags
   sql_present
   src := lower(input.source_code)
   dynamic_source_construction(src)
@@ -95,6 +103,8 @@ sql_injection_heuristic if {
   contains(src, kw)
   input_is_untrusted
   not safe_prepared_statement_shape(src)
+  not helper_safe_sql
+  flags.sql_query_uses_safe_constant != true
 }
 
 safe_prepared_statement_shape(src) if {
@@ -126,6 +136,11 @@ helper_safe_ldap if {
   helpers.safe_constant_return_used_in_ldap_filter == true
 }
 
+helper_safe_sql if {
+  helpers := input.helper_summaries
+  helpers.safe_constant_return_used_in_sql_query == true
+}
+
 helper_safe_xpath if {
   helpers := input.helper_summaries
   helpers.safe_constant_return_used_in_xpath_query == true
@@ -139,6 +154,11 @@ helper_safe_command if {
 helper_tainted_xpath if {
   helpers := input.helper_summaries
   helpers.tainted_return_used_in_xpath_query == true
+}
+
+helper_tainted_sql if {
+  helpers := input.helper_summaries
+  helpers.tainted_return_used_in_sql_query == true
 }
 
 helper_tainted_command if {

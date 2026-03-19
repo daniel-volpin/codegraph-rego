@@ -461,6 +461,54 @@ class TestSourceAnalysis(unittest.TestCase):
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["sql_dynamic_query_detected"])
 
+    def test_sql_dynamic_query_query_for_object_detected(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String sql = "select * from users where password=\'" + param + "\'";'
+            "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.queryForObject(sql, new Object[] {}, String.class);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_dynamic_query_detected"])
+        self.assertTrue(flags["sql_query_uses_tainted_input"])
+
+    def test_sql_dynamic_query_batch_update_detected(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String sql = "update users set password=\'" + param + "\'";'
+            "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.batchUpdate(sql);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_dynamic_query_detected"])
+        self.assertTrue(flags["sql_query_uses_tainted_input"])
+
+    def test_sql_constant_ternary_safe_branch_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            "int num = 106;"
+            'String bar = (7 * 18) + num > 200 ? "This_should_always_happen" : param;'
+            'String sql = "insert into users (username, password) values (\'foo\', \'" + bar + "\')";'
+            "statement.executeUpdate(sql);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["sql_dynamic_query_detected"])
+        self.assertTrue(flags["sql_query_uses_safe_constant"])
+
+    def test_sql_map_safe_override_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String bar = "safe!";'
+            "java.util.HashMap<String, Object> map = new java.util.HashMap<String, Object>();"
+            'map.put("keyA", "a_Value");'
+            'map.put("keyB", param);'
+            'bar = (String) map.get("keyB");'
+            'bar = (String) map.get("keyA");'
+            'String sql = "select * from users where password=\'" + bar + "\'";'
+            "connection.prepareStatement(sql);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["sql_dynamic_query_detected"])
+        self.assertTrue(flags["sql_query_uses_safe_constant"])
+
     def test_xpath_injection_detected(self) -> None:
         source = 'String expr = "/Employees/Employee[@emplid=\'" + request.getHeader("x") + "\']"; XPathFactory.newInstance(); xp.evaluate(expr, xmlDocument);'
         flags = analyze_crypto_indicators(source)

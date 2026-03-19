@@ -145,7 +145,27 @@ SQL_EXECUTE_CALL_PATTERNS = (
     re.compile(r"\.executeQuery\s*\(", re.IGNORECASE),
     re.compile(r"\.executeUpdate\s*\(", re.IGNORECASE),
     re.compile(r"\.execute\s*\(", re.IGNORECASE),
-    re.compile(r"JDBCtemplate\s*\.\s*(?:execute|queryForMap|queryForRowSet|queryForList|update)\s*\(", re.IGNORECASE),
+    re.compile(
+        r"JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|update|batchUpdate)\s*\(",
+        re.IGNORECASE,
+    ),
+)
+SQL_SINK_VARIABLE_PATTERNS = (
+    re.compile(r"(?:prepareStatement|prepareCall|executeQuery|executeUpdate|execute)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE),
+    re.compile(
+        r"JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|update|batchUpdate)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))",
+        re.IGNORECASE,
+    ),
+)
+DIRECT_SQL_UNTRUSTED_PATTERNS = (
+    re.compile(
+        r"(?:prepareStatement|prepareCall|executeQuery|executeUpdate|execute)\s*\([^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|update|batchUpdate)\s*\([^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(",
+        re.IGNORECASE,
+    ),
 )
 STRING_BUILDER_RE = re.compile(r"String(?:Builder|Buffer)", re.IGNORECASE)
 APPEND_CALL_RE = re.compile(r"\.append\s*\(", re.IGNORECASE)
@@ -602,6 +622,13 @@ class XPathAnalysis:
     xpath_injection_detected: bool
 
 
+@dataclass(frozen=True)
+class SQLAnalysis:
+    sql_query_uses_tainted_input: bool
+    sql_query_uses_safe_constant: bool
+    sql_dynamic_query_detected: bool
+
+
 class CommandFlowAnalyzer:
     def __init__(self) -> None:
         self._assignment_analyzer = AssignmentStateAnalyzer(COMMAND_UNTRUSTED_INPUT_PATTERNS)
@@ -892,11 +919,77 @@ class XPathSafetyAnalyzer:
         return bool(all(pattern.search(source_code) for pattern in XPATH_PATTERNS) and has_dynamic_construction)
 
 
+class SQLSafetyAnalyzer:
+    def __init__(self) -> None:
+        self._assignment_analyzer = AssignmentStateAnalyzer(SQL_UNTRUSTED_INPUT_PATTERNS)
+
+    def analyze(self, source_code: str) -> SQLAnalysis:
+        state = self._assignment_analyzer.analyze(source_code)
+        sink_vars = self._sink_vars(source_code)
+        sql_query_uses_safe_constant = self._sink_uses_safe_constant(source_code, state, sink_vars)
+        sql_query_uses_tainted_input = self._sink_uses_tainted_input(source_code, state, sink_vars)
+        compatibility_sql_signal = self._compatibility_sql_signal(source_code)
+        sql_dynamic_query_detected = (
+            (sql_query_uses_tainted_input or compatibility_sql_signal) and not sql_query_uses_safe_constant
+        )
+        return SQLAnalysis(
+            sql_query_uses_tainted_input=sql_query_uses_tainted_input,
+            sql_query_uses_safe_constant=sql_query_uses_safe_constant,
+            sql_dynamic_query_detected=sql_dynamic_query_detected,
+        )
+
+    @staticmethod
+    def _sink_vars(source_code: str) -> set[str]:
+        sink_vars: set[str] = set()
+        for pattern in SQL_SINK_VARIABLE_PATTERNS:
+            for match in pattern.finditer(source_code):
+                sink_vars.add(match.group(1))
+        return sink_vars
+
+    def _sink_uses_safe_constant(self, source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:
+        if not sink_vars:
+            return False
+        if sink_vars & set(state.string_constants):
+            return True
+        for match in SIMPLE_ASSIGNMENT_RE.finditer(source_code):
+            var = match.group(1)
+            if var not in sink_vars:
+                continue
+            referenced = self._assignment_analyzer.referenced_variables(match.group(2))
+            if referenced & state.tainted_vars:
+                continue
+            if referenced & set(state.string_constants):
+                return True
+        return False
+
+    def _sink_uses_tainted_input(self, source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:
+        if any(pattern.search(source_code) for pattern in DIRECT_SQL_UNTRUSTED_PATTERNS):
+            return True
+        return any(sink_var in state.tainted_vars for sink_var in sink_vars)
+
+    @staticmethod
+    def _compatibility_sql_signal(source_code: str) -> bool:
+        if any(pattern.search(source_code) for pattern in DIRECT_SQL_UNTRUSTED_PATTERNS):
+            return True
+        has_dynamic_construction = bool(
+            any(pattern.search(source_code) for pattern in STRING_CONCAT_PATTERNS)
+            or (STRING_BUILDER_RE.search(source_code) and APPEND_CALL_RE.search(source_code))
+        )
+        has_sql_keyword = any(keyword in source_code.lower() for keyword in ("select ", "insert ", "update ", "delete "))
+        has_sql_sink = bool(
+            any(pattern.search(source_code) for pattern in SQL_EXECUTE_CALL_PATTERNS)
+            or SQL_PREPARE_CALL_RE.search(source_code)
+            or SQL_PREPARE_STATEMENT_RE.search(source_code)
+        )
+        return has_dynamic_construction and has_sql_keyword and has_sql_sink
+
+
 class PolicyIndicatorAnalyzer:
     def __init__(self) -> None:
         self._path_safety = PathSafetyAnalyzer()
         self._command_flow = CommandFlowAnalyzer()
         self._xpath_safety = XPathSafetyAnalyzer()
+        self._sql_safety = SQLSafetyAnalyzer()
 
     @staticmethod
     def empty_flags() -> Dict[str, bool]:
@@ -924,6 +1017,8 @@ class PolicyIndicatorAnalyzer:
             "xpath_injection_detected": False,
             "xpath_query_uses_tainted_input": False,
             "xpath_query_uses_safe_constant": False,
+            "sql_query_uses_tainted_input": False,
+            "sql_query_uses_safe_constant": False,
             "sql_prepare_call_detected": False,
             "sql_callable_statement_detected": False,
             "sql_dynamic_query_detected": False,
@@ -933,7 +1028,6 @@ class PolicyIndicatorAnalyzer:
         if not source_code:
             return self.empty_flags()
 
-        sql_untrusted_input_detected = any(pattern.search(source_code) for pattern in SQL_UNTRUSTED_INPUT_PATTERNS)
         path_ldap_untrusted_input_detected = any(
             pattern.search(source_code) for pattern in PATH_LDAP_UNTRUSTED_INPUT_PATTERNS
         )
@@ -990,6 +1084,7 @@ class PolicyIndicatorAnalyzer:
         path_traversal_detected = path_ldap_untrusted_input_detected and path_analysis.path_traversal_detected
         command_analysis = self._command_flow.analyze(source_code)
         xpath_analysis = self._xpath_safety.analyze(source_code)
+        sql_analysis = self._sql_safety.analyze(source_code)
         command_exec_string_tainted = command_analysis.command_exec_string_tainted
         command_exec_args_tainted = command_analysis.command_exec_args_tainted
         command_env_only_tainted = command_analysis.command_env_only_tainted
@@ -1007,9 +1102,7 @@ class PolicyIndicatorAnalyzer:
         sql_execution_detected = sql_prepare_call_detected or sql_prepare_statement_detected or any(
             pattern.search(source_code) for pattern in SQL_EXECUTE_CALL_PATTERNS
         )
-        sql_dynamic_query_detected = bool(
-            sql_untrusted_input_detected and sql_execution_detected and dynamic_construction_detected
-        )
+        sql_dynamic_query_detected = bool(sql_execution_detected and sql_analysis.sql_dynamic_query_detected)
 
         md5_detected = md5_literal or md5_variable
         weak_hash_detected = weak_hash_literal or weak_hash_variable
@@ -1038,6 +1131,8 @@ class PolicyIndicatorAnalyzer:
             "xpath_injection_detected": xpath_injection_detected,
             "xpath_query_uses_tainted_input": xpath_analysis.xpath_query_uses_tainted_input,
             "xpath_query_uses_safe_constant": xpath_analysis.xpath_query_uses_safe_constant,
+            "sql_query_uses_tainted_input": sql_analysis.sql_query_uses_tainted_input,
+            "sql_query_uses_safe_constant": sql_analysis.sql_query_uses_safe_constant,
             "sql_prepare_call_detected": sql_prepare_call_detected,
             "sql_callable_statement_detected": sql_callable_statement_detected,
             "sql_dynamic_query_detected": sql_dynamic_query_detected,
