@@ -126,9 +126,19 @@ helper_safe_ldap if {
   helpers.safe_constant_return_used_in_ldap_filter == true
 }
 
+helper_safe_xpath if {
+  helpers := input.helper_summaries
+  helpers.safe_constant_return_used_in_xpath_query == true
+}
+
 helper_safe_command if {
   helpers := input.helper_summaries
   helpers.safe_constant_return_used_in_command_sink == true
+}
+
+helper_tainted_xpath if {
+  helpers := input.helper_summaries
+  helpers.tainted_return_used_in_xpath_query == true
 }
 
 helper_tainted_command if {
@@ -211,16 +221,26 @@ xpath_injection_heuristic if {
   servlet_context
   flags := input.analysis_flags
   flags.xpath_injection_detected == true
+  not helper_safe_xpath
+}
+
+xpath_injection_heuristic if {
+  servlet_context
+  helper_tainted_xpath
+  not helper_safe_xpath
 }
 
 xpath_injection_heuristic if {
   servlet_context
   input.source_code != null
+  flags := input.analysis_flags
   src := lower(input.source_code)
   input_is_untrusted
   dynamic_source_construction(src)
   some kw in xpath_keywords
   contains(src, kw)
+  not helper_safe_xpath
+  flags.xpath_query_uses_safe_constant != true
 }
 
 violations[v] if {

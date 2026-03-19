@@ -128,6 +128,16 @@ XPATH_PATTERNS = (
     re.compile(r"XPathFactory\s*\.\s*newInstance\s*\(", re.IGNORECASE),
     re.compile(r"\.evaluate\s*\(", re.IGNORECASE),
 )
+XPATH_SINK_VARIABLE_PATTERNS = (
+    re.compile(r"\.evaluate\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE),
+    re.compile(r"\.compile\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)", re.IGNORECASE),
+)
+DIRECT_XPATH_UNTRUSTED_PATTERNS = (
+    re.compile(
+        r"\.(?:evaluate|compile)\s*\([^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(",
+        re.IGNORECASE,
+    ),
+)
 SQL_PREPARE_CALL_RE = re.compile(r"prepareCall\s*\(", re.IGNORECASE)
 SQL_PREPARE_STATEMENT_RE = re.compile(r"prepareStatement\s*\(", re.IGNORECASE)
 SQL_CALLABLE_STATEMENT_RE = re.compile(r"CallableStatement", re.IGNORECASE)
@@ -145,6 +155,14 @@ LIST_ADD_VALUE_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)
 LIST_REMOVE_INDEX_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.remove\(\s*(\d+)\s*\)\s*;', re.DOTALL)
 LIST_GET_VALUE_RE = re.compile(
     r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*(\d+)\s*\)\s*;',
+    re.DOTALL,
+)
+MAP_PUT_VALUE_RE = re.compile(
+    r'([A-Za-z_][A-Za-z0-9_]*)\.put\(\s*"([^"]+)"\s*,\s*([^;]+?)\s*\)\s*;',
+    re.DOTALL,
+)
+MAP_GET_ASSIGNMENT_RE = re.compile(
+    r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*"([^"]+)"\s*\)\s*;',
     re.DOTALL,
 )
 STRING_LITERAL_FULL_RE = re.compile(r'^"([^"\\]*(?:\\.[^"\\]*)*)"$', re.DOTALL)
@@ -349,6 +367,10 @@ class AssignmentStateAnalyzer:
         if collapsed_if_else != source_code:
             return self.analyze(collapsed_if_else, initial_tainted_vars=initial_tainted_vars)
 
+        collapsed_maps = self._resolve_selected_map_gets(source_code, string_constants, tainted_vars)
+        if collapsed_maps != source_code:
+            return self.analyze(collapsed_maps, initial_tainted_vars=initial_tainted_vars)
+
         collapsed_lists = self._resolve_selected_list_gets(source_code, string_constants, tainted_vars)
         if collapsed_lists != source_code:
             return self.analyze(collapsed_lists, initial_tainted_vars=initial_tainted_vars)
@@ -504,6 +526,28 @@ class AssignmentStateAnalyzer:
 
         return LIST_GET_VALUE_RE.sub(_replace, source_code)
 
+    @classmethod
+    def _resolve_selected_map_gets(
+        cls,
+        source_code: str,
+        string_constants: Dict[str, str],
+        tainted_vars: set[str],
+    ) -> str:
+        entries: Dict[str, Dict[str, str]] = {}
+        for map_name, key, raw_value in MAP_PUT_VALUE_RE.findall(source_code):
+            resolved = cls._resolve_collection_expr(raw_value.strip(), string_constants, tainted_vars)
+            if resolved is not None:
+                entries.setdefault(map_name, {})[key] = resolved
+
+        def _replace(match: re.Match[str]) -> str:
+            target_var, map_name, key = match.groups()
+            resolved = entries.get(map_name, {}).get(key)
+            if resolved is None:
+                return match.group(0)
+            return f"{target_var} = {resolved};"
+
+        return MAP_GET_ASSIGNMENT_RE.sub(_replace, source_code)
+
     @staticmethod
     def _resolve_collection_expr(
         expr: str,
@@ -549,6 +593,13 @@ class PathAnalysis:
     path_sink_uses_safe_constant: bool
     path_sink_uses_safe_resource_helper: bool
     path_traversal_detected: bool
+
+
+@dataclass(frozen=True)
+class XPathAnalysis:
+    xpath_query_uses_tainted_input: bool
+    xpath_query_uses_safe_constant: bool
+    xpath_injection_detected: bool
 
 
 class CommandFlowAnalyzer:
@@ -782,10 +833,70 @@ class PathSafetyAnalyzer:
         return bool(sink_vars) and (has_dynamic_sink_shape or has_dynamic_path_construction)
 
 
+class XPathSafetyAnalyzer:
+    def __init__(self) -> None:
+        self._assignment_analyzer = AssignmentStateAnalyzer(PATH_LDAP_UNTRUSTED_INPUT_PATTERNS)
+
+    def analyze(self, source_code: str) -> XPathAnalysis:
+        state = self._assignment_analyzer.analyze(source_code)
+        sink_vars = self._sink_vars(source_code)
+        xpath_query_uses_safe_constant = self._sink_uses_safe_constant(source_code, state, sink_vars)
+        xpath_query_uses_tainted_input = self._sink_uses_tainted_input(source_code, state, sink_vars)
+        compatibility_xpath_signal = self._compatibility_xpath_signal(source_code)
+        xpath_injection_detected = (
+            (xpath_query_uses_tainted_input or compatibility_xpath_signal) and not xpath_query_uses_safe_constant
+        )
+        return XPathAnalysis(
+            xpath_query_uses_tainted_input=xpath_query_uses_tainted_input,
+            xpath_query_uses_safe_constant=xpath_query_uses_safe_constant,
+            xpath_injection_detected=xpath_injection_detected,
+        )
+
+    @staticmethod
+    def _sink_vars(source_code: str) -> set[str]:
+        sink_vars: set[str] = set()
+        for pattern in XPATH_SINK_VARIABLE_PATTERNS:
+            for match in pattern.finditer(source_code):
+                sink_vars.add(match.group(1))
+        return sink_vars
+
+    def _sink_uses_safe_constant(self, source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:
+        if not sink_vars:
+            return False
+        if sink_vars & set(state.string_constants):
+            return True
+        for match in SIMPLE_ASSIGNMENT_RE.finditer(source_code):
+            var = match.group(1)
+            if var not in sink_vars:
+                continue
+            referenced = self._assignment_analyzer.referenced_variables(match.group(2))
+            if referenced & state.tainted_vars:
+                continue
+            if referenced & set(state.string_constants):
+                return True
+        return False
+
+    def _sink_uses_tainted_input(self, source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:
+        if any(pattern.search(source_code) for pattern in DIRECT_XPATH_UNTRUSTED_PATTERNS):
+            return True
+        return any(sink_var in state.tainted_vars for sink_var in sink_vars)
+
+    @staticmethod
+    def _compatibility_xpath_signal(source_code: str) -> bool:
+        if any(pattern.search(source_code) for pattern in DIRECT_XPATH_UNTRUSTED_PATTERNS):
+            return True
+        has_dynamic_construction = bool(
+            any(pattern.search(source_code) for pattern in STRING_CONCAT_PATTERNS)
+            or (STRING_BUILDER_RE.search(source_code) and APPEND_CALL_RE.search(source_code))
+        )
+        return bool(all(pattern.search(source_code) for pattern in XPATH_PATTERNS) and has_dynamic_construction)
+
+
 class PolicyIndicatorAnalyzer:
     def __init__(self) -> None:
         self._path_safety = PathSafetyAnalyzer()
         self._command_flow = CommandFlowAnalyzer()
+        self._xpath_safety = XPathSafetyAnalyzer()
 
     @staticmethod
     def empty_flags() -> Dict[str, bool]:
@@ -811,6 +922,8 @@ class PolicyIndicatorAnalyzer:
             "command_injection_detected": False,
             "ldap_injection_detected": False,
             "xpath_injection_detected": False,
+            "xpath_query_uses_tainted_input": False,
+            "xpath_query_uses_safe_constant": False,
             "sql_prepare_call_detected": False,
             "sql_callable_statement_detected": False,
             "sql_dynamic_query_detected": False,
@@ -820,7 +933,6 @@ class PolicyIndicatorAnalyzer:
         if not source_code:
             return self.empty_flags()
 
-        untrusted_input_detected = any(pattern.search(source_code) for pattern in UNTRUSTED_INPUT_PATTERNS)
         sql_untrusted_input_detected = any(pattern.search(source_code) for pattern in SQL_UNTRUSTED_INPUT_PATTERNS)
         path_ldap_untrusted_input_detected = any(
             pattern.search(source_code) for pattern in PATH_LDAP_UNTRUSTED_INPUT_PATTERNS
@@ -877,6 +989,7 @@ class PolicyIndicatorAnalyzer:
         path_safe_constant_detected = path_analysis.path_sink_uses_safe_constant
         path_traversal_detected = path_ldap_untrusted_input_detected and path_analysis.path_traversal_detected
         command_analysis = self._command_flow.analyze(source_code)
+        xpath_analysis = self._xpath_safety.analyze(source_code)
         command_exec_string_tainted = command_analysis.command_exec_string_tainted
         command_exec_args_tainted = command_analysis.command_exec_args_tainted
         command_env_only_tainted = command_analysis.command_env_only_tainted
@@ -887,11 +1000,7 @@ class PolicyIndicatorAnalyzer:
             and bool(LDAP_PATTERNS[2].search(source_code))
             and dynamic_construction_detected
         )
-        xpath_injection_detected = (
-            untrusted_input_detected
-            and all(pattern.search(source_code) for pattern in XPATH_PATTERNS)
-            and dynamic_construction_detected
-        )
+        xpath_injection_detected = xpath_analysis.xpath_injection_detected
         sql_prepare_call_detected = bool(SQL_PREPARE_CALL_RE.search(source_code))
         sql_prepare_statement_detected = bool(SQL_PREPARE_STATEMENT_RE.search(source_code))
         sql_callable_statement_detected = bool(SQL_CALLABLE_STATEMENT_RE.search(source_code))
@@ -927,6 +1036,8 @@ class PolicyIndicatorAnalyzer:
             "command_injection_detected": command_injection_detected,
             "ldap_injection_detected": ldap_injection_detected,
             "xpath_injection_detected": xpath_injection_detected,
+            "xpath_query_uses_tainted_input": xpath_analysis.xpath_query_uses_tainted_input,
+            "xpath_query_uses_safe_constant": xpath_analysis.xpath_query_uses_safe_constant,
             "sql_prepare_call_detected": sql_prepare_call_detected,
             "sql_callable_statement_detected": sql_callable_statement_detected,
             "sql_dynamic_query_detected": sql_dynamic_query_detected,

@@ -466,6 +466,35 @@ class TestSourceAnalysis(unittest.TestCase):
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["xpath_injection_detected"])
 
+    def test_xpath_constant_if_else_safe_branch_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            "String bar;"
+            "int num = 86;"
+            'if ((7 * 42) - num > 200) bar = "This_should_always_happen"; else bar = param;'
+            'String expression = "/Employees/Employee[@emplid=\'" + bar + "\']";'
+            "XPathFactory.newInstance(); xp.evaluate(expression, xmlDocument);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["xpath_injection_detected"])
+        self.assertTrue(flags["xpath_query_uses_safe_constant"])
+
+    def test_xpath_map_safe_override_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String bar = "safe!";'
+            "java.util.HashMap<String, Object> map = new java.util.HashMap<String, Object>();"
+            'map.put("keyA", "a_Value");'
+            'map.put("keyB", param);'
+            'bar = (String) map.get("keyB");'
+            'bar = (String) map.get("keyA");'
+            'String expression = "/Employees/Employee[@emplid=\'" + bar + "\']";'
+            "XPathFactory.newInstance(); xp.compile(expression).evaluate(xmlDocument, javax.xml.xpath.XPathConstants.NODESET);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["xpath_injection_detected"])
+        self.assertTrue(flags["xpath_query_uses_safe_constant"])
+
     def test_sql_prepare_call_flags(self) -> None:
         source = 'java.sql.CallableStatement statement = connection.prepareCall(sql);'
         flags = analyze_crypto_indicators(source)
