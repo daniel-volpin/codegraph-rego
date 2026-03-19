@@ -6,7 +6,7 @@ from typing import Any, Iterable
 from codegraph.benchmark_registry import load_policy_registry
 
 SUPPORTED_RULE_RATIONALES = {
-    "ISO-A.10-WEAK-HASH": "Bounded hash replacements such as MD5 to SHA-256 can be applied with minimal local edits.",
+    "ISO-A.10-WEAK-HASH": "Bounded weak-hash replacements such as MD5 or SHA-1 to SHA-256 can be applied with minimal local edits.",
     "ISO-A.10-WEAK-RANDOM": "Local randomness upgrades can often be made safely with narrow replacements to SecureRandom-based APIs.",
     "ISO-A.10-WEAK-CRYPTO": "Weak-cipher remediation is available only for explicit literal subcases where a safe minimal replacement is evident.",
 }

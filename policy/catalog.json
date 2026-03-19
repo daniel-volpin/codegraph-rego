@@ -42,7 +42,7 @@
       "control": "A.10",
       "title": "Cryptography (Weak Hash)",
       "reference": "ISO/IEC 27001:2022 A.10",
-      "summary": "Cryptographic controls should avoid weak hash algorithms such as MD5.",
+      "summary": "Cryptographic controls should avoid weak hash algorithms such as MD5 and SHA-1.",
       "rego_module": "policy/iso_27001_crypto.rego",
       "rego_rule": "violations",
       "evidence_fields": [

@@ -4,11 +4,11 @@ import re
 from dataclasses import dataclass
 from typing import Dict
 
-MD5_LITERAL_RE = re.compile(
+WEAK_HASH_LITERAL_RE = re.compile(
     r'MessageDigest\s*\.\s*getInstance\s*\(\s*"([^"]+)"\s*(?:,|\))',
     re.IGNORECASE,
 )
-MD5_VAR_RE = re.compile(
+WEAK_HASH_VAR_RE = re.compile(
     r"MessageDigest\s*\.\s*getInstance\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)",
     re.IGNORECASE,
 )
@@ -162,6 +162,7 @@ STRING_CONCAT_PATTERNS = (
     re.compile(r"[A-Za-z_][A-Za-z0-9_.)]*\s*\+\s*\"[^\n]*\"", re.IGNORECASE),
     re.compile(r"[A-Za-z_][A-Za-z0-9_.)]*\s*\+\s*[A-Za-z_][A-Za-z0-9_.(]*", re.IGNORECASE),
 )
+WEAK_HASH_ALGORITHMS = frozenset({"md5", "sha1", "sha-1"})
 
 
 class SourceSanitizer:
@@ -792,6 +793,9 @@ class PolicyIndicatorAnalyzer:
             "md5_literal": False,
             "md5_variable": False,
             "md5_detected": False,
+            "weak_hash_literal": False,
+            "weak_hash_variable": False,
+            "weak_hash_detected": False,
             "weak_cipher_literal": False,
             "weak_cipher_detected": False,
             "insecure_random_detected": False,
@@ -827,24 +831,32 @@ class PolicyIndicatorAnalyzer:
         )
         md5_literal = False
         md5_variable = False
+        weak_hash_literal = False
+        weak_hash_variable = False
         weak_cipher_literal = False
         insecure_random_detected = False
         sha1prng_detected = False
 
-        for match in MD5_LITERAL_RE.findall(source_code):
-            if match.strip().lower() == "md5":
+        for match in WEAK_HASH_LITERAL_RE.findall(source_code):
+            normalized = match.strip().lower()
+            if normalized not in WEAK_HASH_ALGORITHMS:
+                continue
+            weak_hash_literal = True
+            if normalized == "md5":
                 md5_literal = True
-                break
 
         assignments = {}
         for var, value in STRING_ASSIGN_RE.findall(source_code):
-            if value.strip().lower() == "md5":
+            normalized = value.strip().lower()
+            if normalized in WEAK_HASH_ALGORITHMS:
                 assignments[var] = value
 
         if assignments:
-            for var in MD5_VAR_RE.findall(source_code):
+            for var in WEAK_HASH_VAR_RE.findall(source_code):
                 if var in assignments:
-                    md5_variable = True
+                    weak_hash_variable = True
+                    if assignments[var].strip().lower() == "md5":
+                        md5_variable = True
                     break
 
         for algo in CIPHER_LITERAL_RE.findall(source_code):
@@ -891,11 +903,15 @@ class PolicyIndicatorAnalyzer:
         )
 
         md5_detected = md5_literal or md5_variable
+        weak_hash_detected = weak_hash_literal or weak_hash_variable
         weak_cipher_detected = weak_cipher_literal
         return {
             "md5_literal": md5_literal,
             "md5_variable": md5_variable,
             "md5_detected": md5_detected,
+            "weak_hash_literal": weak_hash_literal,
+            "weak_hash_variable": weak_hash_variable,
+            "weak_hash_detected": weak_hash_detected,
             "weak_cipher_literal": weak_cipher_literal,
             "weak_cipher_detected": weak_cipher_detected,
             "insecure_random_detected": insecure_random_detected,

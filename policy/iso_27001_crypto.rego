@@ -1,6 +1,8 @@
 package iso27001
 
-md5_pattern := "messagedigest.getinstance(\"md5\")"
+md5_pattern := "messagedigest.getinstance(\"md5\""
+sha1_pattern := "messagedigest.getinstance(\"sha1\""
+sha_dash_pattern := "messagedigest.getinstance(\"sha-1\""
 des_pattern := "cipher.getinstance(\"des"
 rc4_pattern := "cipher.getinstance(\"rc4"
 ecb_pattern := "cipher.getinstance(\"aes/ecb"
@@ -17,6 +19,30 @@ random_context if {
   benchmark_context
 }
 
+calls_weak_hash if {
+  calls := input.graph_context.calls
+  calls != null
+  call := calls[_]
+  call != null
+  contains(lower(call), md5_pattern)
+}
+
+calls_weak_hash if {
+  calls := input.graph_context.calls
+  calls != null
+  call := calls[_]
+  call != null
+  contains(lower(call), sha1_pattern)
+}
+
+calls_weak_hash if {
+  calls := input.graph_context.calls
+  calls != null
+  call := calls[_]
+  call != null
+  contains(lower(call), sha_dash_pattern)
+}
+
 calls_md5 if {
   calls := input.graph_context.calls
   calls != null
@@ -30,9 +56,29 @@ source_md5 if {
   contains(lower(input.source_code), md5_pattern)
 }
 
+source_weak_hash if {
+  input.source_code != null
+  contains(lower(input.source_code), md5_pattern)
+}
+
+source_weak_hash if {
+  input.source_code != null
+  contains(lower(input.source_code), sha1_pattern)
+}
+
+source_weak_hash if {
+  input.source_code != null
+  contains(lower(input.source_code), sha_dash_pattern)
+}
+
 analysis_md5 if {
   flags := input.analysis_flags
   flags.md5_detected == true
+}
+
+analysis_weak_hash if {
+  flags := input.analysis_flags
+  flags.weak_hash_detected == true
 }
 
 analysis_weak_cipher if {
@@ -112,17 +158,32 @@ insecure_random if {
 
 violations[v] if {
   calls_md5
-  v := violation_record("ISO-A.10-WEAK-HASH", "Insecure MD5 digest usage detected")
+  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
 }
 
 violations[v] if {
   source_md5
-  v := violation_record("ISO-A.10-WEAK-HASH", "Insecure MD5 digest usage detected")
+  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
 }
 
 violations[v] if {
   analysis_md5
-  v := violation_record("ISO-A.10-WEAK-HASH", "Insecure MD5 digest usage detected")
+  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
+}
+
+violations[v] if {
+  analysis_weak_hash
+  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
+}
+
+violations[v] if {
+  calls_weak_hash
+  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
+}
+
+violations[v] if {
+  source_weak_hash
+  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
 }
 
 violations[v] if {

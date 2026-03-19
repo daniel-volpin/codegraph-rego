@@ -15,6 +15,20 @@ class TestSourceAnalysis(unittest.TestCase):
         self.assertTrue(flags["md5_detected"])
         self.assertTrue(flags["md5_variable"])
 
+    def test_sha1_literal(self) -> None:
+        source = 'MessageDigest.getInstance("SHA1", "SUN");'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["weak_hash_detected"])
+        self.assertTrue(flags["weak_hash_literal"])
+        self.assertFalse(flags["md5_detected"])
+
+    def test_sha1_variable(self) -> None:
+        source = 'String algo = "SHA-1"; MessageDigest.getInstance(algo);'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["weak_hash_detected"])
+        self.assertTrue(flags["weak_hash_variable"])
+        self.assertFalse(flags["md5_variable"])
+
     def test_weak_cipher_des(self) -> None:
         source = 'Cipher.getInstance("DES");'
         flags = analyze_crypto_indicators(source)
