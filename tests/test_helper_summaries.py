@@ -461,7 +461,7 @@ class TestDirectCallSummaryBuilder(unittest.TestCase):
             )
 
         self.assertEqual(helper_summaries["safe_constant_return_vars"], ["bar"])
-        self.assertFalse(helper_summaries["safe_constant_return_used_in_command_sink"])
+        self.assertTrue(helper_summaries["safe_constant_return_used_in_command_sink"])
 
     def test_safe_helper_return_used_in_process_builder_array_payload(self) -> None:
         builder = DirectCallSummaryBuilder()
@@ -504,6 +504,43 @@ class TestDirectCallSummaryBuilder(unittest.TestCase):
 
         self.assertEqual(helper_summaries["safe_constant_return_vars"], ["bar"])
         self.assertTrue(helper_summaries["safe_constant_return_used_in_command_sink"])
+
+    def test_tainted_helper_return_used_in_command_env_payload(self) -> None:
+        builder = DirectCallSummaryBuilder()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            callee_path = Path(tmpdir) / "Helper.java"
+            callee_source = "\n".join(
+                [
+                    "class Helper {",
+                    "  private String doSomething(String param) {",
+                    "    return param;",
+                    "  }",
+                    "}",
+                ]
+            )
+            callee_path.write_text(callee_source, encoding="utf-8")
+            method_snapshot = {
+                "class_fqn": "org.example.Controller",
+                "calls": ["org.example.Controller.doSomething(java.lang.String)"],
+            }
+            method_index = {
+                "org.example.Controller.doSomething(java.lang.String)": {
+                    "signature": "org.example.Controller.doSomething(java.lang.String)",
+                    "class_fqn": "org.example.Controller",
+                    "name": "doSomething",
+                    "file_path": callee_path.as_posix(),
+                    "start_line": 2,
+                    "end_line": 3,
+                }
+            }
+            helper_summaries = builder.build(
+                current_source='String bar = doSomething(param); String cmd = "ls"; String[] argsEnv = {bar}; Runtime.getRuntime().exec(cmd, argsEnv);',
+                method_snapshot=method_snapshot,
+                method_index=method_index,
+            )
+
+        self.assertEqual(helper_summaries["tainted_return_vars"], ["bar"])
+        self.assertTrue(helper_summaries["tainted_return_used_in_command_sink"])
 
     def test_prefers_nested_helper_method_over_outer_method_name_collision(self) -> None:
         builder = DirectCallSummaryBuilder()

@@ -502,13 +502,13 @@ class AssignmentStateAnalyzer:
             constant = char_constants.get(target)
             if constant is None:
                 return ""
-            case_match = re.search(
-                rf"case\s+'{re.escape(constant)}'\s*:(.*?)(?=break;|case\s+'|default:|\Z)",
-                body,
-                re.DOTALL,
-            )
+            case_match = re.search(rf"case\s+'{re.escape(constant)}'\s*:", body, re.DOTALL)
             if case_match:
-                return case_match.group(1)
+                tail = body[case_match.end():]
+                tail = re.sub(r"^(?:\s*case\s+'[^']+'\s*:\s*)+", "", tail, flags=re.DOTALL)
+                stmt_match = re.search(r"(.*?)(?=break;|default:|\Z)", tail, re.DOTALL)
+                if stmt_match:
+                    return stmt_match.group(1)
             default_match = re.search(r"default\s*:(.*?)(?=break;|\Z)", body, re.DOTALL)
             return default_match.group(1) if default_match else ""
 

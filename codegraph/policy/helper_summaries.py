@@ -60,6 +60,10 @@ COMMAND_LIST_USAGE_RE = re.compile(
     re.IGNORECASE,
 )
 COMMAND_EXEC_FIRST_ARG_VAR_RE = re.compile(r'\.exec\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))', re.IGNORECASE)
+COMMAND_EXEC_ENV_ARG_VAR_RE = re.compile(
+    r'\.exec\s*\(\s*[^,]+,\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))',
+    re.IGNORECASE,
+)
 STRING_LITERAL_FULL_RE = re.compile(r'^"([^"\\]*(?:\\.[^"\\]*)*)"$', re.DOTALL)
 
 
@@ -416,7 +420,11 @@ class DirectCallSummaryBuilder:
             if candidate
         }
         payload_lists = {candidate for candidate in payload_call_vars if candidate in list_variables}
-        payload_arrays = payload_call_vars | set(COMMAND_EXEC_FIRST_ARG_VAR_RE.findall(source_code))
+        payload_arrays = (
+            payload_call_vars
+            | set(COMMAND_EXEC_FIRST_ARG_VAR_RE.findall(source_code))
+            | set(COMMAND_EXEC_ENV_ARG_VAR_RE.findall(source_code))
+        )
         return payload_lists, payload_arrays
 
 

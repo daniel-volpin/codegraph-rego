@@ -202,6 +202,13 @@ command_injection_heuristic if {
 
 command_injection_heuristic if {
   servlet_context
+  flags := input.analysis_flags
+  flags.command_env_only_tainted == true
+  not helper_safe_command
+}
+
+command_injection_heuristic if {
+  servlet_context
   helper_tainted_command
   not helper_safe_command
 }

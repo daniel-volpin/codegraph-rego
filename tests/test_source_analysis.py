@@ -364,6 +364,22 @@ class TestSourceAnalysis(unittest.TestCase):
         self.assertTrue(flags["command_env_only_tainted"])
         self.assertFalse(flags["command_injection_detected"])
 
+    def test_command_switch_fallthrough_args_detected(self) -> None:
+        source = (
+            'String param = request.getParameter("x");'
+            'String guess = "ABC";'
+            "char switchTarget = guess.charAt(2);"
+            "String bar;"
+            "switch (switchTarget) { case 'A': bar = param; break; case 'B': bar = \"safe\"; break; case 'C': case 'D': bar = param; break; default: bar = \"safe\"; break; }"
+            'String[] args = {"sh", "-c", "ls " + bar};'
+            'String[] argsEnv = {"foo=bar"};'
+            "Runtime.getRuntime().exec(args, argsEnv, new java.io.File(System.getProperty(\"user.dir\")));"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["command_exec_string_tainted"])
+        self.assertTrue(flags["command_exec_args_tainted"])
+        self.assertTrue(flags["command_injection_detected"])
+
     def test_command_constant_if_else_safe_branch_not_flagged(self) -> None:
         source = (
             'String param = request.getHeaders("x").nextElement();'
