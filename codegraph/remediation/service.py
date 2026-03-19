@@ -584,11 +584,12 @@ class RemediationService:
         target_method: Optional[str] = None,
         file_path: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        workspace_root = os.path.abspath(settings.upload_dir)
+        workspace_root = self._resolve_policy_workspace_root(file_path)
         return gather_violation_context(
             violation_id,
             target_method=target_method,
             file_path=file_path,
+            policy_cache_key=workspace_root,
             evaluate_policies_fn=lambda: evaluate_policies(workspace_root=workspace_root),
             load_policy_catalog_fn=load_policy_catalog,
             policy_evaluator_cls=PolicyEvaluator,
@@ -713,6 +714,15 @@ class RemediationService:
     @staticmethod
     def _resolve_file_path(file_path: str) -> Optional[Path]:
         return resolve_file_path(file_path)
+
+    @staticmethod
+    def _resolve_policy_workspace_root(file_path: Optional[str] = None) -> str:
+        if file_path:
+            resolved = resolve_file_path(file_path)
+            if resolved is not None:
+                return resolved.as_posix()
+            return os.path.abspath(file_path)
+        return os.path.abspath(settings.upload_dir)
 
     @staticmethod
     def _detect_build_root(source_path: Path) -> Optional[Path]:

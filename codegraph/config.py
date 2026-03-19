@@ -4,6 +4,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://127.0.0.1:5173",
+            "http://localhost:5173",
+            "http://127.0.0.1:4173",
+            "http://localhost:4173",
+            "http://127.0.0.1:8000",
+            "http://localhost:8000",
+        ],
+        description="Allowed browser origins for the local frontend and backend tools.",
+    )
     index_dir: str = Field("index", description="Index directory")
     faiss_index_path: str = Field("index/code_embeddings.index", description="FAISS index path")
     signature_map_path: str = Field("index/embedding_signature_map.json", description="Signature map path")
@@ -89,6 +100,7 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # For backward compatibility, expose old variable names
+CORS_ALLOWED_ORIGINS = settings.cors_allowed_origins
 INDEX_DIR = settings.index_dir
 FAISS_INDEX_PATH = settings.faiss_index_path
 SIGNATURE_MAP_PATH = settings.signature_map_path

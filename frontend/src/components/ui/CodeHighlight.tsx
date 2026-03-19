@@ -19,7 +19,7 @@ const CodeHighlight = ({
   return (
     <div className={className}>
       <SyntaxHighlighter
-        language={language === "text" ? "java" : language}
+        language={language === "text" ? undefined : language}
         style={oneDark}
         showLineNumbers
         wrapLongLines={wrapLongLines}

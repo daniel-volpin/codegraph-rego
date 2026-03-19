@@ -232,7 +232,7 @@ export async function fetchHealth(): Promise<HealthCheckResponse> {
     headers: defaultHeaders,
   });
 
-  return handleResponse<HealthCheckResponse>(response);
+  return handleStatusPayloadResponse<HealthCheckResponse>(response);
 }
 
 export async function fetchUploadStatus(): Promise<UploadStatus> {

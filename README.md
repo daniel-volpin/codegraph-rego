@@ -82,6 +82,39 @@ If you only want the backend:
 make backend-dev
 ```
 
+## Verification
+
+Use the backend test invocation below as the canonical local command on this branch:
+
+```bash
+UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest -q
+```
+
+Runtime-hygiene gate:
+
+```bash
+.venv/bin/ruff check .
+UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest -q tests/test_app_startup.py tests/test_health_router.py tests/test_policy_router.py tests/test_upload_router.py tests/test_remediation_router.py tests/test_start_backend_dev.py
+cd frontend && yarn build
+```
+
+Branch smoke contract:
+
+```bash
+python run_benchmark_eval.py \
+  --config configs/benchmark/smoke_mixed.json \
+  --mapping configs/benchmark/policy_registry.json \
+  --output-dir outputs/branch_baseline_recovery/detection_smoke \
+  --reset-neo4j
+
+python run_remediation_eval.py \
+  --config configs/benchmark/remediation_bounded_smoke.json \
+  --mapping configs/benchmark/policy_registry.json \
+  --output-dir outputs/branch_baseline_recovery/remediation_bounded_smoke \
+  --sample-size 3 \
+  --reset-neo4j
+```
+
 Key endpoints:
 - `POST /upload`
 - `POST /search`
@@ -91,6 +124,8 @@ Key endpoints:
 - `POST /remediation/preview`
 - `POST /remediation/apply`
 - `GET /health`
+
+`GET /health` now reports explicit degraded startup state. It returns `200` only when startup preload and the core runtime checks are healthy; otherwise it returns `503` with structured details for the degraded component(s).
 
 ## Reproducibility
 
@@ -114,6 +149,7 @@ Use [.opencode/project/runbook.md](./.opencode/project/runbook.md) for:
 ## Notes
 
 - Use `codegraph.config.settings`; do not read env vars ad hoc in new backend code.
+- Keep browser access aligned with `codegraph.config.settings.cors_allowed_origins`; avoid wildcard credentialed CORS.
 - Keep `policy/catalog.json` aligned with Rego rules.
 - Benchmark claims should cite `outputs/`, not README prose.
 - Real-world case studies should not be presented as the primary evidence surface.

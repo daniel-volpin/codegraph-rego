@@ -1,7 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from codegraph.db import get_neo4j_driver
-from codegraph.config import FAISS_INDEX_PATH, SIGNATURE_MAP_PATH, SIGNATURE_MAP_PATH_FULL, EMBEDDING_MODEL_NAME
 from api.models.validation import HealthCheckResponse
 import shutil
 from typing import Any
@@ -9,14 +8,43 @@ from typing import Any
 router = APIRouter()
 
 
+def _load_search_health_dependencies() -> dict[str, Any]:
+    from codegraph.config import FAISS_INDEX_PATH, SIGNATURE_MAP_PATH, SIGNATURE_MAP_PATH_FULL, EMBEDDING_MODEL_NAME
+    from codegraph.search.hybrid import load_faiss_index, load_signature_map, load_embedding_model
+
+    return {
+        "faiss_index_path": FAISS_INDEX_PATH,
+        "signature_map_path": SIGNATURE_MAP_PATH,
+        "signature_map_path_full": SIGNATURE_MAP_PATH_FULL,
+        "embedding_model_name": EMBEDDING_MODEL_NAME,
+        "load_faiss_index": load_faiss_index,
+        "load_signature_map": load_signature_map,
+        "load_embedding_model": load_embedding_model,
+    }
+
+
 @router.get("/health", response_model=HealthCheckResponse)
-async def health():
+async def health(request: Request):
+    startup_state = getattr(request.app.state, "startup_status", None) or {
+        "ready": False,
+        "phase": "pending",
+        "checks": {},
+        "errors": {"startup": "startup status unavailable"},
+    }
     checks: dict[str, Any] = {
+        "status": "degraded",
+        "startup_ready": bool(startup_state.get("ready")),
         "neo4j": False,
         "faiss_index": False,
         "signature_map": False,
         "embedding_model": False,
         "opa": False,
+        "startup": {
+            "ready": bool(startup_state.get("ready")),
+            "phase": startup_state.get("phase") or "pending",
+            "checks": startup_state.get("checks") or {},
+            "errors": startup_state.get("errors") or {},
+        },
         "details": {},
     }
     try:
@@ -28,16 +56,15 @@ async def health():
     except Exception as e:
         checks["details"]["neo4j"] = str(e)
     try:
-        from codegraph.search.hybrid import load_faiss_index, load_signature_map, load_embedding_model
-
-        load_faiss_index(FAISS_INDEX_PATH)
+        deps = _load_search_health_dependencies()
+        deps["load_faiss_index"](deps["faiss_index_path"])
         try:
-            load_signature_map(SIGNATURE_MAP_PATH_FULL)
+            deps["load_signature_map"](deps["signature_map_path_full"])
         except Exception:
-            load_signature_map(SIGNATURE_MAP_PATH)
+            deps["load_signature_map"](deps["signature_map_path"])
         checks["faiss_index"] = True
         checks["signature_map"] = True
-        load_embedding_model(EMBEDDING_MODEL_NAME)
+        deps["load_embedding_model"](deps["embedding_model_name"])
         checks["embedding_model"] = True
     except Exception as e:
         checks["details"]["search"] = str(e)
@@ -46,5 +73,17 @@ async def health():
             checks["opa"] = True
     except Exception:
         pass
-    status = 200 if all([checks["neo4j"], checks["faiss_index"], checks["signature_map"]]) else 503
-    return JSONResponse(checks, status_code=status)
+    if checks["startup"]["errors"]:
+        checks["details"]["startup"] = checks["startup"]["errors"]
+    core_healthy = all(
+        [
+            checks["startup_ready"],
+            checks["neo4j"],
+            checks["faiss_index"],
+            checks["signature_map"],
+            checks["embedding_model"],
+            checks["opa"],
+        ]
+    )
+    checks["status"] = "ok" if core_healthy else "degraded"
+    return JSONResponse(checks, status_code=200 if core_healthy else 503)
