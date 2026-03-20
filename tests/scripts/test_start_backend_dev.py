@@ -71,10 +71,17 @@ exit 1
     def test_script_starts_podman_machine_when_needed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
+            docker_cmd = tmp_path / "docker"
             podman_cmd = tmp_path / "podman"
             uv_cmd = tmp_path / "uv"
             state_file = tmp_path / "podman-state"
 
+            _write_executable(
+                docker_cmd,
+                """#!/bin/sh
+exit 1
+""",
+            )
             _write_executable(
                 podman_cmd,
                 f"""#!/bin/sh
