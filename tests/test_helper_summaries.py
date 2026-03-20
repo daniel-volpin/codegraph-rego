@@ -147,6 +147,172 @@ class TestDirectCallSummaryBuilder(unittest.TestCase):
         self.assertEqual(helper_summaries["safe_constant_return_vars"], ["bar"])
         self.assertTrue(helper_summaries["safe_constant_return_used_in_ldap_filter"])
 
+    def test_tainted_helper_return_used_in_ldap_filter(self) -> None:
+        builder = DirectCallSummaryBuilder()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            callee_path = Path(tmpdir) / "Helper.java"
+            callee_source = "\n".join(
+                [
+                    "class Helper {",
+                    "  private String doSomething(String param) {",
+                    "    return param;",
+                    "  }",
+                    "}",
+                ]
+            )
+            callee_path.write_text(callee_source, encoding="utf-8")
+            method_snapshot = {
+                "class_fqn": "org.example.Controller",
+                "calls": ["org.example.Controller.doSomething(java.lang.String)"],
+            }
+            method_index = {
+                "org.example.Controller.doSomething(java.lang.String)": {
+                    "signature": "org.example.Controller.doSomething(java.lang.String)",
+                    "class_fqn": "org.example.Controller",
+                    "name": "doSomething",
+                    "file_path": callee_path.as_posix(),
+                    "start_line": 2,
+                    "end_line": 3,
+                }
+            }
+            current_source = (
+                'String param = request.getHeader("x");'
+                "String bar = doSomething(param);"
+                'String filter = "(&(uid=" + bar + "))";'
+            )
+            helper_summaries = builder.build(
+                current_source=current_source,
+                method_snapshot=method_snapshot,
+                method_index=method_index,
+            )
+
+        self.assertEqual(helper_summaries["tainted_return_vars"], ["bar"])
+        self.assertTrue(helper_summaries["tainted_return_used_in_ldap_filter"])
+
+    def test_propagating_helper_with_safe_call_argument_marks_safe_ldap_usage(self) -> None:
+        builder = DirectCallSummaryBuilder()
+        method_snapshot = {
+            "class_fqn": "org.example.Controller",
+            "calls": [],
+        }
+        helper_summaries = builder.build(
+            current_source=(
+                'String param = request.getParameterValues("x")[0];'
+                'String safeInput = "barbarians_at_the_gate";'
+                "String bar = thing.doSomething(safeInput);"
+                'String filter = "(&(uid=" + bar + "))";'
+            ),
+            method_snapshot=method_snapshot,
+            method_index={},
+        )
+
+        self.assertTrue(helper_summaries["safe_constant_return_used_in_ldap_filter"])
+        self.assertFalse(helper_summaries["tainted_return_used_in_ldap_filter"])
+
+    def test_propagating_helper_with_safe_call_argument_not_marked_tainted(self) -> None:
+        builder = DirectCallSummaryBuilder()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            callee_path = Path(tmpdir) / "Helper.java"
+            callee_source = "\n".join(
+                [
+                    "class Helper {",
+                    "  private String doSomething(String param) {",
+                    "    return param;",
+                    "  }",
+                    "}",
+                ]
+            )
+            callee_path.write_text(callee_source, encoding="utf-8")
+            method_snapshot = {
+                "class_fqn": "org.example.Controller",
+                "calls": ["org.example.Controller.doSomething(java.lang.String)"],
+            }
+            method_index = {
+                "org.example.Controller.doSomething(java.lang.String)": {
+                    "signature": "org.example.Controller.doSomething(java.lang.String)",
+                    "class_fqn": "org.example.Controller",
+                    "name": "doSomething",
+                    "file_path": callee_path.as_posix(),
+                    "start_line": 2,
+                    "end_line": 3,
+                }
+            }
+            helper_summaries = builder.build(
+                current_source=(
+                    'String param = request.getHeader("x");'
+                    'String safeInput = "safe";'
+                    "String bar = doSomething(safeInput);"
+                    'String filter = "(&(uid=" + bar + "))";'
+                ),
+                method_snapshot=method_snapshot,
+                method_index=method_index,
+            )
+
+        self.assertEqual(helper_summaries["tainted_return_vars"], [])
+        self.assertFalse(helper_summaries["tainted_return_used_in_ldap_filter"])
+
+    def test_tainted_helper_return_used_in_path_sink(self) -> None:
+        builder = DirectCallSummaryBuilder()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            callee_path = Path(tmpdir) / "Helper.java"
+            callee_source = "\n".join(
+                [
+                    "class Helper {",
+                    "  private String doSomething(String param) {",
+                    "    return param;",
+                    "  }",
+                    "}",
+                ]
+            )
+            callee_path.write_text(callee_source, encoding="utf-8")
+            method_snapshot = {
+                "class_fqn": "org.example.Controller",
+                "calls": ["org.example.Controller.doSomething(java.lang.String)"],
+            }
+            method_index = {
+                "org.example.Controller.doSomething(java.lang.String)": {
+                    "signature": "org.example.Controller.doSomething(java.lang.String)",
+                    "class_fqn": "org.example.Controller",
+                    "name": "doSomething",
+                    "file_path": callee_path.as_posix(),
+                    "start_line": 2,
+                    "end_line": 3,
+                }
+            }
+            helper_summaries = builder.build(
+                current_source=(
+                    'String[] values = request.getParameterValues("x");'
+                    'String param = values[0];'
+                    "String bar = doSomething(param);"
+                    'new java.io.File(new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR), bar);'
+                ),
+                method_snapshot=method_snapshot,
+                method_index=method_index,
+            )
+
+        self.assertEqual(helper_summaries["tainted_return_vars"], ["bar"])
+        self.assertTrue(helper_summaries["tainted_return_used_in_path_sink"])
+
+    def test_propagating_helper_with_safe_call_argument_marks_safe_path_usage(self) -> None:
+        builder = DirectCallSummaryBuilder()
+        method_snapshot = {
+            "class_fqn": "org.example.Controller",
+            "calls": [],
+        }
+        helper_summaries = builder.build(
+            current_source=(
+                'String param = request.getHeader("x");'
+                'String safeInput = "barbarians_at_the_gate";'
+                "String bar = thing.doSomething(safeInput);"
+                "new java.io.File(bar);"
+            ),
+            method_snapshot=method_snapshot,
+            method_index={},
+        )
+
+        self.assertTrue(helper_summaries["safe_constant_return_used_in_path_sink"])
+        self.assertFalse(helper_summaries["tainted_return_used_in_path_sink"])
+
     def test_tainted_helper_return_var_recorded(self) -> None:
         builder = DirectCallSummaryBuilder()
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -64,6 +64,7 @@ PATH_DYNAMIC_CONSTRUCTION_PATTERNS = (
 )
 PATH_DYNAMIC_ARGUMENT_PATTERNS = (
     re.compile(r"new\s+java\.io\.File\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE),
+    re.compile(r"new\s+java\.io\.File\s*\(\s*[^,]+,\s*[A-Za-z_][A-Za-z0-9_]*\s*\)", re.IGNORECASE),
     re.compile(r"new\s+java\.io\.FileInputStream\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE),
     re.compile(r"new\s+java\.io\.FileOutputStream\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE),
     re.compile(r"new\s+java\.io\.FileReader\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE),
@@ -71,6 +72,7 @@ PATH_DYNAMIC_ARGUMENT_PATTERNS = (
 )
 PATH_SINK_VARIABLE_PATTERNS = (
     re.compile(r"new\s+java\.io\.File\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE),
+    re.compile(r"new\s+java\.io\.File\s*\(\s*[^,]+,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)", re.IGNORECASE),
     re.compile(r"new\s+java\.io\.FileInputStream\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE),
     re.compile(r"new\s+java\.io\.FileOutputStream\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE),
     re.compile(r"new\s+java\.io\.FileReader\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE),
@@ -79,6 +81,10 @@ PATH_SINK_VARIABLE_PATTERNS = (
 DIRECT_PATH_UNTRUSTED_PATTERNS = (
     re.compile(
         r"new\s+java\.io\.(?:File|FileInputStream|FileOutputStream|FileReader)\s*\([^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"new\s+java\.io\.File\s*\(\s*[^,]+,\s*[^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(",
         re.IGNORECASE,
     ),
     re.compile(r"Paths\s*\.\s*get\s*\([^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(", re.IGNORECASE),
@@ -123,6 +129,18 @@ LDAP_PATTERNS = (
     re.compile(r"InitialDirContext", re.IGNORECASE),
     re.compile(r"DirContext", re.IGNORECASE),
     re.compile(r"\.search\s*\(", re.IGNORECASE),
+)
+LDAP_FILTER_VARIABLE_PATTERNS = (
+    re.compile(
+        r"\.search\s*\(\s*[^,]+,\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))",
+        re.IGNORECASE,
+    ),
+)
+DIRECT_LDAP_UNTRUSTED_PATTERNS = (
+    re.compile(
+        r"\.search\s*\(\s*[^,]+,\s*[^;\n]*(?:getParameter|getHeader|getQueryString|getCookies|getTheParameter)\s*\(",
+        re.IGNORECASE,
+    ),
 )
 XPATH_PATTERNS = (
     re.compile(r"XPathFactory\s*\.\s*newInstance\s*\(", re.IGNORECASE),
@@ -623,6 +641,13 @@ class XPathAnalysis:
 
 
 @dataclass(frozen=True)
+class LDAPAnalysis:
+    ldap_filter_uses_tainted_input: bool
+    ldap_filter_uses_safe_constant: bool
+    ldap_injection_detected: bool
+
+
+@dataclass(frozen=True)
 class SQLAnalysis:
     sql_query_uses_tainted_input: bool
     sql_query_uses_safe_constant: bool
@@ -919,6 +944,67 @@ class XPathSafetyAnalyzer:
         return bool(all(pattern.search(source_code) for pattern in XPATH_PATTERNS) and has_dynamic_construction)
 
 
+class LDAPSafetyAnalyzer:
+    def __init__(self) -> None:
+        self._assignment_analyzer = AssignmentStateAnalyzer(PATH_LDAP_UNTRUSTED_INPUT_PATTERNS)
+
+    def analyze(self, source_code: str) -> LDAPAnalysis:
+        state = self._assignment_analyzer.analyze(source_code)
+        sink_vars = self._sink_vars(source_code)
+        ldap_filter_uses_safe_constant = self._sink_uses_safe_constant(source_code, state, sink_vars)
+        ldap_filter_uses_tainted_input = self._sink_uses_tainted_input(source_code, state, sink_vars)
+        compatibility_ldap_signal = self._compatibility_ldap_signal(source_code, sink_vars)
+        ldap_injection_detected = (
+            (ldap_filter_uses_tainted_input or compatibility_ldap_signal) and not ldap_filter_uses_safe_constant
+        )
+        return LDAPAnalysis(
+            ldap_filter_uses_tainted_input=ldap_filter_uses_tainted_input,
+            ldap_filter_uses_safe_constant=ldap_filter_uses_safe_constant,
+            ldap_injection_detected=ldap_injection_detected,
+        )
+
+    @staticmethod
+    def _sink_vars(source_code: str) -> set[str]:
+        sink_vars: set[str] = set()
+        for pattern in LDAP_FILTER_VARIABLE_PATTERNS:
+            for match in pattern.finditer(source_code):
+                sink_vars.add(match.group(1))
+        return sink_vars
+
+    def _sink_uses_safe_constant(self, source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:
+        if not sink_vars:
+            return False
+        if sink_vars & set(state.string_constants):
+            return True
+        for match in SIMPLE_ASSIGNMENT_RE.finditer(source_code):
+            var = match.group(1)
+            if var not in sink_vars:
+                continue
+            referenced = self._assignment_analyzer.referenced_variables(match.group(2))
+            if referenced & state.tainted_vars:
+                continue
+            if referenced & set(state.string_constants):
+                return True
+        return False
+
+    def _sink_uses_tainted_input(self, source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:
+        if any(pattern.search(source_code) for pattern in DIRECT_LDAP_UNTRUSTED_PATTERNS):
+            return True
+        return any(sink_var in state.tainted_vars for sink_var in sink_vars)
+
+    @staticmethod
+    def _compatibility_ldap_signal(source_code: str, sink_vars: set[str]) -> bool:
+        if any(pattern.search(source_code) for pattern in DIRECT_LDAP_UNTRUSTED_PATTERNS):
+            return True
+        has_dynamic_construction = bool(
+            any(pattern.search(source_code) for pattern in STRING_CONCAT_PATTERNS)
+            or (STRING_BUILDER_RE.search(source_code) and APPEND_CALL_RE.search(source_code))
+        )
+        has_ldap_context = any(pattern.search(source_code) for pattern in LDAP_PATTERNS[:2])
+        has_ldap_search = bool(LDAP_PATTERNS[2].search(source_code))
+        return bool(has_ldap_context and has_ldap_search and sink_vars and has_dynamic_construction)
+
+
 class SQLSafetyAnalyzer:
     def __init__(self) -> None:
         self._assignment_analyzer = AssignmentStateAnalyzer(SQL_UNTRUSTED_INPUT_PATTERNS)
@@ -988,6 +1074,7 @@ class PolicyIndicatorAnalyzer:
     def __init__(self) -> None:
         self._path_safety = PathSafetyAnalyzer()
         self._command_flow = CommandFlowAnalyzer()
+        self._ldap_safety = LDAPSafetyAnalyzer()
         self._xpath_safety = XPathSafetyAnalyzer()
         self._sql_safety = SQLSafetyAnalyzer()
 
@@ -1014,6 +1101,8 @@ class PolicyIndicatorAnalyzer:
             "command_env_only_tainted": False,
             "command_injection_detected": False,
             "ldap_injection_detected": False,
+            "ldap_filter_uses_tainted_input": False,
+            "ldap_filter_uses_safe_constant": False,
             "xpath_injection_detected": False,
             "xpath_query_uses_tainted_input": False,
             "xpath_query_uses_safe_constant": False,
@@ -1030,10 +1119,6 @@ class PolicyIndicatorAnalyzer:
 
         path_ldap_untrusted_input_detected = any(
             pattern.search(source_code) for pattern in PATH_LDAP_UNTRUSTED_INPUT_PATTERNS
-        )
-        builder_append_detected = bool(STRING_BUILDER_RE.search(source_code) and APPEND_CALL_RE.search(source_code))
-        dynamic_construction_detected = builder_append_detected or any(
-            pattern.search(source_code) for pattern in STRING_CONCAT_PATTERNS
         )
         md5_literal = False
         md5_variable = False
@@ -1083,18 +1168,14 @@ class PolicyIndicatorAnalyzer:
         path_safe_constant_detected = path_analysis.path_sink_uses_safe_constant
         path_traversal_detected = path_ldap_untrusted_input_detected and path_analysis.path_traversal_detected
         command_analysis = self._command_flow.analyze(source_code)
+        ldap_analysis = self._ldap_safety.analyze(source_code)
         xpath_analysis = self._xpath_safety.analyze(source_code)
         sql_analysis = self._sql_safety.analyze(source_code)
         command_exec_string_tainted = command_analysis.command_exec_string_tainted
         command_exec_args_tainted = command_analysis.command_exec_args_tainted
         command_env_only_tainted = command_analysis.command_env_only_tainted
         command_injection_detected = command_exec_string_tainted or command_exec_args_tainted
-        ldap_injection_detected = (
-            path_ldap_untrusted_input_detected
-            and any(pattern.search(source_code) for pattern in LDAP_PATTERNS[:2])
-            and bool(LDAP_PATTERNS[2].search(source_code))
-            and dynamic_construction_detected
-        )
+        ldap_injection_detected = path_ldap_untrusted_input_detected and ldap_analysis.ldap_injection_detected
         xpath_injection_detected = xpath_analysis.xpath_injection_detected
         sql_prepare_call_detected = bool(SQL_PREPARE_CALL_RE.search(source_code))
         sql_prepare_statement_detected = bool(SQL_PREPARE_STATEMENT_RE.search(source_code))
@@ -1128,6 +1209,8 @@ class PolicyIndicatorAnalyzer:
             "command_env_only_tainted": command_env_only_tainted,
             "command_injection_detected": command_injection_detected,
             "ldap_injection_detected": ldap_injection_detected,
+            "ldap_filter_uses_tainted_input": ldap_analysis.ldap_filter_uses_tainted_input,
+            "ldap_filter_uses_safe_constant": ldap_analysis.ldap_filter_uses_safe_constant,
             "xpath_injection_detected": xpath_injection_detected,
             "xpath_query_uses_tainted_input": xpath_analysis.xpath_query_uses_tainted_input,
             "xpath_query_uses_safe_constant": xpath_analysis.xpath_query_uses_safe_constant,

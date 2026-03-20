@@ -131,9 +131,19 @@ helper_safe_path if {
   helpers.safe_constant_return_used_in_path_sink == true
 }
 
+helper_tainted_path if {
+  helpers := input.helper_summaries
+  helpers.tainted_return_used_in_path_sink == true
+}
+
 helper_safe_ldap if {
   helpers := input.helper_summaries
   helpers.safe_constant_return_used_in_ldap_filter == true
+}
+
+helper_tainted_ldap if {
+  helpers := input.helper_summaries
+  helpers.tainted_return_used_in_ldap_filter == true
 }
 
 helper_safe_sql if {
@@ -170,6 +180,12 @@ path_traversal_heuristic if {
   servlet_context
   flags := input.analysis_flags
   flags.path_traversal_detected == true
+  not helper_safe_path
+}
+
+path_traversal_heuristic if {
+  servlet_context
+  helper_tainted_path
   not helper_safe_path
 }
 
@@ -235,8 +251,16 @@ ldap_injection_heuristic if {
 
 ldap_injection_heuristic if {
   servlet_context
+  helper_tainted_ldap
+  not helper_safe_ldap
+}
+
+ldap_injection_heuristic if {
+  servlet_context
   input.source_code != null
   src := lower(input.source_code)
+  flags := input.analysis_flags
+  flags == null
   input_is_untrusted
   dynamic_source_construction(src)
   some kw in ldap_keywords

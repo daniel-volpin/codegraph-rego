@@ -92,6 +92,15 @@ class TestSourceAnalysis(unittest.TestCase):
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
+    def test_path_traversal_nested_parent_child_file_detected(self) -> None:
+        source = (
+            'String[] values = request.getParameterValues("x");'
+            'String bar = values[0];'
+            'new java.io.File(new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR), bar);'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["path_traversal_detected"])
+
     def test_path_traversal_get_parameter_map_detected(self) -> None:
         source = (
             'java.util.Map<String, String[]> map = request.getParameterMap();'
@@ -440,6 +449,32 @@ class TestSourceAnalysis(unittest.TestCase):
         )
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["ldap_injection_detected"])
+
+    def test_ldap_safe_constant_ternary_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            "int num = 106;"
+            'String bar = (7 * 18) + num > 200 ? "This_should_always_happen" : param;'
+            'String filter = "(&(uid=" + bar + "))";'
+            "InitialDirContext idc = null; idc.search(base, filter, filters, sc);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["ldap_injection_detected"])
+        self.assertTrue(flags["ldap_filter_uses_safe_constant"])
+
+    def test_ldap_safe_constant_switch_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String guess = "ABC";'
+            "char switchTarget = guess.charAt(1);"
+            "String bar = param;"
+            "switch (switchTarget) { case 'A': bar = param; break; case 'B': bar = \"bob\"; break; case 'C': case 'D': bar = param; break; default: bar = \"bob's your uncle\"; break; }"
+            'String filter = "(&(uid=" + bar + "))";'
+            "InitialDirContext idc = null; idc.search(base, filter, sc);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["ldap_injection_detected"])
+        self.assertTrue(flags["ldap_filter_uses_safe_constant"])
 
     def test_xpath_injection_builder_detected(self) -> None:
         source = (

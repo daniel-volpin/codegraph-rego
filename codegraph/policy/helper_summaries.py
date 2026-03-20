@@ -6,10 +6,14 @@ from pathlib import Path
 from typing import Any, Dict
 
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
-from codegraph.policy.source_analysis_core import AssignmentStateAnalyzer
+from codegraph.policy.source_analysis_core import AssignmentStateAnalyzer, PATH_LDAP_UNTRUSTED_INPUT_PATTERNS
 
 CALL_ASSIGNMENT_RE = re.compile(
     r"(?:final\s+)?(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>]*\(\)|[A-Za-z_][A-Za-z0-9_$.<>]*)\s*\.\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(",
+    re.DOTALL,
+)
+CALL_ASSIGNMENT_WITH_ARGS_RE = re.compile(
+    r"(?:final\s+)?(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>]*\(\)|[A-Za-z_][A-Za-z0-9_$.<>]*)\s*\.\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(([^;]*?)\)\s*;",
     re.DOTALL,
 )
 METHOD_DECL_RE = re.compile(
@@ -216,6 +220,7 @@ class HelperCollectionResolver:
 class DirectCallSummaryBuilder:
     def __init__(self) -> None:
         self._method_analyzer = HelperMethodAnalyzer()
+        self._assignment_analyzer = AssignmentStateAnalyzer(PATH_LDAP_UNTRUSTED_INPUT_PATTERNS)
 
     def build(
         self,
@@ -226,8 +231,39 @@ class DirectCallSummaryBuilder:
     ) -> Dict[str, Any]:
         safe_vars: list[str] = []
         tainted_vars: list[str] = []
+        path_safe_vars: list[str] = []
+        path_tainted_vars: list[str] = []
+        ldap_safe_vars: list[str] = []
+        ldap_tainted_vars: list[str] = []
+        state = self._assignment_analyzer.analyze(current_source)
         call_signatures = method_snapshot.get("calls") or []
-        for assigned_var, method_name in CALL_ASSIGNMENT_RE.findall(current_source):
+        for assigned_var, method_name, raw_args in CALL_ASSIGNMENT_WITH_ARGS_RE.findall(current_source):
+            is_untrusted_source_call = method_name.lower() in {
+                "getparameter",
+                "getheader",
+                "getquerystring",
+                "getcookies",
+                "getparametermap",
+                "getparametervalues",
+                "getparameternames",
+                "getheaders",
+                "gettheparameter",
+            }
+            if is_untrusted_source_call:
+                continue
+            arg_refs = self._assignment_analyzer.referenced_variables(raw_args)
+            arg_has_tainted_input = bool(
+                any(pattern.search(raw_args) for pattern in PATH_LDAP_UNTRUSTED_INPUT_PATTERNS)
+                or arg_refs & state.tainted_vars
+            )
+            arg_is_safe_constant = bool(
+                raw_args.strip()
+                and not arg_has_tainted_input
+                and (
+                    STRING_LITERAL_FULL_RE.match(raw_args.strip())
+                    or arg_refs <= set(state.string_constants)
+                )
+            )
             callee_snapshot = self._resolve_called_method(
                 method_name=method_name,
                 call_signatures=call_signatures,
@@ -236,19 +272,37 @@ class DirectCallSummaryBuilder:
                 method_index=method_index,
             )
             if not callee_snapshot:
+                if arg_is_safe_constant:
+                    path_safe_vars.append(assigned_var)
+                    ldap_safe_vars.append(assigned_var)
                 continue
             summary = self._method_analyzer.summarize(self._read_method_source(callee_snapshot))
             if summary.returns_constant_string:
                 safe_vars.append(assigned_var)
+                path_safe_vars.append(assigned_var)
+                ldap_safe_vars.append(assigned_var)
+            elif arg_is_safe_constant:
+                path_safe_vars.append(assigned_var)
+                ldap_safe_vars.append(assigned_var)
             if summary.propagates_tainted_input:
                 tainted_vars.append(assigned_var)
+                if arg_has_tainted_input:
+                    path_tainted_vars.append(assigned_var)
+                if arg_has_tainted_input:
+                    ldap_tainted_vars.append(assigned_var)
         safe_vars = sorted(set(safe_vars))
         tainted_vars = sorted(set(tainted_vars))
+        path_safe_vars = sorted(set(path_safe_vars))
+        path_tainted_vars = sorted(set(path_tainted_vars))
+        ldap_safe_vars = sorted(set(ldap_safe_vars))
+        ldap_tainted_vars = sorted(set(ldap_tainted_vars))
         return {
             "safe_constant_return_vars": safe_vars,
             "tainted_return_vars": tainted_vars,
-            "safe_constant_return_used_in_path_sink": self._vars_used_in_path_sink(current_source, safe_vars),
-            "safe_constant_return_used_in_ldap_filter": self._vars_used_in_template(current_source, safe_vars, FILTER_ASSIGNMENT_TEMPLATE),
+            "safe_constant_return_used_in_path_sink": self._vars_used_in_path_sink(current_source, path_safe_vars),
+            "tainted_return_used_in_path_sink": self._vars_used_in_path_sink(current_source, path_tainted_vars),
+            "safe_constant_return_used_in_ldap_filter": self._vars_used_in_template(current_source, ldap_safe_vars, FILTER_ASSIGNMENT_TEMPLATE),
+            "tainted_return_used_in_ldap_filter": self._vars_used_in_template(current_source, ldap_tainted_vars, FILTER_ASSIGNMENT_TEMPLATE),
             "safe_constant_return_used_in_xpath_query": self._vars_used_in_xpath(current_source, safe_vars),
             "safe_constant_return_used_in_sql_query": self._vars_used_in_sql(current_source, safe_vars),
             "safe_constant_return_used_in_command_sink": self._vars_used_in_command(current_source, safe_vars),
