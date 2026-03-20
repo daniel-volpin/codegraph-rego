@@ -662,6 +662,7 @@ const PolicyPage = () => {
     [],
   );
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table hook
   const table = useReactTable({
     data,
     columns,

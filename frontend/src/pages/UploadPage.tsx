@@ -14,26 +14,23 @@ import {
   uniqueSortedModuleLabels,
 } from "../lib/workspace";
 
+const readLastUpload = (): UploadResponse | null => {
+  try {
+    const saved = localStorage.getItem("codegraph:lastUpload");
+    return saved ? (JSON.parse(saved) as UploadResponse) : null;
+  } catch {
+    return null;
+  }
+};
+
 const UploadPage = () => {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const refetchStatusRef = useRef<(() => void) | null>(null);
   const [selectedName, setSelectedName] = useState<string | null>(null);
-  const [result, setResult] = useState<UploadResponse | null>(null);
-  const [status, setStatus] = useState<UploadStatus | null>(null);
+  const [result, setResult] = useState<UploadResponse | null>(() => readLastUpload());
+  const [localStatus, setLocalStatus] = useState<UploadStatus | null>(null);
   const { upsert: upsertActivity, clear: clearActivity } = useActivityContext();
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("codegraph:lastUpload");
-      if (saved) {
-        const parsed: UploadResponse = JSON.parse(saved);
-        setResult(parsed);
-      }
-    } catch {
-      /* ignore serialization issues */
-    }
-  }, []);
 
   const uploadMutation = useMutation({
     mutationFn: uploadZip,
@@ -66,24 +63,22 @@ const UploadPage = () => {
     },
   });
 
-  const shouldPoll =
-    uploadMutation.isPending || Boolean(status && !status.complete);
-  const pollInterval = shouldPoll ? 1000 : false;
-
   const { data: statusData, refetch: refetchStatus } = useQuery({
     queryKey: ["uploadStatus"],
     queryFn: fetchUploadStatus,
     staleTime: 0,
-    refetchInterval: pollInterval,
+    refetchInterval: (query) => {
+      const nextStatus = query.state.data as UploadStatus | undefined;
+      const activeStatus = nextStatus ?? localStatus;
+      return uploadMutation.isPending || Boolean(activeStatus && !activeStatus.complete) ? 1000 : false;
+    },
   });
 
-  refetchStatusRef.current = refetchStatus;
+  const status = statusData ?? localStatus;
 
   useEffect(() => {
-    if (statusData) {
-      setStatus(statusData);
-    }
-  }, [statusData]);
+    refetchStatusRef.current = refetchStatus;
+  }, [refetchStatus]);
 
   useEffect(() => {
     if (!status) {
@@ -124,7 +119,7 @@ const UploadPage = () => {
     }
     const now = new Date().toISOString();
     setResult(null);
-    setStatus({
+    setLocalStatus({
       phase: "upload",
       message: `Uploading ${file.name}…`,
       progress: 0,
