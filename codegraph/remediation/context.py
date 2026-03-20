@@ -9,10 +9,7 @@ import javalang
 from javalang.tree import MemberReference, MethodDeclaration, MethodInvocation
 
 LOGGER = logging.getLogger(__name__)
-_POLICY_CACHE: dict[str, Any] = {
-    "timestamp": 0.0,
-    "data": None,
-}
+_POLICY_CACHE: dict[str, dict[str, Any]] = {}
 _CACHE_TTL_SECONDS = 30.0
 
 
@@ -20,14 +17,21 @@ def format_numbered_lines(lines: list[str]) -> str:
     return "\n".join(f"{idx + 1}: {line}" for idx, line in enumerate(lines))
 
 
-def cached_policy_evaluation(evaluate_policies_fn) -> dict[str, Any]:
+def clear_policy_evaluation_cache() -> None:
+    _POLICY_CACHE.clear()
+
+
+def cached_policy_evaluation(evaluate_policies_fn, *, cache_key: str | None = None) -> dict[str, Any]:
     now = time.monotonic()
-    cached = _POLICY_CACHE.get("data")
-    if cached and now - _POLICY_CACHE.get("timestamp", 0.0) < _CACHE_TTL_SECONDS:
-        return cached
+    key = str(cache_key or "default")
+    cached = _POLICY_CACHE.get(key)
+    if cached and now - float(cached.get("timestamp", 0.0)) < _CACHE_TTL_SECONDS:
+        return cached.get("data") or {}
     data = evaluate_policies_fn()
-    _POLICY_CACHE["data"] = data
-    _POLICY_CACHE["timestamp"] = now
+    _POLICY_CACHE[key] = {
+        "timestamp": now,
+        "data": data,
+    }
     return data
 
 
@@ -36,6 +40,7 @@ def gather_violation_context(
     *,
     target_method: str | None = None,
     file_path: str | None = None,
+    policy_cache_key: str | None = None,
     evaluate_policies_fn,
     load_policy_catalog_fn,
     policy_evaluator_cls,
@@ -44,7 +49,7 @@ def gather_violation_context(
     build_remediation_plan_fn,
     logger: logging.Logger = LOGGER,
 ) -> dict[str, Any] | None:
-    result = cached_policy_evaluation(evaluate_policies_fn)
+    result = cached_policy_evaluation(evaluate_policies_fn, cache_key=policy_cache_key)
     if result.get("error"):
         logger.error("Policy evaluation failed while gathering context: %s", result["error"])
         return None

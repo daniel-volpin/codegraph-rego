@@ -198,12 +198,22 @@ export interface RemediationApplyResponse {
   error?: string | null;
 }
 
+export interface HealthStartupStatus {
+  ready: boolean;
+  phase: "pending" | "running" | "ready" | "degraded";
+  checks: Record<string, boolean>;
+  errors: Record<string, string>;
+}
+
 export interface HealthCheckResponse {
+  status: "ok" | "degraded";
+  startup_ready: boolean;
   neo4j: boolean;
   faiss_index: boolean;
   signature_map: boolean;
   embedding_model: boolean;
   opa: boolean;
+  startup: HealthStartupStatus;
   details: Record<string, unknown>;
 }
 

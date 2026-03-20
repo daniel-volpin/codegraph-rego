@@ -25,7 +25,7 @@
       "action": "Protect",
       "object": "HashAlgorithm",
       "conditions": ["strongHash"],
-      "description": "Cryptographic controls should avoid weak hash algorithms such as MD5"
+      "description": "Cryptographic controls should avoid weak hash algorithms such as MD5 and SHA-1"
     },
     {
       "standard": "ISO-27001",

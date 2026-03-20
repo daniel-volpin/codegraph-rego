@@ -2,6 +2,13 @@ from pydantic import BaseModel, Field
 from typing import Any, List, Literal, Optional
 
 
+class HealthStartupStatus(BaseModel):
+    ready: bool
+    phase: Literal["pending", "running", "ready", "degraded"]
+    checks: dict = Field(default_factory=dict)
+    errors: dict = Field(default_factory=dict)
+
+
 class UploadResponse(BaseModel):
     status: str
     java_root: Optional[str] = None
@@ -20,11 +27,14 @@ class UploadStatusResponse(BaseModel):
 
 
 class HealthCheckResponse(BaseModel):
+    status: Literal["ok", "degraded"]
+    startup_ready: bool
     neo4j: bool
     faiss_index: bool
     signature_map: bool
     embedding_model: bool
     opa: bool
+    startup: HealthStartupStatus
     details: dict
 
 

@@ -3,6 +3,7 @@
 This file is the shortest path to rerun the thesis-final evaluation pipeline on this branch.
 
 ## 1. Prerequisites
+
 - Python 3.10+
 - Neo4j 5.x
 - OPA on `PATH`
@@ -11,6 +12,7 @@ This file is the shortest path to rerun the thesis-final evaluation pipeline on 
 - LM Studio or another OpenAI-compatible LLM endpoint for explanation/remediation runs
 
 ## 2. Environment
+
 ```bash
 uv sync
 source .venv/bin/activate
@@ -36,20 +38,53 @@ export REMEDIATION_LLM_MODEL_TTL_SECONDS=300
 
 If you are using LM Studio with different explanation/remediation models, enable LM Studio's `Auto-Evict` setting. CodeGraph now sends per-request TTL hints so idle models can be unloaded automatically.
 
-## 3. Recommended Explanation-Eval Defaults
+## 3. Branch Verification Contract
+
+Use these commands as the baseline-recovery gate on this branch:
+
+```bash
+.venv/bin/ruff check .
+UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest -q
+cd frontend && yarn build
+```
+
+For branch-local smoke evidence, write new outputs under `outputs/branch_baseline_recovery/`:
+
+```bash
+python run_benchmark_eval.py \
+  --config configs/benchmark/smoke_mixed.json \
+  --mapping configs/benchmark/policy_registry.json \
+  --output-dir outputs/branch_baseline_recovery/detection_smoke \
+  --reset-neo4j
+
+python run_remediation_eval.py \
+  --config configs/benchmark/remediation_bounded_smoke.json \
+  --mapping configs/benchmark/policy_registry.json \
+  --output-dir outputs/branch_baseline_recovery/remediation_bounded_smoke \
+  --sample-size 3 \
+  --reset-neo4j
+```
+
+Historical thesis-grade outputs under `outputs/detection_calibration_path_precision_v4/`, `outputs/thesis_final_explanation_full/`, and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` remain reference baselines until this branch produces replacement evidence.
+
+## 4. Recommended Explanation-Eval Defaults
+
 Use these settings for local Qwen/LM Studio runs:
+
 - `LLM_CONCURRENCY=1`
 - `--evidence-mode lean`
 - `--llm-max-tokens-eval 192`
 
 The runner already enables:
+
 - structured JSON-schema output
 - explicit stop sequences for local completions
 - live progress and request-level metrics
 
 Interactive UI explains now use the same structured `citation` / `why` / `fix` response shape, so the frontend no longer depends on freeform model prose behaving well.
 
-## 4. Choose a Config
+## 5. Choose a Config
+
 - thesis-final detection/explanation: `configs/benchmark/multicat_full.json`
 - thesis-final supported remediation: `configs/benchmark/remediation_supported_medium.json`
 - small smoke: `configs/benchmark/smoke_mixed.json`
@@ -61,7 +96,8 @@ Interactive UI explains now use the same structured `citation` / `why` / `fix` r
 
 Canonical benchmark configs live under `configs/benchmark/`.
 
-## 4a. Build the Recommended Demo Upload
+## 5a. Build the Recommended Demo Upload
+
 For the live thesis/demo UI flow, use the curated OWASP Benchmark pack instead of a generic sample app:
 
 ```bash
@@ -71,17 +107,20 @@ python3 scripts/evaluation/build_benchmark_demo_pack.py \
 ```
 
 This creates:
+
 - `demo/benchmark-framework-demo/build/benchmark-framework-demo/`
 - `demo/benchmark-framework-demo/build/benchmark-framework-demo.zip`
 
 The selected benchmark cases cover:
+
 - full remediation: `ISO-A.10-WEAK-HASH`, `ISO-A.10-WEAK-RANDOM`
 - guarded remediation: `ISO-A.10-WEAK-CRYPTO`
 - explanation/manual-only: `ISO-A.8-SQL-INJECTION`, `ISO-A.8-PATH-TRAVERSAL`, `ISO-A.8-CMD-INJECTION`, `ISO-A.8-LDAP-INJECTION`, `ISO-A.8-XPATH-INJECTION`
 
 For the UI thesis/demo, use the Policy page's `Framework demo focus` preset after upload. That preset sends an explicit `rule_ids` filter to the backend so the grouped table reflects the benchmark-aligned categories rather than the full servlet-heavy policy surface.
 
-## 5. Run Thesis-Final Detection
+## 6. Run Thesis-Final Detection
+
 ```bash
 python run_benchmark_eval.py \
   --config configs/benchmark/multicat_full.json \
@@ -90,7 +129,8 @@ python run_benchmark_eval.py \
   --reset-neo4j
 ```
 
-## 6. Run Thesis-Final Explanation Evaluation
+## 7. Run Thesis-Final Explanation Evaluation
+
 ```bash
 LLM_CONCURRENCY=1 \
 python run_explanation_eval.py \
@@ -102,7 +142,8 @@ python run_explanation_eval.py \
   --reset-neo4j
 ```
 
-## 7. Run Thesis-Final Supported Remediation
+## 8. Run Thesis-Final Supported Remediation
+
 ```bash
 python run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
@@ -112,7 +153,18 @@ python run_remediation_eval.py \
   --reset-neo4j
 ```
 
-## 8. Optional Smaller Validation Runs
+For the baseline-recovery branch, prefer this branch-local output directory for the supported-medium rerun:
+
+```bash
+python run_remediation_eval.py \
+  --config configs/benchmark/remediation_supported_medium.json \
+  --mapping configs/benchmark/policy_registry.json \
+  --output-dir outputs/branch_baseline_recovery/remediation_supported_medium \
+  --sample-size 60 \
+  --reset-neo4j
+```
+
+## 9. Optional Smaller Validation Runs
 
 For a bounded remediation refresh across full and guarded support tiers:
 
@@ -136,14 +188,16 @@ python scripts/evaluation/run_remediation_model_bakeoff.py \
   --reset-neo4j
 ```
 
-## 9. Expected Outputs
+## 10. Expected Outputs
 
 ### Detection
+
 - `metrics.json`
 - `metrics.csv`
 - `table.md` or `table.tex`
 
 ### Explanation
+
 - `citation_metrics.json`
 - `citation_metrics.csv`
 - `table.md` or `table.tex`
@@ -153,11 +207,13 @@ python scripts/evaluation/run_remediation_model_bakeoff.py \
 - `request_metrics.jsonl`
 
 ### Remediation
+
 - `remediation_metrics.json`
 - `remediation_metrics.csv`
 - `table.md` or `table.tex`
 
-## 10. Interpretation
+## 11. Interpretation
+
 - Detection is the baseline validity check.
 - Explanation evaluation is mainly about citation grounding, not prose quality.
 - Remediation is judged by fix success and re-verification, not just patch text.
@@ -173,7 +229,8 @@ python scripts/evaluation/run_remediation_model_bakeoff.py \
   - `reason`
   malformed generation payloads surface as `GENERATION_ERROR` rather than ambiguous parser failures.
 
-## 11. Notes
+## 12. Notes
+
 - Use `--reset-neo4j` for reproducible runs.
 - Keep separate output directories for separate experiments.
 - Policy evaluation excludes Java sources under `src/test/**` to keep findings focused on production-risk code.
