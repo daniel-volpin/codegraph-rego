@@ -59,6 +59,7 @@ export interface PolicyExplainOneRequest {
 }
 
 export interface PolicyExplanationStructured {
+  evidence_id?: string | null;
   citation: string;
   why: string;
   fix: string;

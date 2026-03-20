@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
+from codegraph.llm.evidence_cards import build_evidence_cards
+
 LEAN_SNIPPET_MAX_CHARS = 1200
 LEAN_ANNOTATION_CAP = 5
 LEAN_NOTABLE_CALLS_CAP = 3
@@ -81,6 +83,18 @@ def build_explanation_evidence(
             _build_lean_graph_summary(graph_context, analysis_flags) if include_graph_context else {}
         )
         payload["vector_context"] = []
+    payload["evidence_cards"] = build_evidence_cards(
+        file_path=file_path,
+        target_method=target_method,
+        start_line=start_line,
+        end_line=end_line,
+        source_code=str(payload.get("source_code") or ""),
+        graph_context=payload.get("graph_context") or {},
+        vector_context=payload.get("vector_context") or [],
+        analysis_flags=analysis_flags,
+        include_graph_context=include_graph_context,
+        evidence_mode=normalized_mode,
+    )
     return payload
 
 
@@ -113,6 +127,7 @@ def build_explanation_prompt(
 
     violation_summary = {k: v for k, v in violation.items() if k != "evidence"}
     user_lines = [f"Violation: {json.dumps(violation_summary, indent=2)}"]
+    evidence_cards = payload.get("evidence_cards") or []
     if include_graph_context:
         user_lines.append("Evidence bundle:")
         if payload.get("file_path"):
@@ -133,10 +148,20 @@ def build_explanation_prompt(
         if evidence_mode == "full" and payload.get("vector_context"):
             user_lines.append("Similar methods (FAISS):")
             user_lines.append(json.dumps(payload["vector_context"], indent=2))
-        user_lines.append("Use the exact citation strings from the evidence bundle.")
-        user_lines.append("If file path and lines are present, repeat them verbatim.")
+        if evidence_cards:
+            user_lines.append("Evidence cards:")
+            user_lines.append(json.dumps(evidence_cards, indent=2))
+            user_lines.append(
+                "Choose the single best evidence card by id. Do not invent or rewrite citation text."
+            )
         if structured_output:
-            user_lines.append('Return JSON only with keys "citation", "why", and "fix".')
+            if evidence_cards:
+                user_lines.append('Return JSON only with keys "evidence_id", "why", and "fix".')
+                user_lines.append(
+                    "The evidence_id must exactly match one of the provided evidence card ids."
+                )
+            else:
+                user_lines.append('Return JSON only with keys "citation", "why", and "fix".')
             user_lines.append("Do not output Thinking Process, Analysis, or any text before or after the JSON object.")
         else:
             user_lines.append("Do not output Thinking Process, Analysis, or any preamble before the answer.")
@@ -151,7 +176,43 @@ def build_explanation_prompt(
     return [{"role": "system", "content": system}, {"role": "user", "content": "\n".join(user_lines)}]
 
 
-def build_explanation_response_format() -> Dict[str, Any]:
+def build_explanation_response_format(*, evidence_cards: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
+    use_evidence_cards = bool(evidence_cards)
+    if use_evidence_cards:
+        properties: Dict[str, Any] = {
+            "evidence_id": {
+                "type": "string",
+                "enum": [str(card["id"]) for card in evidence_cards or []],
+                "description": "Choose exactly one evidence card id from the provided bundle.",
+            },
+            "why": {
+                "type": "string",
+                "description": "One concise sentence explaining why the finding matters.",
+            },
+            "fix": {
+                "type": "string",
+                "description": "One concise sentence describing the concrete remediation.",
+            },
+        }
+        required = ["evidence_id", "why", "fix"]
+    else:
+        properties = {
+            "citation": {
+                "type": "string",
+                "description": (
+                    "Exact citation using the provided file path and, when available, the exact provided line range."
+                ),
+            },
+            "why": {
+                "type": "string",
+                "description": "One concise sentence explaining why the finding matters.",
+            },
+            "fix": {
+                "type": "string",
+                "description": "One concise sentence describing the concrete remediation.",
+            },
+        }
+        required = ["citation", "why", "fix"]
     return {
         "type": "json_schema",
         "json_schema": {
@@ -160,23 +221,8 @@ def build_explanation_response_format() -> Dict[str, Any]:
             "schema": {
                 "type": "object",
                 "additionalProperties": False,
-                "properties": {
-                    "citation": {
-                        "type": "string",
-                        "description": (
-                            "Exact citation using the provided file path and, when available, the exact provided line range."
-                        ),
-                    },
-                    "why": {
-                        "type": "string",
-                        "description": "One concise sentence explaining why the finding matters.",
-                    },
-                    "fix": {
-                        "type": "string",
-                        "description": "One concise sentence describing the concrete remediation.",
-                    },
-                },
-                "required": ["citation", "why", "fix"],
+                "properties": properties,
+                "required": required,
             },
         },
     }

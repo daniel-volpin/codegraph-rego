@@ -53,6 +53,9 @@ class TestExplanationPrompting(unittest.TestCase):
         self.assertEqual(len(payload["graph_context"]["annotations"]), 5)
         self.assertEqual(len(payload["graph_context"]["notable_calls"]), 3)
         self.assertEqual(payload["graph_context"]["analysis_flags"], {"uses_md5_literal": True})
+        self.assertEqual(payload["evidence_cards"][0]["id"], "E1")
+        self.assertEqual(payload["evidence_cards"][0]["citation"], "src/Foo.java lines 10-18")
+        self.assertEqual(payload["evidence_cards"][1]["id"], "E2")
 
     def test_build_explanation_evidence_full_preserves_vector_context(self) -> None:
         payload = build_explanation_evidence(
@@ -64,6 +67,7 @@ class TestExplanationPrompting(unittest.TestCase):
         self.assertEqual(payload["evidence_mode"], "full")
         self.assertEqual(payload["vector_context"], ["org.example.Bar.hash()", "org.example.Baz.hash()"])
         self.assertIn("calls", payload["graph_context"])
+        self.assertEqual(payload["evidence_cards"][-1]["id"], "E3")
 
     def test_build_explanation_prompt_without_context_omits_graph_sections(self) -> None:
         messages = build_explanation_prompt(
@@ -76,6 +80,7 @@ class TestExplanationPrompting(unittest.TestCase):
         self.assertIn("Only the violation metadata is provided", messages[1]["content"])
         self.assertNotIn("Graph evidence summary", messages[1]["content"])
         self.assertNotIn("Similar methods (FAISS)", messages[1]["content"])
+        self.assertNotIn("Evidence cards:", messages[1]["content"])
 
     def test_build_explanation_prompt_enforces_final_answer_only(self) -> None:
         messages = build_explanation_prompt(
@@ -85,7 +90,8 @@ class TestExplanationPrompting(unittest.TestCase):
         )
 
         self.assertIn("Do not include thinking process", messages[0]["content"])
-        self.assertIn("Use the exact citation strings from the evidence bundle.", messages[1]["content"])
+        self.assertIn("Evidence cards:", messages[1]["content"])
+        self.assertIn("Choose the single best evidence card by id.", messages[1]["content"])
         self.assertIn("Do not output Thinking Process", messages[1]["content"])
 
     def test_build_explanation_prompt_structured_output_requires_json_only(self) -> None:
@@ -97,17 +103,27 @@ class TestExplanationPrompting(unittest.TestCase):
         )
 
         self.assertIn("Return a JSON object only", messages[0]["content"])
-        self.assertIn('Return JSON only with keys "citation", "why", and "fix".', messages[1]["content"])
+        self.assertIn('Return JSON only with keys "evidence_id", "why", and "fix".', messages[1]["content"])
+        self.assertIn("The evidence_id must exactly match one of the provided evidence card ids.", messages[1]["content"])
         self.assertIn("Do not output Thinking Process, Analysis, or any text before or after the JSON object.", messages[1]["content"])
 
-    def test_build_explanation_response_format_requires_citation_why_fix(self) -> None:
-        response_format = build_explanation_response_format()
+    def test_build_explanation_response_format_requires_evidence_id_when_cards_are_present(self) -> None:
+        response_format = build_explanation_response_format(
+            evidence_cards=[{"id": "E1"}, {"id": "E2"}],
+        )
 
         schema = response_format["json_schema"]["schema"]
         self.assertEqual(response_format["type"], "json_schema")
         self.assertTrue(response_format["json_schema"]["strict"])
-        self.assertEqual(schema["required"], ["citation", "why", "fix"])
+        self.assertEqual(schema["required"], ["evidence_id", "why", "fix"])
+        self.assertEqual(schema["properties"]["evidence_id"]["enum"], ["E1", "E2"])
         self.assertFalse(schema["additionalProperties"])
+
+    def test_build_explanation_response_format_requires_citation_without_cards(self) -> None:
+        response_format = build_explanation_response_format()
+
+        schema = response_format["json_schema"]["schema"]
+        self.assertEqual(schema["required"], ["citation", "why", "fix"])
 
 
 if __name__ == "__main__":

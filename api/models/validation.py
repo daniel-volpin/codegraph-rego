@@ -82,6 +82,7 @@ class PolicyExplainOneRequest(BaseModel):
 
 
 class PolicyExplanationStructured(BaseModel):
+    evidence_id: Optional[str] = None
     citation: str
     why: str
     fix: str

@@ -54,11 +54,16 @@ class TestLlmIntegration(unittest.TestCase):
 
     @patch(
         "codegraph.llm.integration.generate_chat_completion",
-        return_value='{"citation":"src/Foo.java lines 10-18","why":"Weak hash is insecure.","fix":"Use SHA-256."}',
+        return_value='{"evidence_id":"E1","why":"Weak hash is insecure.","fix":"Use SHA-256."}',
     )
     @patch("codegraph.llm.integration.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.integration.build_explanation_evidence",
+        return_value={"evidence_cards": [{"id": "E1", "citation": "src/Foo.java lines 10-18"}]},
+    )
     def test_generate_policy_explanation_structured_output_renders_plain_text(
         self,
+        _mock_build_evidence,
         mock_build_prompt,
         mock_generate_chat_completion,
     ) -> None:
@@ -89,14 +94,20 @@ class TestLlmIntegration(unittest.TestCase):
         self.assertEqual(kwargs["max_tokens"], 192)
         self.assertEqual(kwargs["stop"], ["<|im_end|>", "<|endoftext|>"])
         self.assertEqual(kwargs["response_format"]["type"], "json_schema")
+        self.assertEqual(kwargs["response_format"]["json_schema"]["schema"]["required"], ["evidence_id", "why", "fix"])
 
     @patch(
         "codegraph.llm.integration.generate_chat_completion",
-        return_value='{"citation":"src/Foo.java lines 10-18","why":"Weak hash is insecure.","fix":"Use SHA-256."}<|im_end|><|im_end|>',
+        return_value='{"evidence_id":"E1","why":"Weak hash is insecure.","fix":"Use SHA-256."}<|im_end|><|im_end|>',
     )
     @patch("codegraph.llm.integration.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.integration.build_explanation_evidence",
+        return_value={"evidence_cards": [{"id": "E1", "citation": "src/Foo.java lines 10-18"}]},
+    )
     def test_generate_policy_explanation_structured_output_strips_trailing_tokens(
         self,
+        _mock_build_evidence,
         _mock_build_prompt,
         _mock_generate_chat_completion,
     ) -> None:
@@ -119,11 +130,16 @@ class TestLlmIntegration(unittest.TestCase):
 
     @patch(
         "codegraph.llm.integration.generate_chat_completion",
-        return_value='Thinking Process:\n1. Analyze\n{"citation":"src/Foo.java lines 10-18","why":"Weak hash is insecure.","fix":"Use SHA-256."}\nExtra',
+        return_value='Thinking Process:\n1. Analyze\n{"evidence_id":"E1","why":"Weak hash is insecure.","fix":"Use SHA-256."}\nExtra',
     )
     @patch("codegraph.llm.integration.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.integration.build_explanation_evidence",
+        return_value={"evidence_cards": [{"id": "E1", "citation": "src/Foo.java lines 10-18"}]},
+    )
     def test_generate_policy_explanation_structured_extracts_json_object_from_preamble(
         self,
+        _mock_build_evidence,
         mock_build_prompt,
         mock_generate_chat_completion,
     ) -> None:
@@ -141,6 +157,7 @@ class TestLlmIntegration(unittest.TestCase):
         self.assertEqual(
             result,
             {
+                "evidence_id": "E1",
                 "citation": "src/Foo.java lines 10-18",
                 "why": "Weak hash is insecure.",
                 "fix": "Use SHA-256.",
@@ -161,8 +178,13 @@ class TestLlmIntegration(unittest.TestCase):
         return_value="Thinking Process:\n1. Analyze\n2. Explain",
     )
     @patch("codegraph.llm.integration.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.integration.build_explanation_evidence",
+        return_value={"evidence_cards": [{"id": "E1", "citation": "src/Foo.java lines 10-18"}]},
+    )
     def test_generate_policy_explanation_structured_rejects_invalid_payload(
         self,
+        _mock_build_evidence,
         _mock_build_prompt,
         _mock_generate_chat_completion,
     ) -> None:
@@ -183,8 +205,13 @@ class TestLlmIntegration(unittest.TestCase):
         return_value="Citation: src/Foo.java:10-18\nWhy: Weak hash is insecure.\nFix: Use SHA-256.",
     )
     @patch("codegraph.llm.integration.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.integration.build_explanation_evidence",
+        return_value={"evidence_cards": []},
+    )
     def test_generate_policy_explanation_structured_accepts_labeled_plain_text(
         self,
+        _mock_build_evidence,
         _mock_build_prompt,
         _mock_generate_chat_completion,
     ) -> None:
@@ -207,6 +234,33 @@ class TestLlmIntegration(unittest.TestCase):
                 "fix": "Use SHA-256.",
             },
         )
+
+    @patch(
+        "codegraph.llm.integration.generate_chat_completion",
+        return_value='{"evidence_id":"E99","why":"Weak hash is insecure.","fix":"Use SHA-256."}',
+    )
+    @patch("codegraph.llm.integration.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.integration.build_explanation_evidence",
+        return_value={"evidence_cards": [{"id": "E1", "citation": "src/Foo.java lines 10-18"}]},
+    )
+    def test_generate_policy_explanation_structured_rejects_unknown_evidence_id(
+        self,
+        _mock_build_evidence,
+        _mock_build_prompt,
+        _mock_generate_chat_completion,
+    ) -> None:
+        from codegraph.llm.integration import generate_policy_explanation_structured
+
+        violation = {"violation_id": "ISO-A.10-WEAK-HASH", "evidence": {}}
+        with self.assertRaisesRegex(ValueError, "unknown evidence_id"):
+            generate_policy_explanation_structured(
+                violation,
+                include_graph_context=True,
+                evidence_mode="lean",
+                max_tokens=192,
+                model="dummy-model",
+            )
 
 
 if __name__ == "__main__":

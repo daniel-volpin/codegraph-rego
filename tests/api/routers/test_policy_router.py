@@ -9,6 +9,7 @@ class TestPolicyRouter(unittest.IsolatedAsyncioTestCase):
     @patch(
         "api.routers.policy.generate_policy_explanation_structured",
         return_value={
+            "evidence_id": "E1",
             "citation": "src/main/java/org/example/Foo.java lines 10-18",
             "why": "The endpoint is reachable without authorization checks.",
             "fix": "Add a method-level authorization annotation.",
@@ -31,6 +32,7 @@ class TestPolicyRouter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             payload["explanation_structured"],
             {
+                "evidence_id": "E1",
                 "citation": "src/main/java/org/example/Foo.java lines 10-18",
                 "why": "The endpoint is reachable without authorization checks.",
                 "fix": "Add a method-level authorization annotation.",
