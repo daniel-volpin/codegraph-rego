@@ -10,9 +10,7 @@ from codegraph.benchmark_registry import (
     policy_catalog_payload_from_registry,
     iso_rules_payload_from_registry,
 )
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from tests._support import PROJECT_ROOT
 
 
 def _load_json(path: Path):

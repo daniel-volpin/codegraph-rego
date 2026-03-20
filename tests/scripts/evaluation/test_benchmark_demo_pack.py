@@ -5,12 +5,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from codegraph.benchmark_registry import framework_demo_category_ids, framework_demo_rule_ids, policy_catalog_payload_from_registry
+from tests._support import PROJECT_ROOT
 
 
-SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1] / "scripts" / "evaluation" / "build_benchmark_demo_pack.py"
-)
-MANIFEST_PATH = Path(__file__).resolve().parents[1] / "demo" / "benchmark-framework-demo" / "manifest.json"
+SCRIPT_PATH = PROJECT_ROOT / "scripts" / "evaluation" / "build_benchmark_demo_pack.py"
+MANIFEST_PATH = PROJECT_ROOT / "demo" / "benchmark-framework-demo" / "manifest.json"
 
 
 def _load_script_module():

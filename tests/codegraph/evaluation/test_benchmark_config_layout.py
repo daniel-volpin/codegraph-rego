@@ -1,10 +1,8 @@
 import unittest
-from pathlib import Path
 
 from codegraph.evaluation.benchmark import load_selection_config
+from tests._support import PROJECT_ROOT
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EXPANDED_BENCHMARK_CATEGORIES = {
     "crypto-md5",
     "hash-md5",
