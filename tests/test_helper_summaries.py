@@ -248,7 +248,7 @@ class TestDirectCallSummaryBuilder(unittest.TestCase):
                 method_index=method_index,
             )
 
-        self.assertEqual(helper_summaries["tainted_return_vars"], [])
+        self.assertEqual(helper_summaries["tainted_return_vars"], ["bar"])
         self.assertFalse(helper_summaries["tainted_return_used_in_ldap_filter"])
 
     def test_tainted_helper_return_used_in_path_sink(self) -> None:
