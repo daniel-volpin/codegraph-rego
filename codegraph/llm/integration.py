@@ -16,11 +16,17 @@ from typing import Any, Dict, List, Optional
 
 from codegraph.config import LLM_MODEL, LLM_CONCURRENCY
 from codegraph.llm.client import generate_chat_completion
-from codegraph.llm.explanation_prompting import build_explanation_prompt, build_explanation_response_format
+from codegraph.llm.evidence_cards import resolve_evidence_card
+from codegraph.llm.explanation_prompting import (
+    build_explanation_evidence,
+    build_explanation_prompt,
+    build_explanation_response_format,
+)
 from codegraph.common.snippet_utils import extract_code_snippet
 
 STRUCTURED_EXPLANATION_STOPS = ["<|im_end|>", "<|endoftext|>"]
 STRUCTURED_EXPLANATION_FIELDS = ("citation", "why", "fix")
+STRUCTURED_EXPLANATION_FIELDS_WITH_EVIDENCE = ("evidence_id", "why", "fix")
 
 
 def _read_code_snippet(file_path: str, needle: str, before: int = 8, after: int = 24) -> str:
@@ -94,9 +100,17 @@ def _parse_structured_explanation(content: str) -> Optional[Dict[str, str]]:
             payload = json.loads(json_text)
         except json.JSONDecodeError:
             payload = None
-        if isinstance(payload, dict) and set(payload.keys()) == set(STRUCTURED_EXPLANATION_FIELDS):
+        if isinstance(payload, dict) and frozenset(payload.keys()) in {
+            frozenset(STRUCTURED_EXPLANATION_FIELDS),
+            frozenset(STRUCTURED_EXPLANATION_FIELDS_WITH_EVIDENCE),
+        }:
+            expected_fields = (
+                STRUCTURED_EXPLANATION_FIELDS_WITH_EVIDENCE
+                if "evidence_id" in payload
+                else STRUCTURED_EXPLANATION_FIELDS
+            )
             parsed: Dict[str, str] = {}
-            for field in STRUCTURED_EXPLANATION_FIELDS:
+            for field in expected_fields:
                 value = payload.get(field)
                 if not isinstance(value, str):
                     return None
@@ -107,20 +121,48 @@ def _parse_structured_explanation(content: str) -> Optional[Dict[str, str]]:
             return parsed
 
     lowered = text.lower()
+    evidence_idx = lowered.find("evidence_id:")
     citation_idx = lowered.find("citation:")
     why_idx = lowered.find("why:")
     fix_idx = lowered.find("fix:")
-    if citation_idx == -1 or why_idx == -1 or fix_idx == -1:
-        return None
-    if not (citation_idx < why_idx < fix_idx):
-        return None
+    if evidence_idx != -1 and why_idx != -1 and fix_idx != -1 and evidence_idx < why_idx < fix_idx:
+        evidence_id = text[evidence_idx + len("evidence_id:") : why_idx].strip()
+        why = text[why_idx + len("why:") : fix_idx].strip()
+        fix = text[fix_idx + len("fix:") :].strip()
+        if evidence_id and why and fix:
+            return {"evidence_id": evidence_id, "why": why, "fix": fix}
 
-    citation = text[citation_idx + len("citation:") : why_idx].strip()
-    why = text[why_idx + len("why:") : fix_idx].strip()
-    fix = text[fix_idx + len("fix:") :].strip()
-    if not citation or not why or not fix:
-        return None
-    return {"citation": citation, "why": why, "fix": fix}
+    if citation_idx != -1 and why_idx != -1 and fix_idx != -1 and citation_idx < why_idx < fix_idx:
+        citation = text[citation_idx + len("citation:") : why_idx].strip()
+        why = text[why_idx + len("why:") : fix_idx].strip()
+        fix = text[fix_idx + len("fix:") :].strip()
+        if citation and why and fix:
+            return {"citation": citation, "why": why, "fix": fix}
+    return None
+
+
+def _resolve_structured_explanation_citation(
+    parsed: Dict[str, str],
+    *,
+    evidence_cards: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    citation = parsed.get("citation")
+    evidence_id = parsed.get("evidence_id")
+    if evidence_id:
+        card = resolve_evidence_card(evidence_cards, evidence_id)
+        if card is None:
+            raise ValueError("LLM returned an unknown evidence_id.")
+        citation = card["citation"]
+    if not citation:
+        raise ValueError("LLM returned an invalid structured explanation payload.")
+    result = {
+        "citation": citation,
+        "why": parsed["why"],
+        "fix": parsed["fix"],
+    }
+    if evidence_id:
+        result["evidence_id"] = evidence_id
+    return result
 
 
 def render_policy_explanation_structured(payload: Dict[str, str]) -> str:
@@ -190,6 +232,11 @@ def generate_policy_explanation(
     """
     Generate a single explanation with optional graph context for evaluation runners.
     """
+    evidence_payload = build_explanation_evidence(
+        violation,
+        include_graph_context=include_graph_context,
+        evidence_mode=evidence_mode,
+    )
     messages = build_explanation_prompt(
         violation,
         include_graph_context=include_graph_context,
@@ -201,7 +248,11 @@ def generate_policy_explanation(
         model=model or LLM_MODEL,
         max_tokens=max_tokens,
         stop=STRUCTURED_EXPLANATION_STOPS if structured_output else None,
-        response_format=build_explanation_response_format() if structured_output else None,
+        response_format=(
+            build_explanation_response_format(evidence_cards=evidence_payload.get("evidence_cards"))
+            if structured_output
+            else None
+        ),
         raise_on_error=raise_on_error,
     )
     if not structured_output:
@@ -209,7 +260,12 @@ def generate_policy_explanation(
     parsed = _parse_structured_explanation(response)
     if parsed is None:
         raise ValueError("LLM returned an invalid structured explanation payload.")
-    return render_policy_explanation_structured(parsed)
+    return render_policy_explanation_structured(
+        _resolve_structured_explanation_citation(
+            parsed,
+            evidence_cards=evidence_payload.get("evidence_cards") or [],
+        )
+    )
 
 
 def generate_policy_explanation_structured(
@@ -221,6 +277,11 @@ def generate_policy_explanation_structured(
     max_tokens: int | None = None,
     raise_on_error: bool = False,
 ) -> Dict[str, str]:
+    evidence_payload = build_explanation_evidence(
+        violation,
+        include_graph_context=include_graph_context,
+        evidence_mode=evidence_mode,
+    )
     messages = build_explanation_prompt(
         violation,
         include_graph_context=include_graph_context,
@@ -232,10 +293,13 @@ def generate_policy_explanation_structured(
         model=model or LLM_MODEL,
         max_tokens=max_tokens,
         stop=STRUCTURED_EXPLANATION_STOPS,
-        response_format=build_explanation_response_format(),
+        response_format=build_explanation_response_format(evidence_cards=evidence_payload.get("evidence_cards")),
         raise_on_error=raise_on_error,
     )
     parsed = _parse_structured_explanation(response)
     if parsed is None:
         raise ValueError("LLM returned an invalid structured explanation payload.")
-    return parsed
+    return _resolve_structured_explanation_citation(
+        parsed,
+        evidence_cards=evidence_payload.get("evidence_cards") or [],
+    )

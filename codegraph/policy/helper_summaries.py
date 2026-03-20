@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
-from codegraph.policy.source_analysis_core import AssignmentStateAnalyzer, PATH_LDAP_UNTRUSTED_INPUT_PATTERNS
+from codegraph.policy.analysis.state import AssignmentStateAnalyzer
+from codegraph.policy.source_analysis_core import PATH_LDAP_UNTRUSTED_INPUT_PATTERNS, UNTRUSTED_INPUT_PATTERNS
 
 CALL_ASSIGNMENT_RE = re.compile(
     r"(?:final\s+)?(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>]*\(\)|[A-Za-z_][A-Za-z0-9_$.<>]*)\s*\.\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(",
@@ -79,7 +80,7 @@ class HelperReturnSummary:
 
 class HelperMethodAnalyzer:
     def __init__(self) -> None:
-        self._assignment_analyzer = AssignmentStateAnalyzer()
+        self._assignment_analyzer = AssignmentStateAnalyzer(UNTRUSTED_INPUT_PATTERNS)
         self._collection_resolver = HelperCollectionResolver()
 
     def summarize(self, source_code: str) -> HelperReturnSummary:
