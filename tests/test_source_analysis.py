@@ -15,6 +15,20 @@ class TestSourceAnalysis(unittest.TestCase):
         self.assertTrue(flags["md5_detected"])
         self.assertTrue(flags["md5_variable"])
 
+    def test_sha1_literal(self) -> None:
+        source = 'MessageDigest.getInstance("SHA1", "SUN");'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["weak_hash_detected"])
+        self.assertTrue(flags["weak_hash_literal"])
+        self.assertFalse(flags["md5_detected"])
+
+    def test_sha1_variable(self) -> None:
+        source = 'String algo = "SHA-1"; MessageDigest.getInstance(algo);'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["weak_hash_detected"])
+        self.assertTrue(flags["weak_hash_variable"])
+        self.assertFalse(flags["md5_variable"])
+
     def test_weak_cipher_des(self) -> None:
         source = 'Cipher.getInstance("DES");'
         flags = analyze_crypto_indicators(source)
@@ -75,6 +89,15 @@ class TestSourceAnalysis(unittest.TestCase):
 
     def test_path_traversal_two_arg_file_detected(self) -> None:
         source = 'String bar = request.getHeader("x"); new java.io.File(bar, "/Test.txt");'
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["path_traversal_detected"])
+
+    def test_path_traversal_nested_parent_child_file_detected(self) -> None:
+        source = (
+            'String[] values = request.getParameterValues("x");'
+            'String bar = values[0];'
+            'new java.io.File(new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR), bar);'
+        )
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
@@ -350,6 +373,22 @@ class TestSourceAnalysis(unittest.TestCase):
         self.assertTrue(flags["command_env_only_tainted"])
         self.assertFalse(flags["command_injection_detected"])
 
+    def test_command_switch_fallthrough_args_detected(self) -> None:
+        source = (
+            'String param = request.getParameter("x");'
+            'String guess = "ABC";'
+            "char switchTarget = guess.charAt(2);"
+            "String bar;"
+            "switch (switchTarget) { case 'A': bar = param; break; case 'B': bar = \"safe\"; break; case 'C': case 'D': bar = param; break; default: bar = \"safe\"; break; }"
+            'String[] args = {"sh", "-c", "ls " + bar};'
+            'String[] argsEnv = {"foo=bar"};'
+            "Runtime.getRuntime().exec(args, argsEnv, new java.io.File(System.getProperty(\"user.dir\")));"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["command_exec_string_tainted"])
+        self.assertTrue(flags["command_exec_args_tainted"])
+        self.assertTrue(flags["command_injection_detected"])
+
     def test_command_constant_if_else_safe_branch_not_flagged(self) -> None:
         source = (
             'String param = request.getHeaders("x").nextElement();'
@@ -411,6 +450,32 @@ class TestSourceAnalysis(unittest.TestCase):
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["ldap_injection_detected"])
 
+    def test_ldap_safe_constant_ternary_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            "int num = 106;"
+            'String bar = (7 * 18) + num > 200 ? "This_should_always_happen" : param;'
+            'String filter = "(&(uid=" + bar + "))";'
+            "InitialDirContext idc = null; idc.search(base, filter, filters, sc);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["ldap_injection_detected"])
+        self.assertTrue(flags["ldap_filter_uses_safe_constant"])
+
+    def test_ldap_safe_constant_switch_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String guess = "ABC";'
+            "char switchTarget = guess.charAt(1);"
+            "String bar = param;"
+            "switch (switchTarget) { case 'A': bar = param; break; case 'B': bar = \"bob\"; break; case 'C': case 'D': bar = param; break; default: bar = \"bob's your uncle\"; break; }"
+            'String filter = "(&(uid=" + bar + "))";'
+            "InitialDirContext idc = null; idc.search(base, filter, sc);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["ldap_injection_detected"])
+        self.assertTrue(flags["ldap_filter_uses_safe_constant"])
+
     def test_xpath_injection_builder_detected(self) -> None:
         source = (
             'StringBuilder expr = new StringBuilder("/Employees/Employee[@emplid=\'");'
@@ -447,10 +512,87 @@ class TestSourceAnalysis(unittest.TestCase):
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["sql_dynamic_query_detected"])
 
+    def test_sql_dynamic_query_query_for_object_detected(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String sql = "select * from users where password=\'" + param + "\'";'
+            "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.queryForObject(sql, new Object[] {}, String.class);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_dynamic_query_detected"])
+        self.assertTrue(flags["sql_query_uses_tainted_input"])
+
+    def test_sql_dynamic_query_batch_update_detected(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String sql = "update users set password=\'" + param + "\'";'
+            "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.batchUpdate(sql);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_dynamic_query_detected"])
+        self.assertTrue(flags["sql_query_uses_tainted_input"])
+
+    def test_sql_constant_ternary_safe_branch_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            "int num = 106;"
+            'String bar = (7 * 18) + num > 200 ? "This_should_always_happen" : param;'
+            'String sql = "insert into users (username, password) values (\'foo\', \'" + bar + "\')";'
+            "statement.executeUpdate(sql);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["sql_dynamic_query_detected"])
+        self.assertTrue(flags["sql_query_uses_safe_constant"])
+
+    def test_sql_map_safe_override_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String bar = "safe!";'
+            "java.util.HashMap<String, Object> map = new java.util.HashMap<String, Object>();"
+            'map.put("keyA", "a_Value");'
+            'map.put("keyB", param);'
+            'bar = (String) map.get("keyB");'
+            'bar = (String) map.get("keyA");'
+            'String sql = "select * from users where password=\'" + bar + "\'";'
+            "connection.prepareStatement(sql);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["sql_dynamic_query_detected"])
+        self.assertTrue(flags["sql_query_uses_safe_constant"])
+
     def test_xpath_injection_detected(self) -> None:
         source = 'String expr = "/Employees/Employee[@emplid=\'" + request.getHeader("x") + "\']"; XPathFactory.newInstance(); xp.evaluate(expr, xmlDocument);'
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["xpath_injection_detected"])
+
+    def test_xpath_constant_if_else_safe_branch_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            "String bar;"
+            "int num = 86;"
+            'if ((7 * 42) - num > 200) bar = "This_should_always_happen"; else bar = param;'
+            'String expression = "/Employees/Employee[@emplid=\'" + bar + "\']";'
+            "XPathFactory.newInstance(); xp.evaluate(expression, xmlDocument);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["xpath_injection_detected"])
+        self.assertTrue(flags["xpath_query_uses_safe_constant"])
+
+    def test_xpath_map_safe_override_not_flagged(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String bar = "safe!";'
+            "java.util.HashMap<String, Object> map = new java.util.HashMap<String, Object>();"
+            'map.put("keyA", "a_Value");'
+            'map.put("keyB", param);'
+            'bar = (String) map.get("keyB");'
+            'bar = (String) map.get("keyA");'
+            'String expression = "/Employees/Employee[@emplid=\'" + bar + "\']";'
+            "XPathFactory.newInstance(); xp.compile(expression).evaluate(xmlDocument, javax.xml.xpath.XPathConstants.NODESET);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["xpath_injection_detected"])
+        self.assertTrue(flags["xpath_query_uses_safe_constant"])
 
     def test_sql_prepare_call_flags(self) -> None:
         source = 'java.sql.CallableStatement statement = connection.prepareCall(sql);'

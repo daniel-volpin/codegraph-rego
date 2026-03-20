@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +17,20 @@ from api.routers.upload import router as upload_router
 LOGGER = logging.getLogger("codegraph.app")
 
 
+def _default_startup_status() -> dict[str, Any]:
+    return {
+        "ready": False,
+        "phase": "pending",
+        "checks": {
+            "ingestion": False,
+            "signature_map": False,
+            "faiss_index": False,
+            "embedding_model": False,
+        },
+        "errors": {},
+    }
+
+
 def _configure_runtime() -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logging.basicConfig(
@@ -25,33 +40,62 @@ def _configure_runtime() -> None:
     )
 
 
-async def _preload_resources() -> None:
+def _load_startup_dependencies() -> dict[str, Any]:
+    from codegraph.config import settings
+    from codegraph.ingestion.service import ingest
+    from codegraph.search.hybrid import load_embedding_model, load_faiss_index, load_signature_map
+
+    return {
+        "embedding_model_name": settings.embedding_model_name,
+        "faiss_index_path": settings.faiss_index_path,
+        "java_root_dir": settings.java_root_dir,
+        "signature_map_path": settings.signature_map_path,
+        "signature_map_path_full": settings.signature_map_path_full,
+        "ingest": ingest,
+        "load_embedding_model": load_embedding_model,
+        "load_faiss_index": load_faiss_index,
+        "load_signature_map": load_signature_map,
+    }
+
+
+async def _preload_resources(application: FastAPI) -> None:
+    startup_status = _default_startup_status()
+    startup_status["phase"] = "running"
+    application.state.startup_status = startup_status
     try:
-        from codegraph.config import (
-            EMBEDDING_MODEL_NAME,
-            FAISS_INDEX_PATH,
-            JAVA_ROOT_DIR,
-            SIGNATURE_MAP_PATH,
-            SIGNATURE_MAP_PATH_FULL,
-        )
-        from codegraph.ingestion.service import ingest
-        from codegraph.search.hybrid import load_embedding_model, load_faiss_index, load_signature_map
+        deps = _load_startup_dependencies()
 
         LOGGER.info("Starting automatic graph synchronization...")
         try:
-            ingest(JAVA_ROOT_DIR, sync=True)
+            deps["ingest"](deps["java_root_dir"], sync=True)
+            startup_status["checks"]["ingestion"] = True
         except Exception as exc:
             LOGGER.error("Startup ingestion failed: %s", exc)
+            startup_status["errors"]["ingestion"] = str(exc)
 
         try:
-            load_signature_map(SIGNATURE_MAP_PATH_FULL)
+            deps["load_signature_map"](deps["signature_map_path_full"])
+            startup_status["checks"]["signature_map"] = True
         except Exception:
-            load_signature_map(SIGNATURE_MAP_PATH)
-        load_faiss_index(FAISS_INDEX_PATH)
-        load_embedding_model(EMBEDDING_MODEL_NAME)
-        LOGGER.info("Search resources preloaded successfully.")
+            deps["load_signature_map"](deps["signature_map_path"])
+            startup_status["checks"]["signature_map"] = True
+
+        deps["load_faiss_index"](deps["faiss_index_path"])
+        startup_status["checks"]["faiss_index"] = True
+
+        deps["load_embedding_model"](deps["embedding_model_name"])
+        startup_status["checks"]["embedding_model"] = True
+        if all(startup_status["checks"].values()):
+            LOGGER.info("Search resources preloaded successfully.")
     except Exception as exc:
+        startup_status["errors"]["startup"] = str(exc)
         LOGGER.warning("[startup] Skipping search preload: %s", exc)
+    finally:
+        startup_status["ready"] = all(startup_status["checks"].values())
+        startup_status["phase"] = "ready" if startup_status["ready"] else "degraded"
+        if not startup_status["ready"]:
+            LOGGER.warning("Application startup completed in degraded mode: %s", startup_status["errors"])
+        application.state.startup_status = startup_status
 
 
 async def _generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -61,10 +105,13 @@ async def _generic_exception_handler(request: Request, exc: Exception) -> JSONRe
 
 def create_app() -> FastAPI:
     _configure_runtime()
+    from codegraph.config import CORS_ALLOWED_ORIGINS
+
     application = FastAPI()
+    application.state.startup_status = _default_startup_status()
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=CORS_ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -76,7 +123,10 @@ def create_app() -> FastAPI:
     application.include_router(policy_router)
     application.include_router(remediation_router)
 
-    application.add_event_handler("startup", _preload_resources)
+    async def _startup() -> None:
+        await _preload_resources(application)
+
+    application.add_event_handler("startup", _startup)
     application.add_exception_handler(Exception, _generic_exception_handler)
     return application
 

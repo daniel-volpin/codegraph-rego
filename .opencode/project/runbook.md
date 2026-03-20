@@ -2,6 +2,33 @@
 
 ## What To Run
 
+### Branch runtime hygiene
+```bash
+.venv/bin/ruff check .
+UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest -q
+cd frontend && yarn build
+```
+
+### Branch detection smoke
+```bash
+OWASP_BENCHMARK_ROOT="/abs/path/to/BenchmarkJava" \
+.venv/bin/python3 run_benchmark_eval.py \
+  --config configs/benchmark/smoke_mixed.json \
+  --output-dir outputs/branch_baseline_recovery/detection_smoke \
+  --table-format md
+```
+
+### Branch bounded remediation smoke
+```bash
+OWASP_BENCHMARK_ROOT="/abs/path/to/BenchmarkJava" \
+REMEDIATION_LLM_MODEL="qwen/qwen3-coder-30b" \
+LLM_ENABLE_THINKING=false \
+.venv/bin/python3 run_remediation_eval.py \
+  --config configs/benchmark/remediation_bounded_smoke.json \
+  --output-dir outputs/branch_baseline_recovery/remediation_bounded_smoke \
+  --sample-size 3
+```
+
 ### Detection full
 ```bash
 OWASP_BENCHMARK_ROOT="/abs/path/to/BenchmarkJava" \
@@ -33,7 +60,7 @@ REMEDIATION_LLM_MODEL="qwen/qwen3-coder-30b" \
 LLM_ENABLE_THINKING=false \
 .venv/bin/python3 run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
-  --output-dir outputs/repro_supported_medium_branch_benchmarktest01017_fix \
+  --output-dir outputs/branch_baseline_recovery/remediation_supported_medium \
   --sample-size 60
 ```
 
@@ -45,6 +72,9 @@ LLM_ENABLE_THINKING=false \
 
 ## Output Locations
 
+- Branch detection smoke: `outputs/branch_baseline_recovery/detection_smoke/`
+- Branch bounded remediation smoke: `outputs/branch_baseline_recovery/remediation_bounded_smoke/`
+- Branch supported remediation medium: `outputs/branch_baseline_recovery/remediation_supported_medium/`
 - Detection: `outputs/detection_calibration_path_precision_v4/`
 - Explanation: `outputs/thesis_final_explanation_full/`
 - Remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
@@ -72,6 +102,7 @@ The default report compares:
 - authoritative compile-backed supported remediation
 - current-main remediation regression reference
 - current compile-backed bounded remediation
+- branch-local smoke and supported-medium reruns when present under `outputs/branch_baseline_recovery/`
 
 ## Which Results To Cite
 
@@ -79,6 +110,7 @@ The default report compares:
   - `outputs/detection_calibration_path_precision_v4/`
   - `outputs/thesis_final_explanation_full/`
   - `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
+- For baseline-recovery branch work-in-progress, keep new reruns under `outputs/branch_baseline_recovery/` until they are explicitly accepted as replacement evidence.
 - Treat `outputs/final_full_remediation_current_main/` as a regression/reference run, not the headline remediation baseline.
 
 ## Real-World Case Studies
