@@ -9,194 +9,150 @@ ecb_pattern := "cipher.getinstance(\"aes/ecb"
 random_ctor_pattern := "new random("
 math_random_pattern := "math.random("
 threadlocal_random_pattern := "threadlocalrandom.current("
-sha1prng_pattern := "securerandom.getinstance(\"sha1prng\")"
+
+weak_hash_patterns := {md5_pattern, sha1_pattern, sha_dash_pattern}
+weak_cipher_patterns := {des_pattern, rc4_pattern, ecb_pattern}
+insecure_random_patterns := {random_ctor_pattern, math_random_pattern, threadlocal_random_pattern}
 
 random_context if {
-  servlet_context
+	servlet_context
 }
 
 random_context if {
-  benchmark_context
+	benchmark_context
 }
 
-calls_weak_hash if {
-  calls := input.graph_context.calls
-  calls != null
-  call := calls[_]
-  call != null
-  contains(lower(call), md5_pattern)
+source_contains(pattern) if {
+	input.source_code != null
+	contains(lower(input.source_code), pattern)
 }
 
-calls_weak_hash if {
-  calls := input.graph_context.calls
-  calls != null
-  call := calls[_]
-  call != null
-  contains(lower(call), sha1_pattern)
+source_contains_any(patterns) if {
+	some pattern in patterns
+	source_contains(pattern)
 }
 
-calls_weak_hash if {
-  calls := input.graph_context.calls
-  calls != null
-  call := calls[_]
-  call != null
-  contains(lower(call), sha_dash_pattern)
+graph_calls_contain(pattern) if {
+	calls := input.graph_context.calls
+	calls != null
+	call := calls[_]
+	call != null
+	contains(lower(call), pattern)
+}
+
+graph_calls_contain_any(patterns) if {
+	some pattern in patterns
+	graph_calls_contain(pattern)
+}
+
+flag_enabled(name) if {
+	flags := object.get(input, "analysis_flags", {})
+	object.get(flags, name, false) == true
 }
 
 calls_md5 if {
-  calls := input.graph_context.calls
-  calls != null
-  call := calls[_]
-  call != null
-  contains(lower(call), md5_pattern)
+	graph_calls_contain(md5_pattern)
+}
+
+calls_weak_hash if {
+	graph_calls_contain_any(weak_hash_patterns)
 }
 
 source_md5 if {
-  input.source_code != null
-  contains(lower(input.source_code), md5_pattern)
+	source_contains(md5_pattern)
 }
 
 source_weak_hash if {
-  input.source_code != null
-  contains(lower(input.source_code), md5_pattern)
-}
-
-source_weak_hash if {
-  input.source_code != null
-  contains(lower(input.source_code), sha1_pattern)
-}
-
-source_weak_hash if {
-  input.source_code != null
-  contains(lower(input.source_code), sha_dash_pattern)
+	source_contains_any(weak_hash_patterns)
 }
 
 analysis_md5 if {
-  flags := input.analysis_flags
-  flags.md5_detected == true
+	flag_enabled("md5_detected")
 }
 
 analysis_weak_hash if {
-  flags := input.analysis_flags
-  flags.weak_hash_detected == true
+	flag_enabled("weak_hash_detected")
 }
 
 analysis_weak_cipher if {
-  flags := input.analysis_flags
-  flags.weak_cipher_detected == true
+	flag_enabled("weak_cipher_detected")
 }
 
 source_weak_cipher if {
-  input.source_code != null
-  src := lower(input.source_code)
-  contains(src, des_pattern)
-}
-
-source_weak_cipher if {
-  input.source_code != null
-  src := lower(input.source_code)
-  contains(src, rc4_pattern)
-}
-
-source_weak_cipher if {
-  input.source_code != null
-  src := lower(input.source_code)
-  contains(src, ecb_pattern)
+	source_contains_any(weak_cipher_patterns)
 }
 
 source_insecure_random if {
-  flags := input.analysis_flags
-  flags == null
-  input.source_code != null
-  src := lower(input.source_code)
-  contains(src, random_ctor_pattern)
-}
-
-source_insecure_random if {
-  flags := input.analysis_flags
-  flags == null
-  input.source_code != null
-  src := lower(input.source_code)
-  contains(src, math_random_pattern)
-}
-
-source_insecure_random if {
-  flags := input.analysis_flags
-  flags == null
-  input.source_code != null
-  src := lower(input.source_code)
-  contains(src, threadlocal_random_pattern)
+	input.analysis_flags == null
+	source_contains_any(insecure_random_patterns)
 }
 
 analysis_insecure_random if {
-  flags := input.analysis_flags
-  flags.insecure_random_detected == true
+	flag_enabled("insecure_random_detected")
 }
 
 calls_insecure_random if {
-  calls := input.graph_context.calls
-  calls != null
-  call := calls[_]
-  call != null
-  contains(lower(call), "java.util.random")
+	graph_calls_contain("java.util.random")
 }
 
 insecure_random if {
-  random_context
-  source_insecure_random
+	random_context
+	source_insecure_random
 }
 
 insecure_random if {
-  random_context
-  calls_insecure_random
+	random_context
+	calls_insecure_random
 }
 
 insecure_random if {
-  random_context
-  analysis_insecure_random
+	random_context
+	analysis_insecure_random
+}
+
+weak_hash_detected if {
+	calls_md5
+}
+
+weak_hash_detected if {
+	source_md5
+}
+
+weak_hash_detected if {
+	analysis_md5
+}
+
+weak_hash_detected if {
+	analysis_weak_hash
+}
+
+weak_hash_detected if {
+	calls_weak_hash
+}
+
+weak_hash_detected if {
+	source_weak_hash
+}
+
+weak_cipher_detected if {
+	analysis_weak_cipher
+}
+
+weak_cipher_detected if {
+	source_weak_cipher
 }
 
 violations[v] if {
-  calls_md5
-  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
+	weak_hash_detected
+	v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
 }
 
 violations[v] if {
-  source_md5
-  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
+	weak_cipher_detected
+	v := violation_record("ISO-A.10-WEAK-CRYPTO", "Weak cipher usage detected")
 }
 
 violations[v] if {
-  analysis_md5
-  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
-}
-
-violations[v] if {
-  analysis_weak_hash
-  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
-}
-
-violations[v] if {
-  calls_weak_hash
-  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
-}
-
-violations[v] if {
-  source_weak_hash
-  v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
-}
-
-violations[v] if {
-  analysis_weak_cipher
-  v := violation_record("ISO-A.10-WEAK-CRYPTO", "Weak cipher usage detected")
-}
-
-violations[v] if {
-  source_weak_cipher
-  v := violation_record("ISO-A.10-WEAK-CRYPTO", "Weak cipher usage detected")
-}
-
-violations[v] if {
-  insecure_random
-  v := violation_record("ISO-A.10-WEAK-RANDOM", "Insecure randomness usage detected")
+	insecure_random
+	v := violation_record("ISO-A.10-WEAK-RANDOM", "Insecure randomness usage detected")
 }
