@@ -11,8 +11,7 @@ from codegraph.evaluation.benchmark import (
     select_testcases,
     stage_benchmark_subset,
 )
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from tests._support import PROJECT_ROOT
 
 
 class TestBenchmarkSelectionCoverage(unittest.TestCase):

@@ -5,8 +5,9 @@ import json
 import sys
 from pathlib import Path
 
+from tests._support import PROJECT_ROOT
 
-HELPER_PATH = Path(__file__).resolve().parents[1] / "scripts" / "evaluation" / "reporting_helpers.py"
+HELPER_PATH = PROJECT_ROOT / "scripts" / "evaluation" / "reporting_helpers.py"
 sys.path.insert(0, str(HELPER_PATH.parent))
 
 SPEC = importlib.util.spec_from_file_location("reporting_helpers", HELPER_PATH)

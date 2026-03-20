@@ -3,8 +3,6 @@
 # Default target
 .DEFAULT_GOAL := help
 
-DOCKER_COMPOSE ?= $(shell if command -v docker >/dev/null 2>&1; then printf '%s' 'docker compose'; elif command -v podman >/dev/null 2>&1; then printf '%s' 'podman compose'; fi)
-
 install: ## Install dependencies using uv and yarn
 	@echo "Installing backend dependencies..."
 	@uv sync
@@ -12,13 +10,13 @@ install: ## Install dependencies using uv and yarn
 	@cd frontend && yarn install
 
 backend-dev: ## Start Neo4j via Docker Compose and run the backend locally
-	@DOCKER_COMPOSE_CMD="$(DOCKER_COMPOSE)" ./scripts/start_backend_dev.sh
+	@./scripts/start_backend_dev.sh
 
 dev: ## Run the application in development mode (backend + frontend)
 	@echo "Starting development servers..."
 	@backend_pid=''; frontend_pid=''; \
 	trap 'status=$$?; trap - INT TERM EXIT; if [ -n "$$backend_pid" ]; then kill "$$backend_pid" 2>/dev/null || true; fi; if [ -n "$$frontend_pid" ]; then kill "$$frontend_pid" 2>/dev/null || true; fi; wait "$$backend_pid" 2>/dev/null || true; wait "$$frontend_pid" 2>/dev/null || true; exit $$status' INT TERM EXIT; \
-	DOCKER_COMPOSE_CMD="$(DOCKER_COMPOSE)" ./scripts/start_backend_dev.sh & backend_pid=$$!; \
+	./scripts/start_backend_dev.sh & backend_pid=$$!; \
 	cd frontend && yarn dev --port 5173 & frontend_pid=$$!; \
 	while kill -0 "$$backend_pid" 2>/dev/null && kill -0 "$$frontend_pid" 2>/dev/null; do \
 		sleep 1; \
@@ -53,16 +51,16 @@ format: ## Format code (ruff for backend, prettier for frontend)
 	@cd frontend && npx prettier --write "src/**/*.{ts,tsx,css}"
 
 neo4j-up: ## Start the local Neo4j dependency only
-	@$(DOCKER_COMPOSE) up -d neo4j
+	@./scripts/dev_container.sh compose up -d neo4j
 
 neo4j-down: ## Stop the local Neo4j dependency
-	@$(DOCKER_COMPOSE) stop neo4j
+	@./scripts/dev_container.sh compose stop neo4j
 
 docker-up: ## Start Docker Compose services
-	@$(DOCKER_COMPOSE) up -d --build
+	@./scripts/dev_container.sh compose up -d --build
 
 docker-down: ## Stop Docker Compose services
-	@$(DOCKER_COMPOSE) down
+	@./scripts/dev_container.sh compose down
 
 clean: ## Remove build artifacts and temporary files
 	@echo "Removing Python caches..."
