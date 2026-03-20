@@ -131,8 +131,6 @@ const normalizeViolation = (item: RawViolation): ViolationRow => {
     targetMethod,
     filePath,
     reason: asString(item.reason ?? item.description),
-    // Prefer an empty string over the "—" placeholder so we can render an explicit
-    // "snippet unavailable" message in the UI.
     snippet: asString(item.code_snippet ?? evidenceSnippet ?? item.updated_source_code ?? "", ""),
     remediation,
     raw: item,
@@ -391,8 +389,6 @@ const PolicyPage = () => {
     }));
   }, []);
 
-  // Cache per-violation side-results (preview/apply/explain) in React Query so they
-  // persist across route navigation, but still GC after a while.
   const previewByIdQuery = useQuery<Record<string, RemediationPreviewResponse>>({
     queryKey: ["policy:previewById"],
     queryFn: async () => ({}),
@@ -434,7 +430,6 @@ const PolicyPage = () => {
   const lastEvalToastAtRef = useRef(initialEvalSnapshotRef.current[viewPreset]?.savedAt ?? 0);
   const lastEvalErrorToastAtRef = useRef(0);
 
-  // Keep the last evaluation results in the React Query cache so they survive route navigation.
   const evalQuery = useQuery<PolicyEvaluateResponse, Error>({
     queryKey: ["policyEvaluation:last", viewPreset],
     queryFn: () =>
@@ -600,8 +595,6 @@ const PolicyPage = () => {
   const hasEvaluationResult = Boolean(evalQuery.data || evalQuery.dataUpdatedAt);
 
   const colWidthClass = (colId: string) => {
-    // Needs table-fixed on the table for these widths to be honored.
-    // Use percentages so the table always fits the available main-content width.
     if (colId === "expander") return "w-[4%]";
     if (colId === "ruleId") return "w-[24%]";
     if (colId === "severity") return "w-[10%]";
@@ -672,7 +665,6 @@ const PolicyPage = () => {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
-    // We use expansion as a "details row" pattern, not for hierarchical sub-rows.
     getRowCanExpand: () => true,
   });
 

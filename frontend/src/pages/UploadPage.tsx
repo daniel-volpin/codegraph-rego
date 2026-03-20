@@ -42,7 +42,6 @@ const UploadPage = () => {
       } catch {
         /* ignore storage errors */
       }
-      // New codebase ingested: clear cached policy results so we don't show stale evaluations.
       queryClient.removeQueries({ queryKey: ["policyEvaluation:last"] });
       queryClient.removeQueries({ queryKey: ["policy:previewById"] });
       queryClient.removeQueries({ queryKey: ["policy:applyById"] });
