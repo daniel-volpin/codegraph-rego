@@ -26,7 +26,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
         with:
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Detect changed paths
         id: filter
