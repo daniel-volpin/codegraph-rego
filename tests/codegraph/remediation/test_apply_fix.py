@@ -5,7 +5,11 @@ from unittest.mock import patch
 
 from codegraph.remediation import apply_flow as apply_flow_mod
 
-from tests.codegraph.remediation._test_helpers import RemediationTestBase
+from tests.codegraph.remediation._test_helpers import (
+    RemediationTestBase,
+    ProposalResponseBuilder,
+    ViolationContextBuilder,
+)
 
 
 class ApplyFixTests(RemediationTestBase):
@@ -15,38 +19,18 @@ class ApplyFixTests(RemediationTestBase):
             src_path = Path(tmp) / "Example.java"
             src_path.write_text("class Example { void hash() {} }\n", encoding="utf-8")
 
-            remediation = svc_mod.RemediationService(llm_client=lambda *_args, **_kwargs: "")
-            remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
-                "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
-                "target_method": "com.example.Foo.hash()",
-                "file_path": src_path.as_posix(),
-                "rule_id": "ISO-A.10-WEAK-HASH",
-                "evidence": {"source_code": "public void hash() { }", "graph_context": {}, "vector_context": []},
-                "catalog_entry": {"title": "Cryptography (Weak Hash)"},
-                "baseline_violations": [],
-                "exact_method_source": "public void hash() { }",
-            }
-            remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
-            remediation.propose_method_edits = (  # type: ignore[method-assign]
-                lambda *_args, **_kwargs: {
-                    "decision": "apply_edits",
-                    "edits": None,
-                    "replacement_method_lines": None,
-                    "replacement_method_code": None,
-                    "reason": "",
-                    "schema_error": "invalid_java_syntax: expected \")\"",
-                    "generation": {
-                        "decision": "apply_edits",
-                        "edits": None,
-                        "replacement_method_lines": None,
-                        "replacement_method_code": None,
-                        "reason": "",
-                        "raw_response_valid": False,
-                        "schema_error": "invalid_java_syntax: expected \")\"",
-                    },
-                    "raw_output": '{"decision":"apply_edits"}',
-                }
+            context = (
+                ViolationContextBuilder()
+                .with_file_path(src_path.as_posix())
+                .build()
             )
+
+            error_response = ProposalResponseBuilder().with_error("invalid_java_syntax: expected \")\"").build()
+
+            remediation = svc_mod.RemediationService(llm_client=lambda *_args, **_kwargs: "")
+            remediation.get_violation_context = lambda *_args, **_kwargs: context  # type: ignore[method-assign]
+            remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
+            remediation.propose_method_edits = lambda *_args, **_kwargs: error_response  # type: ignore[method-assign]
 
             out = remediation.apply_fix(
                 "ISO-A.10-WEAK-HASH",
@@ -81,62 +65,30 @@ class ApplyFixTests(RemediationTestBase):
                 "org.owasp.benchmark.testcode.BenchmarkTest00272.doPost(HttpServletRequest,HttpServletResponse)"
             )
 
-            remediation = svc_mod.RemediationService(llm_client=lambda *_args, **_kwargs: "")
-            remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
-                "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
-                "target_method": target_method,
-                "file_path": src_path.as_posix(),
-                "rule_id": "ISO-A.10-WEAK-HASH",
-                "evidence": {
-                    "source_code": 'public void doPost(...) { MessageDigest.getInstance("MD5"); }',
-                    "graph_context": {},
-                    "vector_context": [],
-                },
-                "catalog_entry": {"title": "Cryptography (Weak Hash)"},
-                "baseline_violations": [],
-                "exact_method_source": 'public void doPost(...) { MessageDigest.getInstance("MD5"); }',
-            }
-            remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
-            remediation.propose_method_edits = (  # type: ignore[method-assign]
-                lambda *_args, **_kwargs: {
-                    "decision": "apply_edits",
-                    "edits": [
-                        {
-                            "start_line": 1,
-                            "end_line": 1,
-                            "original_lines": ['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
-                            "replacement_lines": ["public void doPost(...) { /* sha-256 */ }"],
-                        }
-                    ],
-                    "replacement_method_lines": ["public void doPost(...) { /* sha-256 */ }"],
-                    "replacement_method_code": "public void doPost(...) { /* sha-256 */ }",
-                    "reason": None,
-                    "schema_error": None,
-                    "generation": {
-                        "decision": "apply_edits",
-                        "edits": [
-                            {
-                                "start_line": 1,
-                                "end_line": 1,
-                                "original_lines": ['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
-                                "replacement_lines": ["public void doPost(...) { /* sha-256 */ }"],
-                            }
-                        ],
-                        "replacement_method_lines": ["public void doPost(...) { /* sha-256 */ }"],
-                        "replacement_method_code": "public void doPost(...) { /* sha-256 */ }",
-                        "reason": "",
-                        "raw_response_valid": True,
-                        "schema_error": None,
-                    },
-                    "raw_output": None,
-                }
+            context = (
+                ViolationContextBuilder()
+                .with_target_method(target_method)
+                .with_file_path(src_path.as_posix())
+                .with_source_code('public void doPost(...) { MessageDigest.getInstance("MD5"); }')
+                .with_exact_method_source('public void doPost(...) { MessageDigest.getInstance("MD5"); }')
+                .build()
             )
-            remediation._replace_method_in_source = (  # type: ignore[method-assign]
-                lambda *_args, **_kwargs: (
-                    updated_content,
-                    "void a() {}",
-                    updated_method,
+
+            proposal_response = (
+                ProposalResponseBuilder()
+                .with_edits(
+                    original_lines=['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
+                    replacement_lines=["public void doPost(...) { /* sha-256 */ }"],
                 )
+                .build()
+            )
+
+            remediation = svc_mod.RemediationService(llm_client=lambda *_args, **_kwargs: "")
+            remediation.get_violation_context = lambda *_args, **_kwargs: context  # type: ignore[method-assign]
+            remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
+            remediation.propose_method_edits = lambda *_args, **_kwargs: proposal_response  # type: ignore[method-assign]
+            remediation._replace_method_in_source = (  # type: ignore[method-assign]
+                lambda *_args, **_kwargs: (updated_content, "void a() {}", updated_method)
             )
 
             def _prepare_temp_workspace(tmp_root, _resolved):
@@ -207,69 +159,33 @@ class ApplyFixTests(RemediationTestBase):
                 "org.owasp.benchmark.testcode.BenchmarkTest00272.doPost(HttpServletRequest,HttpServletResponse)"
             )
 
-            remediation = svc_mod.RemediationService(llm_client=lambda *_args, **_kwargs: "")
-            remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
-                "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
-                "target_method": target_method,
-                "file_path": src_path.as_posix(),
-                "rule_id": "ISO-A.10-WEAK-HASH",
-                "evidence": {
-                    "source_code": 'public void doPost(...) { MessageDigest.getInstance("MD5"); }',
-                    "graph_context": {},
-                    "vector_context": [],
-                },
-                "catalog_entry": {"title": "Cryptography (Weak Hash)"},
-                "baseline_violations": [],
-                "exact_method_source": 'public void doPost(...) { MessageDigest.getInstance("MD5"); }',
-            }
-            remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
-            remediation.propose_method_edits = (  # type: ignore[method-assign]
-                lambda *_args, **_kwargs: {
-                    "decision": "apply_edits",
-                    "edits": [
-                        {
-                            "start_line": 1,
-                            "end_line": 1,
-                            "original_lines": ['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
-                            "replacement_lines": ["public void doPost(...) { /* sha-256 */ }"],
-                        }
-                    ],
-                    "replacement_method_lines": ["public void doPost(...) { /* sha-256 */ }"],
-                    "replacement_method_code": "public void doPost(...) { /* sha-256 */ }",
-                    "reason": None,
-                    "schema_error": None,
-                    "generation": {
-                        "decision": "apply_edits",
-                        "edits": [
-                            {
-                                "start_line": 1,
-                                "end_line": 1,
-                                "original_lines": ['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
-                                "replacement_lines": ["public void doPost(...) { /* sha-256 */ }"],
-                            }
-                        ],
-                        "replacement_method_lines": ["public void doPost(...) { /* sha-256 */ }"],
-                        "replacement_method_code": "public void doPost(...) { /* sha-256 */ }",
-                        "reason": "",
-                        "raw_response_valid": True,
-                        "schema_error": None,
-                    },
-                    "raw_output": None,
-                }
+            context = (
+                ViolationContextBuilder()
+                .with_target_method(target_method)
+                .with_file_path(src_path.as_posix())
+                .with_source_code('public void doPost(...) { MessageDigest.getInstance("MD5"); }')
+                .with_exact_method_source('public void doPost(...) { MessageDigest.getInstance("MD5"); }')
+                .build()
             )
-            remediation._replace_method_in_source = (  # type: ignore[method-assign]
-                lambda *_args, **_kwargs: (
-                    "class Example { void a() { /* UPDATED */ } }\n",
-                    "void a() {}",
-                    "void a() { /* UPDATED */ }",
+
+            proposal_response = (
+                ProposalResponseBuilder()
+                .with_edits(
+                    original_lines=['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
+                    replacement_lines=["public void doPost(...) { /* sha-256 */ }"],
                 )
+                .build()
+            )
+
+            remediation = svc_mod.RemediationService(llm_client=lambda *_args, **_kwargs: "")
+            remediation.get_violation_context = lambda *_args, **_kwargs: context  # type: ignore[method-assign]
+            remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
+            remediation.propose_method_edits = lambda *_args, **_kwargs: proposal_response  # type: ignore[method-assign]
+            remediation._replace_method_in_source = (  # type: ignore[method-assign]
+                lambda *_args, **_kwargs: ("class Example { void a() { /* UPDATED */ } }\n", "void a() {}", "void a() { /* UPDATED */ }")
             )
             remediation._prepare_temp_workspace = (  # type: ignore[method-assign]
-                lambda tmp_root, _resolved: (
-                    tmp_root,
-                    Path(tmp_root) / "Example.java",
-                    Path(tmp_root),
-                )
+                lambda tmp_root, _resolved: (tmp_root, Path(tmp_root) / "Example.java", Path(tmp_root))
             )
             remediation._compile_project = (  # type: ignore[method-assign]
                 lambda *_args, **_kwargs: {
