@@ -9,8 +9,8 @@ sql_keywords := {"select ", "insert ", "update ", "delete "}
 
 file_path_keywords := {"../", "..\\", "fileinputstream", "new java.io.file(", "paths.get(", "new java.io.filereader("}
 command_keywords := {"processbuilder", ".command(", "runtime.getruntime().exec(", "cmd.exe", "sh", "/c", "-c"}
-ldap_keywords := {"initialdircontext", "dircontext", ".search(", "uid=", "objectclass=person"}
-xpath_keywords := {"xpathfactory.newinstance(", ".evaluate(", "/employees/employee["}
+ldap_keywords := {"initialdircontext", "dircontext", "ldapcontext", ".search("}
+xpath_keywords := {"xpathfactory.newinstance(", ".compile(", ".evaluate("}
 sql_execute_patterns := {sql_execute_pattern, sql_execute_update_pattern, sql_execute_generic_pattern}
 sql_prepare_patterns := {sql_prepare_pattern, sql_prepare_call_pattern}
 
@@ -85,6 +85,7 @@ sql_present if {
 
 sql_injection_heuristic if {
 	flag_enabled("sql_dynamic_query_detected")
+	flag_enabled("sql_query_uses_tainted_input")
 	not helper_safe_sql
 }
 
@@ -96,8 +97,8 @@ sql_injection_heuristic if {
 
 sql_injection_heuristic if {
 	servlet_context
+	no_analysis_flags
 	input.source_code != null
-	flags := input.analysis_flags
 	sql_present
 	src := lower(input.source_code)
 	dynamic_source_construction(src)
@@ -106,7 +107,6 @@ sql_injection_heuristic if {
 	input_is_untrusted
 	not safe_prepared_statement_shape(src)
 	not helper_safe_sql
-	flags.sql_query_uses_safe_constant != true
 }
 
 safe_prepared_statement_shape(src) if {

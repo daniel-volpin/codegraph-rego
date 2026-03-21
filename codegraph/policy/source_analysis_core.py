@@ -16,6 +16,7 @@ EXTENDED_UNTRUSTED_INPUT_PATTERNS = (
     re.compile(r"getParameterNames\s*\(", re.IGNORECASE),
     re.compile(r"getHeaders\s*\(", re.IGNORECASE),
     re.compile(r"getTheParameter\s*\(", re.IGNORECASE),
+    re.compile(r"\b\w*cookie\w*\.getValue\s*\(", re.IGNORECASE),
 )
 SQL_UNTRUSTED_INPUT_PATTERNS = EXTENDED_UNTRUSTED_INPUT_PATTERNS
 PATH_LDAP_UNTRUSTED_INPUT_PATTERNS = EXTENDED_UNTRUSTED_INPUT_PATTERNS
@@ -137,15 +138,23 @@ SQL_EXECUTE_CALL_PATTERNS = (
     re.compile(r"\.executeQuery\s*\(", re.IGNORECASE),
     re.compile(r"\.executeUpdate\s*\(", re.IGNORECASE),
     re.compile(r"\.execute\s*\(", re.IGNORECASE),
+    re.compile(r"\.addBatch\s*\(", re.IGNORECASE),
     re.compile(
-        r"JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|update|batchUpdate)\s*\(",
+        r"JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|queryForLong|update|batchUpdate)\s*\(",
         re.IGNORECASE,
     ),
 )
 SQL_SINK_VARIABLE_PATTERNS = (
-    re.compile(r"(?:prepareStatement|prepareCall|executeQuery|executeUpdate|execute)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE),
+    re.compile(r"(?:prepareStatement|prepareCall|executeQuery|executeUpdate|execute|addBatch)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE),
     re.compile(
-        r"JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|update|batchUpdate)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))",
+        r"JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|queryForLong|update|batchUpdate)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))",
+        re.IGNORECASE,
+    ),
+)
+SQL_SINK_TOSTRING_VARIABLE_PATTERNS = (
+    re.compile(r"(?:prepareStatement|prepareCall|executeQuery|executeUpdate|execute|addBatch)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\.toString\s*\(\s*\)\s*(?:,|\))", re.IGNORECASE),
+    re.compile(
+        r"JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|queryForLong|update|batchUpdate)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\.toString\s*\(\s*\)\s*(?:,|\))",
         re.IGNORECASE,
     ),
 )

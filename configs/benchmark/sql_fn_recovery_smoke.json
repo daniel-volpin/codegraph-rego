@@ -1,0 +1,22 @@
+{
+  "benchmark_root": "${OWASP_BENCHMARK_ROOT}",
+  "java_relative_root": "src/main/java",
+  "ground_truth_path": "${OWASP_BENCHMARK_ROOT}/expectedresults-1.2.csv",
+  "categories": [
+    "sql-injection"
+  ],
+  "testcase_ids": [
+    "BenchmarkTest00102",
+    "BenchmarkTest00103",
+    "BenchmarkTest00764",
+    "BenchmarkTest00769",
+    "BenchmarkTest00108",
+    "BenchmarkTest00435",
+    "BenchmarkTest00762",
+    "BenchmarkTest00931"
+  ],
+  "max_cases_per_category": null,
+  "seed": 7,
+  "debug_fn_analysis": true,
+  "build_command": "mvn -q -DskipTests -Dspotless.apply.skip=true -Dspotless.check.skip=true compile"
+}

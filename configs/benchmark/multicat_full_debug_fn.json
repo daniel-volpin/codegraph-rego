@@ -1,0 +1,18 @@
+{
+  "benchmark_root": "${OWASP_BENCHMARK_ROOT}",
+  "java_relative_root": "src/main/java",
+  "ground_truth_path": "${OWASP_BENCHMARK_ROOT}/expectedresults-1.2.csv",
+  "categories": [
+    "crypto-md5",
+    "hash-md5",
+    "rng-insecure",
+    "sql-injection",
+    "path-traversal",
+    "command-injection",
+    "ldap-injection",
+    "xpath-injection"
+  ],
+  "max_cases_per_category": 60,
+  "seed": 7,
+  "debug_fn_analysis": true
+}

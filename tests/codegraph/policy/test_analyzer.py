@@ -100,6 +100,57 @@ class TestHelperMethodAnalyzer(unittest.TestCase):
         self.assertTrue(summary.returns_constant_string)
         self.assertFalse(summary.propagates_tainted_input)
 
+    def test_conditional_list_value_propagates_taint(self) -> None:
+        source = (
+            "private String doSomething(String param) {"
+            'String bar = "";'
+            "if (param != null) {"
+            "java.util.List<String> valuesList = new java.util.ArrayList<String>();"
+            'valuesList.add("safe");'
+            "valuesList.add(param);"
+            'valuesList.add("moresafe");'
+            "valuesList.remove(0);"
+            "bar = valuesList.get(0);"
+            "}"
+            "return bar;"
+            "}"
+        )
+        summary = HelperMethodAnalyzer().summarize(source)
+        self.assertFalse(summary.returns_constant_string)
+        self.assertTrue(summary.propagates_tainted_input)
+
+    def test_conditional_base64_value_propagates_taint(self) -> None:
+        source = (
+            "private String doSomething(String param) {"
+            'String bar = "";'
+            "if (param != null) {"
+            "bar = new String(org.apache.commons.codec.binary.Base64.decodeBase64("
+            "org.apache.commons.codec.binary.Base64.encodeBase64(param.getBytes())));"
+            "}"
+            "return bar;"
+            "}"
+        )
+        summary = HelperMethodAnalyzer().summarize(source)
+        self.assertFalse(summary.returns_constant_string)
+        self.assertTrue(summary.propagates_tainted_input)
+
+    def test_nested_conditional_assignment_propagates_taint(self) -> None:
+        source = (
+            "private String doSomething(String[] values) {"
+            'String param = "";'
+            "if (values != null) {"
+            "param = values[0];"
+            "}"
+            "String bar;"
+            "int num = 196;"
+            'if ((500 / 42) + num > 200) bar = param; else bar = "This should never happen";'
+            "return bar;"
+            "}"
+        )
+        summary = HelperMethodAnalyzer().summarize(source)
+        self.assertFalse(summary.returns_constant_string)
+        self.assertTrue(summary.propagates_tainted_input)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -834,6 +834,8 @@ class TestSQLInjectionDetection(PolicyTestBase):
                     "command_injection_detected": False,
                     "ldap_injection_detected": False,
                     "xpath_injection_detected": False,
+                    "sql_query_uses_tainted_input": True,
+                    "sql_query_uses_safe_constant": False,
                     "sql_prepare_call_detected": False,
                     "sql_callable_statement_detected": False,
                     "sql_dynamic_query_detected": True,
@@ -845,6 +847,44 @@ class TestSQLInjectionDetection(PolicyTestBase):
         violations = evaluate_bundle(bundle)
         violation_ids = self._normalized_violation_ids(violations)
         self.assertIn("ISO-A.8-SQL-INJECTION", violation_ids)
+
+    def test_evaluate_bundle_does_not_flag_sql_for_shape_only_dynamic_query_signal(self) -> None:
+        from codegraph.policy.integration import evaluate_bundle
+
+        bundle = (
+            BundleBuilder()
+            .with_target_method("org.owasp.benchmark.testcode.BenchmarkTest99996.doPost(HttpServletRequest,HttpServletResponse)")
+            .with_file_path("src/main/java/org/owasp/benchmark/testcode/BenchmarkTest99996.java")
+            .with_source_code(
+                'String param = request.getParameter("x");'
+                'String bar = "moresafe";'
+                'String sql = "SELECT * from USERS where USERNAME=\'foo\' and PASSWORD=\'" + bar + "\'";'
+                "connection.prepareStatement(sql);"
+            )
+            .with_annotation("WebServlet")
+            .with_analysis_flags(
+                {
+                    "md5_detected": False,
+                    "weak_cipher_detected": False,
+                    "insecure_random_detected": False,
+                    "sha1prng_detected": False,
+                    "path_traversal_detected": False,
+                    "command_injection_detected": False,
+                    "ldap_injection_detected": False,
+                    "xpath_injection_detected": False,
+                    "sql_query_uses_tainted_input": False,
+                    "sql_query_uses_safe_constant": False,
+                    "sql_prepare_call_detected": False,
+                    "sql_callable_statement_detected": False,
+                    "sql_dynamic_query_detected": True,
+                }
+            )
+            .build()
+        )
+
+        violations = evaluate_bundle(bundle)
+        violation_ids = self._normalized_violation_ids(violations)
+        self.assertNotIn("ISO-A.8-SQL-INJECTION", violation_ids)
 
     def test_evaluate_bundle_suppresses_safe_helper_sql_query(self) -> None:
         from codegraph.policy.integration import evaluate_bundle

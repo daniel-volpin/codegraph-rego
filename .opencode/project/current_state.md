@@ -67,21 +67,23 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
   - path detection now uses bounded sink-level path semantics with safe constant/resource suppression
   - helper summary resolution now falls back to same-file nested helpers when graph call edges are missing
 - Detection calibration now includes graph-aware multi-hop taint confirmation for injection families.
-- Detection baseline after the multi-hop taint refresh on the full benchmark is now:
-  - precision: `0.9227`
-  - recall: `0.9227`
-  - F1: `0.9227`
+- Detection baseline after the latest full calibration rerun is now:
+  - precision: `0.9528`
+  - recall: `0.9528`
+  - F1: `0.9528`
 - Injection families materially improved on the refreshed full benchmark rerun:
-  - SQL injection: `precision=0.8421`, `recall=0.9143`, `F1=0.8767`
-  - path traversal: `precision=0.9032`, `recall=0.9655`, `F1=0.9333`
-  - command injection: `precision=0.9189`, `recall=0.9714`, `F1=0.9444`
-  - LDAP injection: `precision=0.9259`, `recall=0.9259`, `F1=0.9259`
-  - XPath injection: `precision=0.8824`, `recall=1.0`, `F1=0.9375`
+  - SQL injection: `precision=0.9459`, `recall=1.0`, `F1=0.9722`
+  - path traversal: `precision=0.9355`, `recall=1.0`, `F1=0.9667`
+  - command injection: `precision=0.9211`, `recall=1.0`, `F1=0.9589`
+  - LDAP injection: `precision=0.9643`, `recall=1.0`, `F1=0.9818`
+  - XPath injection: `precision=0.9375`, `recall=1.0`, `F1=0.9677`
 - Benchmark-first outputs are the authoritative evidence for current capability.
 - Authoritative benchmark baselines are frozen as:
-  - detection: `outputs/detection_calibration_multihop_refresh_v1/`
+  - detection: `outputs/review_multicat_full_fixpass_20260321c/`
   - explanation: `outputs/thesis_final_explanation_full/`
   - remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
+- Full command-category regression check is confirmed separately in:
+  - `outputs/command_full_debug_20260321d/`
 - The later `outputs/final_full_remediation_current_main/` rerun (`9/10`) remains a useful regression reference, not the thesis headline baseline.
 - Real-world validation is now completed and cleanly separated from benchmark evidence:
   - `outputs/case_study_spring_petclinic/` validates ingest, policy evaluation, and explanation on a realistic Spring application.

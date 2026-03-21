@@ -108,12 +108,39 @@ class HelperMethodAnalyzer:
                 map_match = MAP_GET_LITERAL_RE.search(expr)
                 if map_match and map_match.group(1) in map_constants and map_match.group(2) in map_constants[map_match.group(1)]:
                     returns_constant = True
+                elif self._assigned_from_safe_call(expr, resolved_source, state):
+                    returns_constant = True
+                elif self._assigned_from_tainted_call(expr, resolved_source, state):
+                    propagates_taint = True
                 elif self._assignment_analyzer.referenced_variables(expr) & state.tainted_vars:
                     propagates_taint = True
         return HelperReturnSummary(
             returns_constant_string=returns_constant,
             propagates_tainted_input=propagates_taint,
         )
+
+    def _assigned_from_safe_call(self, expr: str, source_code: str, state) -> bool:
+        for assigned_var, _method_name, raw_args in CALL_ASSIGNMENT_WITH_ARGS_RE.findall(source_code):
+            if assigned_var != expr:
+                continue
+            arg_refs = self._assignment_analyzer.referenced_variables(raw_args)
+            if arg_refs & state.tainted_vars:
+                continue
+            if STRING_LITERAL_FULL_RE.match(raw_args.strip()):
+                return True
+            if arg_refs and arg_refs <= set(state.string_constants):
+                return True
+        return False
+
+    def _assigned_from_tainted_call(self, expr: str, source_code: str, state) -> bool:
+        for assigned_var, _method_name, raw_args in CALL_ASSIGNMENT_WITH_ARGS_RE.findall(source_code):
+            if assigned_var != expr:
+                continue
+            if any(pattern.search(raw_args) for pattern in UNTRUSTED_INPUT_PATTERNS):
+                return True
+            if self._assignment_analyzer.referenced_variables(raw_args) & state.tainted_vars:
+                return True
+        return False
 
     @staticmethod
     def _parameter_names(source_code: str) -> set[str]:
@@ -236,6 +263,9 @@ class DirectCallSummaryBuilder:
         path_tainted_vars: list[str] = []
         ldap_safe_vars: list[str] = []
         ldap_tainted_vars: list[str] = []
+        xpath_tainted_vars: list[str] = []
+        sql_tainted_vars: list[str] = []
+        command_tainted_vars: list[str] = []
         state = self._assignment_analyzer.analyze(current_source)
         call_signatures = method_snapshot.get("calls") or []
         for assigned_var, method_name, raw_args in CALL_ASSIGNMENT_WITH_ARGS_RE.findall(current_source):
@@ -265,6 +295,7 @@ class DirectCallSummaryBuilder:
                     or arg_refs <= set(state.string_constants)
                 )
             )
+            arg_is_known_safe = arg_is_safe_constant
             callee_snapshot = self._resolve_called_method(
                 method_name=method_name,
                 call_signatures=call_signatures,
@@ -273,7 +304,8 @@ class DirectCallSummaryBuilder:
                 method_index=method_index,
             )
             if not callee_snapshot:
-                if arg_is_safe_constant:
+                if arg_is_known_safe and self._unknown_safe_call_may_be_helper(method_name):
+                    safe_vars.append(assigned_var)
                     path_safe_vars.append(assigned_var)
                     ldap_safe_vars.append(assigned_var)
                 continue
@@ -282,21 +314,28 @@ class DirectCallSummaryBuilder:
                 safe_vars.append(assigned_var)
                 path_safe_vars.append(assigned_var)
                 ldap_safe_vars.append(assigned_var)
-            elif arg_is_safe_constant:
+            elif arg_is_known_safe:
+                safe_vars.append(assigned_var)
                 path_safe_vars.append(assigned_var)
                 ldap_safe_vars.append(assigned_var)
             if summary.propagates_tainted_input:
                 tainted_vars.append(assigned_var)
                 if arg_has_tainted_input:
                     path_tainted_vars.append(assigned_var)
-                if arg_has_tainted_input:
                     ldap_tainted_vars.append(assigned_var)
+                if not arg_is_known_safe:
+                    xpath_tainted_vars.append(assigned_var)
+                    sql_tainted_vars.append(assigned_var)
+                    command_tainted_vars.append(assigned_var)
         safe_vars = sorted(set(safe_vars))
         tainted_vars = sorted(set(tainted_vars))
         path_safe_vars = sorted(set(path_safe_vars))
         path_tainted_vars = sorted(set(path_tainted_vars))
         ldap_safe_vars = sorted(set(ldap_safe_vars))
         ldap_tainted_vars = sorted(set(ldap_tainted_vars))
+        xpath_tainted_vars = sorted(set(xpath_tainted_vars))
+        sql_tainted_vars = sorted(set(sql_tainted_vars))
+        command_tainted_vars = sorted(set(command_tainted_vars))
         return {
             "safe_constant_return_vars": safe_vars,
             "tainted_return_vars": tainted_vars,
@@ -307,11 +346,37 @@ class DirectCallSummaryBuilder:
             "safe_constant_return_used_in_xpath_query": self._vars_used_in_xpath(current_source, safe_vars),
             "safe_constant_return_used_in_sql_query": self._vars_used_in_sql(current_source, safe_vars),
             "safe_constant_return_used_in_command_sink": self._vars_used_in_command(current_source, safe_vars),
-            "tainted_return_used_in_xpath_query": self._vars_used_in_xpath(current_source, tainted_vars),
-            "tainted_return_used_in_sql_query": self._vars_used_in_sql(current_source, tainted_vars),
-            "tainted_return_used_in_command_sink": self._vars_used_in_command(current_source, tainted_vars),
+            "tainted_return_used_in_xpath_query": self._vars_used_in_xpath(current_source, xpath_tainted_vars),
+            "tainted_return_used_in_sql_query": self._vars_used_in_sql(current_source, sql_tainted_vars),
+            "tainted_return_used_in_command_sink": self._vars_used_in_command(current_source, command_tainted_vars),
             "analyzed_call_count": len(safe_vars) + len(tainted_vars),
         }
+
+    @staticmethod
+    def _unknown_safe_call_may_be_helper(method_name: str) -> bool:
+        normalized = method_name.lower()
+        blocked_prefixes = (
+            "get",
+            "set",
+            "add",
+            "remove",
+            "next",
+            "append",
+            "encode",
+            "decode",
+            "char",
+            "index",
+            "to",
+        )
+        blocked_names = {
+            "equals",
+            "hashcode",
+            "length",
+            "size",
+            "name",
+            "value",
+        }
+        return not normalized.startswith(blocked_prefixes) and normalized not in blocked_names
 
     @staticmethod
     def _resolve_called_method(

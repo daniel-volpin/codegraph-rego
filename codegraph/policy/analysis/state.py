@@ -27,7 +27,11 @@ CHAR_AT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\.charAt\((\d+)\)$")
 TOP_LEVEL_TERNARY_RE = re.compile(r"^(?P<condition>.+?)\?(?P<when_true>.+?):(?P<when_false>.+)$", re.DOTALL)
 SWITCH_BLOCK_RE = re.compile(r"switch\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*\{(.*?)\}", re.DOTALL)
 IF_ELSE_ASSIGNMENT_RE = re.compile(
-    r"if\s*\((?P<condition>[^{};]*?)\)\s*(?P<when_true>\{?\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;\s*\}?)\s*else\s*(?P<when_false>\{?\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;\s*\}?)",
+    r"if\s*\((?P<condition>[^{};]*?)\)\s*(?P<when_true>\{[^{}]*\}|[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;)\s*else\s*(?P<when_false>\{[^{}]*\}|[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;)",
+    re.DOTALL,
+)
+IF_ASSIGNMENT_RE = re.compile(
+    r"if\s*\((?P<condition>[^{};]*?)\)\s*(?P<body>\{[^{}]*?[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;[^{}]*?\}|[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;)",
     re.DOTALL,
 )
 VAR_REF_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\b")
@@ -50,8 +54,11 @@ class AssignmentStateAnalyzer:
         string_constants: Dict[str, str] = {}
         int_constants: Dict[str, int] = {}
         char_constants: Dict[str, str] = {}
+        conditional_spans = self._conditional_assignment_spans(source_code)
 
         for match in SIMPLE_ASSIGNMENT_RE.finditer(source_code):
+            if any(start <= match.start() and match.end() <= end for start, end in conditional_spans):
+                continue
             var = match.group(1)
             rhs = match.group(2).strip()
 
@@ -129,6 +136,33 @@ class AssignmentStateAnalyzer:
         if collapsed_if_else != source_code:
             return self.analyze(collapsed_if_else, initial_tainted_vars=initial_tainted_vars)
 
+        tainted_before_join = set(tainted_vars)
+        joined_taint_cutoffs: Dict[str, int] = {}
+
+        # For unresolved branches, keep taint if either side may assign tainted input.
+        self._apply_unresolved_if_else_taint_join(
+            source_code,
+            tainted_vars=tainted_vars,
+            string_constants=string_constants,
+            int_constants=int_constants,
+            char_constants=char_constants,
+            joined_taint_cutoffs=joined_taint_cutoffs,
+        )
+        self._apply_unresolved_if_taint_join(
+            source_code,
+            tainted_vars=tainted_vars,
+            string_constants=string_constants,
+            int_constants=int_constants,
+            char_constants=char_constants,
+            joined_taint_cutoffs=joined_taint_cutoffs,
+        )
+        if tainted_vars != tainted_before_join:
+            self._propagate_taint_from_assignments(
+                source_code,
+                tainted_vars,
+                joined_taint_cutoffs=joined_taint_cutoffs,
+            )
+
         collapsed_maps = self._resolve_selected_map_gets(source_code, string_constants, tainted_vars)
         if collapsed_maps != source_code:
             return self.analyze(collapsed_maps, initial_tainted_vars=initial_tainted_vars)
@@ -142,6 +176,122 @@ class AssignmentStateAnalyzer:
             return self.analyze(collapsed, initial_tainted_vars=initial_tainted_vars)
 
         return AssignmentState(tainted_vars=tainted_vars, string_constants=string_constants)
+
+    def _apply_unresolved_if_else_taint_join(
+        self,
+        source_code: str,
+        *,
+        tainted_vars: set[str],
+        string_constants: Dict[str, str],
+        int_constants: Dict[str, int],
+        char_constants: Dict[str, str],
+        joined_taint_cutoffs: Dict[str, int],
+    ) -> None:
+        for match in IF_ELSE_ASSIGNMENT_RE.finditer(source_code):
+            decision = self._evaluate_constant_boolean(match.group("condition"), int_constants)
+            if decision is not None:
+                continue
+            true_taints = self._simulate_assignment_flow(match.group("when_true"), tainted_vars)
+            false_taints = self._simulate_assignment_flow(match.group("when_false"), tainted_vars)
+            joined_tainted_vars = {
+                var
+                for var in (set(true_taints) & set(false_taints))
+                if true_taints.get(var, False) or false_taints.get(var, False)
+            }
+            for var in joined_tainted_vars:
+                joined_taint_cutoffs[var] = max(joined_taint_cutoffs.get(var, 0), match.end())
+                self._mark_tainted(
+                    var,
+                    tainted_vars=tainted_vars,
+                    string_constants=string_constants,
+                    int_constants=int_constants,
+                    char_constants=char_constants,
+                )
+
+    def _expr_is_tainted(self, expr: str, tainted_vars: set[str]) -> bool:
+        if any(pattern.search(expr) for pattern in self._taint_patterns):
+            return True
+        return bool(self.referenced_variables(expr) & tainted_vars)
+
+    def _apply_unresolved_if_taint_join(
+        self,
+        source_code: str,
+        *,
+        tainted_vars: set[str],
+        string_constants: Dict[str, str],
+        int_constants: Dict[str, int],
+        char_constants: Dict[str, str],
+        joined_taint_cutoffs: Dict[str, int],
+    ) -> None:
+        for match in IF_ASSIGNMENT_RE.finditer(source_code):
+            if IF_ELSE_ASSIGNMENT_RE.fullmatch(match.group(0).strip()):
+                continue
+            decision = self._evaluate_constant_boolean(match.group("condition"), int_constants)
+            if decision is not None:
+                continue
+            branch_taints = self._simulate_assignment_flow(match.group("body"), tainted_vars)
+            for var, is_tainted in branch_taints.items():
+                if not is_tainted:
+                    continue
+                joined_taint_cutoffs[var] = max(joined_taint_cutoffs.get(var, 0), match.end())
+                self._mark_tainted(
+                    var,
+                    tainted_vars=tainted_vars,
+                    string_constants=string_constants,
+                    int_constants=int_constants,
+                    char_constants=char_constants,
+                )
+
+    def _propagate_taint_from_assignments(
+        self,
+        source_code: str,
+        tainted_vars: set[str],
+        *,
+        joined_taint_cutoffs: Dict[str, int],
+    ) -> None:
+        unresolved_spans = self._conditional_assignment_spans(source_code)
+        while True:
+            updated_taints = set(tainted_vars)
+            for match in SIMPLE_ASSIGNMENT_RE.finditer(source_code):
+                if any(start <= match.start() and match.end() <= end for start, end in unresolved_spans):
+                    continue
+                var = match.group(1)
+                rhs = match.group(2).strip()
+                rhs_is_tainted = self._expr_is_tainted(rhs, updated_taints)
+                if rhs_is_tainted:
+                    updated_taints.add(var)
+                else:
+                    if match.start() < joined_taint_cutoffs.get(var, -1):
+                        continue
+                    updated_taints.discard(var)
+            if updated_taints == tainted_vars:
+                return
+            tainted_vars.clear()
+            tainted_vars.update(updated_taints)
+
+    def _simulate_assignment_flow(self, source_code: str, tainted_vars: set[str]) -> Dict[str, bool]:
+        simulated_taints = set(tainted_vars)
+        assigned_vars: list[str] = []
+        for assign in SIMPLE_ASSIGNMENT_RE.finditer(source_code):
+            var = assign.group(1)
+            rhs = assign.group(2).strip()
+            rhs_is_tainted = self._expr_is_tainted(rhs, simulated_taints)
+            if rhs_is_tainted:
+                simulated_taints.add(var)
+            else:
+                simulated_taints.discard(var)
+            if var not in assigned_vars:
+                assigned_vars.append(var)
+        return {var: var in simulated_taints for var in assigned_vars}
+
+    @staticmethod
+    def _conditional_assignment_spans(source_code: str) -> list[tuple[int, int]]:
+        spans = [match.span() for match in IF_ELSE_ASSIGNMENT_RE.finditer(source_code)]
+        for match in IF_ASSIGNMENT_RE.finditer(source_code):
+            if any(start <= match.start() and match.end() <= end for start, end in spans):
+                continue
+            spans.append(match.span())
+        return spans
 
     @staticmethod
     def referenced_variables(expr: str) -> set[str]:
