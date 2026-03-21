@@ -1,0 +1,164 @@
+from __future__ import annotations
+
+from typing import Any, TypedDict
+
+
+class CompilationResult(TypedDict, total=False):
+    attempted: bool
+    success: bool
+    output_snippet: str | None
+    skipped_reason: str | None
+
+
+class ApplyMetadata(TypedDict):
+    violation_id: str
+    rule_id: str | None
+    target_method: str
+    file_path: str
+    attempt_count: int
+    mode: str
+
+
+class _ApplyFixResultRequired(TypedDict):
+    status: str
+    violation_id: str
+
+
+class ApplyFixResult(_ApplyFixResultRequired, total=False):
+    error: str | None
+    rule_id: str | None
+    target_method: str | None
+    file_path: str | None
+    updated_source_code: str | None
+    diff: str | None
+    verification: dict[str, Any]
+    compilation: CompilationResult
+    metadata: ApplyMetadata
+    generation: dict[str, Any] | None
+    confidence: dict[str, Any]
+    attempt_count: int
+    llm_output: Any
+    errors: list[str]
+    raw_capture_files: list[str]
+
+
+def early_error_result(
+    status: str,
+    *,
+    violation_id: str,
+    error: str,
+    rule_id: Any = None,
+    target_method: str | None = None,
+    file_path: str | None = None,
+) -> ApplyFixResult:
+    result: ApplyFixResult = {
+        "status": status,
+        "violation_id": violation_id,
+        "error": error,
+    }
+    if rule_id is not None:
+        result["rule_id"] = rule_id
+    if target_method is not None:
+        result["target_method"] = target_method
+    if file_path is not None:
+        result["file_path"] = file_path
+    return result
+
+
+def generation_error_result(
+    status: str,
+    *,
+    violation_id: str,
+    error: str,
+    target_method: str,
+    file_path: str,
+    rule_id: Any,
+    attempt_count: int,
+    llm_output: Any,
+    errors: list[str],
+    raw_capture_files: list[str],
+    generation: dict[str, Any] | None,
+    confidence: dict[str, Any],
+) -> ApplyFixResult:
+    return {
+        "status": status,
+        "error": error,
+        "violation_id": violation_id,
+        "target_method": target_method,
+        "file_path": file_path,
+        "rule_id": rule_id,
+        "attempt_count": attempt_count,
+        "llm_output": llm_output,
+        "errors": errors,
+        "raw_capture_files": raw_capture_files,
+        "generation": generation,
+        "confidence": confidence,
+    }
+
+
+def partial_error_result(
+    *,
+    violation_id: str,
+    error: str,
+    target_method: str,
+    file_path: str,
+    rule_id: Any,
+    updated_source_code: str | None = None,
+    diff: str | None = None,
+    compilation: CompilationResult | None = None,
+    generation: dict[str, Any] | None = None,
+    confidence: dict[str, Any] | None = None,
+) -> ApplyFixResult:
+    result: ApplyFixResult = {
+        "status": "VERIFICATION_ERROR",
+        "error": error,
+        "violation_id": violation_id,
+        "target_method": target_method,
+        "file_path": file_path,
+        "rule_id": rule_id,
+    }
+    if updated_source_code is not None:
+        result["updated_source_code"] = updated_source_code
+    if diff is not None:
+        result["diff"] = diff
+    if compilation is not None:
+        result["compilation"] = compilation
+    if generation is not None:
+        result["generation"] = generation
+    if confidence is not None:
+        result["confidence"] = confidence
+    return result
+
+
+def apply_result(
+    status: str,
+    *,
+    violation_id: str,
+    rule_id: Any,
+    target_method: str,
+    file_path: str,
+    updated_source_code: str,
+    diff: str,
+    verification: dict[str, Any],
+    compilation: CompilationResult,
+    metadata: ApplyMetadata,
+    generation: dict[str, Any] | None,
+    confidence: dict[str, Any],
+    error: str | None,
+) -> ApplyFixResult:
+    """Full apply-flow result (OK, BUILD_ERROR, or final VERIFICATION_ERROR)."""
+    return {
+        "status": status,
+        "violation_id": violation_id,
+        "rule_id": rule_id,
+        "target_method": target_method,
+        "file_path": file_path,
+        "updated_source_code": updated_source_code,
+        "diff": diff,
+        "verification": verification,
+        "compilation": compilation,
+        "metadata": metadata,
+        "generation": generation,
+        "confidence": confidence,
+        "error": error,
+    }
