@@ -49,6 +49,7 @@ from codegraph.remediation.comparison import (
     render_comparison_summary_markdown,
 )
 from codegraph.remediation.orchestration import apply_remediation
+from codegraph.remediation.dossier import build_dossier
 from codegraph.remediation.ranking import (
     RankingResult,
     build_ranking_summary,
@@ -247,11 +248,21 @@ def main() -> int:
                 )
                 ranking_results.append(ranking)
 
+                # --- Build Dossier ---
+                dossier = build_dossier(
+                    case_id=case_id,
+                    rule_id=str(ctx.get("rule_id") or "unknown"),
+                    det_outcome=det_outcome,
+                    llm_outcome=llm_outcome,
+                    ranking=ranking,
+                )
+
                 # --- Write per-case artifacts ---
                 write_json(case_dir / "comparison.json", comparison.model_dump())
                 write_json(case_dir / "deterministic_outcome.json", det_outcome.model_dump())
                 write_json(case_dir / "llm_outcome.json", llm_outcome.model_dump())
                 write_json(case_dir / "ranking.json", ranking.model_dump())
+                write_json(case_dir / "dossier.json", dossier.model_dump())
 
                 LOGGER.info(
                     "  → %s (det=%s, llm=%s) [Ranked: %s]",
