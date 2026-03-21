@@ -41,9 +41,11 @@ def _configure_runtime() -> None:
 
 
 def _load_startup_dependencies() -> dict[str, Any]:
-    from codegraph.config import settings
+    from codegraph.config import settings, validate_runtime_settings
     from codegraph.ingestion.service import ingest
     from codegraph.search.hybrid import load_embedding_model, load_faiss_index, load_signature_map
+
+    validate_runtime_settings()
 
     return {
         "embedding_model_name": settings.embedding_model_name,
@@ -105,13 +107,13 @@ async def _generic_exception_handler(request: Request, exc: Exception) -> JSONRe
 
 def create_app() -> FastAPI:
     _configure_runtime()
-    from codegraph.config import CORS_ALLOWED_ORIGINS
+    from codegraph.config import settings
 
     application = FastAPI()
     application.state.startup_status = _default_startup_status()
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=CORS_ALLOWED_ORIGINS,
+        allow_origins=settings.cors_allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

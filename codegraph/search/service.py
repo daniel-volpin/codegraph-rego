@@ -2,12 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-from codegraph.config import (
-    FAISS_INDEX_PATH,
-    SIGNATURE_MAP_PATH,
-    SIGNATURE_MAP_PATH_FULL,
-    EMBEDDING_MODEL_NAME,
-)
+from codegraph.config import settings
 from codegraph.db import get_neo4j_driver
 from codegraph.search.hybrid import (
     load_faiss_index,
@@ -26,12 +21,12 @@ class HybridSearchService:
 
     def __init__(
         self,
-        index_path: str = FAISS_INDEX_PATH,
+        index_path: str = settings.faiss_index_path,
         signature_map_candidates: Tuple[str, ...] = (
-            SIGNATURE_MAP_PATH_FULL,
-            SIGNATURE_MAP_PATH,
+            settings.signature_map_path_full,
+            settings.signature_map_path,
         ),
-        model_name: str = EMBEDDING_MODEL_NAME,
+        model_name: str = settings.embedding_model_name,
     ):
         self._index_path = index_path
         self._signature_map_candidates = signature_map_candidates
