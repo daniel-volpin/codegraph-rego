@@ -3,11 +3,11 @@ Shared Neo4j helpers: driver factory and idempotent constraint creation.
 """
 
 from neo4j import GraphDatabase
-from codegraph.config import NEO4J_URI, NEO4J_USER, NEO4J_PASS
+from codegraph.config import settings
 
 
 def get_neo4j_driver():
-    return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+    return GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
 
 
 def ensure_constraints(driver=None):

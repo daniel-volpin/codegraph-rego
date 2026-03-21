@@ -11,7 +11,7 @@ from javalang.tree import (
 )
 from neo4j import GraphDatabase
 
-from codegraph.config import NEO4J_PASS, NEO4J_URI, NEO4J_USER
+from codegraph.config import settings
 from codegraph.db import ensure_constraints
 from codegraph.ingestion.models import FieldEntity, MethodEntity
 
@@ -546,7 +546,7 @@ def ingest_to_neo4j(
         for i in range(0, len(iterable), size):
             yield iterable[i:i + size]
 
-    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+    driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
     with driver.session() as session:
         annotation_count = sum(len(m.annotations) for m in methods)
         unique_method_field_relations = list(dict.fromkeys(method_field_relations))
@@ -654,14 +654,14 @@ def ingest(
     if progress_callback:
         progress_callback("connecting", "Checking Neo4j availability…", 10.0)
     try:
-        _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+        _driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
         with _driver.session() as session:
             session.run("RETURN 1 AS ok").consume()
         _driver.close()
     except Exception as exc:
         print("[ERROR] Could not connect to Neo4j.")
-        print(f"        URI   : {NEO4J_URI}")
-        print(f"        USER  : {NEO4J_USER}")
+        print(f"        URI   : {settings.neo4j_uri}")
+        print(f"        USER  : {settings.neo4j_user}")
         print("        HINTS :")
         print("          - Ensure Neo4j is running and listening on the Bolt port.")
         print("          - If using Docker, map '-p 7687:7687' and use 'bolt://127.0.0.1:7687'.")
@@ -698,7 +698,7 @@ def ingest(
 
         stale_count = 0
         try:
-            driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+            driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
             with driver.session() as session:
                 # Find all file paths currently in DB
                 result = session.run("MATCH (m:Method) RETURN DISTINCT m.file_path as p")
@@ -725,7 +725,7 @@ def ingest(
 
 
 def _purge_file_entities(file_path: str) -> None:
-    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+    driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
     try:
         with driver.session() as session:
             session.run(
@@ -750,7 +750,7 @@ def purge_workspace_entities(root_dir: str) -> None:
     """
 
     workspace_root = os.path.abspath(root_dir)
-    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
+    driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
     LOGGER.info("Purging graph entities under workspace root %s", workspace_root)
     try:
         with driver.session() as session:

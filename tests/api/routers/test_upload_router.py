@@ -1,6 +1,7 @@
 import io
 import os
 import tempfile
+import types
 import unittest
 import zipfile
 from pathlib import Path
@@ -9,6 +10,20 @@ from unittest.mock import patch
 from fastapi import UploadFile
 
 from codegraph.ingestion.service import IngestionError
+
+
+def _test_settings(upload_dir: str, **overrides) -> types.SimpleNamespace:
+    """Minimal settings namespace for upload router tests."""
+    defaults = dict(
+        upload_dir=upload_dir,
+        upload_max_archive_size_bytes=100 * 1024 * 1024,
+        upload_max_member_size_bytes=50 * 1024 * 1024,
+        upload_max_extracted_size_bytes=500 * 1024 * 1024,
+        upload_max_archive_entries=10_000,
+        upload_max_compression_ratio=100.0,
+    )
+    defaults.update(overrides)
+    return types.SimpleNamespace(**defaults)
 
 
 def _build_zip_bytes(*entries: tuple[str, str]) -> bytes:
@@ -48,7 +63,7 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
                 file=io.BytesIO(_build_zip_bytes(("src/main/java/com/example/App.java", "class App {}"))),
             )
 
-            with patch("api.routers.upload.UPLOAD_DIR", str(upload_dir)):
+            with patch("api.routers.upload.settings", new=_test_settings(str(upload_dir))):
                 response = await upload_zip(upload)
 
             self.assertEqual(response.status, "Codebase processed!")
@@ -91,7 +106,7 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
                 ),
             )
 
-            with patch("api.routers.upload.UPLOAD_DIR", str(upload_dir)):
+            with patch("api.routers.upload.settings", new=_test_settings(str(upload_dir))):
                 response = await upload_zip(upload)
 
             expected_roots = [
@@ -134,7 +149,7 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
 
             upload = UploadFile(filename="code.zip", file=io.BytesIO(b"not-a-zip"))
 
-            with patch("api.routers.upload.UPLOAD_DIR", str(upload_dir)):
+            with patch("api.routers.upload.settings", new=_test_settings(str(upload_dir))):
                 response = await upload_zip(upload)
 
             self.assertEqual(response.status_code, 400)
@@ -164,9 +179,7 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
 
             upload = UploadFile(filename="code.zip", file=io.BytesIO(b"0123456789ABCDEF"))
 
-            with patch("api.routers.upload.UPLOAD_DIR", str(upload_dir)), patch(
-                "api.routers.upload.UPLOAD_MAX_ARCHIVE_SIZE_BYTES", 8
-            ):
+            with patch("api.routers.upload.settings", new=_test_settings(str(upload_dir), upload_max_archive_size_bytes=8)):
                 response = await upload_zip(upload)
 
             self.assertEqual(response.status_code, 400)
@@ -200,7 +213,7 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
                 file=io.BytesIO(_build_zip_bytes(("README.md", "no java here"))),
             )
 
-            with patch("api.routers.upload.UPLOAD_DIR", str(upload_dir)):
+            with patch("api.routers.upload.settings", new=_test_settings(str(upload_dir))):
                 response = await upload_zip(upload)
 
             self.assertEqual(response.status_code, 400)
@@ -237,7 +250,7 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
 
             mock_ingest.side_effect = [RuntimeError("boom"), None, None]
 
-            with patch("api.routers.upload.UPLOAD_DIR", str(upload_dir)):
+            with patch("api.routers.upload.settings", new=_test_settings(str(upload_dir))):
                 response = await upload_zip(upload)
 
             self.assertEqual(response.status_code, 500)
@@ -286,7 +299,7 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
                 IngestionError("restore workspace failed"),
             ]
 
-            with patch("api.routers.upload.UPLOAD_DIR", str(upload_dir)):
+            with patch("api.routers.upload.settings", new=_test_settings(str(upload_dir))):
                 response = await upload_zip(upload)
 
             self.assertEqual(response.status_code, 500)

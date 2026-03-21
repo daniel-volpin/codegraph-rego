@@ -132,6 +132,27 @@ Key endpoints:
 - `POST /remediation/apply`
 - `GET /health`
 
+## Configuration
+
+Runtime configuration is loaded via `codegraph.config.get_settings()` (lazy, cached).
+
+Key environment variables:
+
+- `NEO4J_URI`
+- `NEO4J_USER`
+- `NEO4J_PASS` (required at runtime)
+- `LLM_PROVIDER`
+- `LLM_MODEL`
+- `LLM_API_BASE`
+- `LLM_API_KEY`
+- `LLM_TEMPERATURE` (must be in `[0, 2]`)
+- `LLM_CONCURRENCY` (must be `>= 1`)
+- `REMEDIATION_CONFIDENCE_THRESHOLD_APPLY` (must be in `[0, 1]`)
+- `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW` (must be in `[0, 1]`)
+- `REMEDIATION_CONFIDENCE_TEMPERATURE` (must be `> 0`)
+
+Use `.env.example` as the canonical local template. Startup performs runtime validation and reports degraded startup status if required runtime settings are missing.
+
 `GET /health` now reports explicit degraded startup state. It returns `200` only when startup preload and the core runtime checks are healthy; otherwise it returns `503` with structured details for the degraded component(s).
 
 ## Reproducibility

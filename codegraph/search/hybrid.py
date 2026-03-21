@@ -15,12 +15,7 @@ import faiss  # type: ignore
 from sentence_transformers import SentenceTransformer
 from neo4j import Driver
 
-from codegraph.config import (
-    FAISS_INDEX_PATH,
-    SIGNATURE_MAP_PATH,
-    SIGNATURE_MAP_PATH_FULL,
-    EMBEDDING_MODEL_NAME,
-)
+from codegraph.config import settings
 
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
@@ -33,7 +28,7 @@ _MODEL: SentenceTransformer | None = None
 _MODEL_LOCK = threading.Lock()
 
 
-def load_faiss_index(index_path: str = FAISS_INDEX_PATH):
+def load_faiss_index(index_path: str = settings.faiss_index_path):
     global _INDEX, _INDEX_MTIME
     if not os.path.isfile(index_path):
         raise FileNotFoundError(f"FAISS index not found at {index_path}. Build embeddings first.")
@@ -45,9 +40,9 @@ def load_faiss_index(index_path: str = FAISS_INDEX_PATH):
     return _INDEX
 
 
-def load_signature_map(map_path: str = SIGNATURE_MAP_PATH) -> List[str]:
+def load_signature_map(map_path: str = settings.signature_map_path) -> List[str]:
     global _SIGMAP, _SIGMAP_MTIME
-    candidates = [SIGNATURE_MAP_PATH_FULL, map_path, SIGNATURE_MAP_PATH]
+    candidates = [settings.signature_map_path_full, map_path, settings.signature_map_path]
     last_exc: Exception | None = None
     for candidate in candidates:
         if not os.path.isfile(candidate):
@@ -68,7 +63,7 @@ def load_signature_map(map_path: str = SIGNATURE_MAP_PATH) -> List[str]:
     raise FileNotFoundError(msg)
 
 
-def load_embedding_model(model_name: str = EMBEDDING_MODEL_NAME) -> SentenceTransformer:
+def load_embedding_model(model_name: str = settings.embedding_model_name) -> SentenceTransformer:
     global _MODEL
     
     # Fast path without lock if already loaded

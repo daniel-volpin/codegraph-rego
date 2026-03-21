@@ -9,15 +9,7 @@ from typing import Callable, Dict, List, Tuple
 import hashlib
 import logging
 
-from codegraph.config import (
-    NEO4J_URI,
-    NEO4J_USER,
-    NEO4J_PASS,
-    EMBEDDING_MODEL_NAME,
-    INDEX_DIR,
-    EMBEDDING_METADATA_PATH,
-    EMBEDDING_CACHE_PATH,
-)
+from codegraph.config import settings
 
 CONTEXT_LINES_BEFORE = 5
 CONTEXT_LINES_AFTER = 20
@@ -91,8 +83,8 @@ class EmbeddingService:
         method_records: List[Tuple[str, str]] = []
         if progress_callback:
             progress_callback("embedding", "Fetching methods from Neo4j…", 82.0)
-        model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-        with GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS)) as driver:
+        model = SentenceTransformer(settings.embedding_model_name)
+        with GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass)) as driver:
             with driver.session() as session:
                 results = session.run(
                     "MATCH (m:Method) RETURN coalesce(m.full_signature, m.signature) AS sig, m.name AS name, m.file_path AS path"
@@ -105,7 +97,7 @@ class EmbeddingService:
         if rebuild_index:
             cache_entries: Dict[str, Dict[str, object]] = {}
         else:
-            cache_entries = _load_embedding_cache(EMBEDDING_CACHE_PATH, EMBEDDING_MODEL_NAME)
+            cache_entries = _load_embedding_cache(settings.embedding_cache_path, settings.embedding_model_name)
         if not signatures:
             LOGGER.warning("No method snippets found; skipping embedding build.")
             return
@@ -157,10 +149,10 @@ class EmbeddingService:
         if progress_callback:
             progress_callback("embedding", f"Cache hits: {cached_hits}; encoded: {len(to_encode)}", 88.0)
         print(f"vectors_np shape: {vectors_np.shape}, dtype: {vectors_np.dtype}")
-        os.makedirs(INDEX_DIR, exist_ok=True)
-        index_path = os.path.join(INDEX_DIR, "code_embeddings.index")
-        sigmap_legacy_path = os.path.join(INDEX_DIR, "embedding_signature_map.json")
-        sigmap_full_path = os.path.join(INDEX_DIR, "embedding_full_signature_map.json")
+        os.makedirs(settings.index_dir, exist_ok=True)
+        index_path = os.path.join(settings.index_dir, "code_embeddings.index")
+        sigmap_legacy_path = os.path.join(settings.index_dir, "embedding_signature_map.json")
+        sigmap_full_path = os.path.join(settings.index_dir, "embedding_full_signature_map.json")
         if vectors_np.shape[0] > 0:
             dim = int(vectors_np.shape[1])
             index = faiss.IndexFlatIP(dim)
@@ -184,24 +176,24 @@ class EmbeddingService:
         if progress_callback:
             progress_callback("embedding", "Embedding metadata saved.", 95.0)
         metadata = {
-            "model": EMBEDDING_MODEL_NAME,
+            "model": settings.embedding_model_name,
             "dim": dim,
             "metric": "cosine",
             "count": len(signatures),
             "built_at": datetime.now(timezone.utc).isoformat(),
             "index_path": index_path,
             "signature_map": {"full": sigmap_full_path, "legacy": sigmap_legacy_path},
-            "cache_path": EMBEDDING_CACHE_PATH,
+            "cache_path": settings.embedding_cache_path,
             "cache_hits": cached_hits,
             "cache_misses": len(to_encode),
         }
         try:
-            with open(EMBEDDING_METADATA_PATH, "w") as f:
+            with open(settings.embedding_metadata_path, "w") as f:
                 json.dump(metadata, f, indent=2)
         except Exception:
             pass
         try:
-            _persist_embedding_cache(EMBEDDING_CACHE_PATH, EMBEDDING_MODEL_NAME, dim, cache_entries)
+            _persist_embedding_cache(settings.embedding_cache_path, settings.embedding_model_name, dim, cache_entries)
         except Exception as exc:
             LOGGER.warning("Failed to persist embedding cache: %s", exc)
         print(f"Done. Saved FAISS index to {index_path} and signature map to {sigmap_full_path}.")

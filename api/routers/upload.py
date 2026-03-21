@@ -11,14 +11,7 @@ from codegraph.ingestion.utils import UploadValidationError, find_java_roots, sa
 from codegraph.ingestion.service import IngestionError, ingest, purge_workspace_entities
 from codegraph.embedding.service import EmbeddingService
 from api.models.validation import UploadResponse, UploadStatusResponse
-from codegraph.config import (
-    UPLOAD_DIR,
-    UPLOAD_MAX_ARCHIVE_ENTRIES,
-    UPLOAD_MAX_ARCHIVE_SIZE_BYTES,
-    UPLOAD_MAX_COMPRESSION_RATIO,
-    UPLOAD_MAX_EXTRACTED_SIZE_BYTES,
-    UPLOAD_MAX_MEMBER_SIZE_BYTES,
-)
+from codegraph.config import settings
 from codegraph.common.progress import (
     start_progress,
     update_progress,
@@ -32,7 +25,7 @@ UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def _workspace_parent_dir() -> str:
-    parent_dir = os.path.dirname(os.path.abspath(UPLOAD_DIR))
+    parent_dir = os.path.dirname(os.path.abspath(settings.upload_dir))
     os.makedirs(parent_dir, exist_ok=True)
     return parent_dir
 
@@ -45,7 +38,7 @@ def _stage_upload_archive(file_name: str) -> tuple[str, str]:
 
 
 def _swap_workspace(staging_dir: str) -> str | None:
-    target_dir = os.path.abspath(UPLOAD_DIR)
+    target_dir = os.path.abspath(settings.upload_dir)
     parent_dir = _workspace_parent_dir()
     backup_dir = None
     if os.path.exists(target_dir):
@@ -57,7 +50,7 @@ def _swap_workspace(staging_dir: str) -> str | None:
 
 
 def _restore_workspace(backup_dir: str | None) -> None:
-    target_dir = os.path.abspath(UPLOAD_DIR)
+    target_dir = os.path.abspath(settings.upload_dir)
     if os.path.exists(target_dir):
         shutil.rmtree(target_dir)
     if backup_dir and os.path.exists(backup_dir):
@@ -77,9 +70,9 @@ async def _stream_upload_to_disk(file: UploadFile, zip_path: str) -> None:
             if not chunk:
                 break
             total_bytes += len(chunk)
-            if total_bytes > UPLOAD_MAX_ARCHIVE_SIZE_BYTES:
+            if total_bytes > settings.upload_max_archive_size_bytes:
                 raise UploadValidationError(
-                    f"Uploaded archive exceeds size limit ({total_bytes} > {UPLOAD_MAX_ARCHIVE_SIZE_BYTES})"
+                    f"Uploaded archive exceeds size limit ({total_bytes} > {settings.upload_max_archive_size_bytes})"
                 )
             await handle.write(chunk)
 
@@ -108,10 +101,10 @@ async def upload_zip(file: UploadFile = File(...)):
             safe_extract_zip(
                 zip_ref,
                 staging_dir,
-                max_file_size=UPLOAD_MAX_MEMBER_SIZE_BYTES,
-                max_total_size=UPLOAD_MAX_EXTRACTED_SIZE_BYTES,
-                max_entries=UPLOAD_MAX_ARCHIVE_ENTRIES,
-                max_compression_ratio=UPLOAD_MAX_COMPRESSION_RATIO,
+                max_file_size=settings.upload_max_member_size_bytes,
+                max_total_size=settings.upload_max_extracted_size_bytes,
+                max_entries=settings.upload_max_archive_entries,
+                max_compression_ratio=settings.upload_max_compression_ratio,
             )
         if zip_path and os.path.exists(zip_path):
             os.remove(zip_path)
@@ -139,8 +132,8 @@ async def upload_zip(file: UploadFile = File(...)):
         backup_dir = _swap_workspace(staging_dir)
         staging_dir = None
         update_progress("upload", "Resetting uploaded graph…", 20.0)
-        purge_workspace_entities(os.path.abspath(UPLOAD_DIR))
-        final_java_roots = [os.path.join(os.path.abspath(UPLOAD_DIR), relative) for relative in java_root_relatives]
+        purge_workspace_entities(os.path.abspath(settings.upload_dir))
+        final_java_roots = [os.path.join(os.path.abspath(settings.upload_dir), relative) for relative in java_root_relatives]
         _ingest_java_roots(final_java_roots)
     except IngestionError as exc:
         restore_error = None
@@ -148,9 +141,9 @@ async def upload_zip(file: UploadFile = File(...)):
             update_progress("upload", "Restoring previous workspace…", 21.0)
             _restore_workspace(backup_dir)
             backup_dir = None
-            if os.path.exists(os.path.abspath(UPLOAD_DIR)):
-                restored_java_roots = find_java_roots(os.path.abspath(UPLOAD_DIR))
-                purge_workspace_entities(os.path.abspath(UPLOAD_DIR))
+            if os.path.exists(os.path.abspath(settings.upload_dir)):
+                restored_java_roots = find_java_roots(os.path.abspath(settings.upload_dir))
+                purge_workspace_entities(os.path.abspath(settings.upload_dir))
                 if restored_java_roots:
                     _ingest_java_roots(restored_java_roots)
         except Exception as restore_exc:  # pragma: no cover - defensive fallback
@@ -172,9 +165,9 @@ async def upload_zip(file: UploadFile = File(...)):
             update_progress("upload", "Restoring previous workspace…", 21.0)
             _restore_workspace(backup_dir)
             backup_dir = None
-            if os.path.exists(os.path.abspath(UPLOAD_DIR)):
-                restored_java_roots = find_java_roots(os.path.abspath(UPLOAD_DIR))
-                purge_workspace_entities(os.path.abspath(UPLOAD_DIR))
+            if os.path.exists(os.path.abspath(settings.upload_dir)):
+                restored_java_roots = find_java_roots(os.path.abspath(settings.upload_dir))
+                purge_workspace_entities(os.path.abspath(settings.upload_dir))
                 if restored_java_roots:
                     _ingest_java_roots(restored_java_roots)
         except Exception as restore_exc:  # pragma: no cover - defensive fallback
@@ -192,7 +185,7 @@ async def upload_zip(file: UploadFile = File(...)):
         return JSONResponse(content={"error": f"Processing failed: {exc}"}, status_code=500)
     _cleanup_dir(backup_dir)
     complete_progress("Codebase processed!")
-    final_java_roots = [os.path.join(os.path.abspath(UPLOAD_DIR), relative) for relative in java_root_relatives]
+    final_java_roots = [os.path.join(os.path.abspath(settings.upload_dir), relative) for relative in java_root_relatives]
     return UploadResponse(
         status="Codebase processed!",
         java_root=final_java_roots[0],

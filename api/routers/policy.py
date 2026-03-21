@@ -18,7 +18,7 @@ from codegraph.llm.integration import (
     render_policy_explanation_structured,
 )
 from codegraph.llm.client import LLMUnavailableError
-from codegraph.config import LLM_MODEL, settings
+from codegraph.config import settings
 from codegraph.policy.review_store import append_review_jsonl, resolve_review_store_path
 import logging
 from collections import deque
@@ -65,7 +65,7 @@ async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
     enriched = explain_policy_violations(
         vio,
         max_items=safe_limit,
-        model=(payload.model or "").strip() or LLM_MODEL,
+        model=(payload.model or "").strip() or settings.llm_model,
     )
     return JSONResponse({"violations": vio, "enriched": enriched})
 

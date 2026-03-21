@@ -11,7 +11,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Dict, List, Optional
 
-from codegraph.config import LLM_CONCURRENCY
+from codegraph.config import settings
 from codegraph.evaluation.explanation_runtime import ExplanationRuntime, utc_now_iso
 from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
 from codegraph.evaluation.pipeline import (
@@ -236,7 +236,7 @@ def main() -> int:
     interrupted = False
 
     try:
-        with ThreadPoolExecutor(max_workers=max(1, LLM_CONCURRENCY)) as pool:
+        with ThreadPoolExecutor(max_workers=max(1, settings.llm_concurrency)) as pool:
             for category_id in context.selected_category_ids:
                 spec = categories_by_id.get(category_id)
                 if not spec:

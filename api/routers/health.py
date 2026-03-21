@@ -9,14 +9,14 @@ router = APIRouter()
 
 
 def _load_search_health_dependencies() -> dict[str, Any]:
-    from codegraph.config import FAISS_INDEX_PATH, SIGNATURE_MAP_PATH, SIGNATURE_MAP_PATH_FULL, EMBEDDING_MODEL_NAME
+    from codegraph.config import settings
     from codegraph.search.hybrid import load_faiss_index, load_signature_map, load_embedding_model
 
     return {
-        "faiss_index_path": FAISS_INDEX_PATH,
-        "signature_map_path": SIGNATURE_MAP_PATH,
-        "signature_map_path_full": SIGNATURE_MAP_PATH_FULL,
-        "embedding_model_name": EMBEDDING_MODEL_NAME,
+        "faiss_index_path": settings.faiss_index_path,
+        "signature_map_path": settings.signature_map_path,
+        "signature_map_path_full": settings.signature_map_path_full,
+        "embedding_model_name": settings.embedding_model_name,
         "load_faiss_index": load_faiss_index,
         "load_signature_map": load_signature_map,
         "load_embedding_model": load_embedding_model,
