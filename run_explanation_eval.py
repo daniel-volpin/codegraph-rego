@@ -9,7 +9,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from codegraph.config import LLM_CONCURRENCY
 from codegraph.evaluation.explanation_runtime import ExplanationRuntime, utc_now_iso
@@ -21,8 +21,12 @@ from codegraph.evaluation.pipeline import (
     load_benchmark_evaluation_context,
     staged_benchmark_workspace,
 )
-from codegraph.llm.explanation_prompting import build_explanation_prompt
-from codegraph.llm.integration import generate_policy_explanation
+from codegraph.llm.evidence_cards import format_citation
+from codegraph.llm.explanation_prompting import build_explanation_evidence, build_explanation_prompt
+from codegraph.llm.integration import (
+    generate_policy_explanation_structured,
+    render_policy_explanation_structured,
+)
 
 LOGGER = logging.getLogger("codegraph.eval.explanation")
 
@@ -81,27 +85,40 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_citation_tokens(violation: Dict[str, Any]) -> List[str]:
-    evidence = violation.get("evidence") or {}
-    tokens: List[str] = []
-    file_path = evidence.get("file_path") or violation.get("file_path")
-    target_method = evidence.get("target_method") or violation.get("target_method")
-    if isinstance(file_path, str):
-        tokens.append(file_path)
-    if isinstance(target_method, str):
-        tokens.append(target_method)
-    start_line = evidence.get("start_line")
-    end_line = evidence.get("end_line")
-    if isinstance(start_line, int):
-        tokens.append(f"line {start_line}")
-    if isinstance(start_line, int) and isinstance(end_line, int):
-        tokens.append(f"lines {start_line}-{end_line}")
-    return [token for token in tokens if token]
+def build_expected_citation(
+    violation: Dict[str, Any],
+    *,
+    include_graph_context: bool,
+    evidence_mode: str,
+) -> Optional[str]:
+    payload = build_explanation_evidence(
+        violation,
+        include_graph_context=include_graph_context,
+        evidence_mode=evidence_mode,
+    )
+    evidence_cards = payload.get("evidence_cards") or []
+    if evidence_cards:
+        citation = evidence_cards[0].get("citation")
+        if isinstance(citation, str) and citation.strip() and citation != "No file citation available":
+            return citation.strip()
+
+    citation = format_citation(
+        payload.get("file_path"),
+        payload.get("start_line"),
+        payload.get("end_line"),
+    )
+    if citation == "No file citation available":
+        return None
+    return citation
 
 
-def has_citation(text: str, tokens: List[str]) -> bool:
-    haystack = text.lower()
-    return any(token.lower() in haystack for token in tokens if token)
+def has_exact_citation(explanation_payload: Dict[str, Any] | None, expected_citation: str | None) -> bool:
+    if not expected_citation or not isinstance(explanation_payload, dict):
+        return False
+    actual_citation = explanation_payload.get("citation")
+    if not isinstance(actual_citation, str):
+        return False
+    return actual_citation.strip() == expected_citation
 
 def _measure_prompt_chars(messages: List[Dict[str, str]]) -> int:
     return sum(len(message.get("content", "")) for message in messages)
@@ -122,20 +139,22 @@ def _run_explanation_request(
     prompt_chars = _measure_prompt_chars(messages)
     started = perf_counter()
     error = None
+    structured_explanation: Dict[str, Any] | None = None
     try:
-        explanation = generate_policy_explanation(
+        structured_explanation = generate_policy_explanation_structured(
             violation,
             include_graph_context=include_graph_context,
             evidence_mode=evidence_mode,
-            structured_output=True,
             max_tokens=max_tokens,
         )
+        explanation = render_policy_explanation_structured(structured_explanation)
     except Exception as exc:  # pragma: no cover - defensive runtime guard
         explanation = f"[LLM unavailable: unexpected error: {exc}]"
         error = str(exc)
     latency_ms = round((perf_counter() - started) * 1000, 2)
     return {
         "explanation": explanation,
+        "structured_explanation": structured_explanation,
         "prompt_chars": prompt_chars,
         "response_chars": len(explanation),
         "latency_ms": latency_ms,
@@ -242,7 +261,16 @@ def main() -> int:
                     metrics[category_id].update(context.coverage_by_category[category_id])
 
                 for idx, violation in enumerate(category_violations, start=1):
-                    tokens = build_citation_tokens(violation)
+                    with_expected_citation = build_expected_citation(
+                        violation,
+                        include_graph_context=True,
+                        evidence_mode=args.evidence_mode,
+                    )
+                    without_expected_citation = build_expected_citation(
+                        violation,
+                        include_graph_context=False,
+                        evidence_mode=args.evidence_mode,
+                    )
                     fut_with = pool.submit(
                         _run_explanation_request,
                         violation=violation,
@@ -262,8 +290,11 @@ def main() -> int:
 
                     explanation_with = with_result["explanation"]
                     explanation_without = without_result["explanation"]
-                    with_hit = bool(tokens and has_citation(explanation_with, tokens))
-                    without_hit = bool(tokens and has_citation(explanation_without, tokens))
+                    with_hit = has_exact_citation(with_result.get("structured_explanation"), with_expected_citation)
+                    without_hit = has_exact_citation(
+                        without_result.get("structured_explanation"),
+                        without_expected_citation,
+                    )
                     if with_hit:
                         with_success += 1
                     if without_hit:
@@ -309,7 +340,8 @@ def main() -> int:
                                 "violation_id": violation.get("violation_id"),
                                 "target_method": violation.get("target_method"),
                                 "file_path": violation.get("file_path"),
-                                "evidence_tokens": tokens,
+                                "expected_citation_with_context": with_expected_citation,
+                                "expected_citation_without_context": without_expected_citation,
                                 "evidence_mode": args.evidence_mode,
                                 "explanation_with_context": explanation_with,
                                 "explanation_without_context": explanation_without,
