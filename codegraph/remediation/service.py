@@ -18,12 +18,10 @@ import logging
 import os
 import re
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from codegraph.config import settings
-from codegraph.ingestion.service import process_single_file_content
 from codegraph.llm.client import generate_chat_completion
 from codegraph.llm.schema.remediation import parse_structured_generation_response
 from codegraph.llm.services.remediation_generation_service import RemediationGenerationService
@@ -65,10 +63,9 @@ from codegraph.remediation.editing import (
     resolve_file_path,
 )
 from codegraph.remediation.apply_flow import execute_apply_fix
-from codegraph.remediation.metrics import capture_raw_llm_output, extract_testcase_id, summarize_retry_error
+from codegraph.remediation.metrics import summarize_retry_error
 from codegraph.remediation.planning import build_remediation_plan
 from codegraph.remediation.validation import (
-    extract_assistant_content,
     extract_json_block,
 )
 from codegraph.remediation.verification import (
