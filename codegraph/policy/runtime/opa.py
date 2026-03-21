@@ -4,9 +4,11 @@ import json
 import os
 import subprocess
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from codegraph.remediation.capabilities import remediation_capability_dict
+
+from .contracts import PolicyBundle, serialize_policy_bundle
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.abspath(os.path.join(_THIS_DIR, os.pardir, os.pardir, os.pardir))
@@ -33,7 +35,7 @@ def normalize_violation_payload(payload: Any, logger) -> Optional[Dict[str, Any]
 
 def build_violation_response(
     normalized: Dict[str, Any],
-    bundle: Dict[str, Any],
+    bundle: Mapping[str, Any],
     control_meta: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     violation_id = normalized.get("violation_id") or normalized.get("id")
@@ -67,11 +69,12 @@ def build_violation_response(
     }
 
 
-def evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
+def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> List[Dict[str, Any]]:
+    serialized_bundle = serialize_policy_bundle(bundle)
     with tempfile.TemporaryDirectory() as tmp:
         input_path = os.path.join(tmp, "input.json")
         with open(input_path, "w", encoding="utf-8") as file:
-            json.dump(bundle, file)
+            json.dump(serialized_bundle, file)
         cmd = [
             "opa",
             "eval",
@@ -85,7 +88,7 @@ def evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
-            raise RuntimeError(f"OPA evaluation failed for {bundle.get('target_method')}: {proc.stderr}")
+            raise RuntimeError(f"OPA evaluation failed for {serialized_bundle.get('target_method')}: {proc.stderr}")
         try:
             out = json.loads(proc.stdout)
         except json.JSONDecodeError as exc:

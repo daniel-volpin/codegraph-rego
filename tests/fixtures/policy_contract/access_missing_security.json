@@ -1,0 +1,16 @@
+{
+  "notes": "Endpoint annotation without a security annotation should surface the access-control rule.",
+  "bundle": {
+    "target_method": "org.example.UserController.listUsers()",
+    "method_name": "listUsers",
+    "file_path": "src/main/java/org/example/UserController.java",
+    "source_code": "@GetMapping(\"/users\") public String listUsers() { return \"ok\"; }",
+    "graph_context": {
+      "annotations": ["GetMapping"],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    }
+  },
+  "expected_violation_ids": ["ISO-A.9.4.1"]
+}

@@ -1,0 +1,17 @@
+{
+  "notes": "Null analysis flags must remain null so the SQL fallback path still sees a safe prepared-statement shape and emits no finding.",
+  "bundle": {
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest99998.doPost(HttpServletRequest,HttpServletResponse)",
+    "method_name": "doPost",
+    "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest99998.java",
+    "source_code": "String param = request.getParameter(\"x\"); String sql = \"SELECT * from USERS where USERNAME=? and PASSWORD='\" + bar + \"'\"; connection.prepareStatement(sql);",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    },
+    "analysis_flags": null
+  },
+  "expected_violation_ids": []
+}

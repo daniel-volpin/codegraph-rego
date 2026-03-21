@@ -13,6 +13,7 @@ from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.search.service import HybridSearchService
 
 from .catalog import get_policy_catalog_entries, load_iso_rules
+from .contracts import build_policy_bundle, serialize_policy_bundle, serialize_policy_input_envelope
 
 LOGGER = logging.getLogger(__name__)
 
@@ -218,20 +219,21 @@ def build_evidence_bundle(
             vector_context = search_service.similar_to_signature(method_snapshot["signature"], top_k=3)
         except Exception as exc:  # pragma: no cover - optional dependency
             LOGGER.debug("Vector lookup failed for %s: %s", method_snapshot["signature"], exc)
-    return {
-        "target_method": method_snapshot["signature"],
-        "method_name": method_snapshot.get("name"),
-        "class_fqn": method_snapshot.get("class_fqn"),
-        "file_path": resolved_path.as_posix() if resolved_path else file_path,
-        "start_line": method_snapshot.get("start_line"),
-        "end_line": method_snapshot.get("end_line"),
-        "modifiers": method_snapshot.get("modifiers") or [],
-        "source_code": source_code,
-        "graph_context": graph_context,
-        "vector_context": vector_context,
-        "analysis_flags": analysis_flags,
-        "helper_summaries": helper_summaries,
-    }
+    bundle = build_policy_bundle(
+        target_method=method_snapshot["signature"],
+        method_name=method_snapshot.get("name"),
+        class_fqn=method_snapshot.get("class_fqn"),
+        file_path=resolved_path.as_posix() if resolved_path else file_path,
+        start_line=method_snapshot.get("start_line"),
+        end_line=method_snapshot.get("end_line"),
+        modifiers=method_snapshot.get("modifiers") or [],
+        source_code=source_code,
+        graph_context=graph_context,
+        vector_context=vector_context,
+        analysis_flags=analysis_flags,
+        helper_summaries=helper_summaries,
+    )
+    return serialize_policy_bundle(bundle)
 
 
 def build_policy_input(
@@ -265,8 +267,8 @@ def build_policy_input(
         for future in as_completed(future_to_idx):
             bundles[future_to_idx[future]] = future.result()
 
-    return {
-        "bundles": bundles,
-        "rules_catalog": load_iso_rules(),
-        "catalog": get_policy_catalog_entries(),
-    }
+    return serialize_policy_input_envelope(
+        bundles=bundles,
+        rules_catalog=load_iso_rules(),
+        catalog=get_policy_catalog_entries(),
+    )

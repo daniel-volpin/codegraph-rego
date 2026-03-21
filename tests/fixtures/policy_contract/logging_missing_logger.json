@@ -1,0 +1,16 @@
+{
+  "notes": "Sensitive mutation method without logger usage should surface the logging rule.",
+  "bundle": {
+    "target_method": "org.example.AccountService.deleteUser()",
+    "method_name": "deleteUser",
+    "file_path": "src/main/java/org/example/AccountService.java",
+    "source_code": "public void deleteUser() { repository.deleteAll(); }",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    }
+  },
+  "expected_violation_ids": ["ISO-A.12.4.1"]
+}
