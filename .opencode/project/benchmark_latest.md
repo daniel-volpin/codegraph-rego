@@ -4,18 +4,23 @@ Latest thesis-grade benchmark results on this repository state.
 
 ## Detection Full
 
-Source: `outputs/detection_calibration_path_precision_v4/table.md`
+Source: `outputs/detection_calibration_multihop_refresh_v1/table.md`
 
 - Overall:
-  - `TP=178`
-  - `FP=35`
-  - `FN=55`
-  - `Precision=0.8357`
-  - `Recall=0.7639`
-  - `F1=0.7982`
-- Notable calibrated category:
-  - Path traversal: `TP=24`, `FP=4`, `FN=5`
-  - Path traversal `Precision=0.8571`, `Recall=0.8276`, `F1=0.8421`
+  - `TP=215`
+  - `FP=18`
+  - `FN=18`
+  - `Precision=0.9227`
+  - `Recall=0.9227`
+  - `F1=0.9227`
+- Injection categories after graph-aware multi-hop taint confirmation:
+  - SQL injection: `TP=32`, `FP=6`, `FN=3`, `Precision=0.8421`, `Recall=0.9143`, `F1=0.8767`
+  - Path traversal: `TP=28`, `FP=3`, `FN=1`, `Precision=0.9032`, `Recall=0.9655`, `F1=0.9333`
+  - Command injection: `TP=34`, `FP=3`, `FN=1`, `Precision=0.9189`, `Recall=0.9714`, `F1=0.9444`
+  - LDAP injection: `TP=25`, `FP=2`, `FN=2`, `Precision=0.9259`, `Recall=0.9259`, `F1=0.9259`
+  - XPath injection: `TP=15`, `FP=2`, `FN=0`, `Precision=0.8824`, `Recall=1.0`, `F1=0.9375`
+- Focused FP analysis artifact:
+  - `outputs/detection_calibration_multihop_refresh_v1/injection_fp_report.json`
 
 ## Explanation Full
 
@@ -41,7 +46,7 @@ Source: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/summary.md
 ## Authoritative vs Reference Runs
 
 - Cite the following as the current benchmark-backed baseline:
-  - detection: `outputs/detection_calibration_path_precision_v4/`
+  - detection: `outputs/detection_calibration_multihop_refresh_v1/`
   - explanation: `outputs/thesis_final_explanation_full/`
   - remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
 - Treat `outputs/final_full_remediation_current_main/` as a later regression/reference run, not the thesis headline remediation result.
@@ -56,7 +61,11 @@ Source: `outputs/span_edit_bounded_smoke_v2/summary.md`
 ## Reading The Results
 
 - Detection, explanation, and bounded remediation are now all benchmark-backed at materially stronger levels than the earlier thesis baseline.
-- Detection is now stronger because path findings are driven by bounded sink semantics plus one-hop helper summaries instead of broad fallback heuristics.
+- Detection is now stronger because graph-aware multi-hop taint confirmation closes major interprocedural recall gaps across the injection families.
+- The remaining injection false positives are concentrated rather than diffuse:
+  - SQL precision noise from dynamic-query syntax without strong enough taint proof in some benchmark-safe transforms
+  - command-injection noise from helper-return taint over-trust in a small cluster of cases
+  - smaller LDAP and XPath precision gaps tied to transform/sanitization modeling
 - Compile-backed remediation is now real on the successful supported cases.
 - Remediation remains bounded, but the current supported-medium compile-backed rerun now reaches `17/17`.
 

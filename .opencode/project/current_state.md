@@ -66,17 +66,20 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
   - command detection distinguishes payload taint from env-only taint
   - path detection now uses bounded sink-level path semantics with safe constant/resource suppression
   - helper summary resolution now falls back to same-file nested helpers when graph call edges are missing
-- Detection calibration improved the current full benchmark baseline:
-  - precision: `0.8357`
-  - recall: `0.7639`
-  - F1: `0.7982`
-- Path traversal is no longer a primary weak spot on the sampled full benchmark rerun:
-  - precision: `0.8571`
-  - recall: `0.8276`
-  - F1: `0.8421`
+- Detection calibration now includes graph-aware multi-hop taint confirmation for injection families.
+- Detection baseline after the multi-hop taint refresh on the full benchmark is now:
+  - precision: `0.9227`
+  - recall: `0.9227`
+  - F1: `0.9227`
+- Injection families materially improved on the refreshed full benchmark rerun:
+  - SQL injection: `precision=0.8421`, `recall=0.9143`, `F1=0.8767`
+  - path traversal: `precision=0.9032`, `recall=0.9655`, `F1=0.9333`
+  - command injection: `precision=0.9189`, `recall=0.9714`, `F1=0.9444`
+  - LDAP injection: `precision=0.9259`, `recall=0.9259`, `F1=0.9259`
+  - XPath injection: `precision=0.8824`, `recall=1.0`, `F1=0.9375`
 - Benchmark-first outputs are the authoritative evidence for current capability.
 - Authoritative benchmark baselines are frozen as:
-  - detection: `outputs/detection_calibration_path_precision_v4/`
+  - detection: `outputs/detection_calibration_multihop_refresh_v1/`
   - explanation: `outputs/thesis_final_explanation_full/`
   - remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
 - The later `outputs/final_full_remediation_current_main/` rerun (`9/10`) remains a useful regression reference, not the thesis headline baseline.
