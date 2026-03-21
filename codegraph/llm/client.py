@@ -2,8 +2,11 @@
 
 from typing import Any
 
-from codegraph.llm.transport.base import LLMRequest
+from codegraph.llm.transport.base import LLMRequest, LLMUnavailableError
 from codegraph.llm.transport.litellm_transport import LiteLLMTransport
+
+
+__all__ = ["generate_chat_completion", "LLMUnavailableError"]
 
 
 _DEFAULT_TRANSPORT = LiteLLMTransport()
