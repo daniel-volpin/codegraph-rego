@@ -1,5 +1,6 @@
 import json
 import re
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -16,6 +17,10 @@ from tests._support import PROJECT_ROOT
 def _load_json(path: Path):
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _write_json(path: Path, payload) -> None:
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 class TestPolicyArtifacts(unittest.TestCase):
@@ -57,6 +62,42 @@ class TestPolicyArtifacts(unittest.TestCase):
         category_ids = {entry["category_id"] for entry in payload["benchmark_categories"]}
         self.assertIn("hash-md5", category_ids)
         self.assertIn("xpath-injection", category_ids)
+
+    def test_registry_rejects_duplicate_rule_ids(self):
+        payload = _load_json(PROJECT_ROOT / "configs" / "benchmark" / "policy_registry.json")
+        payload["rules"].append(dict(payload["rules"][0]))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            registry_path = Path(temp_dir) / "policy_registry.json"
+            _write_json(registry_path, payload)
+            with self.assertRaisesRegex(ValueError, "duplicate rule id"):
+                load_policy_registry(registry_path.as_posix())
+
+    def test_registry_rejects_alias_collision_with_rule_id(self):
+        payload = _load_json(PROJECT_ROOT / "configs" / "benchmark" / "policy_registry.json")
+        payload["rules"][0]["alias_ids"] = [payload["rules"][1]["id"]]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            registry_path = Path(temp_dir) / "policy_registry.json"
+            _write_json(registry_path, payload)
+            with self.assertRaisesRegex(ValueError, "collides with a rule id"):
+                load_policy_registry(registry_path.as_posix())
+
+    def test_registry_rejects_missing_rego_module(self):
+        payload = _load_json(PROJECT_ROOT / "configs" / "benchmark" / "policy_registry.json")
+        payload["rules"][0]["rego_module"] = "policy/missing_module.rego"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            registry_path = Path(temp_dir) / "policy_registry.json"
+            _write_json(registry_path, payload)
+            with self.assertRaisesRegex(ValueError, "missing module"):
+                load_policy_registry(registry_path.as_posix())
+
+    def test_registry_rejects_unknown_evidence_field_alias(self):
+        payload = _load_json(PROJECT_ROOT / "configs" / "benchmark" / "policy_registry.json")
+        payload["rules"][0]["evidence_fields"] = ["signature", "unknown_field"]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            registry_path = Path(temp_dir) / "policy_registry.json"
+            _write_json(registry_path, payload)
+            with self.assertRaisesRegex(ValueError, "unknown evidence field"):
+                load_policy_registry(registry_path.as_posix())
 
 
 if __name__ == "__main__":

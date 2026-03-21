@@ -6,6 +6,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Literal
 
+from codegraph.policy.runtime.contracts import EVIDENCE_FIELD_ALIAS_MAP
+
 
 RegistryTier = Literal["full", "guarded", "manual"]
 
@@ -153,7 +155,54 @@ def _parse_categories(entries: Any) -> tuple[BenchmarkCategorySpec, ...]:
 
 
 def _validate_registry(registry: PolicyRegistry) -> PolicyRegistry:
-    rule_ids = {spec.id for spec in registry.rules}
+    all_rule_ids = [rule.id for rule in registry.rules]
+    duplicate_rule_ids = sorted({rule_id for rule_id in all_rule_ids if all_rule_ids.count(rule_id) > 1 and rule_id})
+    if duplicate_rule_ids:
+        raise ValueError(f"Policy registry contains duplicate rule id: {duplicate_rule_ids[0]}")
+
+    rule_ids = set(all_rule_ids)
+    alias_ids: set[str] = set()
+    iso_rule_ids: set[str] = set()
+    category_ids: set[str] = set()
+
+    for rule in registry.rules:
+        if not rule.id:
+            raise ValueError("Policy registry rules must include a non-empty id.")
+
+        if not rule.iso_rule_id:
+            raise ValueError(f"Policy registry rule {rule.id} must include a non-empty ISO rule id.")
+        if rule.iso_rule_id in iso_rule_ids:
+            raise ValueError(f"Policy registry contains duplicate ISO rule id: {rule.iso_rule_id}")
+        iso_rule_ids.add(rule.iso_rule_id)
+
+        rego_module_path = (PROJECT_ROOT / rule.rego_module).resolve()
+        if rego_module_path.suffix != ".rego":
+            raise ValueError(f"Policy registry rule {rule.id} must reference a .rego module: {rule.rego_module}")
+        if PROJECT_ROOT.resolve() not in rego_module_path.parents:
+            raise ValueError(f"Policy registry rule {rule.id} references a module outside the repository.")
+        if not rego_module_path.is_file():
+            raise ValueError(f"Policy registry rule {rule.id} references a missing module: {rule.rego_module}")
+
+        for evidence_field in rule.evidence_fields:
+            if evidence_field not in EVIDENCE_FIELD_ALIAS_MAP:
+                raise ValueError(
+                    f"Policy registry rule {rule.id} references an unknown evidence field: {evidence_field}"
+                )
+
+        for alias in rule.alias_ids:
+            if alias in rule_ids:
+                raise ValueError(f"Policy registry alias {alias} collides with a rule id.")
+            if alias in alias_ids:
+                raise ValueError(f"Policy registry contains duplicate alias id: {alias}")
+            alias_ids.add(alias)
+
+    for category in registry.categories:
+        if not category.category_id:
+            raise ValueError("Policy registry categories must include a non-empty category id.")
+        if category.category_id in category_ids:
+            raise ValueError(f"Policy registry contains duplicate category id: {category.category_id}")
+        category_ids.add(category.category_id)
+
     missing = sorted(
         rule_id
         for category in registry.categories

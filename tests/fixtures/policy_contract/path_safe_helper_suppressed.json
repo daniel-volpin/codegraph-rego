@@ -1,0 +1,24 @@
+{
+  "notes": "A safe helper summary should suppress the path-traversal rule even when the source contains a path sink.",
+  "bundle": {
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest99991.doPost(HttpServletRequest,HttpServletResponse)",
+    "method_name": "doPost",
+    "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest99991.java",
+    "source_code": "String param = request.getHeader(\"x\"); String bar = doSomething(param); new java.io.File(bar);",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    },
+    "analysis_flags": {
+      "path_traversal_detected": true
+    },
+    "helper_summaries": {
+      "safe_constant_return_vars": ["bar"],
+      "tainted_return_vars": [],
+      "safe_constant_return_used_in_path_sink": true
+    }
+  },
+  "expected_violation_ids": []
+}

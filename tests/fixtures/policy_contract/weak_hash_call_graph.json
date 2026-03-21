@@ -1,0 +1,16 @@
+{
+  "notes": "Weak hash usage should still be detected from graph call evidence alone.",
+  "bundle": {
+    "target_method": "org.example.HashService.hashPassword()",
+    "method_name": "hashPassword",
+    "file_path": "src/main/java/org/example/HashService.java",
+    "source_code": "",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": ["java.security.MessageDigest.getInstance(\"MD5\")"],
+      "callers": []
+    }
+  },
+  "expected_violation_ids": ["ISO-A.10-WEAK-HASH"]
+}

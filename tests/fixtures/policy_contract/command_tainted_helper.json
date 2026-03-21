@@ -1,0 +1,28 @@
+{
+  "notes": "A tainted helper result reaching a command sink should surface the command-injection rule.",
+  "bundle": {
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest99988.doPost(HttpServletRequest,HttpServletResponse)",
+    "method_name": "doPost",
+    "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest99988.java",
+    "source_code": "String param = request.getHeader(\"x\"); String bar = doSomething(param); String[] args = new String[] {\"sh\", \"-c\", \"ls \" + bar}; Runtime.getRuntime().exec(args);",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    },
+    "analysis_flags": {
+      "command_exec_string_tainted": false,
+      "command_exec_args_tainted": false,
+      "command_env_only_tainted": false,
+      "command_injection_detected": false
+    },
+    "helper_summaries": {
+      "safe_constant_return_vars": [],
+      "tainted_return_vars": ["bar"],
+      "safe_constant_return_used_in_command_sink": false,
+      "tainted_return_used_in_command_sink": true
+    }
+  },
+  "expected_violation_ids": ["ISO-A.8-CMD-INJECTION"]
+}
