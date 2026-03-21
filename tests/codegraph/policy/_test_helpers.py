@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 
 class _FakeResult:
@@ -119,3 +121,126 @@ class PolicyTestBase(unittest.TestCase):
             payloads = list(raw_output)
         normalized = [normalize_violation_payload(item) for item in payloads]
         return {item.get("violation_id") for item in normalized if item}
+
+
+# ---------------------------------------------------------------------------
+# Common Java source bodies used across DirectCallSummaryBuilder tests
+# ---------------------------------------------------------------------------
+
+_JAVA_TAINTED_PASSTHROUGH = [
+    "class Helper {",
+    "  private String doSomething(String param) {",
+    "    return param;",
+    "  }",
+    "}",
+]
+
+_JAVA_SAFE_CONSTANT = [
+    "class Helper {",
+    "  private String doSomething(String param) {",
+    '    String bar = "safe!";',
+    "    return bar;",
+    "  }",
+    "}",
+]
+
+_JAVA_SAFE_RETURN_LITERAL = [
+    "class Helper {",
+    "  private String doSomething(String param) {",
+    '    return "safe!";',
+    "  }",
+    "}",
+]
+
+_JAVA_SAFE_RETURN_STRING = [
+    "class Helper {",
+    "  private String doSomething(String param) {",
+    '    return "safe";',
+    "  }",
+    "}",
+]
+
+_JAVA_SAFE_CONDITIONAL = [
+    "class Helper {",
+    "  private String doSomething(String param) {",
+    "    int num = 106;",
+    '    String bar = (7 * 18) + num > 200 ? "This_should_always_happen" : param;',
+    "    return bar;",
+    "  }",
+    "}",
+]
+
+_JAVA_TAINTED_INDIRECTION = [
+    "class Helper {",
+    "  private String doSomething(String param) {",
+    "    String bar = param;",
+    "    return bar;",
+    "  }",
+    "}",
+]
+
+_DEFAULT_SIG = "org.example.Controller.doSomething(java.lang.String)"
+_DEFAULT_FQN = "org.example.Controller"
+
+
+class DirectCallTestBase(unittest.TestCase):
+    """Base class for DirectCallSummaryBuilder tests.
+
+    Provides convenience helpers that eliminate the repeated 20-30 line
+    boilerplate pattern of: write temp Java file → build method dicts →
+    call builder.build().
+    """
+
+    def _build_summaries(
+        self,
+        current_source: str,
+        java_body_lines: list[str],
+        *,
+        sig: str = _DEFAULT_SIG,
+        fqn: str = _DEFAULT_FQN,
+        name: str = "doSomething",
+        start_line: int = 2,
+        end_line: int = 3,
+        extra_snapshot_calls: list[str] | None = None,
+    ) -> dict:
+        """Build helper summaries for a callee method defined in a temp Java file."""
+        from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
+
+        builder = DirectCallSummaryBuilder()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            callee_path = Path(tmpdir) / "Helper.java"
+            callee_path.write_text("\n".join(java_body_lines), encoding="utf-8")
+            method_snapshot = {
+                "class_fqn": fqn,
+                "calls": [sig] + (extra_snapshot_calls or []),
+            }
+            method_index = {
+                sig: {
+                    "signature": sig,
+                    "class_fqn": fqn,
+                    "name": name,
+                    "file_path": callee_path.as_posix(),
+                    "start_line": start_line,
+                    "end_line": end_line,
+                }
+            }
+            return builder.build(
+                current_source=current_source,
+                method_snapshot=method_snapshot,
+                method_index=method_index,
+            )
+
+    def _build_summaries_no_helper(
+        self,
+        current_source: str,
+        fqn: str = _DEFAULT_FQN,
+    ) -> dict:
+        """Build summaries without a callee method (inline/constant calls only)."""
+        from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
+
+        builder = DirectCallSummaryBuilder()
+        return builder.build(
+            current_source=current_source,
+            method_snapshot={"class_fqn": fqn, "calls": []},
+            method_index={},
+        )
