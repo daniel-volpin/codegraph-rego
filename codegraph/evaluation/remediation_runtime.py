@@ -26,6 +26,86 @@ TRACKED_FINAL_STATUSES: Sequence[str] = (
 )
 
 
+def _safe_float(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number < 0.0 or number > 1.0:
+        return None
+    return number
+
+
+def build_confidence_calibration(
+    results: Sequence[Mapping[str, Any]],
+    *,
+    bins: int = 10,
+) -> Dict[str, Any] | None:
+    points: list[tuple[float, int]] = []
+    for item in results:
+        confidence = item.get("confidence") or {}
+        score = _safe_float((confidence or {}).get("score"))
+        if score is None:
+            continue
+        points.append((score, 1 if item.get("policy_fixed") is True else 0))
+
+    if not points:
+        return None
+
+    n = len(points)
+    brier_score = sum((score - label) ** 2 for score, label in points) / n
+
+    bucket_count = max(1, bins)
+    buckets: list[list[tuple[float, int]]] = [[] for _ in range(bucket_count)]
+    for score, label in points:
+        index = min(int(score * bucket_count), bucket_count - 1)
+        buckets[index].append((score, label))
+
+    ece = 0.0
+    reliability_bins: list[Dict[str, Any]] = []
+    for idx, bucket in enumerate(buckets):
+        if not bucket:
+            continue
+        count = len(bucket)
+        avg_confidence = sum(score for score, _ in bucket) / count
+        empirical_success = sum(label for _, label in bucket) / count
+        gap = abs(avg_confidence - empirical_success)
+        ece += (count / n) * gap
+        reliability_bins.append(
+            {
+                "bin_start": round(idx / bucket_count, 4),
+                "bin_end": round((idx + 1) / bucket_count, 4),
+                "count": count,
+                "avg_confidence": round(avg_confidence, 4),
+                "empirical_success": round(empirical_success, 4),
+                "gap": round(gap, 4),
+            }
+        )
+
+    ranked = sorted(points, key=lambda pair: pair[0], reverse=True)
+    checkpoints = [0.25, 0.5, 0.75, 1.0]
+    risk_coverage: list[Dict[str, Any]] = []
+    for checkpoint in checkpoints:
+        k = max(1, int(round(n * checkpoint)))
+        subset = ranked[:k]
+        success_rate = sum(label for _, label in subset) / k
+        risk_coverage.append(
+            {
+                "coverage": round(k / n, 4),
+                "success_rate": round(success_rate, 4),
+                "risk": round(1.0 - success_rate, 4),
+            }
+        )
+
+    return {
+        "count": n,
+        "brier_score": round(brier_score, 6),
+        "ece": round(ece, 6),
+        "reliability_bins": reliability_bins,
+        "risk_coverage": risk_coverage,
+    }
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -98,6 +178,7 @@ def build_remediation_result(
     replacement_applied = bool(apply_result.get("updated_source_code"))
     structured_valid = isinstance(generation, dict) and generation.get("raw_response_valid") is True
 
+    confidence = apply_result.get("confidence") or None
     evidence = violation.get("evidence") or {}
     return {
         "case_id": case_id,
@@ -123,6 +204,7 @@ def build_remediation_result(
         "build_attempted": compilation.get("attempted") is True,
         "build_success": build_pass is True,
         "policy_fixed": policy_fixed,
+        "confidence": confidence,
     }
 
 
@@ -157,6 +239,7 @@ def build_skipped_result(
         "build_attempted": False,
         "build_success": False,
         "policy_fixed": False,
+        "confidence": None,
     }
 
 
@@ -202,6 +285,7 @@ def build_metrics_payload(
         "build_success": stage_counts["build_success"],
         "fix_success_rate": round(fix_rate, 4),
         "build_success_rate": round(build_rate, 4),
+        "confidence_calibration": build_confidence_calibration(results),
         "legacy_build_command_arg": legacy_build_command_arg,
         "final_status_counts": status_counts,
         "untracked_status_counts": untracked_status_counts(results),
@@ -259,6 +343,17 @@ def render_summary_markdown(
             violation_id = item.get("violation_id") or "unknown"
             lines.append(f"- `{case_id}`: `{status}` ({violation_id})")
 
+        calibration = build_confidence_calibration(list(recent_results), bins=10)
+        if calibration is not None:
+            lines.extend(
+                [
+                    "",
+                    "## Confidence Calibration",
+                    f"- `Brier`: `{calibration.get('brier_score', 'n/a')}`",
+                    f"- `ECE`: `{calibration.get('ece', 'n/a')}`",
+                ]
+            )
+
     lines.extend(
         [
             "",
@@ -281,6 +376,9 @@ def write_final_artifacts(
     table_format: str,
 ) -> None:
     write_json(output_dir / "remediation_metrics.json", metrics)
+    calibration = metrics.get("confidence_calibration")
+    if calibration is not None:
+        write_json(output_dir / "confidence_calibration.json", calibration)
     results = metrics.get("results") or []
     write_csv(
         output_dir / "remediation_metrics.csv",
@@ -319,6 +417,9 @@ def write_final_artifacts(
         ["Build Attempts", metrics.get("build_attempted", 0)],
         ["Attempted", metrics.get("attempted", 0)],
     ]
+    if calibration is not None:
+        table_rows.append(["Confidence Brier", calibration.get("brier_score", "n/a")])
+        table_rows.append(["Confidence ECE", calibration.get("ece", "n/a")])
     if table_format == "tex":
         table = render_latex_table(
             headers,
@@ -340,6 +441,13 @@ def write_final_artifacts(
         recent_results=list(results)[-5:],
         untracked_counts=metrics.get("untracked_status_counts") or {},
     )
+    if calibration is not None:
+        summary += (
+            "\n\n## Confidence Calibration\n"
+            f"- `Brier`: `{calibration.get('brier_score', 'n/a')}`\n"
+            f"- `ECE`: `{calibration.get('ece', 'n/a')}`\n"
+            "- Full reliability bins are in `confidence_calibration.json`.\n"
+        )
     (output_dir / "summary.md").write_text(summary, encoding="utf-8")
 
 
