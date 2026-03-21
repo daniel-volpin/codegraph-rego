@@ -152,7 +152,7 @@ def apply_result(
     predicate_trace: dict[str, Any] | None = None,
 ) -> ApplyFixResult:
     """Full apply-flow result (OK, BUILD_ERROR, or final VERIFICATION_ERROR)."""
-    return {
+    result: ApplyFixResult = {
         "status": status,
         "violation_id": violation_id,
         "rule_id": rule_id,
@@ -167,3 +167,6 @@ def apply_result(
         "confidence": confidence,
         "error": error,
     }
+    if predicate_trace is not None:
+        result["predicate_trace"] = predicate_trace
+    return result
