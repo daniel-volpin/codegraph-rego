@@ -25,6 +25,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from codegraph.config import settings
 from codegraph.ingestion.service import process_single_file_content
 from codegraph.llm.client import generate_chat_completion
+from codegraph.llm.schema.remediation import parse_structured_generation_response
+from codegraph.llm.services.remediation_generation_service import RemediationGenerationService
+from codegraph.llm.tasks.remediation import RemediationTaskSpec
 from codegraph.policy.integration import (
     PolicyEvaluator,
     evaluate_bundle,
@@ -45,8 +48,6 @@ from codegraph.remediation.context import (
 from codegraph.remediation.contracts import (
     FIX_STRATEGIES,
     NO_FIX_PREFIX,
-    STRUCTURED_GENERATION_STOPS,
-    build_generation_payload,
     build_no_fix_response,
 )
 from codegraph.remediation.editing import (
@@ -61,15 +62,9 @@ from codegraph.remediation.editing import (
 )
 from codegraph.remediation.metrics import capture_raw_llm_output, extract_testcase_id, summarize_retry_error
 from codegraph.remediation.planning import build_remediation_plan
-from codegraph.remediation.prompting import (
-    RemediationPromptTemplate,
-    RemediationTaskSpec,
-    build_remediation_response_format,
-)
 from codegraph.remediation.validation import (
     extract_assistant_content,
     extract_json_block,
-    parse_structured_generation_response,
 )
 from codegraph.remediation.verification import (
     build_verification_summary,
@@ -117,7 +112,7 @@ class RemediationService:
     _FIX_STRATEGIES: Dict[str, Dict[str, Any]] = FIX_STRATEGIES
 
     def __init__(self, *, llm_client=generate_chat_completion) -> None:
-        self._llm_client = llm_client
+        self._generation_service = RemediationGenerationService(llm_client=llm_client)
 
     @classmethod
     def _rule_id_variants(cls, rule_id: str) -> List[str]:
@@ -185,27 +180,6 @@ class RemediationService:
             context=context,
             reason=reason,
             attempt_count=attempt_count,
-        )
-
-    @staticmethod
-    def _build_generation_payload(
-        *,
-        decision: Optional[str],
-        edits: Optional[List[Dict[str, Any]]],
-        replacement_method_lines: Optional[List[str]],
-        replacement_method_code: Optional[str],
-        reason: Optional[str],
-        raw_response_valid: bool,
-        schema_error: Optional[str],
-    ) -> Dict[str, Any]:
-        return build_generation_payload(
-            decision=decision,
-            edits=edits,
-            replacement_method_lines=replacement_method_lines,
-            replacement_method_code=replacement_method_code,
-            reason=reason,
-            raw_response_valid=raw_response_valid,
-            schema_error=schema_error,
         )
 
     def preview_virtual_fix(
@@ -620,55 +594,10 @@ class RemediationService:
             non_goals=list(strategy.get("non_goals") or []),
             extra_examples=list(strategy.get("extra_examples") or []),
         )
-        messages = RemediationPromptTemplate.build_messages(context=context, spec=spec, previous_errors=previous_errors)
-        model = settings.remediation_llm_model or settings.llm_model
-        temperature = (
-            settings.remediation_llm_temperature
-            if settings.remediation_llm_temperature is not None
-            else settings.llm_temperature
-        )
-        max_tokens = (
-            settings.remediation_llm_max_tokens
-            if settings.remediation_llm_max_tokens is not None
-            else settings.llm_max_tokens_remediation
-        )
-        ttl_seconds = (
-            settings.remediation_llm_model_ttl_seconds
-            if settings.remediation_llm_model_ttl_seconds is not None
-            else settings.llm_model_ttl_seconds
-        )
-
-        try:
-            response = self._llm_client(
-                messages,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                ttl_seconds=ttl_seconds,
-                stop=STRUCTURED_GENERATION_STOPS,
-                response_format=build_remediation_response_format(),
-                raise_on_error=True,
-            )
-        except TypeError:
-            response = self._llm_client(messages)
-
-        parsed = self._parse_structured_generation_response(
-            response,
-            target_method=context.get("target_method"),
-            original_method_lines=(context.get("exact_method_source") or "").splitlines(),
-            original_method_source=context.get("exact_method_source"),
-            plan=context.get("remediation_plan"),
-            rule_id=context.get("rule_id"),
-        )
-        parsed["raw_output"] = response
-        parsed["generation"] = self._build_generation_payload(
-            decision=parsed.get("decision"),
-            edits=parsed.get("edits"),
-            replacement_method_lines=parsed.get("replacement_method_lines"),
-            replacement_method_code=parsed.get("replacement_method_code"),
-            reason=parsed.get("reason"),
-            raw_response_valid=bool(parsed.get("raw_response_valid")),
-            schema_error=parsed.get("schema_error"),
+        parsed = self._generation_service.propose_method_edits(
+            context=context,
+            spec=spec,
+            previous_errors=previous_errors,
         )
         return parsed
 
