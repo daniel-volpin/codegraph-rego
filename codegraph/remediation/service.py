@@ -18,12 +18,10 @@ import logging
 import os
 import re
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from codegraph.config import settings
-from codegraph.ingestion.service import process_single_file_content
 from codegraph.llm.client import generate_chat_completion
 from codegraph.llm.schema.remediation import parse_structured_generation_response
 from codegraph.llm.services.remediation_generation_service import RemediationGenerationService
@@ -36,6 +34,10 @@ from codegraph.policy.integration import (
     normalize_violation_payload,
 )
 from codegraph.remediation.capabilities import get_remediation_capability, rule_id_variants
+from codegraph.remediation.confidence import (
+    ConfidenceFeatures,
+    assess_remediation_confidence,
+)
 from codegraph.remediation.context import (
     apply_annotation_heuristic,
     apply_fallback_graph_heuristics,
@@ -60,10 +62,10 @@ from codegraph.remediation.editing import (
     replace_method_in_source,
     resolve_file_path,
 )
-from codegraph.remediation.metrics import capture_raw_llm_output, extract_testcase_id, summarize_retry_error
+from codegraph.remediation.apply_flow import execute_apply_fix
+from codegraph.remediation.metrics import summarize_retry_error
 from codegraph.remediation.planning import build_remediation_plan
 from codegraph.remediation.validation import (
-    extract_assistant_content,
     extract_json_block,
 )
 from codegraph.remediation.verification import (
@@ -113,6 +115,44 @@ class RemediationService:
 
     def __init__(self, *, llm_client=generate_chat_completion) -> None:
         self._generation_service = RemediationGenerationService(llm_client=llm_client)
+
+    @staticmethod
+    def _has_graph_context(context: Dict[str, Any]) -> bool:
+        graph_context = ((context.get("evidence") or {}).get("graph_context")) or {}
+        if not isinstance(graph_context, dict):
+            return False
+        keys = ("annotations", "uses_fields", "calls", "callers")
+        return any(bool(graph_context.get(key)) for key in keys)
+
+    def _build_confidence(
+        self,
+        *,
+        context: Dict[str, Any],
+        support_tier: str,
+        decision: str,
+        structured_valid: bool,
+        attempt_count: int,
+    ) -> Dict[str, Any]:
+        assessment = assess_remediation_confidence(
+            ConfidenceFeatures(
+                support_tier=support_tier,
+                decision=decision,
+                structured_valid=structured_valid,
+                has_exact_method_source=bool(context.get("exact_method_source")),
+                has_graph_context=self._has_graph_context(context),
+                attempt_count=max(1, int(attempt_count)),
+            ),
+            threshold_apply=settings.remediation_confidence_threshold_apply,
+            threshold_review=settings.remediation_confidence_threshold_review,
+            temperature=settings.remediation_confidence_temperature,
+        )
+        return {
+            "score": assessment.score,
+            "band": assessment.band,
+            "threshold_apply": assessment.threshold_apply,
+            "threshold_review": assessment.threshold_review,
+            "rationale": assessment.rationale,
+        }
 
     @classmethod
     def _rule_id_variants(cls, rule_id: str) -> List[str]:
@@ -210,11 +250,19 @@ class RemediationService:
 
         preflight_reason = self._preflight_fixability_reason(context)
         if preflight_reason:
-            return self._build_no_fix_response(
+            response = self._build_no_fix_response(
                 violation_id=violation_id,
                 context=context,
                 reason=preflight_reason,
             )
+            response["confidence"] = self._build_confidence(
+                context=context,
+                support_tier=capability.support_tier,
+                decision="no_fix",
+                structured_valid=True,
+                attempt_count=1,
+            )
+            return response
 
         llm_output = self.propose_method_edits(context)
         updated_source = llm_output.get("replacement_method_code")
@@ -222,12 +270,21 @@ class RemediationService:
         decision = llm_output.get("decision")
         reason = llm_output.get("reason")
         schema_error = llm_output.get("schema_error")
+        confidence = self._build_confidence(
+            context=context,
+            support_tier=capability.support_tier,
+            decision=str(decision or ""),
+            structured_valid=bool((generation or {}).get("raw_response_valid")),
+            attempt_count=1,
+        )
         if decision == "no_fix":
-            return self._build_no_fix_response(
+            response = self._build_no_fix_response(
                 violation_id=violation_id,
                 context=context,
                 reason=reason or "no safe minimal fix available",
             )
+            response["confidence"] = confidence
+            return response
 
         original_source = context.get("exact_method_source") or (context.get("evidence") or {}).get("source_code") or ""
         diff = _unified_diff(original_source, updated_source or "", label="method")
@@ -240,6 +297,7 @@ class RemediationService:
                 "file_path": context.get("file_path"),
                 "rule_id": rule_id,
                 "generation": generation,
+                "confidence": confidence,
             }
 
         base_graph = (context.get("evidence") or {}).get("graph_context") or {}
@@ -262,6 +320,7 @@ class RemediationService:
                 "rule_id": context.get("rule_id"),
                 "updated_source_code": updated_source,
                 "generation": generation,
+                "confidence": confidence,
             }
 
         normalized_output: List[Dict[str, Any]] = []
@@ -289,6 +348,7 @@ class RemediationService:
             "diff": diff,
             "verification": verification,
             "generation": generation,
+            "confidence": confidence,
         }
 
     def apply_fix(
@@ -302,262 +362,16 @@ class RemediationService:
         raw_capture_dir: Optional[str] = None,
         build_command: Optional[str] = None,
     ) -> Dict[str, Any]:
-        max_attempts = max(1, max_attempts)
-        context = self.get_violation_context(violation_id, target_method, file_path)
-        if context is None:
-            return {
-                "status": "NOT_FOUND",
-                "error": f"Violation {violation_id} not found",
-                "violation_id": violation_id,
-            }
-        rule_id = context.get("rule_id")
-        capability = get_remediation_capability(rule_id, supported_rule_ids=self._FIX_STRATEGIES.keys())
-        if not capability.supported:
-            return {
-                "status": "INVALID",
-                "error": capability.reason_code,
-                "violation_id": violation_id,
-                "rule_id": rule_id,
-                "target_method": context.get("target_method") or target_method,
-                "file_path": context.get("file_path") or file_path,
-            }
-        target_method = target_method or context.get("target_method")
-        file_path = file_path or context.get("file_path")
-        if not target_method or not file_path:
-            return {
-                "status": "INVALID",
-                "error": "target_method and file_path are required to apply remediation",
-                "violation_id": violation_id,
-                "target_method": target_method,
-                "file_path": file_path,
-                "rule_id": context.get("rule_id"),
-            }
-
-        preflight_reason = self._preflight_fixability_reason(context)
-        if preflight_reason:
-            return self._build_no_fix_response(
-                violation_id=violation_id,
-                context=context,
-                reason=preflight_reason,
-                attempt_count=0,
-            )
-
-        resolved_path = self._resolve_file_path(file_path)
-        if resolved_path is None:
-            return {
-                "status": "VERIFICATION_ERROR",
-                "error": f"Could not resolve file path: {file_path}",
-                "violation_id": violation_id,
-                "target_method": target_method,
-                "file_path": file_path,
-                "rule_id": context.get("rule_id"),
-            }
-
-        original_content = resolved_path.read_text(encoding="utf-8")
-        baseline_violations = context.get("baseline_violations") or []
-        attempt_errors: List[str] = []
-        updated_content = None
-        original_method = None
-        updated_method = None
-        raw_output = None
-        raw_capture_files: List[str] = []
-        generation_payload: Optional[Dict[str, Any]] = None
-
-        for attempt in range(max_attempts):
-            llm_output = self.propose_method_edits(context, previous_errors=attempt_errors)
-            updated_source = llm_output.get("replacement_method_code")
-            updated_source_lines = llm_output.get("replacement_method_lines")
-            raw_output = llm_output.get("raw_output")
-            generation_payload = llm_output.get("generation")
-            if not updated_source:
-                if llm_output.get("decision") == "no_fix":
-                    reason = llm_output.get("reason") or "no safe minimal fix available"
-                    result = self._build_no_fix_response(
-                        violation_id=violation_id,
-                        context=context,
-                        reason=reason,
-                        attempt_count=attempt + 1,
-                    )
-                    result["errors"] = attempt_errors
-                    return result
-                schema_error = llm_output.get("schema_error")
-                if schema_error:
-                    attempt_errors.append(_summarize_retry_error(str(schema_error)))
-                else:
-                    attempt_errors.append("empty_edits")
-                if settings.remediation_raw_capture_enabled and raw_output:
-                    capture_path = capture_raw_llm_output(
-                        raw_capture_dir,
-                        extract_testcase_id(target_method),
-                        attempt + 1,
-                        extract_assistant_content(raw_output),
-                    )
-                    if capture_path:
-                        raw_capture_files.append(capture_path)
-                continue
-            try:
-                updated_content, original_method, updated_method = self._replace_method_in_source(
-                    original_content,
-                    updated_source_lines or [],
-                    target_method,
-                )
-                break
-            except ValueError as exc:
-                attempt_errors.append(_summarize_retry_error(str(exc)))
-                continue
-
-        if not updated_content or not updated_method or not original_method:
-            final_status = "REPLACEMENT_ERROR"
-            final_error = "Failed to produce a valid method replacement"
-            if generation_payload and generation_payload.get("raw_response_valid") is False:
-                final_status = "GENERATION_ERROR"
-                final_error = generation_payload.get("schema_error") or final_error
-            return {
-                "status": final_status,
-                "error": final_error,
-                "violation_id": violation_id,
-                "target_method": target_method,
-                "file_path": file_path,
-                "rule_id": context.get("rule_id"),
-                "attempt_count": min(max_attempts, len(attempt_errors)),
-                "llm_output": raw_output,
-                "errors": attempt_errors,
-                "raw_capture_files": raw_capture_files,
-                "generation": generation_payload,
-            }
-
-        diff = _unified_diff(original_method, updated_method, label=target_method)
-        compilation = {
-            "attempted": False,
-            "success": False,
-            "output_snippet": None,
-            "skipped_reason": "No build system detected",
-        }
-        verification: Dict[str, Any] = {}
-        apply_successful = False
-        attempt_count = min(max_attempts, max(1, len(attempt_errors) + 1))
-        live_workspace_modified = False
-        graph_modified = False
-
-        try:
-            with tempfile.TemporaryDirectory() as tmp:
-                _temp_root, temp_file_path, temp_build_root = self._prepare_temp_workspace(Path(tmp), resolved_path)
-                temp_file_path.write_text(updated_content, encoding="utf-8")
-                compilation = self._compile_project(temp_build_root, build_command=build_command)
-
-                try:
-                    if mode == "apply":
-                        # Set the flag before writing so we restore even if the write truncates
-                        # the file and then fails.
-                        live_workspace_modified = True
-                        resolved_path.write_text(updated_content, encoding="utf-8")
-
-                    # Dry-run verification still depends on a transient graph refresh, but it no
-                    # longer needs to write the patched source into the active workspace tree.
-                    graph_modified = True
-                    process_single_file_content(file_path, updated_content)
-                except Exception as exc:  # pragma: no cover - runtime guard
-                    if LOGGER.isEnabledFor(logging.DEBUG):
-                        LOGGER.exception("Failed to re-ingest updated file: %s", exc)
-                    else:
-                        LOGGER.error("Failed to re-ingest updated file: %s", exc)
-                    return {
-                        "status": "VERIFICATION_ERROR",
-                        "error": str(exc),
-                        "violation_id": violation_id,
-                        "target_method": target_method,
-                        "file_path": file_path,
-                        "rule_id": context.get("rule_id"),
-                        "updated_source_code": updated_method,
-                        "diff": diff,
-                        "compilation": compilation,
-                        "generation": generation_payload,
-                    }
-
-                evaluator = PolicyEvaluator()
-                after_eval = evaluator.evaluate(
-                    target_method,
-                    source_path_override=temp_file_path.as_posix() if mode == "dry_run" else None,
-                )
-                if after_eval.get("error"):
-                    verification = {
-                        "error": after_eval.get("error"),
-                        "baseline": baseline_violations,
-                        "after": after_eval.get("violations") or [],
-                    }
-                else:
-                    verification = _build_verification_summary(
-                        context.get("rule_id"),
-                        baseline_violations,
-                        after_eval.get("violations") or [],
-                    )
-
-                can_apply = (
-                    mode == "apply"
-                    and verification.get("target_rule_status") == "PASS"
-                    and verification.get("overall_status") == "PASS"
-                    and (not compilation.get("attempted") or compilation.get("success"))
-                )
-                apply_successful = bool(can_apply)
-        except Exception as exc:  # pragma: no cover - runtime guard
-            if LOGGER.isEnabledFor(logging.DEBUG):
-                LOGGER.exception("Apply remediation failed: %s", exc)
-            else:
-                LOGGER.error("Apply remediation failed: %s", exc)
-            return {
-                "status": "VERIFICATION_ERROR",
-                "error": str(exc),
-                "violation_id": violation_id,
-                "target_method": target_method,
-                "file_path": file_path,
-                "rule_id": context.get("rule_id"),
-                "updated_source_code": updated_method,
-                "diff": diff,
-                "compilation": compilation,
-                "generation": generation_payload,
-            }
-        finally:
-            if graph_modified and (mode != "apply" or not apply_successful):
-                try:
-                    process_single_file_content(file_path, original_content)
-                except Exception as exc:  # pragma: no cover - runtime guard
-                    LOGGER.warning("Failed to restore original graph content for %s: %s", file_path, exc)
-            if live_workspace_modified and (mode != "apply" or not apply_successful):
-                try:
-                    resolved_path.write_text(original_content, encoding="utf-8")
-                except Exception as exc:  # pragma: no cover - filesystem guard
-                    LOGGER.warning("Failed to restore original content for %s: %s", resolved_path, exc)
-
-        status = "OK"
-        if verification.get("error"):
-            status = "VERIFICATION_ERROR"
-        elif compilation.get("attempted") and not compilation.get("success"):
-            status = "BUILD_ERROR"
-        elif verification.get("overall_status") == "FAIL" or verification.get("target_rule_status") == "FAIL":
-            status = "VERIFICATION_ERROR"
-        if mode == "apply" and not apply_successful:
-            status = "VERIFICATION_ERROR"
-        return {
-            "status": status,
-            "violation_id": violation_id,
-            "rule_id": context.get("rule_id"),
-            "target_method": target_method,
-            "file_path": file_path,
-            "updated_source_code": updated_method,
-            "diff": diff,
-            "verification": verification,
-            "compilation": compilation,
-            "metadata": {
-                "violation_id": violation_id,
-                "rule_id": context.get("rule_id"),
-                "target_method": target_method,
-                "file_path": file_path,
-                "attempt_count": attempt_count,
-                "mode": mode,
-            },
-            "generation": generation_payload,
-            "error": None if status == "OK" else (verification.get("error") or "Apply verification failed"),
-        }
+        return execute_apply_fix(
+            service=self,
+            violation_id=violation_id,
+            target_method=target_method,
+            file_path=file_path,
+            mode=mode,
+            max_attempts=max_attempts,
+            raw_capture_dir=raw_capture_dir,
+            build_command=build_command,
+        )
 
     def get_violation_context(
         self,

@@ -60,6 +60,10 @@ class TestRemediationRuntime(unittest.TestCase):
                 "updated_source_code": (
                     'MessageDigest digest = MessageDigest.getInstance("SHA-256");'
                 ),
+                "confidence": {
+                    "score": 0.91,
+                    "band": "apply",
+                },
                 "verification": {"target_rule_status": "PASS", "overall_status": "PASS"},
                 "compilation": {"attempted": True, "success": True},
                 "diff": "--- before\n+++ after\n@@\n-md5\n+sha256\n",
@@ -113,6 +117,10 @@ class TestRemediationRuntime(unittest.TestCase):
             apply_result_no_fix = {
                 "status": "NO_FIX",
                 "error": "NO_FIX: broader protocol context required",
+                "confidence": {
+                    "score": 0.34,
+                    "band": "abstain",
+                },
                 "verification": {},
                 "compilation": {
                     "attempted": False,
@@ -177,14 +185,18 @@ class TestRemediationRuntime(unittest.TestCase):
             self.assertEqual(remediation_metrics["attempted"], 2)
             self.assertEqual(remediation_metrics["final_status_counts"]["OK"], 1)
             self.assertEqual(remediation_metrics["final_status_counts"]["NO_FIX"], 1)
+            self.assertIn("confidence_calibration", remediation_metrics)
+            self.assertIsNotNone(remediation_metrics["confidence_calibration"])
 
             self.assertTrue((output_dir / "remediation_metrics.csv").exists())
+            self.assertTrue((output_dir / "confidence_calibration.json").exists())
             self.assertTrue((output_dir / "table.md").exists())
 
             summary = (output_dir / "summary.md").read_text(encoding="utf-8")
             self.assertIn("- Attempted: `2` / `2`", summary)
             self.assertIn("- `OK`: `1`", summary)
             self.assertIn("- `NO_FIX`: `1`", summary)
+            self.assertIn("## Confidence Calibration", summary)
             self.assertIn(case_id_no_fix, summary)
 
 

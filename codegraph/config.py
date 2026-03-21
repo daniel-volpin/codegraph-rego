@@ -89,6 +89,22 @@ class Settings(BaseSettings):
             "When true, remediation runs may write raw LLM outputs to disk for debugging on structured generation failures."
         ),
     )
+    remediation_confidence_gate_enabled: bool = Field(
+        True,
+        description="When true, live remediation apply mode enforces a confidence gate before mutating source files.",
+    )
+    remediation_confidence_threshold_apply: float = Field(
+        0.75,
+        description="Minimum confidence required for automatic apply in remediation apply mode.",
+    )
+    remediation_confidence_threshold_review: float = Field(
+        0.50,
+        description="Minimum confidence for manual-review band; lower scores are abstain.",
+    )
+    remediation_confidence_temperature: float = Field(
+        1.0,
+        description="Temperature scaling for remediation confidence scoring; >1 softens confidence.",
+    )
     ui_review_store_path: str = Field(
         "outputs/policy_ui_reviews/reviews.jsonl",
         description="Append-only JSONL store for UI triage/review records.",
@@ -133,4 +149,8 @@ REMEDIATION_LLM_TEMPERATURE = settings.remediation_llm_temperature
 REMEDIATION_LLM_MODEL_TTL_SECONDS = settings.remediation_llm_model_ttl_seconds
 LLM_CONCURRENCY = settings.llm_concurrency
 REMEDIATION_RAW_CAPTURE_ENABLED = settings.remediation_raw_capture_enabled
+REMEDIATION_CONFIDENCE_GATE_ENABLED = settings.remediation_confidence_gate_enabled
+REMEDIATION_CONFIDENCE_THRESHOLD_APPLY = settings.remediation_confidence_threshold_apply
+REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW = settings.remediation_confidence_threshold_review
+REMEDIATION_CONFIDENCE_TEMPERATURE = settings.remediation_confidence_temperature
 UI_REVIEW_STORE_PATH = settings.ui_review_store_path

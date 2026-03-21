@@ -84,3 +84,4 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
   - `outputs/case_study_spring_petclinic/` validates ingest, policy evaluation, and explanation on a realistic Spring application.
   - `outputs/case_study_gs_securing_web/` validates a second Spring target with a clean upload-scoped graph and no surfaced policy findings.
 - Interactive `/upload` now isolates the uploaded workspace graph before ingest, so a new ZIP replaces prior uploaded-project graph state without affecting benchmark workspaces.
+- Remediation service refactored for testability: apply-fix coordinator extracted to `codegraph/remediation/apply_flow.py`, result models centralized in `result_models.py`. Service now delegates apply_fix operations to the coordinator.
