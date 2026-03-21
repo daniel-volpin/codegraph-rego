@@ -184,19 +184,23 @@ def build_evidence_bundle(
     method_snapshot: Dict[str, Any],
     search_service: Optional[HybridSearchService] = None,
     method_index: Optional[Dict[str, Dict[str, Any]]] = None,
+    source_path_override: str | Path | None = None,
 ) -> Dict[str, Any]:
     file_path = method_snapshot.get("file_path")
     resolved_path = resolve_source_path(file_path)
+    if isinstance(source_path_override, Path):
+        source_path_override = source_path_override.as_posix()
+    source_path = resolve_source_path(source_path_override) if source_path_override else resolved_path
     source_code = ""
-    if resolved_path is not None:
+    if source_path is not None:
         source_code = extract_snippet_by_lines(
-            resolved_path.as_posix(),
+            source_path.as_posix(),
             method_snapshot.get("start_line"),
             method_snapshot.get("end_line"),
             padding=2,
         )
         if not source_code and method_snapshot.get("name"):
-            source_code = extract_code_snippet(resolved_path.as_posix(), method_snapshot.get("name", ""))
+            source_code = extract_code_snippet(source_path.as_posix(), method_snapshot.get("name", ""))
     graph_context = {
         "annotations": method_snapshot.get("annotations") or [],
         "uses_fields": method_snapshot.get("uses_fields") or [],
