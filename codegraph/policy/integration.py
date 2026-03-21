@@ -78,11 +78,13 @@ def build_evidence_bundle(
     method_snapshot: Dict[str, Any],
     search_service=None,
     method_index: Optional[Dict[str, Dict[str, Any]]] = None,
+    source_path_override: str | None = None,
 ) -> Dict[str, Any]:
     return runtime_bundles.build_evidence_bundle(
         method_snapshot,
         search_service=search_service,
         method_index=method_index,
+        source_path_override=source_path_override,
     )
 
 
@@ -210,7 +212,7 @@ class PolicyEvaluator:
         self._catalog = load_policy_catalog()
         self._rules = load_iso_rules()
 
-    def evaluate(self, method_signature: str) -> Dict[str, Any]:
+    def evaluate(self, method_signature: str, *, source_path_override: str | None = None) -> Dict[str, Any]:
         driver = get_neo4j_driver()
         try:
             snapshot = _fetch_method_snapshot(driver, method_signature)
@@ -222,7 +224,7 @@ class PolicyEvaluator:
                 "violations": [],
                 "error": "method_not_found",
             }
-        bundle = build_evidence_bundle(snapshot, _load_hybrid_search())
+        bundle = build_evidence_bundle(snapshot, _load_hybrid_search(), source_path_override=source_path_override)
         try:
             opa_output = _evaluate_bundle(bundle)
         except RuntimeError as exc:

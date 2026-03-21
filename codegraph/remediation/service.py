@@ -462,7 +462,8 @@ class RemediationService:
         verification: Dict[str, Any] = {}
         apply_successful = False
         attempt_count = min(max_attempts, max(1, len(attempt_errors) + 1))
-        disk_modified = False
+        live_workspace_modified = False
+        graph_modified = False
 
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -471,15 +472,15 @@ class RemediationService:
                 compilation = self._compile_project(temp_build_root, build_command=build_command)
 
                 try:
-                    # Keep filesystem + graph in sync for verification. Policy evaluation derives
-                    # source snippets/analysis flags from the file_path on disk.
-                    #
-                    # In dry_run, we restore the file at the end.
-                    #
-                    # Set disk_modified before writing so we attempt restoration even if the
-                    # write fails after truncating the file.
-                    disk_modified = True
-                    resolved_path.write_text(updated_content, encoding="utf-8")
+                    if mode == "apply":
+                        # Set the flag before writing so we restore even if the write truncates
+                        # the file and then fails.
+                        live_workspace_modified = True
+                        resolved_path.write_text(updated_content, encoding="utf-8")
+
+                    # Dry-run verification still depends on a transient graph refresh, but it no
+                    # longer needs to write the patched source into the active workspace tree.
+                    graph_modified = True
                     process_single_file_content(file_path, updated_content)
                 except Exception as exc:  # pragma: no cover - runtime guard
                     if LOGGER.isEnabledFor(logging.DEBUG):
@@ -500,7 +501,10 @@ class RemediationService:
                     }
 
                 evaluator = PolicyEvaluator()
-                after_eval = evaluator.evaluate(target_method)
+                after_eval = evaluator.evaluate(
+                    target_method,
+                    source_path_override=temp_file_path.as_posix() if mode == "dry_run" else None,
+                )
                 if after_eval.get("error"):
                     verification = {
                         "error": after_eval.get("error"),
@@ -521,8 +525,6 @@ class RemediationService:
                     and (not compilation.get("attempted") or compilation.get("success"))
                 )
                 apply_successful = bool(can_apply)
-                if not apply_successful:
-                    process_single_file_content(file_path, original_content)
         except Exception as exc:  # pragma: no cover - runtime guard
             if LOGGER.isEnabledFor(logging.DEBUG):
                 LOGGER.exception("Apply remediation failed: %s", exc)
@@ -541,7 +543,12 @@ class RemediationService:
                 "generation": generation_payload,
             }
         finally:
-            if disk_modified and (mode != "apply" or not apply_successful):
+            if graph_modified and (mode != "apply" or not apply_successful):
+                try:
+                    process_single_file_content(file_path, original_content)
+                except Exception as exc:  # pragma: no cover - runtime guard
+                    LOGGER.warning("Failed to restore original graph content for %s: %s", file_path, exc)
+            if live_workspace_modified and (mode != "apply" or not apply_successful):
                 try:
                     resolved_path.write_text(original_content, encoding="utf-8")
                 except Exception as exc:  # pragma: no cover - filesystem guard

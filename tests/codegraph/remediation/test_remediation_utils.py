@@ -1093,6 +1093,139 @@ class RemediationUtilsTests(unittest.TestCase):
             "replacement_not_found",
         )
 
+    def test_apply_fix_dry_run_uses_temp_source_without_live_file_write(self):
+        svc_mod = self.service
+
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "Example.java"
+            original_content = "class Example { void a() {} }\n"
+            updated_content = "class Example { void a() { /* UPDATED */ } }\n"
+            updated_method = "void a() { /* UPDATED */ }"
+            src_path.write_text(original_content, encoding="utf-8")
+
+            target_method = (
+                "org.owasp.benchmark.testcode.BenchmarkTest00272.doPost(HttpServletRequest,HttpServletResponse)"
+            )
+
+            remediation = svc_mod.RemediationService(llm_client=lambda *_args, **_kwargs: "")
+            remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+                "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
+                "target_method": target_method,
+                "file_path": src_path.as_posix(),
+                "rule_id": "ISO-A.10-WEAK-HASH",
+                "evidence": {
+                    "source_code": 'public void doPost(...) { MessageDigest.getInstance("MD5"); }',
+                    "graph_context": {},
+                    "vector_context": [],
+                },
+                "catalog_entry": {"title": "Cryptography (Weak Hash)"},
+                "baseline_violations": [],
+                "exact_method_source": 'public void doPost(...) { MessageDigest.getInstance("MD5"); }',
+            }
+            remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
+            remediation.propose_method_edits = (  # type: ignore[method-assign]
+                lambda *_args, **_kwargs: {
+                    "decision": "apply_edits",
+                    "edits": [
+                        {
+                            "start_line": 1,
+                            "end_line": 1,
+                            "original_lines": ['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
+                            "replacement_lines": ["public void doPost(...) { /* sha-256 */ }"],
+                        }
+                    ],
+                    "replacement_method_lines": ["public void doPost(...) { /* sha-256 */ }"],
+                    "replacement_method_code": "public void doPost(...) { /* sha-256 */ }",
+                    "reason": None,
+                    "schema_error": None,
+                    "generation": {
+                        "decision": "apply_edits",
+                        "edits": [
+                            {
+                                "start_line": 1,
+                                "end_line": 1,
+                                "original_lines": ['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
+                                "replacement_lines": ["public void doPost(...) { /* sha-256 */ }"],
+                            }
+                        ],
+                        "replacement_method_lines": ["public void doPost(...) { /* sha-256 */ }"],
+                        "replacement_method_code": "public void doPost(...) { /* sha-256 */ }",
+                        "reason": "",
+                        "raw_response_valid": True,
+                        "schema_error": None,
+                    },
+                    "raw_output": None,
+                }
+            )
+            remediation._replace_method_in_source = (  # type: ignore[method-assign]
+                lambda *_args, **_kwargs: (
+                    updated_content,
+                    "void a() {}",
+                    updated_method,
+                )
+            )
+
+            def _prepare_temp_workspace(tmp_root, _resolved):
+                temp_file = Path(tmp_root) / "isolated" / "Example.java"
+                temp_file.parent.mkdir(parents=True, exist_ok=True)
+                return Path(tmp_root), temp_file, Path(tmp_root)
+
+            remediation._prepare_temp_workspace = _prepare_temp_workspace  # type: ignore[method-assign]
+            remediation._compile_project = (  # type: ignore[method-assign]
+                lambda *_args, **_kwargs: {
+                    "attempted": False,
+                    "success": False,
+                    "output_snippet": None,
+                    "skipped_reason": "test",
+                }
+            )
+
+            captured: dict[str, object] = {
+                "reingest_calls": [],
+                "source_path_override": None,
+                "temp_file_content": None,
+            }
+
+            orig_psfc = svc_mod.process_single_file_content
+            orig_policy_evaluator = svc_mod.PolicyEvaluator
+
+            class RecordingPolicyEvaluator:
+                def evaluate(self, _method_signature: str, *, source_path_override: str | None = None):
+                    captured["source_path_override"] = source_path_override
+                    if source_path_override:
+                        captured["temp_file_content"] = Path(source_path_override).read_text(encoding="utf-8")
+                    return {"violations": []}
+
+            try:
+                svc_mod.process_single_file_content = (
+                    lambda path, content: captured["reingest_calls"].append((path, content))
+                )
+                svc_mod.PolicyEvaluator = RecordingPolicyEvaluator  # type: ignore[assignment]
+
+                out = remediation.apply_fix(
+                    "ISO-A.10-WEAK-HASH",
+                    target_method=target_method,
+                    file_path=src_path.as_posix(),
+                    mode="dry_run",
+                    max_attempts=1,
+                )
+                self.assertEqual(out.get("status"), "OK")
+                self.assertEqual(out.get("updated_source_code"), updated_method)
+                self.assertEqual(out.get("metadata", {}).get("mode"), "dry_run")
+                self.assertEqual(src_path.read_text(encoding="utf-8"), original_content)
+                self.assertNotEqual(captured["source_path_override"], src_path.as_posix())
+                self.assertEqual(captured["temp_file_content"], updated_content)
+                self.assertEqual(
+                    captured["reingest_calls"],
+                    [
+                        (src_path.as_posix(), updated_content),
+                        (src_path.as_posix(), original_content),
+                    ],
+                )
+            finally:
+                svc_mod.process_single_file_content = orig_psfc
+                svc_mod.PolicyEvaluator = orig_policy_evaluator
+
     def test_apply_fix_restores_original_file_on_verification_exception(self):
         svc_mod = self.service
 
@@ -1180,13 +1313,16 @@ class RemediationUtilsTests(unittest.TestCase):
 
             orig_psfc = svc_mod.process_single_file_content
             orig_policy_evaluator = svc_mod.PolicyEvaluator
+            reingest_calls: list[tuple[str, str]] = []
+            source_path_overrides: list[str | None] = []
 
             class BoomPolicyEvaluator:
-                def evaluate(self, _method_signature: str):
+                def evaluate(self, _method_signature: str, *, source_path_override: str | None = None):
+                    source_path_overrides.append(source_path_override)
                     raise RuntimeError("boom")
 
             try:
-                svc_mod.process_single_file_content = lambda *_args, **_kwargs: None
+                svc_mod.process_single_file_content = lambda path, content: reingest_calls.append((path, content))
                 svc_mod.PolicyEvaluator = BoomPolicyEvaluator  # type: ignore[assignment]
 
                 out = remediation.apply_fix(
@@ -1198,6 +1334,17 @@ class RemediationUtilsTests(unittest.TestCase):
                 )
                 self.assertEqual(out.get("status"), "VERIFICATION_ERROR")
                 self.assertEqual(src_path.read_text(encoding="utf-8"), original_content)
+                self.assertEqual(len(source_path_overrides), 1)
+                self.assertIsNotNone(source_path_overrides[0])
+                self.assertNotEqual(source_path_overrides[0], src_path.as_posix())
+                self.assertEqual(Path(str(source_path_overrides[0])).name, "Example.java")
+                self.assertEqual(
+                    reingest_calls,
+                    [
+                        (src_path.as_posix(), "class Example { void a() { /* UPDATED */ } }\n"),
+                        (src_path.as_posix(), original_content),
+                    ],
+                )
             finally:
                 svc_mod.process_single_file_content = orig_psfc
                 svc_mod.PolicyEvaluator = orig_policy_evaluator
