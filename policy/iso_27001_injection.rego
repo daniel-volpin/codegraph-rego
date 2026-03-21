@@ -276,6 +276,57 @@ xpath_injection_heuristic if {
 	not flag_enabled("xpath_query_uses_safe_constant")
 }
 
+# ---------------------------------------------------------------------------
+# Graph-aware multi-hop taint path detection
+#
+# taint_path_confirmed_for(sink_type) is true when build_evidence_bundle has
+# populated input.taint_paths with a path reaching the requested sink.
+# Combining this with input_is_untrusted (the method reads from HTTP input)
+# lets us detect injection chains that span two or more user-code methods.
+# The existing helper_safe_* suppressors still apply.
+# ---------------------------------------------------------------------------
+
+taint_path_confirmed_for(sink_type) if {
+	input.taint_paths != null
+	some path in input.taint_paths
+	path.sink_type == sink_type
+}
+
+sql_injection_heuristic if {
+	servlet_context
+	input_is_untrusted
+	taint_path_confirmed_for("sql")
+	not helper_safe_sql
+}
+
+path_traversal_heuristic if {
+	servlet_context
+	input_is_untrusted
+	taint_path_confirmed_for("path")
+	not helper_safe_path
+}
+
+command_injection_heuristic if {
+	servlet_context
+	input_is_untrusted
+	taint_path_confirmed_for("command")
+	not helper_safe_command
+}
+
+ldap_injection_heuristic if {
+	servlet_context
+	input_is_untrusted
+	taint_path_confirmed_for("ldap")
+	not helper_safe_ldap
+}
+
+xpath_injection_heuristic if {
+	servlet_context
+	input_is_untrusted
+	taint_path_confirmed_for("xpath")
+	not helper_safe_xpath
+}
+
 violations[v] if {
 	sql_injection_heuristic
 	v := violation_record("ISO-A.8-SQL-INJECTION", "Possible SQL injection via string concatenation")
