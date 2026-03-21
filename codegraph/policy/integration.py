@@ -1,8 +1,4 @@
-"""
-policy_integration.py
-
-Extracts code facts from Neo4j and evaluates Rego policies (OPA) against them.
-"""
+"""Public policy evaluation façade."""
 
 from __future__ import annotations
 
@@ -10,126 +6,47 @@ import json
 import logging
 import os
 import shutil
-import subprocess
-import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from codegraph.benchmark_registry import (
-    iso_rules_payload_from_registry,
-    policy_catalog_entries_from_registry,
-    policy_catalog_payload_from_registry,
-)
-from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
-from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
-from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.db import get_neo4j_driver
-from codegraph.remediation.capabilities import remediation_capability_dict
-from codegraph.search.service import HybridSearchService
+from codegraph.policy.runtime import bundles as runtime_bundles
+from codegraph.policy.runtime import catalog as runtime_catalog
+from codegraph.policy.runtime import opa as runtime_opa
 
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.abspath(os.path.join(_THIS_DIR, os.pardir, os.pardir))
-POLICY_DIR = os.path.join(_PROJECT_ROOT, "policy")
-POLICY_QUERY = "data.iso27001.violations"
-CATALOG_PATH = os.path.join(POLICY_DIR, "catalog.json")
-ISO_RULES_PATH = os.path.join(POLICY_DIR, "iso_rules.json")
 LOGGER = logging.getLogger(__name__)
 
-_CATALOG_CACHE: Dict[str, Dict[str, Any]] | None = None
-_CATALOG_ENTRIES_CACHE: List[Dict[str, Any]] | None = None
-_ISO_RULES_CACHE: Dict[str, Any] | None = None
-_HYBRID_SEARCH: Optional[HybridSearchService] = None
-_HELPER_SUMMARY_BUILDER = DirectCallSummaryBuilder()
 
-
-def _load_hybrid_search() -> Optional[HybridSearchService]:
-    global _HYBRID_SEARCH
-    if _HYBRID_SEARCH is not None:
-        return _HYBRID_SEARCH
-    try:
-        _HYBRID_SEARCH = HybridSearchService()
-    except Exception as exc:  # pragma: no cover - optional dependency
-        LOGGER.warning("Hybrid search unavailable for evidence bundles: %s", exc)
-        _HYBRID_SEARCH = None
-    return _HYBRID_SEARCH
+def _load_hybrid_search():
+    return runtime_bundles.load_hybrid_search()
 
 
 def _is_test_source_path(file_path: Any) -> bool:
-    if not isinstance(file_path, str):
-        return False
-    normalized = file_path.replace("\\", "/")
-    return "/src/test/" in normalized
+    return runtime_bundles.is_test_source_path(file_path)
 
 
 def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
-    global _CATALOG_CACHE, _CATALOG_ENTRIES_CACHE
-    if _CATALOG_CACHE is None or _CATALOG_ENTRIES_CACHE is None:
-        entries = policy_catalog_entries_from_registry()
-        catalog_lookup: Dict[str, Dict[str, Any]] = {}
-        catalog_entries: List[Dict[str, Any]] = []
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            entry_id = entry.get("id")
-            if not isinstance(entry_id, str) or not entry_id.strip():
-                continue
-            catalog_entries.append(entry)
-            catalog_lookup[entry_id] = entry
-            aliases = entry.get("alias_ids") or []
-            if isinstance(aliases, list):
-                for alias in aliases:
-                    if isinstance(alias, str) and alias.strip():
-                        catalog_lookup[alias] = entry
-        _CATALOG_CACHE = catalog_lookup
-        _CATALOG_ENTRIES_CACHE = catalog_entries
-    return _CATALOG_CACHE or {}
+    return runtime_catalog.load_policy_catalog()
 
 
 def get_policy_catalog_entries() -> List[Dict[str, Any]]:
-    load_policy_catalog()
-    return list(_CATALOG_ENTRIES_CACHE or [])
+    return runtime_catalog.get_policy_catalog_entries()
 
 
 def _violation_id_variants(violation_id: str) -> List[str]:
-    text = str(violation_id).strip()
-    if not text:
-        return []
-    variants = [text]
-    if text.startswith("ISO-27001-"):
-        base = text[len("ISO-27001-") :]
-    elif text.startswith("ISO-"):
-        base = text[len("ISO-") :]
-    else:
-        base = text
-    for candidate in (base, f"ISO-{base}", f"ISO-27001-{base}"):
-        if candidate and candidate not in variants:
-            variants.append(candidate)
-    return variants
+    return runtime_catalog.violation_id_variants(violation_id)
 
 
 def _resolve_catalog_entry(violation_id: Any, catalog: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if not violation_id:
-        return None
-    for candidate in _violation_id_variants(str(violation_id)):
-        entry = catalog.get(candidate)
-        if entry is not None:
-            return entry
-    return None
+    return runtime_catalog.resolve_catalog_entry(violation_id, catalog)
 
 
 def load_iso_rules() -> Dict[str, Any]:
-    global _ISO_RULES_CACHE
-    if _ISO_RULES_CACHE is None:
-        _ISO_RULES_CACHE = iso_rules_payload_from_registry()
-    return _ISO_RULES_CACHE or {}
+    return runtime_catalog.load_iso_rules()
 
 
 def get_policy_catalog_payload() -> Dict[str, Any]:
-    payload = policy_catalog_payload_from_registry()
-    payload["controls"] = get_policy_catalog_entries()
-    payload["rules"] = load_iso_rules().get("rules", [])
-    return payload
+    return runtime_catalog.get_policy_catalog_payload()
 
 
 def build_policy_input(
@@ -137,39 +54,7 @@ def build_policy_input(
     max_bundles: int | None = None,
     workspace_root: str | None = None,
 ) -> Dict[str, Any]:
-    driver = get_neo4j_driver()
-    try:
-        methods = _fetch_methods_with_context(
-            driver,
-            max_bundles=max_bundles,
-            workspace_root=workspace_root,
-        )
-    finally:
-        driver.close()
-    hybrid_search = _load_hybrid_search()
-
-    # Build evidence bundles concurrently (file I/O + FAISS).
-    # This is CPU/IO bound, so we use available CPU cores to maximize throughput.
-    workers = min(32, (os.cpu_count() or 4) + 4)
-    method_index = {
-        snapshot["signature"]: snapshot
-        for snapshot in methods
-        if snapshot.get("signature")
-    }
-    bundles: List[Dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        future_to_idx = {
-            pool.submit(build_evidence_bundle, m, hybrid_search, method_index): i
-            for i, m in enumerate(methods)
-        }
-        for future in as_completed(future_to_idx):
-            bundles[future_to_idx[future]] = future.result()
-
-    return {
-        "bundles": bundles,
-        "rules_catalog": load_iso_rules(),
-        "catalog": get_policy_catalog_entries(),
-    }
+    return runtime_bundles.build_policy_input(max_bundles=max_bundles, workspace_root=workspace_root)
 
 
 def _fetch_methods_with_context(
@@ -178,208 +63,31 @@ def _fetch_methods_with_context(
     max_bundles: int | None = None,
     workspace_root: str | None = None,
 ) -> List[Dict[str, Any]]:
-    cypher = "MATCH (m:Method) "
-    params: Dict[str, Any] = {}
-    if workspace_root:
-        cypher += " WHERE m.file_path STARTS WITH $workspace_root "
-        params["workspace_root"] = workspace_root
-    cypher += (
-        "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
-        "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
-        "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
-        "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
-        "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
+    return runtime_bundles.fetch_methods_with_context(
+        driver,
+        max_bundles=max_bundles,
+        workspace_root=workspace_root,
     )
-    cypher += (
-        "RETURN coalesce(m.full_signature, m.signature) AS signature, "
-        "       m.name AS name, "
-        "       m.file_path AS file_path, "
-        "       m.start_line AS start_line, "
-        "       m.end_line AS end_line, "
-        "       m.modifiers AS modifiers, "
-        "       m.annotations AS property_annotations, "
-        "       cls.fqn AS class_fqn, "
-        "       collect(DISTINCT ann.name) AS annotation_nodes, "
-        "       collect(DISTINCT CASE WHEN usedField IS NULL "
-        "                             THEN NULL "
-        "                             ELSE {"
-        "                                 name: usedField.name, "
-        "                                 type: usedField.type, "
-        "                                 class_fqn: usedField.class_fqn"
-        "                             } END) AS uses_fields, "
-        "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
-        "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
-    )
-    if isinstance(max_bundles, int) and max_bundles > 0:
-        cypher += " LIMIT $max_bundles"
-        params["max_bundles"] = max_bundles
-    snapshots: List[Dict[str, Any]] = []
-    with driver.session() as session:
-        for rec in session.run(cypher, params):
-            signature = rec.get("signature")
-            if not signature:
-                continue
-            file_path = rec.get("file_path")
-            if _is_test_source_path(file_path):
-                continue
-            uses_fields = [field for field in (rec.get("uses_fields") or []) if field and field.get("name")]
-            annotations = rec.get("property_annotations") or []
-            annotation_nodes = rec.get("annotation_nodes") or []
-            combined_annotations = sorted({a for a in annotations + annotation_nodes if a})
-            snapshots.append(
-                {
-                    "signature": signature,
-                    "name": rec.get("name"),
-                    "class_fqn": rec.get("class_fqn"),
-                    "file_path": file_path,
-                    "start_line": rec.get("start_line"),
-                    "end_line": rec.get("end_line"),
-                    "modifiers": rec.get("modifiers") or [],
-                    "annotations": combined_annotations,
-                    "uses_fields": uses_fields,
-                    "calls": rec.get("calls") or [],
-                    "callers": rec.get("callers") or [],
-                }
-            )
-    return snapshots
 
 
 def _fetch_method_snapshot(driver, method_signature: str) -> Dict[str, Any] | None:
-    cypher = (
-        "MATCH (m:Method) "
-        "WHERE coalesce(m.full_signature, m.signature) = $method_signature "
-        "   OR m.signature = $method_signature "
-        "   OR m.full_signature = $method_signature "
-        "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
-        "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
-        "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
-        "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
-        "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
-        "RETURN coalesce(m.full_signature, m.signature) AS signature, "
-        "       m.name AS name, "
-        "       m.file_path AS file_path, "
-        "       m.start_line AS start_line, "
-        "       m.end_line AS end_line, "
-        "       m.modifiers AS modifiers, "
-        "       m.annotations AS property_annotations, "
-        "       cls.fqn AS class_fqn, "
-        "       collect(DISTINCT ann.name) AS annotation_nodes, "
-        "       collect(DISTINCT CASE WHEN usedField IS NULL "
-        "                             THEN NULL "
-        "                             ELSE {"
-        "                                 name: usedField.name, "
-        "                                 type: usedField.type, "
-        "                                 class_fqn: usedField.class_fqn"
-        "                             } END) AS uses_fields, "
-        "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
-        "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
-        "LIMIT 1"
-    )
-    with driver.session() as session:
-        record = session.run(cypher, method_signature=method_signature).single()
-        if not record:
-            return None
-        uses_fields = [field for field in (record.get("uses_fields") or []) if field and field.get("name")]
-        annotations = record.get("property_annotations") or []
-        annotation_nodes = record.get("annotation_nodes") or []
-        combined_annotations = sorted({a for a in annotations + annotation_nodes if a})
-        return {
-            "signature": record.get("signature"),
-            "name": record.get("name"),
-            "class_fqn": record.get("class_fqn"),
-            "file_path": record.get("file_path"),
-            "start_line": record.get("start_line"),
-            "end_line": record.get("end_line"),
-            "modifiers": record.get("modifiers") or [],
-            "annotations": combined_annotations,
-            "uses_fields": uses_fields,
-            "calls": record.get("calls") or [],
-            "callers": record.get("callers") or [],
-        }
-
-
-def _resolve_source_path(file_path: Optional[str]) -> Optional[Path]:
-    if not file_path:
-        return None
-    path = Path(file_path)
-    if path.is_file():
-        return path
-    candidate = Path(_PROJECT_ROOT) / path
-    if candidate.is_file():
-        return candidate
-    return None
+    return runtime_bundles.fetch_method_snapshot(driver, method_signature)
 
 
 def build_evidence_bundle(
     method_snapshot: Dict[str, Any],
-    search_service: Optional[HybridSearchService] = None,
+    search_service=None,
     method_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    file_path = method_snapshot.get("file_path")
-    resolved_path = _resolve_source_path(file_path)
-    source_code = ""
-    if resolved_path is not None:
-        source_code = extract_snippet_by_lines(
-            resolved_path.as_posix(),
-            method_snapshot.get("start_line"),
-            method_snapshot.get("end_line"),
-            padding=2,
-        )
-        if not source_code and method_snapshot.get("name"):
-            source_code = extract_code_snippet(resolved_path.as_posix(), method_snapshot.get("name", ""))
-    graph_context = {
-        "annotations": method_snapshot.get("annotations") or [],
-        "uses_fields": method_snapshot.get("uses_fields") or [],
-        "calls": method_snapshot.get("calls") or [],
-        "callers": method_snapshot.get("callers") or [],
-    }
-    analysis_flags = analyze_policy_indicators(source_code)
-    helper_summaries = (
-        _HELPER_SUMMARY_BUILDER.build(
-            current_source=source_code,
-            method_snapshot=method_snapshot,
-            method_index=method_index or {},
-        )
-        if method_index is not None
-        else {}
+    return runtime_bundles.build_evidence_bundle(
+        method_snapshot,
+        search_service=search_service,
+        method_index=method_index,
     )
-    vector_context: List[str] = []
-    if search_service is not None:
-        try:
-            vector_context = search_service.similar_to_signature(method_snapshot["signature"], top_k=3)
-        except Exception as exc:  # pragma: no cover - optional dependency
-            LOGGER.debug("Vector lookup failed for %s: %s", method_snapshot["signature"], exc)
-    return {
-        "target_method": method_snapshot["signature"],
-        "method_name": method_snapshot.get("name"),
-        "class_fqn": method_snapshot.get("class_fqn"),
-        "file_path": resolved_path.as_posix() if resolved_path else file_path,
-        "start_line": method_snapshot.get("start_line"),
-        "end_line": method_snapshot.get("end_line"),
-        "modifiers": method_snapshot.get("modifiers") or [],
-        "source_code": source_code,
-        "graph_context": graph_context,
-        "vector_context": vector_context,
-        "analysis_flags": analysis_flags,
-        "helper_summaries": helper_summaries,
-    }
 
 
 def _normalize_violation_payload(payload: Any) -> Optional[Dict[str, Any]]:
-    if isinstance(payload, dict):
-        return payload
-    if isinstance(payload, str):
-        try:
-            parsed = json.loads(payload)
-        except json.JSONDecodeError:
-            LOGGER.warning("Skipping non-JSON violation payload: %s", payload)
-            return None
-        if isinstance(parsed, dict):
-            return parsed
-        LOGGER.warning("Skipping violation payload (unexpected type): %s", payload)
-        return None
-    LOGGER.warning("Skipping unexpected OPA violation payload: %r", payload)
-    return None
+    return runtime_opa.normalize_violation_payload(payload, LOGGER)
 
 
 def _build_violation_response(
@@ -387,35 +95,7 @@ def _build_violation_response(
     bundle: Dict[str, Any],
     control_meta: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    violation_id = normalized.get("violation_id") or normalized.get("id")
-    source_code = bundle.get("source_code", "") or ""
-    start_line = bundle.get("start_line")
-    end_line = bundle.get("end_line")
-    evidence = {
-        "source_code": source_code,
-        "graph_context": bundle.get("graph_context", {}),
-        "vector_context": bundle.get("vector_context", []),
-        "file_path": bundle.get("file_path"),
-        "target_method": bundle.get("target_method"),
-        "start_line": start_line,
-        "end_line": end_line,
-        "analysis_flags": bundle.get("analysis_flags", {}),
-        "helper_summaries": bundle.get("helper_summaries", {}),
-    }
-    return {
-        "violation_id": violation_id,
-        "target_method": bundle.get("target_method"),
-        "file_path": bundle.get("file_path"),
-        "reason": normalized.get("reason"),
-        "severity": normalized.get("severity") or "high",
-        "control_metadata": control_meta,
-        "remediation": remediation_capability_dict(str(violation_id) if violation_id else None),
-        "code_snippet": source_code,
-        "snippet_available": bool(source_code),
-        "snippet_start_line": start_line,
-        "snippet_end_line": end_line,
-        "evidence": evidence,
-    }
+    return runtime_opa.build_violation_response(normalized, bundle, control_meta)
 
 
 def evaluate_policies(
@@ -520,35 +200,7 @@ def normalize_violation_payload(payload: Any) -> Optional[Dict[str, Any]]:
 
 
 def _evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
-    with tempfile.TemporaryDirectory() as tmp:
-        input_path = os.path.join(tmp, "input.json")
-        with open(input_path, "w") as file:
-            json.dump(bundle, file)
-        cmd = [
-            "opa",
-            "eval",
-            "-f",
-            "json",
-            "-d",
-            POLICY_DIR,
-            "-i",
-            input_path,
-            POLICY_QUERY,
-        ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode != 0:
-            raise RuntimeError(f"OPA evaluation failed for {bundle.get('target_method')}: {proc.stderr}")
-        try:
-            out = json.loads(proc.stdout)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("Failed to parse OPA output") from exc
-        result = out.get("result") or []
-        if not result:
-            return []
-        expressions = result[0].get("expressions") or []
-        if not expressions:
-            return []
-        return expressions[0].get("value") or []
+    return runtime_opa.evaluate_bundle(bundle)
 
 
 class PolicyEvaluator:
