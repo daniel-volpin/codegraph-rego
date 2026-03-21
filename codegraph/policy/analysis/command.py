@@ -130,6 +130,8 @@ class CommandFlowAnalyzer:
             return False, False
         if any(pattern.search(normalized) for pattern in COMMAND_UNTRUSTED_INPUT_PATTERNS):
             return True, False
+        if normalized in state.string_constants:
+            return False, False
         if normalized in list_taint:
             return list_taint[normalized], True
         if normalized in array_taint:

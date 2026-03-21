@@ -166,6 +166,40 @@ class TestCommandExecSinks(DirectCallTestBase):
         self.assertEqual(result["tainted_return_vars"], ["bar"])
         self.assertTrue(result["tainted_return_used_in_command_sink"])
 
+    def test_propagating_helper_with_get_the_value_argument_stays_tainted_in_command_sink(self) -> None:
+        result = self._build_summaries(
+            current_source=(
+                'org.owasp.benchmark.helpers.SeparateClassRequest scr = new org.owasp.benchmark.helpers.SeparateClassRequest(request);'
+                'String param = scr.getTheValue("BenchmarkTest01795");'
+                'String bar = doSomething(param);'
+                'String[] args = new String[] {"sh", "-c", "ls " + bar};'
+                'Runtime.getRuntime().exec(args);'
+            ),
+            java_body_lines=_JAVA_TAINTED_PASSTHROUGH,
+        )
+        self.assertEqual(result["tainted_return_vars"], ["bar"])
+        self.assertTrue(result["tainted_return_used_in_command_sink"])
+
+    def test_collection_access_is_not_treated_as_safe_helper_return_in_command_sink(self) -> None:
+        result = self._build_summaries_no_helper(
+            current_source=(
+                'String param = request.getParameter("x");'
+                'String bar = "";'
+                'if (param != null) {'
+                'java.util.List<String> valuesList = new java.util.ArrayList<String>();'
+                'valuesList.add("safe");'
+                'valuesList.add(param);'
+                'valuesList.add("moresafe");'
+                'valuesList.remove(0);'
+                'bar = valuesList.get(0);'
+                '}'
+                'String[] args = new String[] {"sh", "-c", "ls " + bar};'
+                'Runtime.getRuntime().exec(args);'
+            ),
+        )
+        self.assertNotIn("bar", result["safe_constant_return_vars"])
+        self.assertFalse(result["safe_constant_return_used_in_command_sink"])
+
 
 class TestXPathSinks(DirectCallTestBase):
     def test_safe_helper_return_used_in_xpath_query(self) -> None:
@@ -217,6 +251,44 @@ class TestSQLSinks(DirectCallTestBase):
         )
         self.assertEqual(result["tainted_return_vars"], ["bar"])
         self.assertTrue(result["tainted_return_used_in_sql_query"])
+
+    def test_propagating_helper_with_get_the_value_argument_stays_tainted_in_sql_query(self) -> None:
+        result = self._build_summaries(
+            current_source=(
+                'org.owasp.benchmark.helpers.SeparateClassRequest scr = new org.owasp.benchmark.helpers.SeparateClassRequest(request);'
+                'String param = scr.getTheValue("BenchmarkTest02739");'
+                'String bar = doSomething(param);'
+                'String sql = "select * from users where password=\'" + bar + "\'";'
+                'connection.prepareStatement(sql);'
+            ),
+            java_body_lines=_JAVA_TAINTED_PASSTHROUGH,
+        )
+        self.assertEqual(result["tainted_return_vars"], ["bar"])
+        self.assertTrue(result["tainted_return_used_in_sql_query"])
+
+    def test_helper_safe_call_result_used_in_sql_query(self) -> None:
+        result = self._build_summaries(
+            current_source=(
+                'String param = request.getQueryString();'
+                'String bar = doSomething(request, param);'
+                'String sql = "select * from users where password=\'" + bar + "\'";'
+                'connection.prepareStatement(sql);'
+            ),
+            java_body_lines=[
+                'class Helper {',
+                '  private String doSomething(javax.servlet.http.HttpServletRequest request, String param) {',
+                '    String g = "barbarians_at_the_gate";',
+                '    String bar = thing.doSomething(g);',
+                '    return bar;',
+                '  }',
+                '}',
+            ],
+            sig='org.example.Controller.doSomething(javax.servlet.http.HttpServletRequest,java.lang.String)',
+            start_line=2,
+            end_line=5,
+        )
+        self.assertEqual(result["safe_constant_return_vars"], ["bar"])
+        self.assertTrue(result["safe_constant_return_used_in_sql_query"])
 
 
 class TestDirectCallSpecialCases(unittest.TestCase):

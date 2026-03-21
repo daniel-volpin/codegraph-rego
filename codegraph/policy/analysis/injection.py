@@ -8,6 +8,7 @@ from codegraph.policy.analysis.state import (
     AssignmentStateAnalyzer,
     SIMPLE_ASSIGNMENT_RE,
 )
+
 from codegraph.policy.source_analysis_core import (
     APPEND_CALL_RE,
     DIRECT_LDAP_UNTRUSTED_PATTERNS,
@@ -22,15 +23,19 @@ from codegraph.policy.source_analysis_core import (
     PATH_SAFE_RESOURCE_PATTERNS,
     PATH_SINK_VARIABLE_PATTERNS,
     PATH_TRAVERSAL_PATTERNS,
-    SQL_EXECUTE_CALL_PATTERNS,
-    SQL_PREPARE_CALL_RE,
-    SQL_PREPARE_STATEMENT_RE,
+    SQL_SINK_TOSTRING_VARIABLE_PATTERNS,
     SQL_SINK_VARIABLE_PATTERNS,
     SQL_UNTRUSTED_INPUT_PATTERNS,
     STRING_BUILDER_RE,
     STRING_CONCAT_PATTERNS,
     XPATH_PATTERNS,
     XPATH_SINK_VARIABLE_PATTERNS,
+)
+
+
+SQL_BUILDER_APPEND_RE = re.compile(
+    r'([A-Za-z_][A-Za-z0-9_]*)\.append\(\s*([^;]+?)\s*\)\s*;',
+    re.DOTALL,
 )
 
 
@@ -181,6 +186,9 @@ class XPathSafetyAnalyzer:
     def _compatibility_xpath_signal(source_code: str) -> bool:
         if any(pattern.search(source_code) for pattern in DIRECT_XPATH_UNTRUSTED_PATTERNS):
             return True
+        has_input_signal = any(pattern.search(source_code) for pattern in PATH_LDAP_UNTRUSTED_INPUT_PATTERNS)
+        if not has_input_signal:
+            return False
         has_dynamic_construction = bool(
             any(pattern.search(source_code) for pattern in STRING_CONCAT_PATTERNS)
             or (STRING_BUILDER_RE.search(source_code) and APPEND_CALL_RE.search(source_code))
@@ -238,17 +246,20 @@ class SQLSafetyAnalyzer:
     def analyze(self, source_code: str) -> SQLAnalysis:
         state = self._assignment_analyzer.analyze(source_code)
         sink_vars = _sink_vars(source_code, SQL_SINK_VARIABLE_PATTERNS)
+        builder_sink_vars = _sink_vars(source_code, SQL_SINK_TOSTRING_VARIABLE_PATTERNS)
         sql_query_uses_safe_constant = _sink_uses_safe_constant(
             source_code,
             state=state,
             sink_vars=sink_vars,
             assignment_analyzer=self._assignment_analyzer,
         )
-        sql_query_uses_tainted_input = self._sink_uses_tainted_input(source_code, state, sink_vars)
-        compatibility_sql_signal = self._compatibility_sql_signal(source_code)
-        sql_dynamic_query_detected = (
-            (sql_query_uses_tainted_input or compatibility_sql_signal) and not sql_query_uses_safe_constant
+        sql_query_uses_tainted_input = self._sink_uses_tainted_input(
+            source_code,
+            state,
+            sink_vars,
+            builder_sink_vars,
         )
+        sql_dynamic_query_detected = sql_query_uses_tainted_input and not sql_query_uses_safe_constant
         return SQLAnalysis(
             sql_query_uses_tainted_input=sql_query_uses_tainted_input,
             sql_query_uses_safe_constant=sql_query_uses_safe_constant,
@@ -256,23 +267,33 @@ class SQLSafetyAnalyzer:
         )
 
     @staticmethod
-    def _sink_uses_tainted_input(source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:
+    def _sink_uses_tainted_input(
+        source_code: str,
+        state: AssignmentState,
+        sink_vars: set[str],
+        builder_sink_vars: set[str],
+    ) -> bool:
         if any(pattern.search(source_code) for pattern in DIRECT_SQL_UNTRUSTED_PATTERNS):
             return True
-        return any(sink_var in state.tainted_vars for sink_var in sink_vars)
+        if any(sink_var in state.tainted_vars for sink_var in sink_vars):
+            return True
+        return SQLSafetyAnalyzer._tainted_builder_used_in_sql_sink(source_code, state, builder_sink_vars)
 
     @staticmethod
-    def _compatibility_sql_signal(source_code: str) -> bool:
-        if any(pattern.search(source_code) for pattern in DIRECT_SQL_UNTRUSTED_PATTERNS):
-            return True
-        has_dynamic_construction = bool(
-            any(pattern.search(source_code) for pattern in STRING_CONCAT_PATTERNS)
-            or (STRING_BUILDER_RE.search(source_code) and APPEND_CALL_RE.search(source_code))
-        )
-        has_sql_keyword = any(keyword in source_code.lower() for keyword in ("select ", "insert ", "update ", "delete "))
-        has_sql_sink = bool(
-            any(pattern.search(source_code) for pattern in SQL_EXECUTE_CALL_PATTERNS)
-            or SQL_PREPARE_CALL_RE.search(source_code)
-            or SQL_PREPARE_STATEMENT_RE.search(source_code)
-        )
-        return has_dynamic_construction and has_sql_keyword and has_sql_sink
+    def _tainted_builder_used_in_sql_sink(
+        source_code: str,
+        state: AssignmentState,
+        builder_sink_vars: set[str],
+    ) -> bool:
+        if not builder_sink_vars:
+            return False
+        for match in SQL_BUILDER_APPEND_RE.finditer(source_code):
+            builder_name = match.group(1)
+            if builder_name not in builder_sink_vars:
+                continue
+            expr = match.group(2)
+            if any(pattern.search(expr) for pattern in SQL_UNTRUSTED_INPUT_PATTERNS):
+                return True
+            if AssignmentStateAnalyzer.referenced_variables(expr) & state.tainted_vars:
+                return True
+        return False

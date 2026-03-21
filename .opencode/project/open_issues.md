@@ -3,7 +3,7 @@
 ## Highest-Value Current Gaps
 
 - The authoritative remediation benchmark gate is the compile-backed `17/17` supported-medium run, but the later current-main rerun reached `9/10`; that later result should be treated as a regression reference until the stronger baseline is re-confirmed on a fresh main rerun.
-- Detection quality is now materially stronger on the graph-aware multi-hop rerun, but a small number of injection families still rely on heuristic evidence that creates concentrated false positives.
+- Detection quality is now materially stronger on the refreshed full rerun (`outputs/review_multicat_full_fixpass_20260321c/`), but a small number of injection families still show concentrated precision noise.
 - Real-world validation is now cleanly separated and trustworthy, but it currently validates transfer for detection/explanation more strongly than remediation coverage because the chosen case studies surfaced no bounded remediation category.
 
 ## Known Bounded Risks
@@ -13,33 +13,17 @@
 - Remediation is still model-sensitive even with the stronger span-edit contract and generic planning layer.
 - Remaining detection weak spots are now concentrated rather than global:
   - weak-hash recall
-  - SQL injection precision
-  - command helper-taint precision
+  - command precision on benchmark-safe transforms/helper returns
   - LDAP / XPath transform-sensitivity on benchmark-safe cases
 
-## Confirmed Injection FP Clusters
+## Current Injection Precision Shape
 
-- SQL injection false positives are concentrated in six benchmark cases:
-  - `BenchmarkTest02363`
-  - `BenchmarkTest00931`
-  - `BenchmarkTest02739`
-  - `BenchmarkTest00599`
-  - `BenchmarkTest02633`
-  - `BenchmarkTest00936`
-- The SQL pattern is usually `sql_dynamic_query_detected` without equally strong taint proof after benchmark-safe transforms.
-- Command injection false positives are concentrated in three benchmark cases:
-  - `BenchmarkTest01794`
-  - `BenchmarkTest01795`
-  - `BenchmarkTest01796`
-- The command pattern is helper-return taint over-trust reaching a command sink even when direct command taint flags are absent.
-- LDAP injection false positives are concentrated in two benchmark cases:
-  - `BenchmarkTest01491`
-  - `BenchmarkTest01569`
-- XPath injection false positives are concentrated in two benchmark cases:
-  - `BenchmarkTest00941`
-  - `BenchmarkTest01633`
-- Authoritative artifact for this focused analysis:
-  - `outputs/detection_calibration_multihop_refresh_v1/injection_fp_report.json`
+- SQL precision/recall was materially improved by requiring sink-level taint evidence, yielding `TP=35`, `FP=2`, `FN=0` on the refreshed full run.
+- Command injection remains the largest residual injection precision gap on the refreshed full run (`FP=3`), although full-category recall is restored (`outputs/command_full_debug_20260321d/table.md` -> `TP=126`, `FN=0`).
+- LDAP and XPath are now smaller precision gaps (`FP=1` each) and remain sensitive to transform/sanitization modeling.
+- Path traversal precision remains strong but not perfect (`FP=2`).
+- The older per-case injection false-positive cluster artifact remains useful as a reference snapshot:
+  - `outputs/detection_calibration_multihop_refresh_v3/injection_fp_report.json`
 
 ## What Not To Overclaim
 

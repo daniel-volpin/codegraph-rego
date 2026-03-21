@@ -48,6 +48,25 @@ class TestCommandInjectionDetected(unittest.TestCase):
         self.assertTrue(flags["command_exec_args_tainted"])
         self.assertTrue(flags["command_injection_detected"])
 
+    def test_command_injection_conditional_list_payload_detected(self) -> None:
+        source = (
+            'String param = request.getParameter("x");'
+            'String bar = "";'
+            'if (param != null) {'
+            'java.util.List<String> valuesList = new java.util.ArrayList<String>();'
+            'valuesList.add("safe");'
+            'valuesList.add(param);'
+            'valuesList.add("moresafe");'
+            'valuesList.remove(0);'
+            'bar = valuesList.get(0);'
+            '}'
+            'String[] args = new String[] {"sh", "-c", "ls " + bar};'
+            "Runtime.getRuntime().exec(args);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["command_exec_args_tainted"])
+        self.assertTrue(flags["command_injection_detected"])
+
     def test_command_injection_runtime_exec_args_with_get_the_parameter_detected(self) -> None:
         source = (
             'org.owasp.benchmark.helpers.SeparateClassRequest scr = new org.owasp.benchmark.helpers.SeparateClassRequest(request);'
@@ -66,6 +85,21 @@ class TestCommandInjectionDetected(unittest.TestCase):
             'String[] values = request.getParameterValues("x");'
             "String param = values[0];"
             'String bar = new String(org.apache.commons.codec.binary.Base64.decodeBase64(org.apache.commons.codec.binary.Base64.encodeBase64(param.getBytes())));'
+            'String cmd = "echo " + bar;'
+            "Runtime.getRuntime().exec(cmd);"
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["command_exec_string_tainted"])
+        self.assertTrue(flags["command_injection_detected"])
+
+    def test_command_injection_conditional_base64_roundtrip_detected(self) -> None:
+        source = (
+            'String[] values = request.getParameterValues("x");'
+            "String param = values[0];"
+            'String bar = "";'
+            'if (param != null) {'
+            'bar = new String(org.apache.commons.codec.binary.Base64.decodeBase64(org.apache.commons.codec.binary.Base64.encodeBase64(param.getBytes())));'
+            '}'
             'String cmd = "echo " + bar;'
             "Runtime.getRuntime().exec(cmd);"
         )
@@ -139,6 +173,42 @@ class TestCommandInjectionNotFlagged(unittest.TestCase):
         self.assertFalse(flags["command_exec_string_tainted"])
         self.assertFalse(flags["command_exec_args_tainted"])
         self.assertFalse(flags["command_injection_detected"])
+
+    def test_command_map_safe_override_after_nullable_source_not_flagged(self) -> None:
+        source = (
+            'String[] values = request.getParameterValues("BenchmarkTest00742");'
+            'String param;'
+            'if (values != null && values.length > 0) param = values[0];'
+            'else param = "";'
+            'String bar = "safe!";'
+            'java.util.HashMap<String, Object> map62435 = new java.util.HashMap<String, Object>();'
+            'map62435.put("keyA-62435", "a_Value");'
+            'map62435.put("keyB-62435", param);'
+            'map62435.put("keyC", "another_Value");'
+            'bar = (String) map62435.get("keyB-62435");'
+            'bar = (String) map62435.get("keyA-62435");'
+            'String cmd = "";'
+            'String osName = System.getProperty("os.name");'
+            'if (osName.indexOf("Windows") != -1) {'
+            'cmd = org.owasp.benchmark.helpers.Utils.getOSCommandString("echo");'
+            '}'
+            'String[] argsEnv = {"Foo=bar"};'
+            'Runtime.getRuntime().exec(cmd + bar, argsEnv, new java.io.File(System.getProperty("user.dir")));'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["command_exec_string_tainted"])
+        self.assertFalse(flags["command_exec_args_tainted"])
+        self.assertFalse(flags["command_injection_detected"])
+
+    def test_command_branch_taint_not_cleared_by_optional_safe_reassignment(self) -> None:
+        source = (
+            'String cmd = request.getParameter("cmd");'
+            'if (flag) cmd = "safe";'
+            'Runtime.getRuntime().exec(cmd);'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["command_exec_string_tainted"])
+        self.assertTrue(flags["command_injection_detected"])
 
 
 class TestLDAPInjection(unittest.TestCase):
@@ -238,6 +308,23 @@ class TestXPathInjection(unittest.TestCase):
         self.assertFalse(flags["xpath_injection_detected"])
         self.assertTrue(flags["xpath_query_uses_safe_constant"])
 
+    def test_xpath_safe_get_the_value_source_not_flagged(self) -> None:
+        source = (
+            'org.owasp.benchmark.helpers.SeparateClassRequest scr = new org.owasp.benchmark.helpers.SeparateClassRequest(request);'
+            'String param = scr.getTheValue("BenchmarkTest00941");'
+            'String bar = "";'
+            'if (param != null) {'
+            'bar = new String(org.apache.commons.codec.binary.Base64.decodeBase64(org.apache.commons.codec.binary.Base64.encodeBase64(param.getBytes())));'
+            '}'
+            'java.io.FileInputStream file = new java.io.FileInputStream(org.owasp.benchmark.helpers.Utils.getFileFromClasspath("employees.xml", this.getClass().getClassLoader()));'
+            'XPathFactory.newInstance();'
+            'String expression = "/Employees/Employee[@emplid=\'" + bar + "\']";'
+            'xp.compile(expression).evaluate(xmlDocument, javax.xml.xpath.XPathConstants.NODESET);'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["xpath_injection_detected"])
+        self.assertFalse(flags["xpath_query_uses_tainted_input"])
+
 
 class TestSQLInjection(unittest.TestCase):
     def test_sql_dynamic_query_detected(self) -> None:
@@ -248,6 +335,7 @@ class TestSQLInjection(unittest.TestCase):
         )
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["sql_dynamic_query_detected"])
+        self.assertTrue(flags["sql_query_uses_tainted_input"])
 
     def test_sql_dynamic_query_jdbc_template_detected(self) -> None:
         source = (
@@ -315,11 +403,84 @@ class TestSQLInjection(unittest.TestCase):
         self.assertFalse(flags["sql_dynamic_query_detected"])
         self.assertTrue(flags["sql_query_uses_safe_constant"])
 
+    def test_sql_list_safe_override_not_flagged(self) -> None:
+        source = (
+            'org.owasp.benchmark.helpers.SeparateClassRequest scr = new org.owasp.benchmark.helpers.SeparateClassRequest(request);'
+            'String param = scr.getTheValue("BenchmarkTest00931");'
+            'String bar = "alsosafe";'
+            'if (param != null) {'
+            'java.util.List<String> valuesList = new java.util.ArrayList<String>();'
+            'valuesList.add("safe");'
+            'valuesList.add(param);'
+            'valuesList.add("moresafe");'
+            'valuesList.remove(0);'
+            'bar = valuesList.get(1);'
+            '}'
+            'String sql = "SELECT * from USERS where USERNAME=\'foo\' and PASSWORD=\'" + bar + "\'";'
+            'org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.execute(sql);'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertFalse(flags["sql_dynamic_query_detected"])
+        self.assertFalse(flags["sql_query_uses_tainted_input"])
+
+    def test_sql_branch_taint_not_cleared_by_optional_safe_reassignment(self) -> None:
+        source = (
+            'String param = request.getParameter("x");'
+            'String bar = param;'
+            'if (flag) bar = "safe";'
+            'String sql = "SELECT * from USERS where USERNAME=\'foo\' and PASSWORD=\'" + bar + "\'";'
+            'connection.prepareStatement(sql);'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_query_uses_tainted_input"])
+        self.assertTrue(flags["sql_dynamic_query_detected"])
+
     def test_sql_prepare_call_flags(self) -> None:
         source = "java.sql.CallableStatement statement = connection.prepareCall(sql);"
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["sql_prepare_call_detected"])
         self.assertTrue(flags["sql_callable_statement_detected"])
+
+    def test_sql_cookie_decode_query_for_map_detected(self) -> None:
+        source = (
+            'javax.servlet.http.Cookie[] theCookies = request.getCookies();'
+            'String param = "noCookieValueSupplied";'
+            'if (theCookies != null) { for (javax.servlet.http.Cookie theCookie : theCookies) {'
+            'if (theCookie.getName().equals("BenchmarkTest00102")) {'
+            'param = java.net.URLDecoder.decode(theCookie.getValue(), "UTF-8");'
+            'break; } } }'
+            'String bar = param;'
+            'String sql = "SELECT * from USERS where USERNAME=\'foo\' and PASSWORD=\'" + bar + "\'";'
+            'org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.queryForMap(sql);'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_query_uses_tainted_input"])
+        self.assertTrue(flags["sql_dynamic_query_detected"])
+
+    def test_sql_if_else_nullable_values_branch_detected(self) -> None:
+        source = (
+            'String[] values = request.getParameterValues("x");'
+            'String param;'
+            'if (values != null && values.length > 0) param = values[0]; else param = "";'
+            'String bar = param;'
+            'String sql = "SELECT * from USERS where USERNAME=\'foo\' and PASSWORD=\'" + bar + "\'";'
+            'org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.queryForObject(sql, Long.class);'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_query_uses_tainted_input"])
+        self.assertTrue(flags["sql_dynamic_query_detected"])
+
+    def test_sql_add_batch_sink_detected(self) -> None:
+        source = (
+            'String param = request.getHeader("x");'
+            'String sql = "SELECT * from USERS where USERNAME=\'foo\' and PASSWORD=\'" + param + "\'";'
+            'java.sql.Statement statement = org.owasp.benchmark.helpers.DatabaseHelper.getSqlStatement();'
+            'statement.addBatch(sql);'
+            'statement.executeBatch();'
+        )
+        flags = analyze_crypto_indicators(source)
+        self.assertTrue(flags["sql_query_uses_tainted_input"])
+        self.assertTrue(flags["sql_dynamic_query_detected"])
 
 
 if __name__ == "__main__":
