@@ -3,13 +3,13 @@
 from typing import Any
 
 from codegraph.llm.transport.base import LLMRequest, LLMUnavailableError
-from codegraph.llm.transport.litellm_transport import LiteLLMTransport
+from codegraph.llm.transport.openai_compatible_transport import OpenAICompatibleTransport
 
 
 __all__ = ["generate_chat_completion", "LLMUnavailableError"]
 
 
-_DEFAULT_TRANSPORT = LiteLLMTransport()
+_DEFAULT_TRANSPORT = OpenAICompatibleTransport()
 
 
 def generate_chat_completion(
