@@ -36,6 +36,10 @@ from codegraph.policy.integration import (
     normalize_violation_payload,
 )
 from codegraph.remediation.capabilities import get_remediation_capability, rule_id_variants
+from codegraph.remediation.confidence import (
+    ConfidenceFeatures,
+    assess_remediation_confidence,
+)
 from codegraph.remediation.context import (
     apply_annotation_heuristic,
     apply_fallback_graph_heuristics,
@@ -113,6 +117,44 @@ class RemediationService:
 
     def __init__(self, *, llm_client=generate_chat_completion) -> None:
         self._generation_service = RemediationGenerationService(llm_client=llm_client)
+
+    @staticmethod
+    def _has_graph_context(context: Dict[str, Any]) -> bool:
+        graph_context = ((context.get("evidence") or {}).get("graph_context")) or {}
+        if not isinstance(graph_context, dict):
+            return False
+        keys = ("annotations", "uses_fields", "calls", "callers")
+        return any(bool(graph_context.get(key)) for key in keys)
+
+    def _build_confidence(
+        self,
+        *,
+        context: Dict[str, Any],
+        support_tier: str,
+        decision: str,
+        structured_valid: bool,
+        attempt_count: int,
+    ) -> Dict[str, Any]:
+        assessment = assess_remediation_confidence(
+            ConfidenceFeatures(
+                support_tier=support_tier,
+                decision=decision,
+                structured_valid=structured_valid,
+                has_exact_method_source=bool(context.get("exact_method_source")),
+                has_graph_context=self._has_graph_context(context),
+                attempt_count=max(1, int(attempt_count)),
+            ),
+            threshold_apply=settings.remediation_confidence_threshold_apply,
+            threshold_review=settings.remediation_confidence_threshold_review,
+            temperature=settings.remediation_confidence_temperature,
+        )
+        return {
+            "score": assessment.score,
+            "band": assessment.band,
+            "threshold_apply": assessment.threshold_apply,
+            "threshold_review": assessment.threshold_review,
+            "rationale": assessment.rationale,
+        }
 
     @classmethod
     def _rule_id_variants(cls, rule_id: str) -> List[str]:
@@ -210,11 +252,19 @@ class RemediationService:
 
         preflight_reason = self._preflight_fixability_reason(context)
         if preflight_reason:
-            return self._build_no_fix_response(
+            response = self._build_no_fix_response(
                 violation_id=violation_id,
                 context=context,
                 reason=preflight_reason,
             )
+            response["confidence"] = self._build_confidence(
+                context=context,
+                support_tier=capability.support_tier,
+                decision="no_fix",
+                structured_valid=True,
+                attempt_count=1,
+            )
+            return response
 
         llm_output = self.propose_method_edits(context)
         updated_source = llm_output.get("replacement_method_code")
@@ -222,12 +272,21 @@ class RemediationService:
         decision = llm_output.get("decision")
         reason = llm_output.get("reason")
         schema_error = llm_output.get("schema_error")
+        confidence = self._build_confidence(
+            context=context,
+            support_tier=capability.support_tier,
+            decision=str(decision or ""),
+            structured_valid=bool((generation or {}).get("raw_response_valid")),
+            attempt_count=1,
+        )
         if decision == "no_fix":
-            return self._build_no_fix_response(
+            response = self._build_no_fix_response(
                 violation_id=violation_id,
                 context=context,
                 reason=reason or "no safe minimal fix available",
             )
+            response["confidence"] = confidence
+            return response
 
         original_source = context.get("exact_method_source") or (context.get("evidence") or {}).get("source_code") or ""
         diff = _unified_diff(original_source, updated_source or "", label="method")
@@ -240,6 +299,7 @@ class RemediationService:
                 "file_path": context.get("file_path"),
                 "rule_id": rule_id,
                 "generation": generation,
+                "confidence": confidence,
             }
 
         base_graph = (context.get("evidence") or {}).get("graph_context") or {}
@@ -262,6 +322,7 @@ class RemediationService:
                 "rule_id": context.get("rule_id"),
                 "updated_source_code": updated_source,
                 "generation": generation,
+                "confidence": confidence,
             }
 
         normalized_output: List[Dict[str, Any]] = []
@@ -289,6 +350,7 @@ class RemediationService:
             "diff": diff,
             "verification": verification,
             "generation": generation,
+            "confidence": confidence,
         }
 
     def apply_fix(
@@ -335,12 +397,20 @@ class RemediationService:
 
         preflight_reason = self._preflight_fixability_reason(context)
         if preflight_reason:
-            return self._build_no_fix_response(
+            response = self._build_no_fix_response(
                 violation_id=violation_id,
                 context=context,
                 reason=preflight_reason,
                 attempt_count=0,
             )
+            response["confidence"] = self._build_confidence(
+                context=context,
+                support_tier=capability.support_tier,
+                decision="no_fix",
+                structured_valid=True,
+                attempt_count=1,
+            )
+            return response
 
         resolved_path = self._resolve_file_path(file_path)
         if resolved_path is None:
@@ -362,6 +432,7 @@ class RemediationService:
         raw_output = None
         raw_capture_files: List[str] = []
         generation_payload: Optional[Dict[str, Any]] = None
+        confidence: Optional[Dict[str, Any]] = None
 
         for attempt in range(max_attempts):
             llm_output = self.propose_method_edits(context, previous_errors=attempt_errors)
@@ -376,6 +447,13 @@ class RemediationService:
                         violation_id=violation_id,
                         context=context,
                         reason=reason,
+                        attempt_count=attempt + 1,
+                    )
+                    result["confidence"] = self._build_confidence(
+                        context=context,
+                        support_tier=capability.support_tier,
+                        decision="no_fix",
+                        structured_valid=bool((llm_output.get("generation") or {}).get("raw_response_valid")),
                         attempt_count=attempt + 1,
                     )
                     result["errors"] = attempt_errors
@@ -395,6 +473,27 @@ class RemediationService:
                     if capture_path:
                         raw_capture_files.append(capture_path)
                 continue
+
+            confidence = self._build_confidence(
+                context=context,
+                support_tier=capability.support_tier,
+                decision=str(llm_output.get("decision") or ""),
+                structured_valid=bool((generation_payload or {}).get("raw_response_valid")),
+                attempt_count=attempt + 1,
+            )
+
+            if mode == "apply" and settings.remediation_confidence_gate_enabled:
+                if confidence.get("band") != "apply":
+                    result = self._build_no_fix_response(
+                        violation_id=violation_id,
+                        context=context,
+                        reason="confidence gate requires manual review before apply",
+                        attempt_count=attempt + 1,
+                    )
+                    result["confidence"] = confidence
+                    result["errors"] = attempt_errors
+                    return result
+
             try:
                 updated_content, original_method, updated_method = self._replace_method_in_source(
                     original_content,
@@ -424,6 +523,7 @@ class RemediationService:
                 "errors": attempt_errors,
                 "raw_capture_files": raw_capture_files,
                 "generation": generation_payload,
+                "confidence": confidence,
             }
 
         diff = _unified_diff(original_method, updated_method, label=target_method)
@@ -472,6 +572,7 @@ class RemediationService:
                         "diff": diff,
                         "compilation": compilation,
                         "generation": generation_payload,
+                        "confidence": confidence,
                     }
 
                 evaluator = PolicyEvaluator()
@@ -515,6 +616,7 @@ class RemediationService:
                 "diff": diff,
                 "compilation": compilation,
                 "generation": generation_payload,
+                "confidence": confidence,
             }
         finally:
             if graph_modified and (mode != "apply" or not apply_successful):
@@ -556,6 +658,7 @@ class RemediationService:
                 "mode": mode,
             },
             "generation": generation_payload,
+            "confidence": confidence,
             "error": None if status == "OK" else (verification.get("error") or "Apply verification failed"),
         }
 

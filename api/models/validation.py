@@ -158,6 +158,7 @@ class RemediationPreviewResponse(BaseModel):
     diff: Optional[str] = None
     verification: Optional[dict] = None
     generation: Optional[RemediationGenerationResponse] = None
+    confidence: Optional[dict] = None
     error: Optional[str] = None
 
 
@@ -181,4 +182,5 @@ class RemediationApplyResponse(BaseModel):
     compilation: Optional[dict] = None
     metadata: Optional[dict] = None
     generation: Optional[RemediationGenerationResponse] = None
+    confidence: Optional[dict] = None
     error: Optional[str] = None
