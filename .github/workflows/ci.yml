@@ -91,6 +91,9 @@ jobs:
         with:
           version: latest
 
+      - name: Run policy check
+        run: make policy-check
+
       - name: Run backend lint
         run: uv run ruff check codegraph api scripts tests
 

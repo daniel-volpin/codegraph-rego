@@ -108,3 +108,41 @@ def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> List[Dict[str, 
         if not expressions:
             return []
         return expressions[0].get("value") or []
+
+
+def evaluate_package_root(bundle: PolicyBundle | Mapping[str, Any], package: str = "data.iso27001") -> Dict[str, Any]:
+    if isinstance(bundle, PolicyBundle):
+        serialized_bundle = bundle.to_dict()
+    elif isinstance(bundle, dict):
+        serialized_bundle = bundle
+    else:
+        serialized_bundle = serialize_policy_bundle(bundle)
+    with tempfile.TemporaryDirectory() as tmp:
+        input_path = os.path.join(tmp, "input.json")
+        with open(input_path, "w", encoding="utf-8") as file:
+            json.dump(serialized_bundle, file)
+        cmd = [
+            "opa",
+            "eval",
+            "-f",
+            "json",
+            "-d",
+            POLICY_DIR,
+            "-i",
+            input_path,
+            package,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(f"OPA package evaluation failed for {serialized_bundle.get('target_method')}: {proc.stderr}")
+        try:
+            out = json.loads(proc.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Failed to parse OPA package output") from exc
+        result = out.get("result") or []
+        if not result:
+            return {}
+        expressions = result[0].get("expressions") or []
+        if not expressions:
+            return {}
+        return expressions[0].get("value") or {}

@@ -205,6 +205,10 @@ def _evaluate_bundle(bundle: Dict[str, Any]) -> List[Dict[str, Any]]:
     return runtime_opa.evaluate_bundle(bundle)
 
 
+def _evaluate_package_root(bundle: Dict[str, Any], package: str = "data.iso27001") -> Dict[str, Any]:
+    return runtime_opa.evaluate_package_root(bundle, package=package)
+
+
 class PolicyEvaluator:
     """Evaluate policies against a single method signature."""
 
@@ -248,6 +252,21 @@ class PolicyEvaluator:
             "rules_catalog": self._rules,
             "catalog": get_policy_catalog_entries(),
         }
+
+    def trace(self, method_signature: str, *, source_path_override: str | None = None) -> Dict[str, Any]:
+        """Shadow trace path: evaluates the bundle via package root to extract intermediate predicate definitions."""
+        driver = get_neo4j_driver()
+        try:
+            snapshot = _fetch_method_snapshot(driver, method_signature)
+        finally:
+            driver.close()
+        if not snapshot:
+            return {}
+        bundle = build_evidence_bundle(snapshot, _load_hybrid_search(), source_path_override=source_path_override)
+        try:
+            return _evaluate_package_root(bundle)
+        except RuntimeError:
+            return {}
 
 
 if __name__ == "__main__":
