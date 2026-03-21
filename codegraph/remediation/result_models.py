@@ -40,6 +40,7 @@ class ApplyFixResult(_ApplyFixResultRequired, total=False):
     llm_output: Any
     errors: list[str]
     raw_capture_files: list[str]
+    predicate_trace: dict[str, Any] | None
 
 
 def early_error_result(
@@ -108,6 +109,7 @@ def partial_error_result(
     compilation: CompilationResult | None = None,
     generation: dict[str, Any] | None = None,
     confidence: dict[str, Any] | None = None,
+    predicate_trace: dict[str, Any] | None = None,
 ) -> ApplyFixResult:
     result: ApplyFixResult = {
         "status": "VERIFICATION_ERROR",
@@ -127,6 +129,8 @@ def partial_error_result(
         result["generation"] = generation
     if confidence is not None:
         result["confidence"] = confidence
+    if predicate_trace is not None:
+        result["predicate_trace"] = predicate_trace
     return result
 
 
@@ -145,6 +149,7 @@ def apply_result(
     generation: dict[str, Any] | None,
     confidence: dict[str, Any],
     error: str | None,
+    predicate_trace: dict[str, Any] | None = None,
 ) -> ApplyFixResult:
     """Full apply-flow result (OK, BUILD_ERROR, or final VERIFICATION_ERROR)."""
     return {
