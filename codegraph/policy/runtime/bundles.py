@@ -11,7 +11,7 @@ from codegraph.db import get_neo4j_driver
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.search.service import HybridSearchService
-
+from codegraph.policy.taint_graph import TaintPathFinder
 from .catalog import get_policy_catalog_entries, load_iso_rules
 from .contracts import build_policy_bundle, serialize_policy_bundle, serialize_policy_input_envelope
 
@@ -185,6 +185,7 @@ def build_evidence_bundle(
     search_service: Optional[HybridSearchService] = None,
     method_index: Optional[Dict[str, Dict[str, Any]]] = None,
     source_path_override: str | Path | None = None,
+    taint_path_finder: Optional[TaintPathFinder] = None,
 ) -> Dict[str, Any]:
     file_path = method_snapshot.get("file_path")
     resolved_path = resolve_source_path(file_path)
@@ -237,7 +238,13 @@ def build_evidence_bundle(
         analysis_flags=analysis_flags,
         helper_summaries=helper_summaries,
     )
-    return serialize_policy_bundle(bundle)
+    result = serialize_policy_bundle(bundle)
+    result["taint_paths"] = (
+        taint_path_finder.find_reachable_sinks(method_snapshot["signature"])
+        if taint_path_finder is not None
+        else []
+    )
+    return result
 
 
 def build_policy_input(
@@ -262,10 +269,11 @@ def build_policy_input(
         for snapshot in methods
         if snapshot.get("signature")
     }
+    taint_finder = TaintPathFinder(method_index)
     bundles: List[Dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
     with ThreadPoolExecutor(max_workers=workers) as pool:
         future_to_idx = {
-            pool.submit(build_evidence_bundle, method, hybrid_search, method_index): idx
+            pool.submit(build_evidence_bundle, method, hybrid_search, method_index, None, taint_finder): idx
             for idx, method in enumerate(methods)
         }
         for future in as_completed(future_to_idx):
