@@ -1,5 +1,7 @@
 package iso27001
 
+import rego.v1
+
 md5_pattern := "messagedigest.getinstance(\"md5\""
 sha1_pattern := "messagedigest.getinstance(\"sha1\""
 sha_dash_pattern := "messagedigest.getinstance(\"sha-1\""
@@ -142,17 +144,14 @@ weak_cipher_detected if {
 	source_weak_cipher
 }
 
-violations[v] if {
+violations contains violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected") if {
 	weak_hash_detected
-	v := violation_record("ISO-A.10-WEAK-HASH", "Weak hash usage detected")
 }
 
-violations[v] if {
+violations contains violation_record("ISO-A.10-WEAK-CRYPTO", "Weak cipher usage detected") if {
 	weak_cipher_detected
-	v := violation_record("ISO-A.10-WEAK-CRYPTO", "Weak cipher usage detected")
 }
 
-violations[v] if {
+violations contains violation_record("ISO-A.10-WEAK-RANDOM", "Insecure randomness usage detected") if {
 	insecure_random
-	v := violation_record("ISO-A.10-WEAK-RANDOM", "Insecure randomness usage detected")
 }

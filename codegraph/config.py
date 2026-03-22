@@ -1,7 +1,7 @@
 from functools import lru_cache
 import os
 import warnings
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -184,6 +184,16 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("REMEDIATION_CONFIDENCE_TEMPERATURE", "remediation_confidence_temperature"),
         description="Temperature scaling for remediation confidence scoring; >1 softens confidence.",
     )
+    remediation_ranking_enabled: bool = Field(
+        False,
+        validation_alias=AliasChoices("REMEDIATION_RANKING_ENABLED", "remediation_ranking_enabled"),
+        description="When true, optional backend flows may compute multi-candidate ranking.",
+    )
+    remediation_ranking_mode: Literal["off", "shadow"] = Field(
+        "off",
+        validation_alias=AliasChoices("REMEDIATION_RANKING_MODE", "remediation_ranking_mode"),
+        description="Ranking operation mode. Use 'shadow' to score but not alter decisions.",
+    )
     ui_review_store_path: str = Field(
         "outputs/policy_ui_reviews/reviews.jsonl",
         description="Append-only JSONL store for UI triage/review records.",
@@ -257,6 +267,8 @@ _LEGACY_EXPORTS = {
     "REMEDIATION_CONFIDENCE_THRESHOLD_APPLY": "remediation_confidence_threshold_apply",
     "REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW": "remediation_confidence_threshold_review",
     "REMEDIATION_CONFIDENCE_TEMPERATURE": "remediation_confidence_temperature",
+    "REMEDIATION_RANKING_ENABLED": "remediation_ranking_enabled",
+    "REMEDIATION_RANKING_MODE": "remediation_ranking_mode",
     "UI_REVIEW_STORE_PATH": "ui_review_store_path",
 }
 _WARNED_LEGACY_EXPORTS: set[str] = set()

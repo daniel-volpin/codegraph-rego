@@ -4,8 +4,8 @@
 .DEFAULT_GOAL := help
 
 install: ## Install dependencies using uv and yarn
-	@echo "Installing backend dependencies..."
-	@uv sync
+	@chmod +x scripts/setup_benchmark_env.sh
+	@./scripts/setup_benchmark_env.sh
 	@echo "Installing frontend dependencies..."
 	@cd frontend && yarn install
 
@@ -37,6 +37,10 @@ dev: ## Run the application in development mode (backend + frontend)
 
 test: ## Run backend tests
 	@uv run python -m pytest -q
+
+policy-check: ## Validate OPA/Rego policies
+	@opa check --strict policy/
+	@opa fmt -w policy/
 
 lint: ## Run linting (ruff for backend, eslint for frontend)
 	@echo "Linting backend..."

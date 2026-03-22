@@ -124,7 +124,15 @@ def ingest_and_evaluate_subset(
     reset_neo4j: bool,
     logger: Optional[logging.Logger] = None,
 ) -> Dict[str, Any]:
+    import shutil
+
     active_logger = logger or LOGGER
+
+    if not shutil.which("opa"):
+        err_msg = "OPA CLI not found on PATH. Please install OPA or run `make install`."
+        active_logger.error(err_msg)
+        return {"error": err_msg}
+
     if reset_neo4j:
         clear_graph()
 

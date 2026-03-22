@@ -1,5 +1,7 @@
 package iso27001
 
+import rego.v1
+
 sql_execute_pattern := "executequery("
 sql_execute_update_pattern := "executeupdate("
 sql_execute_generic_pattern := "execute("
@@ -327,27 +329,22 @@ xpath_injection_heuristic if {
 	not helper_safe_xpath
 }
 
-violations[v] if {
+violations contains violation_record("ISO-A.8-SQL-INJECTION", "Possible SQL injection via string concatenation") if {
 	sql_injection_heuristic
-	v := violation_record("ISO-A.8-SQL-INJECTION", "Possible SQL injection via string concatenation")
 }
 
-violations[v] if {
+violations contains violation_record("ISO-A.8-PATH-TRAVERSAL", "Possible path traversal via untrusted path construction") if {
 	path_traversal_heuristic
-	v := violation_record("ISO-A.8-PATH-TRAVERSAL", "Possible path traversal via untrusted path construction")
 }
 
-violations[v] if {
+violations contains violation_record("ISO-A.8-CMD-INJECTION", "Possible command injection via untrusted command construction") if {
 	command_injection_heuristic
-	v := violation_record("ISO-A.8-CMD-INJECTION", "Possible command injection via untrusted command construction")
 }
 
-violations[v] if {
+violations contains violation_record("ISO-A.8-LDAP-INJECTION", "Possible LDAP injection via concatenated filter construction") if {
 	ldap_injection_heuristic
-	v := violation_record("ISO-A.8-LDAP-INJECTION", "Possible LDAP injection via concatenated filter construction")
 }
 
-violations[v] if {
+violations contains violation_record("ISO-A.8-XPATH-INJECTION", "Possible XPath injection via concatenated query construction") if {
 	xpath_injection_heuristic
-	v := violation_record("ISO-A.8-XPATH-INJECTION", "Possible XPath injection via concatenated query construction")
 }

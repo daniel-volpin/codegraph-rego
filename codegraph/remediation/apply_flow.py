@@ -10,6 +10,7 @@ from codegraph.config import settings
 from codegraph.ingestion.service import process_single_file_content
 from codegraph.policy.integration import PolicyEvaluator
 from codegraph.remediation.capabilities import get_remediation_capability
+from codegraph.policy.trace import PolicyStateTrace, filter_predicate_trace, project_trace_profile
 from codegraph.remediation.metrics import (
     capture_raw_llm_output,
     extract_testcase_id,
@@ -123,6 +124,13 @@ def execute_apply_fix(
     raw_capture_files: list[str] = []
     generation_payload: dict[str, Any] | None = None
     confidence: dict[str, Any] = {}
+    
+    before_trace_raw = None
+    try:
+        tmp_eval = PolicyEvaluator()
+        before_trace_raw = tmp_eval.trace(target_method, source_path_override=resolved_path.as_posix())
+    except Exception as exc:
+        LOGGER.warning("Shadow trace failed on baseline: %s", exc)
 
     for attempt in range(max_attempts):
         llm_output = service.propose_method_edits(context, previous_errors=attempt_errors)
@@ -265,6 +273,15 @@ def execute_apply_fix(
                 target_method,
                 source_path_override=temp_file_path.as_posix() if mode == "dry_run" else None,
             )
+            
+            after_trace_raw = None
+            try:
+                after_trace_raw = evaluator.trace(
+                    target_method,
+                    source_path_override=temp_file_path.as_posix() if mode == "dry_run" else None,
+                )
+            except Exception as exc:
+                LOGGER.warning("Shadow trace failed on candidate: %s", exc)
             if after_eval.get("error"):
                 verification = {
                     "error": after_eval.get("error"),
@@ -324,6 +341,22 @@ def execute_apply_fix(
     if mode == "apply" and not apply_successful:
         status = "VERIFICATION_ERROR"
 
+    trace_rule_id = str(context.get("rule_id"))
+    before_filtered = filter_predicate_trace(before_trace_raw)
+    after_filtered = filter_predicate_trace(after_trace_raw)
+    trace_obj = PolicyStateTrace(
+        package_path="data.iso27001",
+        rule_id=trace_rule_id,
+        trace_source="package_root_eval",
+        before_trace_raw=before_trace_raw,
+        after_trace_raw=after_trace_raw,
+        before_trace_filtered=before_filtered,
+        after_trace_filtered=after_filtered,
+        before_trace_normalized=project_trace_profile(trace_rule_id, before_filtered),
+        after_trace_normalized=project_trace_profile(trace_rule_id, after_filtered),
+        trace_fields_used=list(before_trace_raw.keys() if before_trace_raw else []),
+    )
+
     metadata: ApplyMetadata = {
         "violation_id": violation_id,
         "rule_id": context.get("rule_id"),
@@ -346,4 +379,5 @@ def execute_apply_fix(
         generation=generation_payload,
         confidence=confidence,
         error=None if status == "OK" else (verification.get("error") or "Apply verification failed"),
+        predicate_trace=trace_obj.model_dump(),
     )
