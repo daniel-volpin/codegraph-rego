@@ -1,17 +1,15 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ColumnDef,
-  flexRender,
+  type ColumnDef,
+  type ExpandedState,
+  type SortingState,
   getCoreRowModel,
   getExpandedRowModel,
   getSortedRowModel,
-  SortingState,
-  ExpandedState,
   useReactTable,
 } from "@tanstack/react-table";
-import { CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, Scale, Sparkles } from "lucide-react";
-import Markdown from "react-markdown";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import {
   applyRemediation,
@@ -20,413 +18,44 @@ import {
   fetchPolicyCatalog,
   previewRemediation,
 } from "../lib/api";
-import type {
-  PolicyCatalogResponse,
-  PolicyEvaluateResponse,
-  PolicyExplanationStructured,
-  PolicyExplainOneResponse,
-  RemediationCapability,
-  RemediationApplyResponse,
-  RemediationPreviewResponse,
-  UploadResponse,
-} from "../lib/types";
-import { Button } from "../components/ui/button";
+import type { PolicyCatalogResponse, PolicyEvaluateResponse } from "../lib/types";
+import { uniqueSortedModuleLabels } from "../lib/workspace";
 import { Badge } from "../components/ui/badge";
-import { Card } from "../components/ui/card";
-import CodeHighlight from "../components/ui/CodeHighlight";
+import ControlsPanel from "../components/features/policy/ControlsPanel";
+import FindingDetailPanel from "../components/features/policy/FindingDetailPanel";
+import SummaryCards from "../components/features/policy/SummaryCards";
+import ViolationGroupTable from "../components/features/policy/ViolationGroupTable";
 import {
-  deriveModuleLabel,
-  relativeToUploadedWorkspace,
-  uniqueSortedModuleLabels,
-} from "../lib/workspace";
-
-type RawViolation = Record<string, unknown>;
-
-interface ViolationRow {
-  id: string;
-  ruleId: string;
-  severity: string;
-  module: string;
-  targetMethod: string;
-  filePath: string;
-  reason: string;
-  snippet: string;
-  remediation: RemediationCapability;
-  raw: RawViolation;
-}
-
-interface ViolationGroupRow {
-  id: string;
-  ruleId: string;
-  severity: string;
-  findingCount: number;
-  fileCount: number;
-  fullSupportCount: number;
-  guardedSupportCount: number;
-  manualCount: number;
-  findings: ViolationRow[];
-}
-
-interface PersistedPolicyEvaluation {
-  data: PolicyEvaluateResponse;
-  savedAt: number;
-  preset: PolicyViewPreset;
-}
-
-type PolicyViewPreset = "all" | "framework_demo";
-const LAST_UPLOAD_STORAGE_KEY = "codegraph:lastUpload";
-
-const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-
-const asString = (value: unknown, fallback = "—") => (typeof value === "string" && value.trim() ? value : fallback);
-const asBoolean = (value: unknown, fallback = false) => (typeof value === "boolean" ? value : fallback);
-
-const compactTargetMethod = (value: string) => {
-  if (!value || value === "—") return value;
-
-  const openParen = value.indexOf("(");
-  const prefix = openParen >= 0 ? value.slice(0, openParen) : value;
-  const suffix = openParen >= 0 ? value.slice(openParen) : "";
-
-  const parts = prefix.split(".").filter(Boolean);
-  if (parts.length < 2) return value;
-
-  const methodName = parts[parts.length - 1];
-  const className = parts[parts.length - 2];
-  return `${className}.${methodName}${suffix}`;
-};
-
-const normalizeRemediationCapability = (value: unknown): RemediationCapability => {
-  const record = asRecord(value);
-  return {
-    supported: asBoolean(record?.supported, false),
-    support_tier:
-      record?.support_tier === "full" || record?.support_tier === "guarded" || record?.support_tier === "manual"
-        ? record.support_tier
-        : "manual",
-    reason_code: asString(record?.reason_code ?? "unsupported_rule_for_auto_fix", "unsupported_rule_for_auto_fix"),
-    strategy: typeof record?.strategy === "string" ? record.strategy : null,
-    preview_available: asBoolean(record?.preview_available, false),
-    verify_available: asBoolean(record?.verify_available, false),
-    ui_apply_mode: record?.ui_apply_mode === "dry_run" ? "dry_run" : "dry_run",
-    rationale: asString(record?.rationale ?? "Automatic remediation is not available for this rule.", "Automatic remediation is not available for this rule."),
-    safe_refusal_possible: asBoolean(record?.safe_refusal_possible, false),
-  };
-};
-
-const extractMethodNameFromSignature = (targetMethod: string) => {
-  const match = targetMethod.match(/([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-  return match ? match[1] : "";
-};
-
-const trimSnippetToMethod = (snippet: string, targetMethod: string) => {
-  if (!snippet.trim()) return "";
-
-  const methodName = extractMethodNameFromSignature(targetMethod);
-  if (!methodName) return snippet.trimEnd();
-
-  const lines = snippet.split("\n");
-  const declarationIndex = lines.findIndex((line) => new RegExp(`\\b${methodName}\\s*\\(`).test(line));
-  if (declarationIndex < 0) return snippet.trimEnd();
-
-  let start = declarationIndex;
-  while (start > 0) {
-    const previous = lines[start - 1].trim();
-    if (!previous || previous.startsWith("@")) {
-      start -= 1;
-      continue;
-    }
-    break;
-  }
-
-  let sawOpeningBrace = false;
-  let depth = 0;
-  let end = lines.length - 1;
-
-  for (let i = declarationIndex; i < lines.length; i += 1) {
-    const line = lines[i];
-    for (const char of line) {
-      if (char === "{") {
-        sawOpeningBrace = true;
-        depth += 1;
-      } else if (char === "}") {
-        depth -= 1;
-        if (sawOpeningBrace && depth === 0) {
-          end = i;
-          return lines.slice(start, end + 1).join("\n").trimEnd();
-        }
-      }
-    }
-  }
-
-  return lines.slice(start, end + 1).join("\n").trimEnd();
-};
-
-const normalizeViolation = (item: RawViolation): ViolationRow => {
-  const evidence = asRecord(item.evidence);
-  const evidenceSnippet = evidence ? asString(evidence.source_code ?? "", "") : "";
-  const remediation = normalizeRemediationCapability(item.remediation);
-  const ruleId = asString(item.violation_id ?? item.rule_id);
-  const targetMethod = asString(item.target_method);
-  const filePath = asString(item.file_path);
-  const severity = asString(item.severity, "MEDIUM").toUpperCase();
-  const rawSnippet = asString(item.code_snippet ?? evidenceSnippet ?? item.updated_source_code ?? "", "");
-  return {
-    id: `${ruleId}:${targetMethod}:${filePath}`,
-    ruleId,
-    severity,
-    module: deriveModuleLabel(filePath),
-    targetMethod,
-    filePath,
-    reason: asString(item.reason ?? item.description),
-    snippet: trimSnippetToMethod(rawSnippet, targetMethod),
-    remediation,
-    raw: item,
-  };
-};
-
-const severityVariant = (severity: string): "destructive" | "warning" | "secondary" => {
-  if (severity === "HIGH") return "destructive";
-  if (severity === "MEDIUM") return "warning";
-  return "secondary";
-};
-
-const severityRank = (severity: string) => {
-  if (severity === "HIGH") return 3;
-  if (severity === "MEDIUM") return 2;
-  if (severity === "LOW") return 1;
-  return 0;
-};
-
-const readUploadedModules = (): string[] => {
-  try {
-    const raw = localStorage.getItem(LAST_UPLOAD_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as UploadResponse;
-    const roots = parsed.java_roots?.length ? parsed.java_roots : parsed.java_root ? [parsed.java_root] : [];
-    return uniqueSortedModuleLabels(roots.filter(Boolean));
-  } catch {
-    return [];
-  }
-};
-
-const formatCitationDisplay = (citation: string) => {
-  const trimmed = citation.trim();
-  if (!trimmed) {
-    return { display: citation, full: citation };
-  }
-
-  const match = trimmed.match(/^(.*?)(:\d+(?:-\d+)?)$/);
-  const rawPath = match?.[1] ?? trimmed;
-  const suffix = match?.[2] ?? "";
-  const normalizedPath = rawPath.replace(/\\/g, "/");
-
-  let displayPath = normalizedPath;
-  const srcIndex = normalizedPath.indexOf("/src/");
-
-  if (normalizedPath.includes("/uploaded_code/") || normalizedPath.startsWith("uploaded_code/")) {
-    displayPath = relativeToUploadedWorkspace(normalizedPath);
-  } else if (srcIndex >= 0) {
-    displayPath = normalizedPath.slice(srcIndex + 1);
-  } else {
-    const parts = normalizedPath.split("/").filter(Boolean);
-    if (parts.length > 4) {
-      displayPath = parts.slice(-4).join("/");
-    }
-  }
-
-  return {
-    display: `${displayPath}${suffix}`,
-    full: trimmed,
-  };
-};
-
-const renderStructuredExplanation = (payload: PolicyExplanationStructured) => {
-  const citation = formatCitationDisplay(payload.citation);
-  return (
-    <div className="space-y-3 rounded-md border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Citation</p>
-        <p className="mt-1 break-words font-mono text-xs text-indigo-900" title={citation.full}>
-          {citation.display}
-        </p>
-      </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Why</p>
-        <p className="mt-1 break-words">{payload.why}</p>
-      </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Fix</p>
-        <p className="mt-1 break-words">{payload.fix}</p>
-      </div>
-    </div>
-  );
-};
-
-const remediationSummaryText = (capability: RemediationCapability) =>
-  capability.support_tier === "full"
-    ? "Preview suggests a bounded fix without compilation. Verify fix (dry run) runs compile and policy re-checks without persisting changes."
-    : capability.support_tier === "guarded"
-      ? "This rule supports guarded remediation. The system may safely return NO_FIX when a minimal secure change is not evident from method-local context."
-      : "This rule is explanation-first and remains manual review only. Automatic remediation is intentionally disabled for this category.";
-
-const remediationBadgeLabel = (capability: RemediationCapability) => {
-  if (capability.support_tier === "full") return "Auto-fix available";
-  if (capability.support_tier === "guarded") return "Auto-fix with safety checks";
-  return "Manual review required";
-};
-
-const remediationBadgeVariant = (capability: RemediationCapability): "success" | "secondary" => {
-  return capability.support_tier === "manual" ? "secondary" : "success";
-};
-
-const ruleGroupStatusLabel = (group: ViolationGroupRow) => {
-  if (group.fullSupportCount > 0 && group.guardedSupportCount > 0) {
-    return `${group.fullSupportCount} auto-fixable, ${group.guardedSupportCount} guarded`;
-  }
-  if (group.fullSupportCount > 0) {
-    return `${group.fullSupportCount} auto-fixable`;
-  }
-  if (group.guardedSupportCount > 0) {
-    return `${group.guardedSupportCount} with safety checks`;
-  }
-  return "Manual review only";
-};
-
-const ruleGroupStatusVariant = (group: ViolationGroupRow): "success" | "secondary" => {
-  return group.fullSupportCount > 0 || group.guardedSupportCount > 0 ? "success" : "secondary";
-};
-
-const artifactStatusVariant = (status: "idle" | "running" | "ready" | "error"): "secondary" | "warning" | "success" | "destructive" => {
-  if (status === "running") return "warning";
-  if (status === "ready") return "success";
-  if (status === "error") return "destructive";
-  return "secondary";
-};
-
-const artifactStatusLabel = (status: "idle" | "running" | "ready" | "error") => {
-  if (status === "running") return "Running";
-  if (status === "ready") return "Ready";
-  if (status === "error") return "Error";
-  return "Not started";
-};
-
-const LEGACY_FRAMEWORK_DEMO_RULE_IDS = [
-  "ISO-A.10-WEAK-HASH",
-  "ISO-A.10-WEAK-RANDOM",
-  "ISO-A.10-WEAK-CRYPTO",
-  "ISO-A.8-SQL-INJECTION",
-  "ISO-A.8-PATH-TRAVERSAL",
-  "ISO-A.8-CMD-INJECTION",
-  "ISO-A.8-LDAP-INJECTION",
-  "ISO-A.8-XPATH-INJECTION",
-];
-const POLICY_EVALUATION_STORAGE_KEY = "codegraph:policy:lastEvaluation";
-const POLICY_VIEW_PRESET_STORAGE_KEY = "codegraph:policy:viewPreset";
-
-const readPolicyViewPreset = (): PolicyViewPreset => {
-  try {
-    const saved = localStorage.getItem(POLICY_VIEW_PRESET_STORAGE_KEY);
-    return saved === "framework_demo" ? "framework_demo" : "all";
-  } catch {
-    return "all";
-  }
-};
-
-const readPersistedPolicyEvaluation = (preset: PolicyViewPreset): PersistedPolicyEvaluation | null => {
-  try {
-    const saved = localStorage.getItem(POLICY_EVALUATION_STORAGE_KEY);
-    if (!saved) return null;
-    const parsed = JSON.parse(saved) as Partial<PersistedPolicyEvaluation>;
-    if (
-      !parsed ||
-      typeof parsed !== "object" ||
-      !parsed.data ||
-      typeof parsed.savedAt !== "number" ||
-      (parsed.preset !== "all" && parsed.preset !== "framework_demo")
-    ) {
-      return null;
-    }
-    if (parsed.preset !== preset) return null;
-    return {
-      data: parsed.data as PolicyEvaluateResponse,
-      savedAt: parsed.savedAt,
-      preset: parsed.preset,
-    };
-  } catch {
-    return null;
-  }
-};
-
-const persistPolicyEvaluation = (data: PolicyEvaluateResponse, preset: PolicyViewPreset) => {
-  try {
-    const payload: PersistedPolicyEvaluation = {
-      data,
-      savedAt: Date.now(),
-      preset,
-    };
-    localStorage.setItem(POLICY_EVALUATION_STORAGE_KEY, JSON.stringify(payload));
-  } catch {
-    /* ignore storage errors */
-  }
-};
-
-const uniqueRuleIds = (ruleIds: string[]) => Array.from(new Set(ruleIds.filter((ruleId) => ruleId.trim())));
-
-const groupViolationsByRule = (violations: ViolationRow[]): ViolationGroupRow[] => {
-  const groups = new Map<string, ViolationRow[]>();
-  for (const violation of violations) {
-    const key = violation.ruleId || "unknown-rule";
-    const current = groups.get(key);
-    if (current) {
-      current.push(violation);
-    } else {
-      groups.set(key, [violation]);
-    }
-  }
-
-  return Array.from(groups.entries()).map(([ruleId, findings]) => {
-    const sortedFindings = [...findings].sort((left, right) => {
-      const severityDiff = severityRank(right.severity) - severityRank(left.severity);
-      if (severityDiff !== 0) return severityDiff;
-      const fileDiff = left.filePath.localeCompare(right.filePath);
-      if (fileDiff !== 0) return fileDiff;
-      return left.targetMethod.localeCompare(right.targetMethod);
-    });
-
-    const fileCount = new Set(sortedFindings.map((finding) => finding.filePath)).size;
-    const fullSupportCount = sortedFindings.filter((finding) => finding.remediation.support_tier === "full").length;
-    const guardedSupportCount = sortedFindings.filter((finding) => finding.remediation.support_tier === "guarded").length;
-    const manualCount = sortedFindings.filter((finding) => finding.remediation.support_tier === "manual").length;
-    const highestSeverity = sortedFindings.reduce(
-      (current, finding) => (severityRank(finding.severity) > severityRank(current) ? finding.severity : current),
-      sortedFindings[0]?.severity ?? "LOW",
-    );
-
-    return {
-      id: ruleId,
-      ruleId,
-      severity: highestSeverity,
-      findingCount: sortedFindings.length,
-      fileCount,
-      fullSupportCount,
-      guardedSupportCount,
-      manualCount,
-      findings: sortedFindings,
-    };
-  });
-};
-
-type PendingAction = "explain" | "preview" | "apply";
+  type PendingAction,
+  type PolicyExplainOneResponse,
+  type PolicyViewPreset,
+  type RawViolation,
+  type RemediationApplyResponse,
+  type RemediationPreviewResponse,
+  type ViolationGroupRow,
+  type ViolationRow,
+  LEGACY_FRAMEWORK_DEMO_RULE_IDS,
+  POLICY_VIEW_PRESET_STORAGE_KEY,
+  groupViolationsByRule,
+  normalizeViolation,
+  persistPolicyEvaluation,
+  readPersistedPolicyEvaluation,
+  readPolicyViewPreset,
+  readUploadedModules,
+  ruleGroupStatusLabel,
+  ruleGroupStatusVariant,
+  severityVariant,
+  uniqueRuleIds,
+} from "../components/features/policy/policyUtils";
 
 const PolicyPage = () => {
   const queryClient = useQueryClient();
   const initialViewPreset = readPolicyViewPreset();
-  const initialEvalSnapshotRef = useRef<Record<PolicyViewPreset, PersistedPolicyEvaluation | null>>({
+  const initialEvalSnapshotRef = useRef<Record<PolicyViewPreset, ReturnType<typeof readPersistedPolicyEvaluation>>>({
     all: readPersistedPolicyEvaluation("all"),
     framework_demo: readPersistedPolicyEvaluation("framework_demo"),
   });
+
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
   const [expandedFindingByGroup, setExpandedFindingByGroup] = useState<Record<string, string | null>>({});
@@ -453,6 +82,8 @@ const PolicyPage = () => {
     }));
   }, []);
 
+  // ---- Cache-as-state queries (manual updates only) ----
+
   const previewByIdQuery = useQuery<Record<string, RemediationPreviewResponse>>({
     queryKey: ["policy:previewById"],
     queryFn: async () => ({}),
@@ -461,7 +92,6 @@ const PolicyPage = () => {
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 6,
   });
-
   const explainByIdQuery = useQuery<Record<string, PolicyExplainOneResponse>>({
     queryKey: ["policy:explainById"],
     queryFn: async () => ({}),
@@ -470,7 +100,6 @@ const PolicyPage = () => {
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 6,
   });
-
   const applyByIdQuery = useQuery<Record<string, RemediationApplyResponse>>({
     queryKey: ["policy:applyById"],
     queryFn: async () => ({}),
@@ -483,21 +112,23 @@ const PolicyPage = () => {
   const previewById = previewByIdQuery.data;
   const explainById = explainByIdQuery.data;
   const applyById = applyByIdQuery.data;
+
+  // ---- Policy catalog + eval queries ----
+
   const policyCatalogQuery = useQuery<PolicyCatalogResponse, Error>({
     queryKey: ["policyCatalog"],
     queryFn: fetchPolicyCatalog,
   });
+
   const frameworkDemoRuleIds = useMemo(() => {
     const explicit = uniqueRuleIds(policyCatalogQuery.data?.framework_demo_rule_ids ?? []);
     if (explicit.length > 0) return explicit;
-
     const derivedFromCategories = uniqueRuleIds(
       (policyCatalogQuery.data?.benchmark_categories ?? [])
         .filter((category) => category.framework_demo)
         .flatMap((category) => category.rego_rule_ids ?? []),
     );
     if (derivedFromCategories.length > 0) return derivedFromCategories;
-
     return LEGACY_FRAMEWORK_DEMO_RULE_IDS;
   }, [policyCatalogQuery.data?.benchmark_categories, policyCatalogQuery.data?.framework_demo_rule_ids]);
 
@@ -506,10 +137,7 @@ const PolicyPage = () => {
 
   const evalQuery = useQuery<PolicyEvaluateResponse, Error>({
     queryKey: ["policyEvaluation:last", viewPreset],
-    queryFn: () =>
-      evaluatePolicies({
-        ruleIds: viewPreset === "framework_demo" ? frameworkDemoRuleIds : undefined,
-      }),
+    queryFn: () => evaluatePolicies({ ruleIds: viewPreset === "framework_demo" ? frameworkDemoRuleIds : undefined }),
     enabled: false,
     initialData: initialEvalSnapshotRef.current[viewPreset]?.data,
     initialDataUpdatedAt: initialEvalSnapshotRef.current[viewPreset]?.savedAt,
@@ -525,6 +153,8 @@ const PolicyPage = () => {
       : (policyCatalogQuery.data?.benchmark_categories?.some((category) => category.framework_demo) ?? false)
         ? "benchmark_categories"
         : "legacy_fallback";
+
+  // ---- Effects ----
 
   useEffect(() => {
     if (!evalQuery.data) return;
@@ -556,6 +186,8 @@ const PolicyPage = () => {
     lastEvalErrorToastAtRef.current = evalQuery.errorUpdatedAt;
     toast.error(`Evaluation failed: ${evalQuery.error.message}`);
   }, [evalQuery.error, evalQuery.errorUpdatedAt, evalQuery.isError]);
+
+  // ---- Mutations ----
 
   const explainMutation = useMutation({
     mutationFn: (violation: RawViolation) =>
@@ -608,7 +240,8 @@ const PolicyPage = () => {
   });
 
   const applyMutation = useMutation({
-    mutationFn: (row: ViolationRow) => applyRemediation({ violation_id: row.ruleId, target_method: row.targetMethod, file_path: row.filePath }),
+    mutationFn: (row: ViolationRow) =>
+      applyRemediation({ violation_id: row.ruleId, target_method: row.targetMethod, file_path: row.filePath }),
     onMutate: (row) => markPending(row.id, "apply"),
     onSuccess: (data, row) => {
       queryClient.setQueryData<Record<string, RemediationApplyResponse>>(
@@ -626,13 +259,15 @@ const PolicyPage = () => {
     onError: (error: Error) => toast.error(`Apply failed: ${error.message}`),
   });
 
-  const findings = useMemo(() => {
-    const result: PolicyEvaluateResponse | undefined = evalQuery.data;
-    return (result?.violations ?? []).map((v) => normalizeViolation(v));
-  }, [evalQuery.data]);
+  // ---- Derived data ----
+
+  const findings = useMemo(
+    () => (evalQuery.data?.violations ?? []).map((v) => normalizeViolation(v)),
+    [evalQuery.data],
+  );
 
   const availableModules = useMemo(
-    () => uniqueSortedModuleLabels([...uploadedModules, ...findings.map((finding) => finding.filePath)]),
+    () => uniqueSortedModuleLabels([...uploadedModules, ...findings.map((f) => f.filePath)]),
     [findings, uploadedModules],
   );
 
@@ -643,7 +278,7 @@ const PolicyPage = () => {
   }, [availableModules, moduleFilter]);
 
   const filteredFindings = useMemo(
-    () => (moduleFilter === "all" ? findings : findings.filter((finding) => finding.module === moduleFilter)),
+    () => (moduleFilter === "all" ? findings : findings.filter((f) => f.module === moduleFilter)),
     [findings, moduleFilter],
   );
 
@@ -652,52 +287,42 @@ const PolicyPage = () => {
       setSelectedFindingId(null);
       return;
     }
-    if (!selectedFindingId || !filteredFindings.some((finding) => finding.id === selectedFindingId)) {
+    if (!selectedFindingId || !filteredFindings.some((f) => f.id === selectedFindingId)) {
       setSelectedFindingId(filteredFindings[0].id);
     }
   }, [filteredFindings, selectedFindingId]);
 
   const selectedFinding = useMemo(
-    () => filteredFindings.find((finding) => finding.id === selectedFindingId) ?? null,
+    () => filteredFindings.find((f) => f.id === selectedFindingId) ?? null,
     [filteredFindings, selectedFindingId],
   );
 
+  const selectedPendingAction = selectedFinding ? pendingAction[selectedFinding.id] : undefined;
   const selectedExplain = selectedFinding ? explainById[selectedFinding.id] : undefined;
   const selectedPreview = selectedFinding ? previewById[selectedFinding.id] : undefined;
-  const selectedApply = selectedFinding ? applyById[selectedFinding.id] : undefined;
-  const selectedPendingAction = selectedFinding ? pendingAction[selectedFinding.id] : undefined;
 
   const explainStatus: "idle" | "running" | "ready" | "error" =
-    selectedPendingAction === "explain"
-      ? "running"
-      : selectedExplain?.status === "OK"
-        ? "ready"
-        : selectedExplain?.status === "ERROR"
-          ? "error"
-          : "idle";
-  const previewStatus: "idle" | "running" | "ready" | "error" =
-    selectedPendingAction === "preview"
-      ? "running"
-      : selectedPreview?.status === "OK"
-        ? "ready"
-        : selectedPreview?.status === "ERROR"
-          ? "error"
-          : "idle";
-  const verifyStatus: "idle" | "running" | "ready" | "error" =
-    selectedPendingAction === "apply"
-      ? "running"
-      : selectedApply?.status === "OK"
-        ? "ready"
-        : selectedApply?.status === "ERROR"
-          ? "error"
-          : "idle";
+    selectedPendingAction === "explain" ? "running"
+    : selectedExplain?.status === "OK" ? "ready"
+    : selectedExplain?.status === "ERROR" ? "error"
+    : "idle";
 
-  const visibleModules = useMemo(() => {
-    if (moduleFilter === "all") {
-      return availableModules;
-    }
-    return availableModules.includes(moduleFilter) ? [moduleFilter] : [];
-  }, [availableModules, moduleFilter]);
+  const previewStatus: "idle" | "running" | "ready" | "error" =
+    selectedPendingAction === "preview" ? "running"
+    : selectedPreview?.status === "OK" ? "ready"
+    : selectedPreview?.status === "ERROR" ? "error"
+    : "idle";
+
+  const verifyStatus: "idle" | "running" | "ready" | "error" =
+    selectedPendingAction === "apply" ? "running"
+    : (selectedFinding ? applyById[selectedFinding.id] : undefined)?.status === "OK" ? "ready"
+    : (selectedFinding ? applyById[selectedFinding.id] : undefined)?.status === "ERROR" ? "error"
+    : "idle";
+
+  const visibleModules = useMemo(
+    () => (moduleFilter === "all" ? availableModules : availableModules.includes(moduleFilter) ? [moduleFilter] : []),
+    [availableModules, moduleFilter],
+  );
 
   const data = useMemo(() => groupViolationsByRule(filteredFindings), [filteredFindings]);
 
@@ -706,23 +331,16 @@ const PolicyPage = () => {
       findingCount: filteredFindings.length,
       ruleCount: data.length,
       moduleCount: visibleModules.length,
-      fullSupportCount: filteredFindings.filter((finding) => finding.remediation.support_tier === "full").length,
-      guardedSupportCount: filteredFindings.filter((finding) => finding.remediation.support_tier === "guarded").length,
-      manualReviewCount: filteredFindings.filter((finding) => finding.remediation.support_tier === "manual").length,
+      fullSupportCount: filteredFindings.filter((f) => f.remediation.support_tier === "full").length,
+      guardedSupportCount: filteredFindings.filter((f) => f.remediation.support_tier === "guarded").length,
+      manualReviewCount: filteredFindings.filter((f) => f.remediation.support_tier === "manual").length,
     }),
     [data.length, filteredFindings, visibleModules.length],
   );
+
   const hasEvaluationResult = Boolean(evalQuery.data || evalQuery.dataUpdatedAt);
 
-  const colWidthClass = (colId: string) => {
-    if (colId === "expander") return "w-[4%]";
-    if (colId === "ruleId") return "w-[24%]";
-    if (colId === "severity") return "w-[10%]";
-    if (colId === "findingCount") return "w-[12%]";
-    if (colId === "fileCount") return "w-[12%]";
-    if (colId === "status") return "w-[24%]";
-    return "";
-  };
+  // ---- Table ----
 
   const columns = useMemo<ColumnDef<ViolationGroupRow>[]>(
     () => [
@@ -738,14 +356,11 @@ const PolicyPage = () => {
       {
         accessorKey: "ruleId",
         header: "Rule ID",
-        cell: ({ row }) => {
-          const full = row.original.ruleId;
-          return (
-            <span className="block min-w-0 truncate font-mono text-xs text-slate-800" title={full}>
-              {full}
-            </span>
-          );
-        },
+        cell: ({ row }) => (
+          <span className="block min-w-0 truncate font-mono text-xs text-slate-800" title={row.original.ruleId}>
+            {row.original.ruleId}
+          </span>
+        ),
       },
       {
         accessorKey: "severity",
@@ -766,9 +381,7 @@ const PolicyPage = () => {
         id: "status",
         header: "Remediation",
         cell: ({ row }) => (
-          <Badge variant={ruleGroupStatusVariant(row.original)}>
-            {ruleGroupStatusLabel(row.original)}
-          </Badge>
+          <Badge variant={ruleGroupStatusVariant(row.original)}>{ruleGroupStatusLabel(row.original)}</Badge>
         ),
       },
     ],
@@ -788,600 +401,57 @@ const PolicyPage = () => {
     getRowCanExpand: () => true,
   });
 
+  // ---- Render ----
+
   return (
     <div className="space-y-4">
-      <Card className="p-6">
-        <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_auto] lg:items-center">
-          <div className="grid gap-4 xl:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-600">View mode</label>
-              <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={viewPreset === "framework_demo"}
-                  aria-label="Toggle framework demo focus"
-                  onClick={() => setViewPreset((current) => (current === "all" ? "framework_demo" : "all"))}
-                  className={`relative inline-flex h-7 w-14 items-center rounded-full border transition-colors ${
-                    viewPreset === "framework_demo"
-                      ? "border-indigo-600 bg-indigo-600"
-                      : "border-slate-300 bg-slate-200"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                      viewPreset === "framework_demo" ? "translate-x-8" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900">Framework demo focus</p>
-                  <p className="text-xs text-slate-500">
-                    {viewPreset === "framework_demo"
-                      ? "On. Show only the benchmark-aligned framework categories."
-                      : "Off. Show the full policy surface for the current upload."}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-600">Module filter</label>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <select
-                  value={moduleFilter}
-                  onChange={(event) => setModuleFilter(event.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                >
-                  <option value="all">All modules</option>
-                  {availableModules.map((module) => (
-                    <option key={module} value={module}>
-                      {module}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-2 text-xs text-slate-500">
-                  Filter findings to one uploaded module while keeping the active upload workspace unchanged.
-                </p>
-                {viewPreset === "framework_demo" && policyCatalogQuery.isError && (
-                  <p className="mt-2 text-xs text-amber-700">
-                    Framework demo metadata could not be loaded from the backend. Falling back to the legacy thesis demo rule set.
-                  </p>
-                )}
-                {viewPreset === "framework_demo" && !policyCatalogQuery.isLoading && frameworkDemoScopeSource === "legacy_fallback" && !policyCatalogQuery.isError && (
-                  <p className="mt-2 text-xs text-amber-700">
-                    Backend demo metadata is unavailable on this server response. Using the legacy thesis demo rule set for compatibility.
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="flex lg:justify-end lg:self-center">
-            <Button
-              onClick={() => evalQuery.refetch()}
-              disabled={evalQuery.isFetching || !frameworkDemoReady || policyCatalogQuery.isLoading}
-              title={
-                viewPreset === "framework_demo"
-                  ? "Evaluate only the benchmark-aligned framework demo categories."
-                  : "Evaluate the full policy surface for the current upload."
-              }
-              className="w-full lg:min-w-[18rem] lg:w-auto"
-            >
-              {evalQuery.isFetching ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {viewPreset === "framework_demo" ? "Running demo scan..." : "Running full scan..."}
-                </>
-              ) : policyCatalogQuery.isLoading && viewPreset === "framework_demo" ? (
-                "Loading demo scope..."
-              ) : (
-                viewPreset === "framework_demo" ? "Run Framework Demo Scan" : "Run Full Policy Scan"
-              )}
-            </Button>
-          </div>
-        </div>
-      </Card>
+      <ControlsPanel
+        viewPreset={viewPreset}
+        onViewPresetChange={setViewPreset}
+        moduleFilter={moduleFilter}
+        onModuleFilterChange={setModuleFilter}
+        availableModules={availableModules}
+        evalIsFetching={evalQuery.isFetching}
+        onEvalRefetch={() => evalQuery.refetch()}
+        frameworkDemoReady={frameworkDemoReady}
+        policyCatalogIsLoading={policyCatalogQuery.isLoading}
+        policyCatalogIsError={policyCatalogQuery.isError}
+        frameworkDemoScopeSource={frameworkDemoScopeSource}
+      />
 
-      <div className="grid gap-3 md:grid-cols-6">
-        <Card className="p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Findings</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.findingCount}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rules</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.ruleCount}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Modules</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.moduleCount}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Auto-fixable</p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-700">{summary.fullSupportCount}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Guarded fixes</p>
-          <p className="mt-2 text-2xl font-semibold text-amber-700">{summary.guardedSupportCount}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Manual review</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{summary.manualReviewCount}</p>
-        </Card>
-      </div>
+      <SummaryCards {...summary} />
 
       <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] 2xl:items-start">
-        <Card className="overflow-hidden">
-        {viewPreset === "framework_demo" && (
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Showing the benchmark-aligned categories used in the thesis framework demo. Switch to All findings to inspect the full policy surface.
-          </div>
-        )}
-        <div className="overflow-auto 2xl:max-h-[calc(100vh-11rem)]">
-          <table className="w-full table-fixed border-collapse text-sm">
-            <thead className="bg-slate-100 text-left text-slate-700">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      className={`px-3 py-2 font-semibold overflow-hidden ${colWidthClass(header.column.id)}`}
-                    >
-                      {header.isPlaceholder ? null : (
-                        <button
-                          className="inline-flex items-center gap-1"
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                        </button>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.map((row) => (
-                <Fragment key={row.id}>
-                  <tr key={row.id} className="border-t border-slate-200">
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className={`px-3 py-2 align-top overflow-hidden ${colWidthClass(cell.column.id)}`}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                  {row.getIsExpanded() && (
-                    <tr className="border-t border-slate-100 bg-slate-50">
-                      <td className="px-4 py-4" colSpan={columns.length}>
-                        <div className="space-y-4">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">{row.original.ruleId}</p>
-                              <p className="text-sm text-slate-600">
-                                {row.original.findingCount} findings across {row.original.fileCount} files
-                              </p>
-                            </div>
-                            <Badge variant={ruleGroupStatusVariant(row.original)}>
-                              {ruleGroupStatusLabel(row.original)}
-                            </Badge>
-                          </div>
+        <ViolationGroupTable
+          table={table}
+          columnCount={columns.length}
+          viewPreset={viewPreset}
+          selectedFindingId={selectedFindingId}
+          onSelectFinding={setSelectedFindingId}
+          expandedFindingByGroup={expandedFindingByGroup}
+          onToggleFinding={toggleFindingExpanded}
+          pendingAction={pendingAction}
+          explainById={explainById}
+          previewById={previewById}
+          hasEvaluationResult={hasEvaluationResult}
+          onExplain={(raw) => explainMutation.mutate(raw)}
+          onPreview={(finding) => previewMutation.mutate(finding)}
+          onApply={(finding) => applyMutation.mutate(finding)}
+        />
 
-                          <div className="space-y-3">
-                            {row.original.findings.map((finding) => {
-                              const rowPending = pendingAction[finding.id];
-                              const remediation = finding.remediation;
-                              const isBusy = !!rowPending;
-                              const previewDisabled = isBusy || !remediation.preview_available;
-                              const verifyDisabled = isBusy || !remediation.verify_available;
-                              const isFindingExpanded = expandedFindingByGroup[row.original.id] === finding.id;
-
-                              return (
-                                <div
-                                  key={finding.id}
-                                  className={`rounded-lg border bg-white ${
-                                    selectedFindingId === finding.id ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200"
-                                  }`}
-                                >
-                                  <button
-                                    type="button"
-                                    className="flex w-full flex-wrap items-start justify-between gap-3 p-4 text-left"
-                                    onClick={() => {
-                                      setSelectedFindingId(finding.id);
-                                      toggleFindingExpanded(row.original.id, finding.id);
-                                    }}
-                                  >
-                                    <div className="flex min-w-0 items-start gap-3">
-                                      {isFindingExpanded ? (
-                                        <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                                      ) : (
-                                        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                                      )}
-                                      <div className="min-w-0">
-                                        <p className="truncate font-mono text-sm text-slate-900" title={finding.targetMethod}>
-                                          {compactTargetMethod(finding.targetMethod)}
-                                        </p>
-                                        <p className="mt-1 truncate font-mono text-xs text-slate-500" title={finding.filePath}>
-                                          {finding.filePath}
-                                        </p>
-                                        <div className="mt-2">
-                                          <Badge variant="secondary">{finding.module}</Badge>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                      <Badge variant={severityVariant(finding.severity)}>{finding.severity}</Badge>
-                                      <Badge variant={remediationBadgeVariant(remediation)}>
-                                        {remediationBadgeLabel(remediation)}
-                                      </Badge>
-                                    </div>
-                                  </button>
-
-                                  {isFindingExpanded && (
-                                    <div className="border-t border-slate-200 p-4">
-                                      <div className="space-y-4">
-                                        <p className="text-sm text-slate-700">{finding.reason}</p>
-
-                                        <div className="flex flex-wrap gap-2">
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            disabled={isBusy}
-                                            onClick={() => setSelectedFindingId(finding.id)}
-                                          >
-                                            Open dossier
-                                          </Button>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={isBusy}
-                                            title="Generate a concise explanation of why this finding matters and how to address it."
-                                            onClick={() => {
-                                              setSelectedFindingId(finding.id);
-                                              explainMutation.mutate(finding.raw);
-                                            }}
-                                          >
-                                            {rowPending === "explain" ? (
-                                              <>
-                                                <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Explaining…
-                                              </>
-                                            ) : (
-                                              <>
-                                                <Sparkles className="mr-1 h-4 w-4" /> Explain finding
-                                              </>
-                                            )}
-                                          </Button>
-                                          <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            disabled={previewDisabled}
-                                            title="Generate a proposed code change and check it virtually without compiling or modifying source files."
-                                            onClick={() => {
-                                              setSelectedFindingId(finding.id);
-                                              previewMutation.mutate(finding);
-                                            }}
-                                          >
-                                            {rowPending === "preview" ? (
-                                              <>
-                                                <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Previewing…
-                                              </>
-                                            ) : (
-                                              <>Preview suggested fix</>
-                                            )}
-                                          </Button>
-                                          <Button
-                                            variant="default"
-                                            size="sm"
-                                            disabled={verifyDisabled}
-                                            title="Run the full dry-run remediation pipeline: generate a fix, compile in a temp workspace, re-ingest, and re-check policies. No source files are persisted from the UI."
-                                            onClick={() => {
-                                              setSelectedFindingId(finding.id);
-                                              applyMutation.mutate(finding);
-                                            }}
-                                          >
-                                            {rowPending === "apply" ? (
-                                              <>
-                                                <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Applying…
-                                              </>
-                                            ) : (
-                                              <>Verify fix (dry run)</>
-                                            )}
-                                          </Button>
-                                        </div>
-
-                                        <p className="text-xs text-slate-500">{remediationSummaryText(remediation)}</p>
-                                        <p className="text-xs text-slate-500">{remediation.rationale}</p>
-
-                                        {explainById[finding.id]?.status === "ERROR" && explainById[finding.id]?.error && (
-                                          <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
-                                            {explainById[finding.id].error}
-                                          </div>
-                                        )}
-
-                                        {explainById[finding.id]?.status === "OK" &&
-                                          (explainById[finding.id]?.explanation_structured ||
-                                            explainById[finding.id]?.explanation) &&
-                                          (explainById[finding.id]?.explanation_structured ? (
-                                            renderStructuredExplanation(explainById[finding.id].explanation_structured!)
-                                          ) : (
-                                            <div className="prose prose-sm prose-indigo max-w-none rounded-md border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 break-words [&_pre]:whitespace-pre-wrap [&_code]:break-all">
-                                              <Markdown>{explainById[finding.id].explanation!}</Markdown>
-                                            </div>
-                                          ))}
-
-                                        <div className="rounded-lg border border-slate-200">
-                                          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-                                            <span className="text-xs font-semibold uppercase text-slate-500">Code snippet</span>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => {
-                                                navigator.clipboard.writeText(finding.snippet || "");
-                                                toast.success("Code copied.");
-                                              }}
-                                            >
-                                              <Copy className="mr-1 h-4 w-4" /> Copy
-                                            </Button>
-                                          </div>
-                                          <CodeHighlight
-                                            code={finding.snippet || "// snippet unavailable"}
-                                            language="java"
-                                            maxHeight={460}
-                                          />
-                                        </div>
-
-                                        {previewById[finding.id]?.error && (
-                                          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                                            <strong>Preview error:</strong> {previewById[finding.id].error}
-                                          </div>
-                                        )}
-                                        {previewById[finding.id]?.diff && (
-                                          <div className="rounded-lg border border-slate-200">
-                                            <div className="border-b border-slate-200 px-3 py-2">
-                                              <span className="text-xs font-semibold uppercase text-slate-500">Remediation Diff</span>
-                                            </div>
-                                            <pre className="overflow-auto whitespace-pre-wrap break-words bg-white p-3 text-xs">
-                                              {previewById[finding.id].diff}
-                                            </pre>
-                                          </div>
-                                        )}
-                                        {!previewById[finding.id]?.diff && previewById[finding.id]?.explanation && (
-                                          <div className="prose prose-sm max-w-none rounded-md border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 break-words">
-                                            <strong>Preview:</strong>
-                                            <Markdown>{previewById[finding.id].explanation!}</Markdown>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))}
-              {data.length === 0 && (
-                <tr>
-                  <td colSpan={columns.length} className="py-12 text-center">
-                    <Scale className="mx-auto h-10 w-10 text-slate-300" />
-                    <p className="mt-3 text-sm text-slate-500">
-                      {hasEvaluationResult
-                        ? "No rule groups matched the current policy scan."
-                        : "No rule groups loaded yet. Run a policy evaluation to see results."}
-                    </p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        </Card>
-
-        <Card className="p-5 2xl:sticky 2xl:top-24 2xl:max-h-[calc(100vh-11rem)] 2xl:overflow-auto">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Case dossier</p>
-              <p className="text-xs text-slate-500">
-                One selected finding with end-to-end evidence: explanation, suggested fix, and dry-run verification.
-              </p>
-            </div>
-            {selectedFinding && (
-              <div className="flex items-center gap-2">
-                <Badge variant={severityVariant(selectedFinding.severity)}>{selectedFinding.severity}</Badge>
-                <Badge variant={remediationBadgeVariant(selectedFinding.remediation)}>
-                  {remediationBadgeLabel(selectedFinding.remediation)}
-                </Badge>
-              </div>
-            )}
-          </div>
-
-          {!selectedFinding ? (
-            <div className="py-6 text-sm text-slate-600">
-              Run a policy scan and select a finding to open a case dossier.
-            </div>
-          ) : (
-            <div className="space-y-4 pt-4">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="truncate font-mono text-sm text-slate-900" title={selectedFinding.targetMethod}>
-                  {selectedFinding.targetMethod}
-                </p>
-                <p className="mt-1 truncate font-mono text-xs text-slate-500" title={selectedFinding.filePath}>
-                  {selectedFinding.filePath}
-                </p>
-                <p className="mt-2 text-sm text-slate-700">{selectedFinding.reason}</p>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-3 2xl:grid-cols-1">
-                <div className="rounded-lg border border-slate-200 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">1. Explain</p>
-                    <Badge variant={artifactStatusVariant(explainStatus)}>{artifactStatusLabel(explainStatus)}</Badge>
-                  </div>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">2. Preview</p>
-                    <Badge variant={artifactStatusVariant(previewStatus)}>{artifactStatusLabel(previewStatus)}</Badge>
-                  </div>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">3. Verify</p>
-                    <Badge variant={artifactStatusVariant(verifyStatus)}>{artifactStatusLabel(verifyStatus)}</Badge>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={selectedPendingAction !== undefined}
-                  onClick={() => explainMutation.mutate(selectedFinding.raw)}
-                >
-                  {selectedPendingAction === "explain" ? (
-                    <>
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Explaining…
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="mr-1 h-4 w-4" /> Explain finding
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={selectedPendingAction !== undefined || !selectedFinding.remediation.preview_available}
-                  onClick={() => previewMutation.mutate(selectedFinding)}
-                >
-                  {selectedPendingAction === "preview" ? (
-                    <>
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Previewing…
-                    </>
-                  ) : (
-                    <>Preview suggested fix</>
-                  )}
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  disabled={selectedPendingAction !== undefined || !selectedFinding.remediation.verify_available}
-                  onClick={() => applyMutation.mutate(selectedFinding)}
-                >
-                  {selectedPendingAction === "apply" ? (
-                    <>
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Verifying…
-                    </>
-                  ) : (
-                    <>Verify fix (dry run)</>
-                  )}
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-3 rounded-lg border border-slate-200 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Explanation artifact</p>
-                  {selectedExplain?.status === "ERROR" && selectedExplain.error && (
-                    <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
-                      {selectedExplain.error}
-                    </div>
-                  )}
-                  {selectedExplain?.status === "OK" && selectedExplain.explanation_structured && (
-                    renderStructuredExplanation(selectedExplain.explanation_structured)
-                  )}
-                  {selectedExplain?.status === "OK" && !selectedExplain.explanation_structured && selectedExplain.explanation && (
-                    <div className="prose prose-sm prose-indigo max-w-none rounded-md border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 break-words [&_pre]:whitespace-pre-wrap [&_code]:break-all">
-                      <Markdown>{selectedExplain.explanation}</Markdown>
-                    </div>
-                  )}
-                  {!selectedExplain && <p className="text-sm text-slate-500">No explanation generated yet.</p>}
-                </div>
-
-                <div className="space-y-3 rounded-lg border border-slate-200 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Remediation artifacts</p>
-                  {selectedPreview?.error && (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                      <strong>Preview error:</strong> {selectedPreview.error}
-                    </div>
-                  )}
-                  {selectedPreview?.diff && (
-                    <div className="rounded-lg border border-slate-200">
-                      <div className="border-b border-slate-200 px-3 py-2">
-                        <span className="text-xs font-semibold uppercase text-slate-500">Proposed diff</span>
-                      </div>
-                      <pre className="overflow-auto whitespace-pre-wrap break-words bg-white p-3 text-xs">{selectedPreview.diff}</pre>
-                    </div>
-                  )}
-                  {!selectedPreview?.diff && selectedPreview?.explanation && (
-                    <div className="prose prose-sm max-w-none rounded-md border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 break-words">
-                      <strong>Preview:</strong>
-                      <Markdown>{selectedPreview.explanation}</Markdown>
-                    </div>
-                  )}
-                  {!selectedPreview && <p className="text-sm text-slate-500">No preview generated yet.</p>}
-
-                  {selectedApply && (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                      <div className="flex items-center gap-2 text-slate-900">
-                        <CheckCircle2 className="h-4 w-4" />
-                        <p className="font-medium">Verification summary</p>
-                      </div>
-                      <div className="mt-2 grid gap-2 md:grid-cols-2 2xl:grid-cols-1">
-                        <p>
-                          Overall: <span className="font-medium">{selectedApply.verification?.overall_status ?? "—"}</span>
-                        </p>
-                        <p>
-                          Rule status: <span className="font-medium">{selectedApply.verification?.target_rule_status ?? "—"}</span>
-                        </p>
-                        <p>
-                          Remaining violations: <span className="font-medium">{selectedApply.verification?.remaining_violations?.length ?? 0}</span>
-                        </p>
-                        <p>
-                          New violations: <span className="font-medium">{selectedApply.verification?.new_violations?.length ?? 0}</span>
-                        </p>
-                        <p>
-                          Compilation: <span className="font-medium">{selectedApply.compilation?.success ? "success" : selectedApply.compilation?.attempted ? "failed" : "not attempted"}</span>
-                        </p>
-                        <p>
-                          Decision: <span className="font-medium">{selectedApply.generation?.decision ?? "—"}</span>
-                        </p>
-                      </div>
-                      {selectedApply.generation?.reason && (
-                        <p className="mt-2 text-xs text-slate-600">Reason: {selectedApply.generation.reason}</p>
-                      )}
-                      {selectedApply.error && (
-                        <p className="mt-2 text-xs text-rose-700">Error: {selectedApply.error}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-slate-200">
-                <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-                  <span className="text-xs font-semibold uppercase text-slate-500">Evidence snippet</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(selectedFinding.snippet || "");
-                      toast.success("Code copied.");
-                    }}
-                  >
-                    <Copy className="mr-1 h-4 w-4" /> Copy
-                  </Button>
-                </div>
-                <CodeHighlight
-                  code={selectedFinding.snippet || "// snippet unavailable"}
-                  language="java"
-                  maxHeight={460}
-                />
-              </div>
-            </div>
-          )}
-        </Card>
+        <FindingDetailPanel
+          selectedFinding={selectedFinding}
+          explainById={explainById}
+          previewById={previewById}
+          applyById={applyById}
+          pendingAction={pendingAction}
+          explainStatus={explainStatus}
+          previewStatus={previewStatus}
+          verifyStatus={verifyStatus}
+          onExplain={(raw) => explainMutation.mutate(raw)}
+          onPreview={(finding) => previewMutation.mutate(finding)}
+          onApply={(finding) => applyMutation.mutate(finding)}
+        />
       </div>
     </div>
   );
