@@ -45,6 +45,29 @@ class TestPolicyRouter(unittest.IsolatedAsyncioTestCase):
             "Fix: Add a method-level authorization annotation.",
         )
 
+    @patch("api.routers.policy.generate_policy_explanation", return_value="Fallback plain explanation")
+    @patch("api.routers.policy.generate_policy_explanation_structured", side_effect=ValueError("invalid structured explanation payload"))
+    async def test_policy_explain_one_falls_back_to_plain_explanation(
+        self,
+        _mock_explain_structured,
+        _mock_explain_plain,
+    ) -> None:
+        from api.routers.policy import policy_explain_one
+
+        response = await policy_explain_one(
+            PolicyExplainOneRequest(
+                violation={"violation_id": "ISO-A.9.4.1", "evidence": {}},
+                include_graph_context=True,
+                model="dummy-model",
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body)
+        self.assertEqual(payload["status"], "OK")
+        self.assertIsNone(payload["explanation_structured"])
+        self.assertEqual(payload["explanation"], "Fallback plain explanation")
+
 
 if __name__ == "__main__":
     unittest.main()

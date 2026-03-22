@@ -109,6 +109,8 @@ def create_app() -> FastAPI:
     _configure_runtime()
     from codegraph.config import settings
 
+    LOGGER.info("Runtime Neo4j target: uri=%s user=%s", settings.neo4j_uri, settings.neo4j_user)
+
     application = FastAPI()
     application.state.startup_status = _default_startup_status()
     application.add_middleware(

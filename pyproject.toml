@@ -1,6 +1,6 @@
 [project]
 name = "codegraph"
-version = "0.1.0"
+version = "0.5.0"
 description = "A sophisticated code search and understanding engine powered by CodeGraph"
 readme = "README.md"
 requires-python = ">=3.10"

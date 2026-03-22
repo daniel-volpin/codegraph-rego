@@ -35,23 +35,27 @@ Remediation support tiers:
 
 ## Authoritative Baselines
 
-Use these as the thesis benchmark baselines for this repository state:
+Thesis-final benchmark outputs produced on `main` on 2026-03-22:
 
-- detection: `outputs/detection_calibration_path_precision_v4/`
-  - precision `0.8357`
-  - recall `0.7639`
-  - F1 `0.7982`
+- detection: `outputs/thesis_final_detection_full/`
+  - precision `0.953`, recall `0.953`, F1 `0.953`
+  - 8 CWE categories · 454 OWASP Benchmark cases (seed=7, 60/category)
 - explanation: `outputs/thesis_final_explanation_full/`
-  - surfaced true positives evaluated: `112`
-  - `Citation@Context=0.8125`
-  - `Citation@NoContext=0.8125`
-- remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
-  - compile-backed supported remediation: `17/17` fully verified
+  - 222 true positives evaluated across all 8 categories
+  - `Citation@Context=0.9955` · `Citation@NoContext=0.000`
+- remediation: `outputs/thesis_final_remediation_v2/`
+  - 25/25 fully verified (`dry_run`, fix and build success rate 1.000)
+  - confidence calibration populated: Brier=0.006, ECE=0.070
 
-Keep these separate from:
+Historical runs (preserved for provenance, not for citation):
 
-- `outputs/final_full_remediation_current_main/`, which is a regression/reference run
-- `outputs/case_study_spring_petclinic/` and `outputs/case_study_gs_securing_web/`, which are transferability case studies
+- `outputs/detection_calibration_path_precision_v4/` — pre-taint intermediate baseline (F1=0.798)
+- `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` — pre-confidence-gate remediation reference (17/17, pre-PR #81)
+- `outputs/final_full_remediation_current_main/` — 10-case regression/reference run
+
+Keep case studies separate from benchmark evidence:
+
+- `outputs/case_study_spring_petclinic/` and `outputs/case_study_gs_securing_web/` — transferability case studies
 
 ## Quick Start
 
@@ -159,11 +163,24 @@ Use `.env.example` as the canonical local template. Startup performs runtime val
 
 Use [REPRODUCIBILITY.md](./REPRODUCIBILITY.md) for the shortest path to rerun the benchmark pipeline.
 
+Use [docs/release_checklist.md](./docs/release_checklist.md) for the minimal release flow so Git tags, release notes, and manifest versions stay aligned.
+
 Use [.opencode/project/runbook.md](./.opencode/project/runbook.md) for:
 
 - the current authoritative output directories
 - reporting commands
 - which runs should be cited versus treated as reference-only
+
+## Release
+
+Current lightweight release process:
+
+- update [pyproject.toml](./pyproject.toml) and [frontend/package.json](./frontend/package.json) to the intended release version
+- verify `main` is clean and CI is green
+- create the GitHub tag and release from `main`
+- keep the release title, notes, and manifest versions synchronized
+
+Use [docs/release_checklist.md](./docs/release_checklist.md) for the step-by-step checklist.
 
 ## Repo Layout
 

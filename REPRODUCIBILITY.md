@@ -65,7 +65,7 @@ python run_remediation_eval.py \
   --reset-neo4j
 ```
 
-Historical thesis-grade outputs under `outputs/detection_calibration_path_precision_v4/`, `outputs/thesis_final_explanation_full/`, and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` remain reference baselines until this branch produces replacement evidence.
+Thesis-final authoritative outputs are under `outputs/thesis_final_detection_full/`, `outputs/thesis_final_explanation_full/`, and `outputs/thesis_final_remediation_v2/` (all produced on `main` on 2026-03-22). The earlier runs under `outputs/detection_calibration_path_precision_v4/` and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` are preserved as historical reference only.
 
 ## 4. Recommended Explanation-Eval Defaults
 
@@ -125,7 +125,7 @@ For the UI thesis/demo, use the Policy page's `Framework demo focus` preset afte
 python run_benchmark_eval.py \
   --config configs/benchmark/multicat_full.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/detection_calibration_path_precision_v4 \
+  --output-dir outputs/thesis_final_detection_full \
   --reset-neo4j
 ```
 
@@ -148,7 +148,7 @@ python run_explanation_eval.py \
 python run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/repro_supported_medium_branch_benchmarktest01017_fix \
+  --output-dir outputs/thesis_final_remediation_v2 \
   --sample-size 60 \
   --reset-neo4j
 ```

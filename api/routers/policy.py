@@ -14,6 +14,7 @@ from api.models.validation import (
 from codegraph.policy.service import evaluate as evaluate_policies, catalog as get_policy_catalog_payload
 from codegraph.llm.integration import (
     explain_policy_violations,
+    generate_policy_explanation,
     generate_policy_explanation_structured,
     render_policy_explanation_structured,
 )
@@ -74,13 +75,24 @@ async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
 async def policy_explain_one(payload: PolicyExplainOneRequest):
     model = (payload.model or "").strip() or settings.llm_model
     try:
-        explanation_structured = generate_policy_explanation_structured(
-            payload.violation,
-            include_graph_context=bool(payload.include_graph_context),
-            model=model,
-            raise_on_error=True,
-        )
-        explanation = render_policy_explanation_structured(explanation_structured)
+        try:
+            explanation_structured = generate_policy_explanation_structured(
+                payload.violation,
+                include_graph_context=bool(payload.include_graph_context),
+                model=model,
+                raise_on_error=True,
+            )
+            explanation = render_policy_explanation_structured(explanation_structured)
+        except ValueError as exc:
+            logger.warning("Explain-one structured parse failed; falling back to plain explanation: %s", exc)
+            explanation_structured = None
+            explanation = generate_policy_explanation(
+                payload.violation,
+                include_graph_context=bool(payload.include_graph_context),
+                structured_output=False,
+                model=model,
+                raise_on_error=True,
+            )
         return JSONResponse(
             {
                 "status": "OK",

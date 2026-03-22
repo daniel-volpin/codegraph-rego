@@ -1,9 +1,12 @@
 from functools import lru_cache
-import os
-import warnings
+from pathlib import Path
 from typing import Any, Literal, Optional
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+LOCAL_ENV_FILE = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -194,17 +197,12 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("REMEDIATION_RANKING_MODE", "remediation_ranking_mode"),
         description="Ranking operation mode. Use 'shadow' to score but not alter decisions.",
     )
-    remediation_trace_prompt_enabled: bool = Field(
-        False,
-        validation_alias=AliasChoices("REMEDIATION_TRACE_PROMPT_ENABLED", "remediation_trace_prompt_enabled"),
-        description="Whether to enrich the LLM remediation prompt with active policy traces and shadow baseline contexts.",
-    )
     ui_review_store_path: str = Field(
         "outputs/policy_ui_reviews/reviews.jsonl",
         description="Append-only JSONL store for UI triage/review records.",
     )
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(LOCAL_ENV_FILE), env_file_encoding="utf-8", extra="ignore")
 
 
 @lru_cache(maxsize=1)
@@ -232,64 +230,3 @@ class _SettingsProxy:
 
 
 settings = _SettingsProxy()
-
-# Backward-compatible exports are resolved lazily to avoid import-time validation failures.
-_LEGACY_EXPORTS = {
-    "CORS_ALLOWED_ORIGINS": "cors_allowed_origins",
-    "INDEX_DIR": "index_dir",
-    "FAISS_INDEX_PATH": "faiss_index_path",
-    "SIGNATURE_MAP_PATH": "signature_map_path",
-    "SIGNATURE_MAP_PATH_FULL": "signature_map_path_full",
-    "EMBEDDING_METADATA_PATH": "embedding_metadata_path",
-    "EMBEDDING_CACHE_PATH": "embedding_cache_path",
-    "EMBEDDING_MODEL_NAME": "embedding_model_name",
-    "UPLOAD_DIR": "upload_dir",
-    "JAVA_ROOT_DIR": "java_root_dir",
-    "UPLOAD_MAX_ARCHIVE_SIZE_BYTES": "upload_max_archive_size_bytes",
-    "UPLOAD_MAX_MEMBER_SIZE_BYTES": "upload_max_member_size_bytes",
-    "UPLOAD_MAX_EXTRACTED_SIZE_BYTES": "upload_max_extracted_size_bytes",
-    "UPLOAD_MAX_ARCHIVE_ENTRIES": "upload_max_archive_entries",
-    "UPLOAD_MAX_COMPRESSION_RATIO": "upload_max_compression_ratio",
-    "NEO4J_URI": "neo4j_uri",
-    "NEO4J_USER": "neo4j_user",
-    "NEO4J_PASS": "neo4j_pass",
-    "LLM_PROVIDER": "llm_provider",
-    "LLM_MODEL": "llm_model",
-    "LLM_API_BASE": "llm_api_base",
-    "LLM_API_KEY": "llm_api_key",
-    "LLM_TEMPERATURE": "llm_temperature",
-    "LLM_ENABLE_THINKING": "llm_enable_thinking",
-    "LLM_MAX_TOKENS_EXPLANATION": "llm_max_tokens_explanation",
-    "LLM_MAX_TOKENS_REMEDIATION": "llm_max_tokens_remediation",
-    "LLM_MODEL_TTL_SECONDS": "llm_model_ttl_seconds",
-    "REMEDIATION_LLM_MODEL": "remediation_llm_model",
-    "REMEDIATION_LLM_MAX_TOKENS": "remediation_llm_max_tokens",
-    "REMEDIATION_LLM_TEMPERATURE": "remediation_llm_temperature",
-    "REMEDIATION_LLM_MODEL_TTL_SECONDS": "remediation_llm_model_ttl_seconds",
-    "LLM_CONCURRENCY": "llm_concurrency",
-    "REMEDIATION_RAW_CAPTURE_ENABLED": "remediation_raw_capture_enabled",
-    "REMEDIATION_CONFIDENCE_GATE_ENABLED": "remediation_confidence_gate_enabled",
-    "REMEDIATION_CONFIDENCE_THRESHOLD_APPLY": "remediation_confidence_threshold_apply",
-    "REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW": "remediation_confidence_threshold_review",
-    "REMEDIATION_CONFIDENCE_TEMPERATURE": "remediation_confidence_temperature",
-    "REMEDIATION_RANKING_ENABLED": "remediation_ranking_enabled",
-    "REMEDIATION_RANKING_MODE": "remediation_ranking_mode",
-    "REMEDIATION_TRACE_PROMPT_ENABLED": "remediation_trace_prompt_enabled",
-    "UI_REVIEW_STORE_PATH": "ui_review_store_path",
-}
-_WARNED_LEGACY_EXPORTS: set[str] = set()
-_WARN_LEGACY_EXPORTS = os.getenv("CODEGRAPH_WARN_LEGACY_CONFIG_EXPORTS", "0") == "1"
-
-
-def __getattr__(name: str) -> Any:
-    field_name = _LEGACY_EXPORTS.get(name)
-    if field_name is not None:
-        if _WARN_LEGACY_EXPORTS and name not in _WARNED_LEGACY_EXPORTS:
-            warnings.warn(
-                f"{name} is deprecated; use get_settings().{field_name} or settings.{field_name} instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            _WARNED_LEGACY_EXPORTS.add(name)
-        return getattr(get_settings(), field_name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
