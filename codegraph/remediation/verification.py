@@ -3,10 +3,14 @@ from __future__ import annotations
 import shlex
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
+from codegraph.telemetry import get_tracer
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_tracer = get_tracer("codegraph.remediation.verification")
 
 
 def violation_key(violation: dict[str, Any]) -> str:
@@ -31,6 +35,14 @@ def build_verification_summary(
     if rule_id and rule_id in after_ids:
         target_rule_status = "FAIL"
     overall_status = "PASS" if target_rule_status == "PASS" and not new_violations else "FAIL"
+    with _tracer.start_as_current_span("policy.recheck") as recheck_span:
+        recheck_span.set_attribute("rule_id", str(rule_id or ""))
+        recheck_span.set_attribute("target_rule_status", target_rule_status)
+        recheck_span.set_attribute("overall_status", overall_status)
+        recheck_span.set_attribute("new_violations_count", len(new_violations))
+        recheck_span.set_attribute("remaining_violations_count", len(remaining_violations))
+        recheck_span.set_attribute("baseline_count", len(baseline_list))
+        recheck_span.set_attribute("after_count", len(after_list))
     return {
         "target_rule_status": target_rule_status,
         "overall_status": overall_status,
@@ -76,65 +88,87 @@ def compile_project(
     *,
     run_command=subprocess.run,
 ) -> dict[str, Any]:
-    if not build_root:
-        return {
-            "attempted": False,
-            "success": False,
-            "output_snippet": None,
-            "skipped_reason": "No build system detected",
-        }
-    mvn_file = build_root / "pom.xml"
-    gradle_file = build_root / "build.gradle"
-    gradle_kts_file = build_root / "build.gradle.kts"
-    if not any(path.exists() for path in [mvn_file, gradle_file, gradle_kts_file]):
-        return {
-            "attempted": False,
-            "success": False,
-            "output_snippet": None,
-            "skipped_reason": "No build system detected",
-        }
+    with _tracer.start_as_current_span("build.verify") as span:
+        if not build_root:
+            span.set_attribute("build_skipped", True)
+            span.set_attribute("build_skipped_reason", "No build system detected")
+            return {
+                "attempted": False,
+                "success": False,
+                "output_snippet": None,
+                "skipped_reason": "No build system detected",
+            }
+        mvn_file = build_root / "pom.xml"
+        gradle_file = build_root / "build.gradle"
+        gradle_kts_file = build_root / "build.gradle.kts"
+        if not any(path.exists() for path in [mvn_file, gradle_file, gradle_kts_file]):
+            span.set_attribute("build_skipped", True)
+            span.set_attribute("build_skipped_reason", "No build system detected")
+            return {
+                "attempted": False,
+                "success": False,
+                "output_snippet": None,
+                "skipped_reason": "No build system detected",
+            }
 
-    if build_command:
-        cmd = shlex.split(build_command)
-    elif mvn_file.exists():
-        cmd = ["mvn", "-q", "-DskipTests", "compile"]
-    else:
-        gradlew = build_root / "gradlew"
-        if gradlew.exists():
-            cmd = [gradlew.as_posix(), "-q", "compileJava"]
+        if build_command:
+            cmd = shlex.split(build_command)
+            build_tool = "custom"
+        elif mvn_file.exists():
+            cmd = ["mvn", "-q", "-DskipTests", "compile"]
+            build_tool = "maven"
         else:
-            cmd = ["gradle", "-q", "compileJava"]
+            gradlew = build_root / "gradlew"
+            if gradlew.exists():
+                cmd = [gradlew.as_posix(), "-q", "compileJava"]
+            else:
+                cmd = ["gradle", "-q", "compileJava"]
+            build_tool = "gradle"
 
-    try:
-        proc = run_command(
-            cmd,
-            cwd=build_root,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-    except FileNotFoundError as exc:
+        span.set_attribute("build_tool", build_tool)
+        span.set_attribute("build_skipped", False)
+        t0 = time.monotonic()
+        try:
+            proc = run_command(
+                cmd,
+                cwd=build_root,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except FileNotFoundError as exc:
+            span.set_attribute("build_success", False)
+            span.set_attribute("build_duration_ms", round((time.monotonic() - t0) * 1000))
+            span.set_attribute("build_error_snippet", str(exc)[:200])
+            return {
+                "attempted": True,
+                "success": False,
+                "output_snippet": str(exc),
+                "skipped_reason": "Build tool not available",
+            }
+        except subprocess.TimeoutExpired:
+            span.set_attribute("build_success", False)
+            span.set_attribute("build_duration_ms", 120000)
+            span.set_attribute("build_error_snippet", "Compilation timed out")
+            return {
+                "attempted": True,
+                "success": False,
+                "output_snippet": "Compilation timed out",
+                "skipped_reason": "Timeout",
+            }
+
+        output = "\n".join([proc.stdout.strip(), proc.stderr.strip()]).strip()
+        output_snippet = output[:2000] if output else None
+        success = proc.returncode == 0
+        span.set_attribute("build_success", success)
+        span.set_attribute("build_duration_ms", round((time.monotonic() - t0) * 1000))
+        if not success and output_snippet:
+            span.set_attribute("build_error_snippet", output_snippet[:200])
         return {
             "attempted": True,
-            "success": False,
-            "output_snippet": str(exc),
-            "skipped_reason": "Build tool not available",
+            "success": success,
+            "output_snippet": output_snippet,
         }
-    except subprocess.TimeoutExpired:
-        return {
-            "attempted": True,
-            "success": False,
-            "output_snippet": "Compilation timed out",
-            "skipped_reason": "Timeout",
-        }
-
-    output = "\n".join([proc.stdout.strip(), proc.stderr.strip()]).strip()
-    output_snippet = output[:2000] if output else None
-    return {
-        "attempted": True,
-        "success": proc.returncode == 0,
-        "output_snippet": output_snippet,
-    }
 
 
 def method_name_from_signature(signature: str | None) -> str | None:

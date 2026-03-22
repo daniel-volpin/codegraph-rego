@@ -22,6 +22,8 @@ def generate_chat_completion(
     stop: list[str] | str | None = None,
     response_format: dict[str, Any] | None = None,
     raise_on_error: bool = False,
+    task_type: str = "",
+    retry_index: int = 0,
 ) -> str:
     """Generate a chat completion via the default transport."""
 
@@ -35,4 +37,4 @@ def generate_chat_completion(
         response_format=response_format,
         raise_on_error=raise_on_error,
     )
-    return _DEFAULT_TRANSPORT.generate(request)
+    return _DEFAULT_TRANSPORT.generate(request, task_type=task_type, retry_index=retry_index)

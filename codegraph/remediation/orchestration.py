@@ -46,6 +46,7 @@ def apply_remediation(
     max_attempts: int = 2,
     raw_capture_dir: str | None = None,
     build_command: str | None = None,
+    prompt_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply remediation in a temp workspace and verify via OPA."""
     if not violation_id:
@@ -64,6 +65,7 @@ def apply_remediation(
             max_attempts=max_attempts,
             raw_capture_dir=raw_capture_dir,
             build_command=build_command,
+            prompt_context=prompt_context,
         )
     except Exception as exc:  # pragma: no cover - runtime guard
         LOGGER.exception("Remediation apply failed: %s", exc)

@@ -108,11 +108,22 @@ async def _generic_exception_handler(request: Request, exc: Exception) -> JSONRe
 def create_app() -> FastAPI:
     _configure_runtime()
     from codegraph.config import settings
+    from codegraph.telemetry import configure_telemetry
+
+    configure_telemetry()
 
     LOGGER.info("Runtime Neo4j target: uri=%s user=%s", settings.neo4j_uri, settings.neo4j_user)
 
     application = FastAPI()
     application.state.startup_status = _default_startup_status()
+
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor  # noqa: PLC0415
+
+        FastAPIInstrumentor().instrument_app(application)
+    except Exception:
+        pass
+
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,

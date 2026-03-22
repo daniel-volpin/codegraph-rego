@@ -38,6 +38,7 @@ class RemediationGenerationService:
             else settings.llm_model_ttl_seconds
         )
 
+        retry_index = len(previous_errors or [])
         try:
             response = self._llm_client(
                 messages,
@@ -48,9 +49,11 @@ class RemediationGenerationService:
                 stop=STRUCTURED_GENERATION_STOPS,
                 response_format=build_remediation_response_format(),
                 raise_on_error=True,
+                task_type="remediation",
+                retry_index=retry_index,
             )
         except TypeError:
-            response = self._llm_client(messages)
+            response = self._llm_client(messages, task_type="remediation", retry_index=retry_index)
 
         parsed = parse_structured_generation_response(
             response,

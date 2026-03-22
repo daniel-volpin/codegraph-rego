@@ -222,12 +222,20 @@ def main() -> int:
 
                 # --- LLM path ---
                 if violation_id and target_method and file_path:
+                    shadow_context = {
+                        "deterministic_baseline_available": det_outcome.produced_edits,
+                        "deterministic_diff_snippet": det_outcome.diff_snippet if det_outcome.produced_edits else None,
+                    }
+                    if not shadow_context["deterministic_diff_snippet"]:
+                        del shadow_context["deterministic_diff_snippet"]
+                        
                     apply_result = apply_remediation(
                         str(violation_id),
                         target_method=str(target_method),
                         file_path=str(file_path),
                         mode=args.mode,
                         max_attempts=args.max_attempts,
+                        prompt_context=shadow_context,
                     )
                 else:
                     apply_result = {
