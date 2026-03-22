@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from openai import OpenAI
@@ -8,9 +9,11 @@ from openai import OpenAI
 from codegraph.config import settings
 from codegraph.llm.schema.explanation import strip_structured_stop_tokens
 from codegraph.llm.transport.base import LLMRequest, LLMTransport, LLMUnavailableError
+from codegraph.telemetry import get_tracer
 
 
 logger = logging.getLogger("codegraph.llm.transport.openai_compatible")
+_tracer = get_tracer("codegraph.llm.transport")
 
 
 def _summarize_exception(exc: Exception) -> str:
@@ -48,6 +51,17 @@ def _is_lm_studio_api_base(api_base: str | None) -> bool:
         return False
     lowered = api_base.lower()
     return "localhost:1234" in lowered or "127.0.0.1:1234" in lowered
+
+
+def _infer_provider(api_base: str | None) -> str:
+    if not api_base:
+        return "openai"
+    lowered = api_base.lower()
+    if "localhost" in lowered or "127.0.0.1" in lowered:
+        return "lmstudio"
+    if "anthropic" in lowered:
+        return "anthropic"
+    return "openai"
 
 
 def _build_client(*, api_base: str | None, api_key: str | None) -> OpenAI:
@@ -132,7 +146,7 @@ def _to_responses_format(response_format: dict[str, Any]) -> dict[str, Any] | No
 
 
 class OpenAICompatibleTransport(LLMTransport):
-    def generate(self, request: LLMRequest) -> str:
+    def generate(self, request: LLMRequest, *, task_type: str = "", retry_index: int = 0) -> str:
         api_base = settings.llm_api_base
         client = _build_client(api_base=api_base, api_key=settings.llm_api_key)
         model = request.model or settings.llm_model or "gpt-4o-mini"
@@ -155,56 +169,92 @@ class OpenAICompatibleTransport(LLMTransport):
         if is_lm_studio and effective_ttl is not None:
             extra_body["ttl"] = int(effective_ttl)
 
-        try:
-            if use_chat_completions:
-                params: dict[str, Any] = {
+        with _tracer.start_as_current_span("llm.generate") as span:
+            span.set_attribute("llm.model", model)
+            span.set_attribute("llm.provider", _infer_provider(api_base))
+            span.set_attribute("llm.base_url", api_base or "")
+            span.set_attribute("llm.temperature", request.temperature if request.temperature is not None else settings.llm_temperature)
+            span.set_attribute("llm.max_tokens", effective_max_tokens if effective_max_tokens is not None else -1)
+            span.set_attribute("llm.task_type", task_type)
+            span.set_attribute("llm.response_format", str(request.response_format is not None))
+            span.set_attribute("llm.retry_index", retry_index)
+
+            t0 = time.monotonic()
+            error_msg = ""
+            try:
+                if use_chat_completions:
+                    params: dict[str, Any] = {
+                        "model": model,
+                        "messages": list(request.messages),
+                        "temperature": request.temperature if request.temperature is not None else settings.llm_temperature,
+                    }
+                    if effective_max_tokens is not None:
+                        params["max_tokens"] = effective_max_tokens
+                    if request.stop is not None:
+                        params["stop"] = request.stop
+                    if request.response_format is not None:
+                        params["response_format"] = request.response_format
+                    if extra_body:
+                        params["extra_body"] = extra_body
+
+                    response = client.chat.completions.create(**params)
+                    usage = getattr(response, "usage", None)
+                    if usage:
+                        span.set_attribute("llm.prompt_tokens", getattr(usage, "prompt_tokens", -1) or -1)
+                        span.set_attribute("llm.completion_tokens", getattr(usage, "completion_tokens", -1) or -1)
+                        span.set_attribute("llm.total_tokens", getattr(usage, "total_tokens", -1) or -1)
+                    else:
+                        span.set_attribute("llm.prompt_tokens", -1)
+                        span.set_attribute("llm.completion_tokens", -1)
+                        span.set_attribute("llm.total_tokens", -1)
+                    span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
+                    return _extract_message_content(response, allow_reasoning_content=request.response_format is not None)
+
+                params = {
                     "model": model,
-                    "messages": list(request.messages),
+                    "input": list(request.messages),
                     "temperature": request.temperature if request.temperature is not None else settings.llm_temperature,
                 }
                 if effective_max_tokens is not None:
-                    params["max_tokens"] = effective_max_tokens
-                if request.stop is not None:
-                    params["stop"] = request.stop
+                    params["max_output_tokens"] = effective_max_tokens
                 if request.response_format is not None:
-                    params["response_format"] = request.response_format
+                    mapped_format = _to_responses_format(request.response_format)
+                    if mapped_format is None:
+                        raise LLMUnavailableError("Unsupported response_format for responses endpoint.")
+                    params["text"] = {"format": mapped_format}
                 if extra_body:
                     params["extra_body"] = extra_body
 
-                response = client.chat.completions.create(**params)
-                return _extract_message_content(response, allow_reasoning_content=request.response_format is not None)
-
-            params = {
-                "model": model,
-                "input": list(request.messages),
-                "temperature": request.temperature if request.temperature is not None else settings.llm_temperature,
-            }
-            if effective_max_tokens is not None:
-                params["max_output_tokens"] = effective_max_tokens
-
-            if request.response_format is not None:
-                mapped_format = _to_responses_format(request.response_format)
-                if mapped_format is None:
-                    raise LLMUnavailableError("Unsupported response_format for responses endpoint.")
-                params["text"] = {"format": mapped_format}
-            if extra_body:
-                params["extra_body"] = extra_body
-
-            response = client.responses.create(**params)
-            return _extract_responses_output_text(response)
-        except LLMUnavailableError:
-            message = "LLM returned an empty response."
-            if request.raise_on_error:
-                raise
-            return f"[LLM unavailable: {message}]"
-        except Exception as exc:  # pragma: no cover - runtime guard
-            logger.exception(
-                "LLM completion failed (model=%s api_base=%s endpoint=%s)",
-                model,
-                api_base,
-                "chat.completions" if use_chat_completions else "responses",
-            )
-            message = _humanize_llm_failure(exc, api_base=api_base)
-            if request.raise_on_error:
-                raise LLMUnavailableError(message) from exc
-            return f"[LLM unavailable: {message}]"
+                response = client.responses.create(**params)
+                usage = getattr(response, "usage", None)
+                if usage:
+                    span.set_attribute("llm.prompt_tokens", getattr(usage, "input_tokens", -1) or -1)
+                    span.set_attribute("llm.completion_tokens", getattr(usage, "output_tokens", -1) or -1)
+                    total = (getattr(usage, "input_tokens", 0) or 0) + (getattr(usage, "output_tokens", 0) or 0)
+                    span.set_attribute("llm.total_tokens", total or -1)
+                else:
+                    span.set_attribute("llm.prompt_tokens", -1)
+                    span.set_attribute("llm.completion_tokens", -1)
+                    span.set_attribute("llm.total_tokens", -1)
+                span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
+                return _extract_responses_output_text(response)
+            except LLMUnavailableError:
+                error_msg = "LLM returned an empty response."
+                span.set_attribute("llm.error", error_msg)
+                span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
+                if request.raise_on_error:
+                    raise
+                return f"[LLM unavailable: {error_msg}]"
+            except Exception as exc:  # pragma: no cover - runtime guard
+                logger.exception(
+                    "LLM completion failed (model=%s api_base=%s endpoint=%s)",
+                    model,
+                    api_base,
+                    "chat.completions" if use_chat_completions else "responses",
+                )
+                error_msg = _humanize_llm_failure(exc, api_base=api_base)
+                span.set_attribute("llm.error", error_msg)
+                span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
+                if request.raise_on_error:
+                    raise LLMUnavailableError(error_msg) from exc
+                return f"[LLM unavailable: {error_msg}]"

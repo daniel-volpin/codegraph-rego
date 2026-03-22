@@ -40,7 +40,7 @@ def _build_prompt(violation: dict[str, Any], code_snippet: str) -> list[dict[str
 
 
 def _call_llm(messages: list[dict[str, str]], model: str) -> str:
-    return generate_chat_completion(messages, model=model)
+    return generate_chat_completion(messages, model=model, task_type="explanation")
 
 
 def _method_name_from_signature(signature: Any) -> str:
@@ -137,6 +137,7 @@ def generate_policy_explanation(
             else None
         ),
         raise_on_error=raise_on_error,
+        task_type="explanation",
     )
     if not structured_output:
         return response
@@ -177,6 +178,7 @@ def generate_policy_explanation_structured(
         stop=STRUCTURED_EXPLANATION_STOPS,
         response_format=build_explanation_response_format(evidence_cards=evidence_payload.get("evidence_cards")),
         raise_on_error=raise_on_error,
+        task_type="explanation",
     )
     return _parse_or_raise(
         response,

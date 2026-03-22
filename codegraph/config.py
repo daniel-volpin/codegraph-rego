@@ -197,6 +197,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("REMEDIATION_RANKING_MODE", "remediation_ranking_mode"),
         description="Ranking operation mode. Use 'shadow' to score but not alter decisions.",
     )
+    remediation_trace_prompt_enabled: bool = Field(
+        False,
+        validation_alias=AliasChoices("REMEDIATION_TRACE_PROMPT_ENABLED", "remediation_trace_prompt_enabled"),
+        description="When true, enriches the remediation prompt with OPA trace context when available.",
+    )
     ui_review_store_path: str = Field(
         "outputs/policy_ui_reviews/reviews.jsonl",
         description="Append-only JSONL store for UI triage/review records.",

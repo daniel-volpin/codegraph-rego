@@ -12,8 +12,11 @@ from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.search.service import HybridSearchService
 from codegraph.policy.taint_graph import TaintPathFinder
+from codegraph.telemetry import get_tracer
 from .catalog import get_policy_catalog_entries, load_iso_rules
 from .contracts import build_policy_bundle, serialize_policy_bundle, serialize_policy_input_envelope
+
+_tracer = get_tracer("codegraph.policy.bundles")
 
 LOGGER = logging.getLogger(__name__)
 
@@ -187,64 +190,89 @@ def build_evidence_bundle(
     source_path_override: str | Path | None = None,
     taint_path_finder: Optional[TaintPathFinder] = None,
 ) -> Dict[str, Any]:
-    file_path = method_snapshot.get("file_path")
-    resolved_path = resolve_source_path(file_path)
-    if isinstance(source_path_override, Path):
-        source_path_override = source_path_override.as_posix()
-    source_path = resolve_source_path(source_path_override) if source_path_override else resolved_path
-    source_code = ""
-    if source_path is not None:
-        source_code = extract_snippet_by_lines(
-            source_path.as_posix(),
-            method_snapshot.get("start_line"),
-            method_snapshot.get("end_line"),
-            padding=2,
+    with _tracer.start_as_current_span("evidence.build") as span:
+        span.set_attribute("method_signature", str(method_snapshot.get("signature") or ""))
+        span.set_attribute("file_path", str(method_snapshot.get("file_path") or ""))
+
+        file_path = method_snapshot.get("file_path")
+        resolved_path = resolve_source_path(file_path)
+        if isinstance(source_path_override, Path):
+            source_path_override = source_path_override.as_posix()
+        source_path = resolve_source_path(source_path_override) if source_path_override else resolved_path
+        source_code = ""
+        if source_path is not None:
+            source_code = extract_snippet_by_lines(
+                source_path.as_posix(),
+                method_snapshot.get("start_line"),
+                method_snapshot.get("end_line"),
+                padding=2,
+            )
+            if not source_code and method_snapshot.get("name"):
+                source_code = extract_code_snippet(source_path.as_posix(), method_snapshot.get("name", ""))
+        graph_context = {
+            "annotations": method_snapshot.get("annotations") or [],
+            "uses_fields": method_snapshot.get("uses_fields") or [],
+            "calls": method_snapshot.get("calls") or [],
+            "callers": method_snapshot.get("callers") or [],
+        }
+        analysis_flags = analyze_policy_indicators(source_code)
+        helper_summaries = (
+            _HELPER_SUMMARY_BUILDER.build(
+                current_source=source_code,
+                method_snapshot=method_snapshot,
+                method_index=method_index or {},
+            )
+            if method_index is not None
+            else {}
         )
-        if not source_code and method_snapshot.get("name"):
-            source_code = extract_code_snippet(source_path.as_posix(), method_snapshot.get("name", ""))
-    graph_context = {
-        "annotations": method_snapshot.get("annotations") or [],
-        "uses_fields": method_snapshot.get("uses_fields") or [],
-        "calls": method_snapshot.get("calls") or [],
-        "callers": method_snapshot.get("callers") or [],
-    }
-    analysis_flags = analyze_policy_indicators(source_code)
-    helper_summaries = (
-        _HELPER_SUMMARY_BUILDER.build(
-            current_source=source_code,
-            method_snapshot=method_snapshot,
-            method_index=method_index or {},
+        vector_context: List[str] = []
+        if search_service is not None:
+            try:
+                vector_context = search_service.similar_to_signature(method_snapshot["signature"], top_k=3)
+            except Exception as exc:  # pragma: no cover - optional dependency
+                LOGGER.debug("Vector lookup failed for %s: %s", method_snapshot["signature"], exc)
+        bundle = build_policy_bundle(
+            target_method=method_snapshot["signature"],
+            method_name=method_snapshot.get("name"),
+            class_fqn=method_snapshot.get("class_fqn"),
+            file_path=resolved_path.as_posix() if resolved_path else file_path,
+            start_line=method_snapshot.get("start_line"),
+            end_line=method_snapshot.get("end_line"),
+            modifiers=method_snapshot.get("modifiers") or [],
+            source_code=source_code,
+            graph_context=graph_context,
+            vector_context=vector_context,
+            analysis_flags=analysis_flags,
+            helper_summaries=helper_summaries,
         )
-        if method_index is not None
-        else {}
-    )
-    vector_context: List[str] = []
-    if search_service is not None:
-        try:
-            vector_context = search_service.similar_to_signature(method_snapshot["signature"], top_k=3)
-        except Exception as exc:  # pragma: no cover - optional dependency
-            LOGGER.debug("Vector lookup failed for %s: %s", method_snapshot["signature"], exc)
-    bundle = build_policy_bundle(
-        target_method=method_snapshot["signature"],
-        method_name=method_snapshot.get("name"),
-        class_fqn=method_snapshot.get("class_fqn"),
-        file_path=resolved_path.as_posix() if resolved_path else file_path,
-        start_line=method_snapshot.get("start_line"),
-        end_line=method_snapshot.get("end_line"),
-        modifiers=method_snapshot.get("modifiers") or [],
-        source_code=source_code,
-        graph_context=graph_context,
-        vector_context=vector_context,
-        analysis_flags=analysis_flags,
-        helper_summaries=helper_summaries,
-    )
-    result = serialize_policy_bundle(bundle)
-    result["taint_paths"] = (
-        taint_path_finder.find_reachable_sinks(method_snapshot["signature"])
-        if taint_path_finder is not None
-        else []
-    )
-    return result
+        result = serialize_policy_bundle(bundle)
+
+        taint_paths = (
+            taint_path_finder.find_reachable_sinks(method_snapshot["signature"])
+            if taint_path_finder is not None
+            else []
+        )
+        result["taint_paths"] = taint_paths
+
+        # Span attributes summarising evidence quality
+        span.set_attribute("source_code_lines", len(source_code.splitlines()) if source_code else 0)
+        span.set_attribute("source_code_available", bool(source_code))
+        graph_node_count = (
+            len(graph_context.get("annotations") or [])
+            + len(graph_context.get("uses_fields") or [])
+            + len(graph_context.get("calls") or [])
+            + len(graph_context.get("callers") or [])
+        )
+        span.set_attribute("graph_nodes_count", graph_node_count)
+        span.set_attribute("vector_results_count", len(vector_context))
+        span.set_attribute("helper_summaries_count", len(helper_summaries))
+        span.set_attribute("taint_paths_count", len(taint_paths))
+        max_taint_hops = max((p.get("hops", 0) for p in taint_paths), default=0)
+        span.set_attribute("taint_hops_max", max_taint_hops)
+        analysis_flag_count = sum(1 for v in analysis_flags.values() if v)
+        span.set_attribute("analysis_flags_active", analysis_flag_count)
+
+        return result
 
 
 def build_policy_input(

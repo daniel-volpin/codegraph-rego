@@ -10,6 +10,7 @@ import random
 from pathlib import Path
 from typing import Any, Dict, List
 
+from codegraph.telemetry import configure_telemetry, get_tracer
 from codegraph.remediation.orchestration import apply_remediation
 from codegraph.evaluation.pipeline import (
     collect_category_violations,
@@ -96,6 +97,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    configure_telemetry()
+    tracer = get_tracer("codegraph.benchmark.remediation")
     args = parse_args()
 
     context = load_benchmark_evaluation_context(Path(args.config), Path(args.mapping))
@@ -118,101 +121,126 @@ def main() -> int:
         "Loaded benchmark remediation context",
         selected_testcases=len(selected_ids),
     )
+    from codegraph.config import settings as _settings  # noqa: PLC0415
+
     completed = False
-    try:
-        with staged_benchmark_workspace(
-            benchmark_root=context.benchmark_root,
-            java_relative_root=context.selection_cfg["java_relative_root"],
-            testcase_ids=selected_ids,
-            workdir=args.workdir,
-        ) as workspace:
-            eval_result = ingest_and_evaluate_subset(
-                java_root=workspace.java_root,
-                reset_neo4j=args.reset_neo4j,
-                logger=LOGGER,
-            )
-            if eval_result.get("error"):
-                LOGGER.error("Policy evaluation failed: %s", eval_result["error"])
-                return 1
-            violations = eval_result.get("violations") or []
-
-            violations_by_testcase = group_violations_by_testcase(violations)
-            category_violations_by_id = collect_category_violations(
-                selected_category_ids=context.selected_category_ids,
-                categories_by_id=context.categories_by_id,
-                selection=context.selection,
-                violations_by_testcase=violations_by_testcase,
-            )
-            candidates: List[Dict[str, Any]] = []
-            for category_id in context.selected_category_ids:
-                spec = context.categories_by_id.get(category_id)
-                if not spec:
-                    continue
-                for violation in category_violations_by_id.get(category_id, []):
-                    candidate = dict(violation)
-                    candidate["category"] = spec.label
-                    candidates.append(candidate)
-            if not candidates:
-                LOGGER.warning("No candidate violations found for remediation evaluation.")
-                return 1
-
-            rng = random.Random(args.seed)
-            if len(candidates) > args.sample_size:
-                candidates = rng.sample(candidates, k=args.sample_size)
-
-            results: List[Dict[str, Any]] = []
-            runtime.begin(total_cases=len(candidates))
-            for violation in candidates:
-                case_id, case_dir = runtime.prepare_case(violation)
-                violation_id = violation.get("violation_id")
-                target_method = violation.get("target_method")
-                evidence = violation.get("evidence") or {}
-                file_path = evidence.get("file_path") or violation.get("file_path")
-
-                if not violation_id or not target_method or not file_path:
-                    result = build_skipped_result(
-                        violation=violation,
-                        case_id=case_id,
-                        error="missing_violation_fields",
-                    )
-                    results.append(result)
-                    runtime.record_case(apply_result=result, result=result)
-                    continue
-
-                apply_result = apply_remediation(
-                    str(violation_id),
-                    target_method=str(target_method),
-                    file_path=str(file_path),
-                    mode=args.mode,
-                    max_attempts=args.max_attempts,
-                    raw_capture_dir=case_dir.as_posix(),
-                    build_command=args.build_command or context.selection_cfg.get("build_command"),
+    with tracer.start_as_current_span("benchmark.run") as run_span:
+        run_span.set_attribute("config_name", str(Path(args.config).stem))
+        run_span.set_attribute("mode", args.mode)
+        run_span.set_attribute("max_attempts", args.max_attempts)
+        run_span.set_attribute("sample_size", args.sample_size)
+        run_span.set_attribute("seed", args.seed)
+        run_span.set_attribute("category_ids", str(context.selected_category_ids))
+        run_span.set_attribute("model", str(getattr(_settings, "llm_model", "")))
+        run_span.set_attribute("remediation_model", str(getattr(_settings, "remediation_llm_model", "") or ""))
+        try:
+            with staged_benchmark_workspace(
+                benchmark_root=context.benchmark_root,
+                java_relative_root=context.selection_cfg["java_relative_root"],
+                testcase_ids=selected_ids,
+                workdir=args.workdir,
+            ) as workspace:
+                eval_result = ingest_and_evaluate_subset(
+                    java_root=workspace.java_root,
+                    reset_neo4j=args.reset_neo4j,
+                    logger=LOGGER,
                 )
-                result = build_remediation_result(
-                    violation=violation,
-                    apply_result=apply_result,
-                    case_id=case_id,
-                )
-                results.append(result)
-                runtime.record_case(apply_result=apply_result, result=result)
+                if eval_result.get("error"):
+                    LOGGER.error("Policy evaluation failed: %s", eval_result["error"])
+                    run_span.set_attribute("final_status", "eval_error")
+                    return 1
+                violations = eval_result.get("violations") or []
 
-        metrics = build_metrics_payload(
-            benchmark_root=context.benchmark_root,
-            truth_path=context.truth_path,
-            truth_schema=context.truth_schema,
-            selection_cfg=context.selection_cfg,
-            coverage_by_category=context.coverage_by_category,
-            mode=args.mode,
-            max_attempts=args.max_attempts,
-            legacy_build_command_arg=args.build_command,
-            results=results,
-        )
-        write_final_artifacts(output_dir, metrics, table_format=args.table_format)
-        runtime.finalize(status="completed")
-        completed = True
-    finally:
-        if not completed:
-            runtime.finalize(status="failed")
+                violations_by_testcase = group_violations_by_testcase(violations)
+                category_violations_by_id = collect_category_violations(
+                    selected_category_ids=context.selected_category_ids,
+                    categories_by_id=context.categories_by_id,
+                    selection=context.selection,
+                    violations_by_testcase=violations_by_testcase,
+                )
+                candidates: List[Dict[str, Any]] = []
+                for category_id in context.selected_category_ids:
+                    spec = context.categories_by_id.get(category_id)
+                    if not spec:
+                        continue
+                    for violation in category_violations_by_id.get(category_id, []):
+                        candidate = dict(violation)
+                        candidate["category"] = spec.label
+                        candidates.append(candidate)
+                if not candidates:
+                    LOGGER.warning("No candidate violations found for remediation evaluation.")
+                    run_span.set_attribute("final_status", "no_candidates")
+                    return 1
+
+                rng = random.Random(args.seed)
+                if len(candidates) > args.sample_size:
+                    candidates = rng.sample(candidates, k=args.sample_size)
+
+                results: List[Dict[str, Any]] = []
+                runtime.begin(total_cases=len(candidates))
+                for violation in candidates:
+                    with tracer.start_as_current_span("benchmark.case") as case_span:
+                        case_id, case_dir = runtime.prepare_case(violation)
+                        violation_id = violation.get("violation_id")
+                        target_method = violation.get("target_method")
+                        evidence = violation.get("evidence") or {}
+                        file_path = evidence.get("file_path") or violation.get("file_path")
+                        case_span.set_attribute("case_id", str(case_id or ""))
+                        case_span.set_attribute("violation_id", str(violation_id or ""))
+                        case_span.set_attribute("target_method", str(target_method or ""))
+                        case_span.set_attribute("category", str(violation.get("category") or ""))
+                        rule_id = violation.get("rule_id") or (violation.get("control_metadata") or {}).get("rule_id") or ""
+                        case_span.set_attribute("rule_id", str(rule_id))
+
+                        if not violation_id or not target_method or not file_path:
+                            result = build_skipped_result(
+                                violation=violation,
+                                case_id=case_id,
+                                error="missing_violation_fields",
+                            )
+                            case_span.set_attribute("final_status", "SKIPPED")
+                            results.append(result)
+                            runtime.record_case(apply_result=result, result=result)
+                            continue
+
+                        apply_result = apply_remediation(
+                            str(violation_id),
+                            target_method=str(target_method),
+                            file_path=str(file_path),
+                            mode=args.mode,
+                            max_attempts=args.max_attempts,
+                            raw_capture_dir=case_dir.as_posix(),
+                            build_command=args.build_command or context.selection_cfg.get("build_command"),
+                        )
+                        result = build_remediation_result(
+                            violation=violation,
+                            apply_result=apply_result,
+                            case_id=case_id,
+                        )
+                        case_span.set_attribute("final_status", str(apply_result.get("status") or ""))
+                        results.append(result)
+                        runtime.record_case(apply_result=apply_result, result=result)
+
+            metrics = build_metrics_payload(
+                benchmark_root=context.benchmark_root,
+                truth_path=context.truth_path,
+                truth_schema=context.truth_schema,
+                selection_cfg=context.selection_cfg,
+                coverage_by_category=context.coverage_by_category,
+                mode=args.mode,
+                max_attempts=args.max_attempts,
+                legacy_build_command_arg=args.build_command,
+                results=results,
+            )
+            write_final_artifacts(output_dir, metrics, table_format=args.table_format)
+            run_span.set_attribute("total_cases", len(results))
+            run_span.set_attribute("final_status", "completed")
+            runtime.finalize(status="completed")
+            completed = True
+        finally:
+            if not completed:
+                run_span.set_attribute("final_status", "failed")
+                runtime.finalize(status="failed")
 
     LOGGER.info("Remediation evaluation complete. Outputs written to %s", output_dir)
     return 0

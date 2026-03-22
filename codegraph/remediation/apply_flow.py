@@ -27,8 +27,10 @@ from codegraph.remediation.result_models import (
 )
 from codegraph.remediation.validation import extract_assistant_content
 from codegraph.remediation.verification import build_verification_summary
+from codegraph.telemetry import get_tracer
 
 LOGGER = logging.getLogger(__name__)
+_tracer = get_tracer("codegraph.remediation.apply_flow")
 
 
 def _unified_diff(before: str, after: str, *, label: str = "method") -> str:
@@ -53,6 +55,46 @@ def execute_apply_fix(
     raw_capture_dir: str | None,
     build_command: str | None,
     prompt_context: dict[str, Any] | None = None,
+) -> ApplyFixResult:
+    with _tracer.start_as_current_span("remediation.fix") as fix_span:
+        fix_span.set_attribute("violation_id", str(violation_id or ""))
+        fix_span.set_attribute("target_method", str(target_method or ""))
+        fix_span.set_attribute("file_path", str(file_path or ""))
+        fix_span.set_attribute("mode", str(mode or ""))
+        fix_span.set_attribute("max_attempts", max_attempts)
+        result = _execute_apply_fix_inner(
+            service,
+            violation_id,
+            target_method=target_method,
+            file_path=file_path,
+            mode=mode,
+            max_attempts=max_attempts,
+            raw_capture_dir=raw_capture_dir,
+            build_command=build_command,
+            prompt_context=prompt_context,
+            _fix_span=fix_span,
+        )
+        fix_span.set_attribute("final_status", str(result.get("status") or ""))
+        fix_span.set_attribute("attempt_count", int(result.get("attempt_count") or 0))
+        confidence = result.get("confidence") or {}
+        fix_span.set_attribute("confidence_score", float(confidence.get("score") or -1.0))
+        fix_span.set_attribute("confidence_band", str(confidence.get("band") or ""))
+        fix_span.set_attribute("rule_id", str(result.get("rule_id") or ""))
+        return result
+
+
+def _execute_apply_fix_inner(
+    service: Any,
+    violation_id: str,
+    *,
+    target_method: str | None,
+    file_path: str | None,
+    mode: str,
+    max_attempts: int,
+    raw_capture_dir: str | None,
+    build_command: str | None,
+    prompt_context: dict[str, Any] | None = None,
+    _fix_span: Any = None,
 ) -> ApplyFixResult:
     max_attempts = max(1, max_attempts)
     context = service.get_violation_context(violation_id, target_method, file_path)
@@ -141,75 +183,90 @@ def execute_apply_fix(
     context["prompt_context"] = prompt_context
 
     for attempt in range(max_attempts):
-        llm_output = service.propose_method_edits(context, previous_errors=attempt_errors)
-        updated_source = llm_output.get("replacement_method_code")
-        updated_source_lines = llm_output.get("replacement_method_lines")
-        raw_output = llm_output.get("raw_output")
-        generation_payload = llm_output.get("generation")
-        if not updated_source:
-            if llm_output.get("decision") == "no_fix":
-                reason = llm_output.get("reason") or "no safe minimal fix available"
-                result = service._build_no_fix_response(
-                    violation_id=violation_id,
-                    context=context,
-                    reason=reason,
-                    attempt_count=attempt + 1,
-                )
-                result["confidence"] = service._build_confidence(
-                    context=context,
-                    support_tier=capability.support_tier,
-                    decision="no_fix",
-                    structured_valid=bool((llm_output.get("generation") or {}).get("raw_response_valid")),
-                    attempt_count=attempt + 1,
-                )
-                result["errors"] = attempt_errors
-                return result
-            schema_error = llm_output.get("schema_error")
-            if schema_error:
-                attempt_errors.append(summarize_retry_error(str(schema_error)))
-            else:
-                attempt_errors.append("empty_edits")
-            if settings.remediation_raw_capture_enabled and raw_output:
-                capture_path = capture_raw_llm_output(
-                    raw_capture_dir,
-                    extract_testcase_id(target_method),
-                    attempt + 1,
-                    extract_assistant_content(raw_output),
-                )
-                if capture_path:
-                    raw_capture_files.append(capture_path)
-            continue
+        with _tracer.start_as_current_span("remediation.attempt") as attempt_span:
+            attempt_span.set_attribute("attempt_num", attempt + 1)
+            llm_output = service.propose_method_edits(context, previous_errors=attempt_errors)
+            updated_source = llm_output.get("replacement_method_code")
+            updated_source_lines = llm_output.get("replacement_method_lines")
+            raw_output = llm_output.get("raw_output")
+            generation_payload = llm_output.get("generation")
+            attempt_span.set_attribute("schema_valid", bool((generation_payload or {}).get("raw_response_valid")))
+            attempt_span.set_attribute("decision", str(llm_output.get("decision") or ""))
+            attempt_span.set_attribute("edits_count", len(llm_output.get("edits") or []))
+            if not updated_source:
+                if llm_output.get("decision") == "no_fix":
+                    reason = llm_output.get("reason") or "no safe minimal fix available"
+                    result = service._build_no_fix_response(
+                        violation_id=violation_id,
+                        context=context,
+                        reason=reason,
+                        attempt_count=attempt + 1,
+                    )
+                    result["confidence"] = service._build_confidence(
+                        context=context,
+                        support_tier=capability.support_tier,
+                        decision="no_fix",
+                        structured_valid=bool((llm_output.get("generation") or {}).get("raw_response_valid")),
+                        attempt_count=attempt + 1,
+                    )
+                    result["errors"] = attempt_errors
+                    attempt_span.set_attribute("outcome", "no_fix")
+                    return result
+                schema_error = llm_output.get("schema_error")
+                if schema_error:
+                    attempt_errors.append(summarize_retry_error(str(schema_error)))
+                    attempt_span.set_attribute("error_summary", str(schema_error)[:200])
+                else:
+                    attempt_errors.append("empty_edits")
+                    attempt_span.set_attribute("error_summary", "empty_edits")
+                if settings.remediation_raw_capture_enabled and raw_output:
+                    capture_path = capture_raw_llm_output(
+                        raw_capture_dir,
+                        extract_testcase_id(target_method),
+                        attempt + 1,
+                        extract_assistant_content(raw_output),
+                    )
+                    if capture_path:
+                        raw_capture_files.append(capture_path)
+                attempt_span.set_attribute("outcome", "retry")
+                continue
 
-        confidence = service._build_confidence(
-            context=context,
-            support_tier=capability.support_tier,
-            decision=str(llm_output.get("decision") or ""),
-            structured_valid=bool((generation_payload or {}).get("raw_response_valid")),
-            attempt_count=attempt + 1,
-        )
-
-        if mode == "apply" and settings.remediation_confidence_gate_enabled:
-            if confidence.get("band") != "apply":
-                result = service._build_no_fix_response(
-                    violation_id=violation_id,
-                    context=context,
-                    reason="confidence gate requires manual review before apply",
-                    attempt_count=attempt + 1,
-                )
-                result["confidence"] = confidence
-                result["errors"] = attempt_errors
-                return result
-
-        try:
-            updated_content, original_method, updated_method = service._replace_method_in_source(
-                original_content,
-                updated_source_lines or [],
-                target_method,
+            confidence = service._build_confidence(
+                context=context,
+                support_tier=capability.support_tier,
+                decision=str(llm_output.get("decision") or ""),
+                structured_valid=bool((generation_payload or {}).get("raw_response_valid")),
+                attempt_count=attempt + 1,
             )
-            break
-        except ValueError as exc:
-            attempt_errors.append(summarize_retry_error(str(exc)))
-            continue
+            attempt_span.set_attribute("confidence_score", float(confidence.get("score") or -1.0))
+            attempt_span.set_attribute("confidence_band", str(confidence.get("band") or ""))
+
+            if mode == "apply" and settings.remediation_confidence_gate_enabled:
+                if confidence.get("band") != "apply":
+                    result = service._build_no_fix_response(
+                        violation_id=violation_id,
+                        context=context,
+                        reason="confidence gate requires manual review before apply",
+                        attempt_count=attempt + 1,
+                    )
+                    result["confidence"] = confidence
+                    result["errors"] = attempt_errors
+                    attempt_span.set_attribute("outcome", "confidence_gate_blocked")
+                    return result
+
+            try:
+                updated_content, original_method, updated_method = service._replace_method_in_source(
+                    original_content,
+                    updated_source_lines or [],
+                    target_method,
+                )
+                attempt_span.set_attribute("outcome", "replacement_ok")
+                break
+            except ValueError as exc:
+                attempt_errors.append(summarize_retry_error(str(exc)))
+                attempt_span.set_attribute("error_summary", str(exc)[:200])
+                attempt_span.set_attribute("outcome", "replacement_error")
+                continue
 
     if not updated_content or not updated_method or not original_method:
         final_status = "REPLACEMENT_ERROR"
