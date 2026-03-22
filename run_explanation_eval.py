@@ -11,6 +11,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Dict, List, Optional
 
+from codegraph.telemetry import install_log_correlation
 from codegraph.config import settings
 from codegraph.evaluation.explanation_runtime import ExplanationRuntime, utc_now_iso
 from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
@@ -163,7 +164,11 @@ def _run_explanation_request(
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(otel_trace_id)s/%(otel_span_id)s] %(message)s",
+    )
+    install_log_correlation()
     args = parse_args()
 
     context = load_benchmark_evaluation_context(Path(args.config), Path(args.mapping))

@@ -35,7 +35,7 @@ def _configure_runtime() -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        format="%(asctime)s %(levelname)s [%(name)s] [%(otel_trace_id)s/%(otel_span_id)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
@@ -108,9 +108,10 @@ async def _generic_exception_handler(request: Request, exc: Exception) -> JSONRe
 def create_app() -> FastAPI:
     _configure_runtime()
     from codegraph.config import settings
-    from codegraph.telemetry import configure_telemetry
+    from codegraph.telemetry import configure_telemetry, install_log_correlation
 
     configure_telemetry()
+    install_log_correlation()
 
     LOGGER.info("Runtime Neo4j target: uri=%s user=%s", settings.neo4j_uri, settings.neo4j_user)
 
