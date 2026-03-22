@@ -1,4 +1,6 @@
 import { cn } from "../../lib/utils";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 interface CodeHighlightProps {
   code: string;
@@ -10,30 +12,53 @@ interface CodeHighlightProps {
 
 const CodeHighlight = ({
   code,
+  language = "text",
   className,
   wrapLongLines = false,
   maxHeight,
 }: CodeHighlightProps) => {
-  const lines = code.split("\n");
+  const normalizedLanguage = language === "text" ? "plaintext" : language;
+  const maxHeightClass =
+    maxHeight == null
+      ? undefined
+      : maxHeight <= 320
+        ? "max-h-80"
+        : maxHeight <= 460
+          ? "max-h-[460px]"
+          : "max-h-[640px]";
 
   return (
     <div
-      className={cn("overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-slate-100", className)}
-      style={maxHeight != null ? { maxHeight } : undefined}
+      className={cn("overflow-auto rounded-lg border border-slate-200 bg-slate-50", maxHeightClass, className)}
     >
-      <pre
-        className={cn(
-          "m-0 overflow-auto p-4 font-mono text-xs leading-6",
-          wrapLongLines ? "whitespace-pre-wrap break-words" : "whitespace-pre"
-        )}
+      <SyntaxHighlighter
+        language={normalizedLanguage}
+        style={oneLight}
+        wrapLongLines={wrapLongLines}
+        showLineNumbers
+        customStyle={{
+          margin: 0,
+          background: "transparent",
+          padding: "0.625rem 0.75rem",
+          fontSize: "12px",
+          lineHeight: "1.4",
+          minWidth: "100%",
+        }}
+        codeTagProps={{
+          style: {
+            fontFamily:
+              "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace",
+          },
+        }}
+        lineNumberStyle={{
+          minWidth: "2.25em",
+          paddingRight: "0.75em",
+          color: "#94a3b8",
+          userSelect: "none",
+        }}
       >
-        {lines.map((line, index) => (
-          <div key={`${index + 1}:${line}`} className="grid grid-cols-[auto,1fr] gap-4">
-            <span className="select-none text-right text-slate-500">{index + 1}</span>
-            <code>{line || " "}</code>
-          </div>
-        ))}
-      </pre>
+        {code || "// snippet unavailable"}
+      </SyntaxHighlighter>
     </div>
   );
 };
