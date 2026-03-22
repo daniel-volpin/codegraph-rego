@@ -361,6 +361,7 @@ class RemediationService:
         max_attempts: int = 2,
         raw_capture_dir: Optional[str] = None,
         build_command: Optional[str] = None,
+        prompt_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         return execute_apply_fix(
             service=self,
@@ -371,6 +372,7 @@ class RemediationService:
             max_attempts=max_attempts,
             raw_capture_dir=raw_capture_dir,
             build_command=build_command,
+            prompt_context=prompt_context,
         )
 
     def get_violation_context(

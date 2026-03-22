@@ -194,6 +194,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("REMEDIATION_RANKING_MODE", "remediation_ranking_mode"),
         description="Ranking operation mode. Use 'shadow' to score but not alter decisions.",
     )
+    remediation_trace_prompt_enabled: bool = Field(
+        False,
+        validation_alias=AliasChoices("REMEDIATION_TRACE_PROMPT_ENABLED", "remediation_trace_prompt_enabled"),
+        description="Whether to enrich the LLM remediation prompt with active policy traces and shadow baseline contexts.",
+    )
     ui_review_store_path: str = Field(
         "outputs/policy_ui_reviews/reviews.jsonl",
         description="Append-only JSONL store for UI triage/review records.",
@@ -269,6 +274,7 @@ _LEGACY_EXPORTS = {
     "REMEDIATION_CONFIDENCE_TEMPERATURE": "remediation_confidence_temperature",
     "REMEDIATION_RANKING_ENABLED": "remediation_ranking_enabled",
     "REMEDIATION_RANKING_MODE": "remediation_ranking_mode",
+    "REMEDIATION_TRACE_PROMPT_ENABLED": "remediation_trace_prompt_enabled",
     "UI_REVIEW_STORE_PATH": "ui_review_store_path",
 }
 _WARNED_LEGACY_EXPORTS: set[str] = set()

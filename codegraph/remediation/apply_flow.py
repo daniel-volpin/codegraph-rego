@@ -52,6 +52,7 @@ def execute_apply_fix(
     max_attempts: int,
     raw_capture_dir: str | None,
     build_command: str | None,
+    prompt_context: dict[str, Any] | None = None,
 ) -> ApplyFixResult:
     max_attempts = max(1, max_attempts)
     context = service.get_violation_context(violation_id, target_method, file_path)
@@ -124,13 +125,19 @@ def execute_apply_fix(
     raw_capture_files: list[str] = []
     generation_payload: dict[str, Any] | None = None
     confidence: dict[str, Any] = {}
-    
     before_trace_raw = None
     try:
         tmp_eval = PolicyEvaluator()
         before_trace_raw = tmp_eval.trace(target_method, source_path_override=resolved_path.as_posix())
+        if before_trace_raw:
+            if prompt_context is None:
+                prompt_context = {}
+            _before_filtered = filter_predicate_trace(before_trace_raw)
+            prompt_context["normalized_trace_profile"] = project_trace_profile(str(context.get("rule_id")), _before_filtered)
     except Exception as exc:
         LOGGER.warning("Shadow trace failed on baseline: %s", exc)
+
+    context["prompt_context"] = prompt_context
 
     for attempt in range(max_attempts):
         llm_output = service.propose_method_edits(context, previous_errors=attempt_errors)

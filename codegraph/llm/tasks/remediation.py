@@ -5,6 +5,7 @@ import json
 import logging
 from typing import Any
 
+from codegraph.config import settings
 from codegraph.remediation.planning import RemediationPlan
 
 
@@ -49,6 +50,12 @@ class RemediationPromptTemplate:
 
     PLAN_BEGIN = "BEGIN_REMEDIATION_PLAN_JSON"
     PLAN_END = "END_REMEDIATION_PLAN_JSON"
+
+    TRACE_PROFILE_BEGIN = "BEGIN_TRACE_PROFILE_JSON"
+    TRACE_PROFILE_END = "END_TRACE_PROFILE_JSON"
+
+    SHADOW_CONTEXT_BEGIN = "BEGIN_DETERMINISTIC_BASELINE_JSON"
+    SHADOW_CONTEXT_END = "END_DETERMINISTIC_BASELINE_JSON"
 
     PREV_ERR_BEGIN = "BEGIN_PREVIOUS_ERRORS"
     PREV_ERR_END = "END_PREVIOUS_ERRORS"
@@ -200,6 +207,29 @@ class RemediationPromptTemplate:
             sections.append("")
         if vector_context:
             sections.extend([cls.VECTOR_BEGIN, vector_json, cls.VECTOR_END])
+
+        if settings.remediation_trace_prompt_enabled:
+            prompt_context = context.get("prompt_context") or {}
+            normalized_trace = prompt_context.get("normalized_trace_profile")
+            if normalized_trace:
+                trace_dict = normalized_trace.model_dump() if hasattr(normalized_trace, "model_dump") else (normalized_trace if isinstance(normalized_trace, dict) else vars(normalized_trace))
+                enriched_trace = {
+                    "is_vulnerable": trace_dict.get("is_vulnerable"),
+                    "detected_via_source": trace_dict.get("detected_via_source"),
+                    "detected_via_graph": trace_dict.get("detected_via_graph"),
+                    "detected_via_ast": trace_dict.get("detected_via_ast"),
+                }
+                sections.extend(["", cls.TRACE_PROFILE_BEGIN, json.dumps(enriched_trace, indent=2), cls.TRACE_PROFILE_END])
+            
+            det_available = prompt_context.get("deterministic_baseline_available")
+            if det_available is not None:
+                shadow_summary = {
+                    "deterministic_baseline_available": bool(det_available),
+                }
+                diff_snippet = prompt_context.get("deterministic_diff_snippet")
+                if diff_snippet:
+                    shadow_summary["deterministic_diff_snippet"] = diff_snippet
+                sections.extend(["", cls.SHADOW_CONTEXT_BEGIN, json.dumps(shadow_summary, indent=2), cls.SHADOW_CONTEXT_END])
 
         errors_note = "\n".join(previous_errors or [])
         if errors_note:
