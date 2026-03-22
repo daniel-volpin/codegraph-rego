@@ -130,10 +130,11 @@ def execute_apply_fix(
         tmp_eval = PolicyEvaluator()
         before_trace_raw = tmp_eval.trace(target_method, source_path_override=resolved_path.as_posix())
         if before_trace_raw:
-            if prompt_context is None:
-                prompt_context = {}
+            prompt_context = dict(prompt_context) if prompt_context else {}
             _before_filtered = filter_predicate_trace(before_trace_raw)
-            prompt_context["normalized_trace_profile"] = project_trace_profile(str(context.get("rule_id")), _before_filtered)
+            trace_profile = project_trace_profile(str(context.get("rule_id")), _before_filtered)
+            if trace_profile is not None:
+                prompt_context["normalized_trace_profile"] = trace_profile
     except Exception as exc:
         LOGGER.warning("Shadow trace failed on baseline: %s", exc)
 
