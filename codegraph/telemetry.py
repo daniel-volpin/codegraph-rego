@@ -112,8 +112,6 @@ class _FileSpanExporter:
     """
 
     def __init__(self, path: str) -> None:
-        import io  # noqa: PLC0415
-
         from opentelemetry.sdk.trace.export import ConsoleSpanExporter as _CSE  # noqa: PLC0415
 
         self._fh = open(path, "a", encoding="utf-8")  # noqa: SIM115
