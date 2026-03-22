@@ -34,7 +34,7 @@ LLM_ENABLE_THINKING=false \
 OWASP_BENCHMARK_ROOT="/abs/path/to/BenchmarkJava" \
 .venv/bin/python3 run_benchmark_eval.py \
   --config configs/benchmark/multicat_full.json \
-  --output-dir outputs/detection_calibration_path_precision_v4 \
+  --output-dir outputs/thesis_final_detection_full \
   --table-format md
 ```
 
@@ -60,7 +60,7 @@ REMEDIATION_LLM_MODEL="qwen/qwen3-coder-30b" \
 LLM_ENABLE_THINKING=false \
 .venv/bin/python3 run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
-  --output-dir outputs/branch_baseline_recovery/remediation_supported_medium \
+  --output-dir outputs/thesis_final_remediation_v2 \
   --sample-size 60
 ```
 
@@ -75,10 +75,11 @@ LLM_ENABLE_THINKING=false \
 - Branch detection smoke: `outputs/branch_baseline_recovery/detection_smoke/`
 - Branch bounded remediation smoke: `outputs/branch_baseline_recovery/remediation_bounded_smoke/`
 - Branch supported remediation medium: `outputs/branch_baseline_recovery/remediation_supported_medium/`
-- Detection: `outputs/detection_calibration_path_precision_v4/`
+- Detection: `outputs/thesis_final_detection_full/`
 - Explanation: `outputs/thesis_final_explanation_full/`
-- Remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
-  - current-main regression reference: `outputs/final_full_remediation_current_main/`
+- Remediation: `outputs/thesis_final_remediation_v2/`
+  - historical reference: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` (pre-confidence-gate, 17/17)
+  - regression reference: `outputs/final_full_remediation_current_main/` (10-case run)
 
 ## Reporting Summary
 
@@ -106,12 +107,12 @@ The default report compares:
 
 ## Which Results To Cite
 
-- For benchmark-backed baseline claims, cite:
-  - `outputs/detection_calibration_path_precision_v4/`
+- For thesis-final benchmark claims, cite:
+  - `outputs/thesis_final_detection_full/`
   - `outputs/thesis_final_explanation_full/`
-  - `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
-- For baseline-recovery branch work-in-progress, keep new reruns under `outputs/branch_baseline_recovery/` until they are explicitly accepted as replacement evidence.
-- Treat `outputs/final_full_remediation_current_main/` as a regression/reference run, not the headline remediation baseline.
+  - `outputs/thesis_final_remediation_v2/`
+- For branch validation work-in-progress, keep new reruns under `outputs/branch_baseline_recovery/` until they are explicitly promoted.
+- Treat `outputs/final_full_remediation_current_main/` and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` as historical reference runs, not the headline baseline.
 
 ## Real-World Case Studies
 

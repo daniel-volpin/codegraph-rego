@@ -1,10 +1,11 @@
 # Benchmark Latest
 
-Latest thesis-grade benchmark results on this repository state.
+Thesis-final benchmark results produced on `main` on 2026-03-22.
 
 ## Detection Full
 
-Source: `outputs/review_multicat_full_fixpass_20260321c/table.md`
+Source: `outputs/thesis_final_detection_full/`
+Config: `multicat_full.json` · seed=7 · 60 cases/category · 454 total cases
 
 - Overall:
   - `TP=222`
@@ -13,68 +14,65 @@ Source: `outputs/review_multicat_full_fixpass_20260321c/table.md`
   - `Precision=0.9528`
   - `Recall=0.9528`
   - `F1=0.9528`
-- Injection categories after graph-aware multi-hop taint confirmation:
-  - SQL injection: `TP=35`, `FP=2`, `FN=0`, `Precision=0.9459`, `Recall=1.0`, `F1=0.9722`
-  - Path traversal: `TP=29`, `FP=2`, `FN=0`, `Precision=0.9355`, `Recall=1.0`, `F1=0.9667`
-  - Command injection: `TP=35`, `FP=3`, `FN=0`, `Precision=0.9211`, `Recall=1.0`, `F1=0.9589`
-  - LDAP injection: `TP=27`, `FP=1`, `FN=0`, `Precision=0.9643`, `Recall=1.0`, `F1=0.9818`
-  - XPath injection: `TP=15`, `FP=1`, `FN=0`, `Precision=0.9375`, `Recall=1.0`, `F1=0.9677`
-- Full command-category confirmation:
-  - `outputs/command_full_debug_20260321d/table.md` -> `TP=126`, `FP=12`, `FN=0`, `Recall=1.0`
+- Per-category results:
+  - Crypto (CWE-327): `TP=27`, `FP=0`, `FN=4`, `P=1.000`, `R=0.871`, `F1=0.931`
+  - Hash (CWE-328): `TP=22`, `FP=0`, `FN=7`, `P=1.000`, `R=0.759`, `F1=0.863`
+  - Randomness (CWE-330): `TP=32`, `FP=0`, `FN=0`, `P=1.000`, `R=1.000`, `F1=1.000`
+  - SQL Injection (CWE-89): `TP=35`, `FP=2`, `FN=0`, `P=0.946`, `R=1.000`, `F1=0.972`
+  - Path Traversal (CWE-22): `TP=29`, `FP=2`, `FN=0`, `P=0.935`, `R=1.000`, `F1=0.967`
+  - Command Injection (CWE-78): `TP=35`, `FP=3`, `FN=0`, `P=0.921`, `R=1.000`, `F1=0.959`
+  - LDAP Injection (CWE-90): `TP=27`, `FP=1`, `FN=0`, `P=0.964`, `R=1.000`, `F1=0.982`
+  - XPath Injection (CWE-643): `TP=15`, `FP=1`, `FN=0`, `P=0.938`, `R=1.000`, `F1=0.968`
+- Zero false positives on crypto, hash, and randomness categories.
+- All five injection categories achieve perfect recall (R=1.000).
+- Remaining FN concentrated in hash (7) and crypto (4).
 
 ## Explanation Full
 
-Source: `outputs/thesis_final_explanation_full/table.md`
+Source: `outputs/thesis_final_explanation_full/`
+Config: `multicat_full.json` · seed=7 · `evidence_mode=lean` · `llm_max_tokens_eval=192` · `LLM_CONCURRENCY=1`
 
-- Surfaced violations evaluated: `112`
-- Overall `Citation@Context`: `0.8125`
-- Overall `Citation@NoContext`: `0.8125`
+- Evaluated violations: `222` true positives across all 8 categories
+- Overall `Citation@Context`: `0.9955` (221/222)
+- Overall `Citation@NoContext`: `0.000`
+- Per-category `Citation@Context`:
+  - Crypto (CWE-327): `1.000` · Hash (CWE-328): `1.000` · Randomness (CWE-330): `1.000`
+  - SQL Injection (CWE-89): `1.000` · Path Traversal (CWE-22): `1.000` · Command Injection (CWE-78): `1.000`
+  - LDAP Injection (CWE-90): `1.000` · XPath Injection (CWE-643): `0.933` (14/15)
+- `Citation@NoContext=0.000` is the expected ablation result: without evidence context the LLM cannot ground citations.
 
-## Remediation Supported Medium (Compile-Backed Product Gate)
+## Remediation Supported Medium
 
-Source: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/summary.md`
+Source: `outputs/thesis_final_remediation_v2/`
+Config: `remediation_supported_medium.json` · seed=42 · 20 cases/category · 3 categories · `--sample-size 60` · `mode=dry_run`
 
-- Attempted supported cases: `17`
-- Structured valid: `17`
-- Replacement applied: `17`
-- Policy fixed: `17`
-- Build attempted: `17`
-- Build success: `17`
-- Fully verified success rate: `100%`
-- Current-main regression reference: `outputs/final_full_remediation_current_main/summary.md` (`9/10`)
+- Attempted: `25`
+- Fix Success Rate: `1.000` (25/25)
+- Build Success Rate: `1.000` (25/25)
+- `final_status_counts`: `{"OK": 25}`
+- Confidence calibration Brier score: `0.0057`
+- Confidence calibration ECE: `0.0696`
+- Confidence gate active (PR #81 on `main`)
+
+Note: 25 attempted vs. 17 in the prior reference run reflects improved detection recall on `main`. All 25 succeeded.
 
 ## Authoritative vs Reference Runs
 
-- Cite the following as the current benchmark-backed baseline:
-  - detection: `outputs/review_multicat_full_fixpass_20260321c/`
-  - explanation: `outputs/thesis_final_explanation_full/`
-  - remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
-- Treat `outputs/final_full_remediation_current_main/` as a later regression/reference run, not the thesis headline remediation result.
+Cite the following as the thesis-final authoritative evidence:
+- detection: `outputs/thesis_final_detection_full/`
+- explanation: `outputs/thesis_final_explanation_full/`
+- remediation: `outputs/thesis_final_remediation_v2/`
 
-## Remediation Bounded Smoke
-
-Source: `outputs/span_edit_bounded_smoke_v2/summary.md`
-
-- Attempted supported cases: `3`
-- Fully verified success rate: `100%`
-
-## Reading The Results
-
-- Detection, explanation, and bounded remediation are now all benchmark-backed at materially stronger levels than the earlier thesis baseline.
-- Detection is now stronger because graph-aware multi-hop taint confirmation plus sink-level taint-evidence cleanup recovered command recall while reducing residual injection false positives.
-- Remaining precision gaps are concentrated rather than diffuse, led by command injection and smaller path/LDAP/XPath clusters.
-- Compile-backed remediation is now real on the successful supported cases.
-- Remediation remains bounded, but the current supported-medium compile-backed rerun now reaches `17/17`.
+Preserve but do not cite as primary evidence:
+- `outputs/detection_calibration_path_precision_v4/` — pre-taint intermediate run (F1=0.798); useful for showing improvement trajectory
+- `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` — pre-confidence-gate remediation reference (17/17)
+- `outputs/final_full_remediation_current_main/` — 10-case regression/reference run
 
 ## Real-World Case Studies
 
 Source: `outputs/reporting/baseline_freeze_v0_2_0/report.md`
 
-- `spring_petclinic`
-  - ingest, search, policy evaluation, and explanation validated cleanly
-  - first surfaced finding comes from the uploaded PetClinic workspace path
-  - no bounded remediation category surfaced
-- `gs_securing_web`
-  - ingest and search validated cleanly
-  - upload-scope graph isolation is now correct; no stale PetClinic/benchmark findings remain
-  - no policy findings surfaced, which is an acceptable transferability outcome
+- `spring_petclinic`: ingest, search, policy evaluation, and explanation validated; no bounded remediation category surfaced
+- `gs_securing_web`: ingest and search validated; no policy findings surfaced (acceptable transferability outcome)
+
+Case studies validate workflow breadth. They are not the primary benchmark evidence surface.

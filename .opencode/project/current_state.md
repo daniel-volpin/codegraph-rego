@@ -59,7 +59,7 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
   - `cases/<case-id>/`
 - Compile-backed remediation is proven on the current supported benchmark subset:
   - bounded smoke: `3/3`
-  - supported medium: `17/17`
+  - supported medium: `25/25` (thesis-final run on `main`, 2026-03-22)
 - Detection calibration now uses a more maintainable evidence layer:
   - source analysis split into smaller analyzers under `source_analysis_core.py`
   - one-hop helper-return summaries under `helper_summaries.py`
@@ -78,13 +78,14 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
   - LDAP injection: `precision=0.9643`, `recall=1.0`, `F1=0.9818`
   - XPath injection: `precision=0.9375`, `recall=1.0`, `F1=0.9677`
 - Benchmark-first outputs are the authoritative evidence for current capability.
-- Authoritative benchmark baselines are frozen as:
-  - detection: `outputs/review_multicat_full_fixpass_20260321c/`
-  - explanation: `outputs/thesis_final_explanation_full/`
-  - remediation: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/`
-- Full command-category regression check is confirmed separately in:
-  - `outputs/command_full_debug_20260321d/`
-- The later `outputs/final_full_remediation_current_main/` rerun (`9/10`) remains a useful regression reference, not the thesis headline baseline.
+- Thesis-final authoritative benchmark outputs produced on `main` on 2026-03-22:
+  - detection: `outputs/thesis_final_detection_full/` (P=0.953, R=0.953, F1=0.953)
+  - explanation: `outputs/thesis_final_explanation_full/` (222 TPs, Citation@Context=0.9955)
+  - remediation: `outputs/thesis_final_remediation_v2/` (25/25 OK, Brier=0.006)
+- Historical reference runs (do not cite as primary):
+  - `outputs/detection_calibration_path_precision_v4/` — pre-taint intermediate (F1=0.798)
+  - `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` — pre-confidence-gate remediation (17/17)
+  - `outputs/final_full_remediation_current_main/` — 10-case regression/reference run
 - Real-world validation is now completed and cleanly separated from benchmark evidence:
   - `outputs/case_study_spring_petclinic/` validates ingest, policy evaluation, and explanation on a realistic Spring application.
   - `outputs/case_study_gs_securing_web/` validates a second Spring target with a clean upload-scoped graph and no surfaced policy findings.
