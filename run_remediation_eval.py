@@ -10,7 +10,7 @@ import random
 from pathlib import Path
 from typing import Any, Dict, List
 
-from codegraph.telemetry import configure_telemetry, get_tracer
+from codegraph.telemetry import configure_telemetry, get_tracer, install_log_correlation
 from codegraph.remediation.orchestration import apply_remediation
 from codegraph.evaluation.pipeline import (
     collect_category_violations,
@@ -96,8 +96,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(otel_trace_id)s/%(otel_span_id)s] %(message)s",
+    )
     configure_telemetry()
+    install_log_correlation()
     tracer = get_tracer("codegraph.benchmark.remediation")
     args = parse_args()
 

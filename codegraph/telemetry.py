@@ -15,12 +15,26 @@ entry point).  Then acquire a tracer per module::
     with tracer.start_as_current_span("my.span") as span:
         span.set_attribute("key", "value")
 
+Log correlation
+---------------
+Call ``install_log_correlation()`` immediately after ``basicConfig`` to inject
+``otel_trace_id`` and ``otel_span_id`` into every log record.  When no span is
+active both fields are the zero-value sentinel so the format string never
+raises a ``KeyError``::
+
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)s [%(otel_trace_id)s/%(otel_span_id)s] %(message)s",
+    )
+    install_log_correlation()
+
 Export
 ------
-By default spans are written to stdout via ``ConsoleSpanExporter`` (ideal for
-redirecting to a per-run log file during benchmarks).
+By default spans are written to stdout via ``ConsoleSpanExporter``.
 
-To export to a Grafana / Tempo / Jaeger collector set the standard env var::
+Set ``OTEL_TRACE_FILE=/path/to/traces.jsonl`` to write spans to a file instead
+(one JSON object per line, safe for concurrent reads by the reporting script).
+
+To export to a Grafana / Tempo / Jaeger collector set::
 
     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 
@@ -33,6 +47,7 @@ To silence all telemetry (e.g. in unit tests)::
 
 from __future__ import annotations
 
+import logging
 import os
 
 from opentelemetry import trace
@@ -40,6 +55,86 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
 _initialized = False
+
+# ── Log/trace correlation ─────────────────────────────────────────────────────
+
+
+class OtelCorrelationFilter(logging.Filter):
+    """Injects ``otel_trace_id`` and ``otel_span_id`` into every LogRecord.
+
+    When no span is active (or telemetry is disabled) both fields are set to
+    the zero-value sentinel so a format string like
+    ``%(otel_trace_id)s/%(otel_span_id)s`` never raises a KeyError.
+    """
+
+    _ZERO_TRACE = "0" * 32
+    _ZERO_SPAN = "0" * 16
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        ctx = trace.get_current_span().get_span_context()
+        if ctx.is_valid:
+            record.otel_trace_id = format(ctx.trace_id, "032x")
+            record.otel_span_id = format(ctx.span_id, "016x")
+        else:
+            record.otel_trace_id = self._ZERO_TRACE
+            record.otel_span_id = self._ZERO_SPAN
+        return True
+
+
+def install_log_correlation() -> None:
+    """Attach :class:`OtelCorrelationFilter` to every handler on the root logger.
+
+    Filters must be on *handlers*, not on the logger itself, because Python's
+    propagation path calls ``handler.handle()`` directly and bypasses
+    ``Logger.handle()`` — so logger-level filters are skipped for child-logger
+    records that propagate up.
+
+    Safe to call multiple times.  Safe when ``OTEL_SDK_DISABLED=true`` — the
+    filter degrades to zero-value sentinels when no span is active.
+    """
+    root = logging.getLogger()
+    _filter = OtelCorrelationFilter()
+    for handler in root.handlers:
+        if not any(isinstance(f, OtelCorrelationFilter) for f in handler.filters):
+            handler.addFilter(_filter)
+
+
+# ── Span file exporter ────────────────────────────────────────────────────────
+
+
+class _FileSpanExporter:
+    """Minimal span exporter that appends one JSON line per span to a file.
+
+    Not a full ``SpanExporter`` subclass — wraps ``ConsoleSpanExporter`` and
+    redirects its output to a file handle opened once at construction time.
+    Using ConsoleSpanExporter's ``out`` parameter avoids re-implementing
+    ``span.to_json()`` serialisation.
+    """
+
+    def __init__(self, path: str) -> None:
+        import io  # noqa: PLC0415
+
+        from opentelemetry.sdk.trace.export import ConsoleSpanExporter as _CSE  # noqa: PLC0415
+
+        self._fh = open(path, "a", encoding="utf-8")  # noqa: SIM115
+        # ConsoleSpanExporter accepts an ``out`` file-like; reuse its serialisation.
+        self._inner = _CSE(out=self._fh)
+
+    # Mirror the SpanExporter interface used by BatchSpanProcessor.
+    def export(self, spans):  # type: ignore[override]
+        return self._inner.export(spans)
+
+    def shutdown(self) -> None:
+        self._inner.shutdown()
+        self._fh.flush()
+        self._fh.close()
+
+    def force_flush(self, timeout_millis: int = 30_000) -> bool:
+        self._fh.flush()
+        return True
+
+
+# ── SDK bootstrap ─────────────────────────────────────────────────────────────
 
 
 def configure_telemetry(service_name: str = "codegraph") -> None:
@@ -54,15 +149,17 @@ def configure_telemetry(service_name: str = "codegraph") -> None:
     provider = TracerProvider()
 
     otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    trace_file = os.environ.get("OTEL_TRACE_FILE")
+
     if otlp_endpoint:
-        # Lazy import so the grpc dependency is only required when actually exporting.
         try:
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter  # noqa: PLC0415
 
             exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
         except ImportError:
-            # Fall back to console if the grpc extra is not installed.
             exporter = ConsoleSpanExporter()  # type: ignore[assignment]
+    elif trace_file:
+        exporter = _FileSpanExporter(trace_file)  # type: ignore[assignment]
     else:
         exporter = ConsoleSpanExporter()  # type: ignore[assignment]
 

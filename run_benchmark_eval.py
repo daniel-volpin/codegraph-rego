@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from codegraph.telemetry import install_log_correlation
 from codegraph.db import get_neo4j_driver
 from codegraph.evaluation.benchmark import (
     CategorySpec,
@@ -143,7 +144,11 @@ def score_category(
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(otel_trace_id)s/%(otel_span_id)s] %(message)s",
+    )
+    install_log_correlation()
     args = parse_args()
 
     context = load_benchmark_evaluation_context(Path(args.config), Path(args.mapping))
