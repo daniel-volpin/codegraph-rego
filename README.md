@@ -159,11 +159,24 @@ Use `.env.example` as the canonical local template. Startup performs runtime val
 
 Use [REPRODUCIBILITY.md](./REPRODUCIBILITY.md) for the shortest path to rerun the benchmark pipeline.
 
+Use [docs/release_checklist.md](./docs/release_checklist.md) for the minimal release flow so Git tags, release notes, and manifest versions stay aligned.
+
 Use [.opencode/project/runbook.md](./.opencode/project/runbook.md) for:
 
 - the current authoritative output directories
 - reporting commands
 - which runs should be cited versus treated as reference-only
+
+## Release
+
+Current lightweight release process:
+
+- update [pyproject.toml](./pyproject.toml) and [frontend/package.json](./frontend/package.json) to the intended release version
+- verify `main` is clean and CI is green
+- create the GitHub tag and release from `main`
+- keep the release title, notes, and manifest versions synchronized
+
+Use [docs/release_checklist.md](./docs/release_checklist.md) for the step-by-step checklist.
 
 ## Repo Layout
 
