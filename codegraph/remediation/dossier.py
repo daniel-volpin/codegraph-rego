@@ -32,8 +32,10 @@ def build_dossier(
     remediated_trace = None
 
     if llm_outcome and llm_outcome.predicate_trace:
-        baseline_trace = llm_outcome.predicate_trace.get("before_trace_normalized")
-        remediated_trace = llm_outcome.predicate_trace.get("after_trace_normalized")
+        raw_before = llm_outcome.predicate_trace.get("before_trace_normalized")
+        raw_after = llm_outcome.predicate_trace.get("after_trace_normalized")
+        baseline_trace = TraceProfile.model_validate(raw_before) if raw_before else None
+        remediated_trace = TraceProfile.model_validate(raw_after) if raw_after else None
 
     return RemediationDossier(
         case_id=case_id,

@@ -29,7 +29,7 @@ import argparse
 import logging
 import random
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from codegraph.evaluation.io import write_json
 from codegraph.evaluation.pipeline import (
@@ -115,7 +115,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _extract_source_lines(violation: Dict[str, Any]) -> list[str]:
+def _extract_source_lines(violation: dict[str, Any]) -> list[str]:
     """Extract method source lines from violation evidence."""
     evidence = violation.get("evidence") or {}
     source_code = evidence.get("source_code") or ""
@@ -124,12 +124,12 @@ def _extract_source_lines(violation: Dict[str, Any]) -> list[str]:
     return []
 
 
-def _build_violation_context(violation: Dict[str, Any]) -> Dict[str, Any]:
+def _build_violation_context(violation: dict[str, Any]) -> dict[str, Any]:
     """Build a violation context dict from a raw violation record."""
     evidence = violation.get("evidence") or {}
     return {
         "violation_id": violation.get("violation_id"),
-        "rule_id": violation.get("violation_id"),
+        "rule_id": violation.get("rule_id"),
         "file_path": evidence.get("file_path") or violation.get("file_path"),
         "target_method": violation.get("target_method"),
         "evidence": evidence,
@@ -176,7 +176,7 @@ def main() -> int:
                 violations_by_testcase=violations_by_testcase,
             )
 
-            candidates: List[Dict[str, Any]] = []
+            candidates: list[dict[str, Any]] = []
             for category_id in context.selected_category_ids:
                 spec = context.categories_by_id.get(category_id)
                 if not spec:
@@ -196,8 +196,8 @@ def main() -> int:
 
             LOGGER.info("Comparing %d violations", len(candidates))
 
-            comparison_results: List[ComparisonResult] = []
-            ranking_results: List[RankingResult] = []
+            comparison_results: list[ComparisonResult] = []
+            ranking_results: list[RankingResult] = []
             for i, violation in enumerate(candidates, 1):
                 case_id = build_case_id(violation)
                 case_dir = cases_dir / case_id
