@@ -10,7 +10,7 @@ import {
   ExpandedState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronRight, Copy, Loader2, Scale, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, Scale, Sparkles } from "lucide-react";
 import Markdown from "react-markdown";
 import { toast } from "sonner";
 import {
@@ -249,6 +249,20 @@ const ruleGroupStatusVariant = (group: ViolationGroupRow): "success" | "secondar
   return group.fullSupportCount > 0 || group.guardedSupportCount > 0 ? "success" : "secondary";
 };
 
+const artifactStatusVariant = (status: "idle" | "running" | "ready" | "error"): "secondary" | "warning" | "success" | "destructive" => {
+  if (status === "running") return "warning";
+  if (status === "ready") return "success";
+  if (status === "error") return "destructive";
+  return "secondary";
+};
+
+const artifactStatusLabel = (status: "idle" | "running" | "ready" | "error") => {
+  if (status === "running") return "Running";
+  if (status === "ready") return "Ready";
+  if (status === "error") return "Error";
+  return "Not started";
+};
+
 const LEGACY_FRAMEWORK_DEMO_RULE_IDS = [
   "ISO-A.10-WEAK-HASH",
   "ISO-A.10-WEAK-RANDOM",
@@ -370,6 +384,7 @@ const PolicyPage = () => {
   const [viewPreset, setViewPreset] = useState<PolicyViewPreset>(initialViewPreset);
   const [uploadedModules, setUploadedModules] = useState<string[]>(() => readUploadedModules());
   const [moduleFilter, setModuleFilter] = useState<string>("all");
+  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<Record<string, PendingAction>>({});
 
   const markPending = useCallback((id: string, action: PendingAction) => {
@@ -407,8 +422,18 @@ const PolicyPage = () => {
     gcTime: 1000 * 60 * 60 * 6,
   });
 
+  const applyByIdQuery = useQuery<Record<string, RemediationApplyResponse>>({
+    queryKey: ["policy:applyById"],
+    queryFn: async () => ({}),
+    enabled: false,
+    initialData: {},
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60 * 6,
+  });
+
   const previewById = previewByIdQuery.data;
   const explainById = explainByIdQuery.data;
+  const applyById = applyByIdQuery.data;
   const policyCatalogQuery = useQuery<PolicyCatalogResponse, Error>({
     queryKey: ["policyCatalog"],
     queryFn: fetchPolicyCatalog,
@@ -572,6 +597,52 @@ const PolicyPage = () => {
     () => (moduleFilter === "all" ? findings : findings.filter((finding) => finding.module === moduleFilter)),
     [findings, moduleFilter],
   );
+
+  useEffect(() => {
+    if (filteredFindings.length === 0) {
+      setSelectedFindingId(null);
+      return;
+    }
+    if (!selectedFindingId || !filteredFindings.some((finding) => finding.id === selectedFindingId)) {
+      setSelectedFindingId(filteredFindings[0].id);
+    }
+  }, [filteredFindings, selectedFindingId]);
+
+  const selectedFinding = useMemo(
+    () => filteredFindings.find((finding) => finding.id === selectedFindingId) ?? null,
+    [filteredFindings, selectedFindingId],
+  );
+
+  const selectedExplain = selectedFinding ? explainById[selectedFinding.id] : undefined;
+  const selectedPreview = selectedFinding ? previewById[selectedFinding.id] : undefined;
+  const selectedApply = selectedFinding ? applyById[selectedFinding.id] : undefined;
+  const selectedPendingAction = selectedFinding ? pendingAction[selectedFinding.id] : undefined;
+
+  const explainStatus: "idle" | "running" | "ready" | "error" =
+    selectedPendingAction === "explain"
+      ? "running"
+      : selectedExplain?.status === "OK"
+        ? "ready"
+        : selectedExplain?.status === "ERROR"
+          ? "error"
+          : "idle";
+  const previewStatus: "idle" | "running" | "ready" | "error" =
+    selectedPendingAction === "preview"
+      ? "running"
+      : selectedPreview?.status === "OK"
+        ? "ready"
+        : selectedPreview?.status === "ERROR"
+          ? "error"
+          : "idle";
+  const verifyStatus: "idle" | "running" | "ready" | "error" =
+    selectedPendingAction === "apply"
+      ? "running"
+      : selectedApply?.status === "OK"
+        ? "ready"
+        : selectedApply?.status === "ERROR"
+          ? "error"
+          : "idle";
+
   const visibleModules = useMemo(() => {
     if (moduleFilter === "all") {
       return availableModules;
@@ -788,6 +859,212 @@ const PolicyPage = () => {
         </Card>
       </div>
 
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Case dossier</p>
+            <p className="text-xs text-slate-500">
+              One selected finding with end-to-end evidence: explanation, suggested fix, and dry-run verification.
+            </p>
+          </div>
+          {selectedFinding && (
+            <div className="flex items-center gap-2">
+              <Badge variant={severityVariant(selectedFinding.severity)}>{selectedFinding.severity}</Badge>
+              <Badge variant={remediationBadgeVariant(selectedFinding.remediation)}>
+                {remediationBadgeLabel(selectedFinding.remediation)}
+              </Badge>
+            </div>
+          )}
+        </div>
+
+        {!selectedFinding ? (
+          <div className="py-6 text-sm text-slate-600">
+            Run a policy scan and select a finding to open a case dossier.
+          </div>
+        ) : (
+          <div className="space-y-4 pt-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="truncate font-mono text-sm text-slate-900" title={selectedFinding.targetMethod}>
+                {selectedFinding.targetMethod}
+              </p>
+              <p className="mt-1 truncate font-mono text-xs text-slate-500" title={selectedFinding.filePath}>
+                {selectedFinding.filePath}
+              </p>
+              <p className="mt-2 text-sm text-slate-700">{selectedFinding.reason}</p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">1. Explain</p>
+                  <Badge variant={artifactStatusVariant(explainStatus)}>{artifactStatusLabel(explainStatus)}</Badge>
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">2. Preview</p>
+                  <Badge variant={artifactStatusVariant(previewStatus)}>{artifactStatusLabel(previewStatus)}</Badge>
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">3. Verify</p>
+                  <Badge variant={artifactStatusVariant(verifyStatus)}>{artifactStatusLabel(verifyStatus)}</Badge>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={selectedPendingAction !== undefined}
+                onClick={() => explainMutation.mutate(selectedFinding.raw)}
+              >
+                {selectedPendingAction === "explain" ? (
+                  <>
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Explaining…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-1 h-4 w-4" /> Explain finding
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={selectedPendingAction !== undefined || !selectedFinding.remediation.preview_available}
+                onClick={() => previewMutation.mutate(selectedFinding)}
+              >
+                {selectedPendingAction === "preview" ? (
+                  <>
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Previewing…
+                  </>
+                ) : (
+                  <>Preview suggested fix</>
+                )}
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                disabled={selectedPendingAction !== undefined || !selectedFinding.remediation.verify_available}
+                onClick={() => applyMutation.mutate(selectedFinding)}
+              >
+                {selectedPendingAction === "apply" ? (
+                  <>
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Verifying…
+                  </>
+                ) : (
+                  <>Verify fix (dry run)</>
+                )}
+              </Button>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Explanation artifact</p>
+                {selectedExplain?.status === "ERROR" && selectedExplain.error && (
+                  <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
+                    {selectedExplain.error}
+                  </div>
+                )}
+                {selectedExplain?.status === "OK" && selectedExplain.explanation_structured && (
+                  renderStructuredExplanation(selectedExplain.explanation_structured)
+                )}
+                {selectedExplain?.status === "OK" && !selectedExplain.explanation_structured && selectedExplain.explanation && (
+                  <div className="prose prose-sm prose-indigo max-w-none rounded-md border border-indigo-200 bg-indigo-50 p-4 text-indigo-900 break-words [&_pre]:whitespace-pre-wrap [&_code]:break-all">
+                    <Markdown>{selectedExplain.explanation}</Markdown>
+                  </div>
+                )}
+                {!selectedExplain && <p className="text-sm text-slate-500">No explanation generated yet.</p>}
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Remediation artifacts</p>
+                {selectedPreview?.error && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <strong>Preview error:</strong> {selectedPreview.error}
+                  </div>
+                )}
+                {selectedPreview?.diff && (
+                  <div className="rounded-lg border border-slate-200">
+                    <div className="border-b border-slate-200 px-3 py-2">
+                      <span className="text-xs font-semibold uppercase text-slate-500">Proposed diff</span>
+                    </div>
+                    <pre className="overflow-auto whitespace-pre-wrap break-words bg-white p-3 text-xs">{selectedPreview.diff}</pre>
+                  </div>
+                )}
+                {!selectedPreview?.diff && selectedPreview?.explanation && (
+                  <div className="prose prose-sm max-w-none rounded-md border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 break-words">
+                    <strong>Preview:</strong>
+                    <Markdown>{selectedPreview.explanation}</Markdown>
+                  </div>
+                )}
+                {!selectedPreview && <p className="text-sm text-slate-500">No preview generated yet.</p>}
+
+                {selectedApply && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                    <div className="flex items-center gap-2 text-slate-900">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <p className="font-medium">Verification summary</p>
+                    </div>
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      <p>
+                        Overall: <span className="font-medium">{selectedApply.verification?.overall_status ?? "—"}</span>
+                      </p>
+                      <p>
+                        Rule status: <span className="font-medium">{selectedApply.verification?.target_rule_status ?? "—"}</span>
+                      </p>
+                      <p>
+                        Remaining violations: <span className="font-medium">{selectedApply.verification?.remaining_violations?.length ?? 0}</span>
+                      </p>
+                      <p>
+                        New violations: <span className="font-medium">{selectedApply.verification?.new_violations?.length ?? 0}</span>
+                      </p>
+                      <p>
+                        Compilation: <span className="font-medium">{selectedApply.compilation?.success ? "success" : selectedApply.compilation?.attempted ? "failed" : "not attempted"}</span>
+                      </p>
+                      <p>
+                        Decision: <span className="font-medium">{selectedApply.generation?.decision ?? "—"}</span>
+                      </p>
+                    </div>
+                    {selectedApply.generation?.reason && (
+                      <p className="mt-2 text-xs text-slate-600">Reason: {selectedApply.generation.reason}</p>
+                    )}
+                    {selectedApply.error && (
+                      <p className="mt-2 text-xs text-rose-700">Error: {selectedApply.error}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200">
+              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+                <span className="text-xs font-semibold uppercase text-slate-500">Evidence snippet</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedFinding.snippet || "");
+                    toast.success("Code copied.");
+                  }}
+                >
+                  <Copy className="mr-1 h-4 w-4" /> Copy
+                </Button>
+              </div>
+              <CodeHighlight
+                code={selectedFinding.snippet || "// snippet unavailable"}
+                language="java"
+                wrapLongLines
+                maxHeight={320}
+              />
+            </div>
+          </div>
+        )}
+      </Card>
+
       <Card className="overflow-hidden">
         {viewPreset === "framework_demo" && (
           <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -853,11 +1130,19 @@ const PolicyPage = () => {
                               const isFindingExpanded = expandedFindingByGroup[row.original.id] === finding.id;
 
                               return (
-                                <div key={finding.id} className="rounded-lg border border-slate-200 bg-white">
+                                <div
+                                  key={finding.id}
+                                  className={`rounded-lg border bg-white ${
+                                    selectedFindingId === finding.id ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200"
+                                  }`}
+                                >
                                   <button
                                     type="button"
                                     className="flex w-full flex-wrap items-start justify-between gap-3 p-4 text-left"
-                                    onClick={() => toggleFindingExpanded(row.original.id, finding.id)}
+                                    onClick={() => {
+                                      setSelectedFindingId(finding.id);
+                                      toggleFindingExpanded(row.original.id, finding.id);
+                                    }}
                                   >
                                     <div className="flex min-w-0 items-start gap-3">
                                       {isFindingExpanded ? (
@@ -892,11 +1177,22 @@ const PolicyPage = () => {
 
                                         <div className="flex flex-wrap gap-2">
                                           <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={isBusy}
+                                            onClick={() => setSelectedFindingId(finding.id)}
+                                          >
+                                            Open dossier
+                                          </Button>
+                                          <Button
                                             variant="outline"
                                             size="sm"
                                             disabled={isBusy}
                                             title="Generate a concise explanation of why this finding matters and how to address it."
-                                            onClick={() => explainMutation.mutate(finding.raw)}
+                                            onClick={() => {
+                                              setSelectedFindingId(finding.id);
+                                              explainMutation.mutate(finding.raw);
+                                            }}
                                           >
                                             {rowPending === "explain" ? (
                                               <>
@@ -913,7 +1209,10 @@ const PolicyPage = () => {
                                             size="sm"
                                             disabled={previewDisabled}
                                             title="Generate a proposed code change and check it virtually without compiling or modifying source files."
-                                            onClick={() => previewMutation.mutate(finding)}
+                                            onClick={() => {
+                                              setSelectedFindingId(finding.id);
+                                              previewMutation.mutate(finding);
+                                            }}
                                           >
                                             {rowPending === "preview" ? (
                                               <>
@@ -928,7 +1227,10 @@ const PolicyPage = () => {
                                             size="sm"
                                             disabled={verifyDisabled}
                                             title="Run the full dry-run remediation pipeline: generate a fix, compile in a temp workspace, re-ingest, and re-check policies. No source files are persisted from the UI."
-                                            onClick={() => applyMutation.mutate(finding)}
+                                            onClick={() => {
+                                              setSelectedFindingId(finding.id);
+                                              applyMutation.mutate(finding);
+                                            }}
                                           >
                                             {rowPending === "apply" ? (
                                               <>
