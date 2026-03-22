@@ -94,3 +94,6 @@ frontend/yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Claude Code local config (machine-specific: hardcoded paths, worktree refs)
+.claude/
