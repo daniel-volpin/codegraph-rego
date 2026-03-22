@@ -222,8 +222,13 @@ class RemediationPromptTemplate:
                 sections.extend(["", cls.TRACE_PROFILE_BEGIN, json.dumps(enriched_trace, indent=2), cls.TRACE_PROFILE_END])
             
             det_available = prompt_context.get("deterministic_baseline_available")
-            if det_available:
-                shadow_summary = {"deterministic_baseline_available": True}
+            if det_available is not None:
+                shadow_summary = {
+                    "deterministic_baseline_available": bool(det_available),
+                }
+                diff_snippet = prompt_context.get("deterministic_diff_snippet")
+                if diff_snippet:
+                    shadow_summary["deterministic_diff_snippet"] = diff_snippet
                 sections.extend(["", cls.SHADOW_CONTEXT_BEGIN, json.dumps(shadow_summary, indent=2), cls.SHADOW_CONTEXT_END])
 
         errors_note = "\n".join(previous_errors or [])
