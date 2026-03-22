@@ -54,6 +54,7 @@ outputs/
 policy_evaluate.json
 policy_llm_enriched.json
 tmp_bundle.json
+playwright-snapshots/
 
 # Tooling / editor noise
 copilot-context/

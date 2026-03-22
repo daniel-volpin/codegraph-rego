@@ -6,6 +6,7 @@ from typing import Any
 from openai import OpenAI
 
 from codegraph.config import settings
+from codegraph.llm.schema.explanation import strip_structured_stop_tokens
 from codegraph.llm.transport.base import LLMRequest, LLMTransport, LLMUnavailableError
 
 
@@ -60,7 +61,7 @@ def _build_client(*, api_base: str | None, api_key: str | None) -> OpenAI:
     return OpenAI(**kwargs)
 
 
-def _extract_message_content(response: Any) -> str:
+def _extract_message_content(response: Any, *, allow_reasoning_content: bool = False) -> str:
     choices = getattr(response, "choices", None)
     if not choices:
         raise LLMUnavailableError("LLM returned an empty response.")
@@ -73,7 +74,16 @@ def _extract_message_content(response: Any) -> str:
             if isinstance(text, str):
                 parts.append(text)
         content = "".join(parts)
-    return (content or "").strip()
+    text = (content or "").strip()
+    if text:
+        return text
+    if allow_reasoning_content and message is not None:
+        reasoning_content = getattr(message, "reasoning_content", None)
+        if isinstance(reasoning_content, str):
+            salvaged = strip_structured_stop_tokens(reasoning_content)
+            if salvaged:
+                return salvaged
+    raise LLMUnavailableError("LLM returned an empty response.")
 
 
 def _extract_responses_output_text(response: Any) -> str:
@@ -162,7 +172,7 @@ class OpenAICompatibleTransport(LLMTransport):
                     params["extra_body"] = extra_body
 
                 response = client.chat.completions.create(**params)
-                return _extract_message_content(response)
+                return _extract_message_content(response, allow_reasoning_content=request.response_format is not None)
 
             params = {
                 "model": model,

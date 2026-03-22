@@ -12,7 +12,7 @@ const ActivityTray = () => {
   if (!activities.length) return null;
 
   return (
-    <aside className="w-80 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+    <aside className="w-full shrink-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-80">
       <h3 className="text-sm font-semibold text-slate-900">Activity</h3>
       {activities.map((activity) => (
         <div key={activity.key} className="rounded-lg border border-slate-200 p-3">

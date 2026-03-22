@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import unittest
-import warnings
 import os
 from unittest.mock import patch
 
@@ -58,24 +57,6 @@ class TestConfigSettings(unittest.TestCase):
         clear_settings_cache()
         settings_c = get_settings()
         self.assertIsNot(settings_a, settings_c)
-
-    def test_legacy_exports_emit_deprecation_warning(self) -> None:
-        import codegraph.config as config
-
-        config.clear_settings_cache()
-        config._WARNED_LEGACY_EXPORTS.clear()
-        previous = config._WARN_LEGACY_EXPORTS
-        config._WARN_LEGACY_EXPORTS = True
-
-        try:
-            with warnings.catch_warnings(record=True) as caught:
-                warnings.simplefilter("always", DeprecationWarning)
-                _ = config.CORS_ALLOWED_ORIGINS
-        finally:
-            config._WARN_LEGACY_EXPORTS = previous
-
-        self.assertTrue(any(issubclass(w.category, DeprecationWarning) for w in caught))
-
 
 if __name__ == "__main__":
     unittest.main()

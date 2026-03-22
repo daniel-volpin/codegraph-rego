@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from codegraph.llm.transport.base import LLMRequest
+from codegraph.llm.transport.base import LLMRequest, LLMUnavailableError
 from codegraph.llm.transport.openai_compatible_transport import OpenAICompatibleTransport
 
 
@@ -80,6 +80,71 @@ class TestOpenAICompatibleTransport(unittest.TestCase):
         kwargs = mock_client.responses.create.call_args.kwargs
         self.assertEqual(kwargs["model"], "gpt-4o-mini")
         self.assertEqual(kwargs["text"]["format"]["type"], "json_schema")
+
+    @patch("codegraph.llm.transport.openai_compatible_transport.OpenAI")
+    def test_lm_studio_structured_output_salvages_reasoning_content_when_content_empty(self, mock_openai_cls) -> None:
+        mock_client = mock_openai_cls.return_value
+        mock_client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        reasoning_content='{"citation":"src/Foo.java:10-18","why":"Weak hash is insecure.","fix":"Use SHA-256."}<|im_end|><|im_end|>',
+                    )
+                )
+            ]
+        )
+
+        request = LLMRequest(
+            messages=[{"role": "user", "content": "hello"}],
+            model="dummy-model",
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "policy_explanation",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"citation": {"type": "string"}},
+                        "required": ["citation"],
+                    },
+                },
+            },
+        )
+
+        with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_base", "http://localhost:1234/v1"):
+            with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_key", None):
+                transport = OpenAICompatibleTransport()
+                result = transport.generate(request)
+
+        self.assertEqual(result, '{"citation":"src/Foo.java:10-18","why":"Weak hash is insecure.","fix":"Use SHA-256."}')
+
+    @patch("codegraph.llm.transport.openai_compatible_transport.OpenAI")
+    def test_lm_studio_plain_text_does_not_salvage_reasoning_content(self, mock_openai_cls) -> None:
+        mock_client = mock_openai_cls.return_value
+        mock_client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        reasoning_content="Thinking Process:\n1. Analyze\n2. Answer",
+                    )
+                )
+            ]
+        )
+
+        request = LLMRequest(
+            messages=[{"role": "user", "content": "hello"}],
+            model="dummy-model",
+            raise_on_error=True,
+        )
+
+        with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_base", "http://localhost:1234/v1"):
+            with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_key", None):
+                transport = OpenAICompatibleTransport()
+                with self.assertRaisesRegex(LLMUnavailableError, "empty response"):
+                    transport.generate(request)
 
 
 if __name__ == "__main__":
