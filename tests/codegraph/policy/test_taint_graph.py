@@ -29,7 +29,7 @@ def _snapshot(sig: str, file_path: str, calls: list[str] | None = None) -> dict:
 class TestTaintPathFinderEmpty(unittest.TestCase):
     def test_no_callees_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            fp = _write_java(tmp, "A.java", "  String x = request.getParameter(\"p\");")
+            fp = _write_java(tmp, "A.java", '  String x = request.getParameter("p");')
             index = {"a.A.doGet()": _snapshot("a.A.doGet()", fp)}
             finder = TaintPathFinder(index)
             result = finder.find_reachable_sinks("a.A.doGet()")
@@ -91,16 +91,12 @@ class TestTaintPathFinderMultiHop(unittest.TestCase):
 
     def test_sql_sink_at_depth_two(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            ctrl_fp = _write_java(tmp, "Ctrl.java", "  helper(request.getParameter(\"x\"));")
+            ctrl_fp = _write_java(tmp, "Ctrl.java", '  helper(request.getParameter("x"));')
             mid_fp = _write_java(tmp, "Mid.java", "  sink(val);")
             sink_fp = _write_java(tmp, "Sink.java", "  stmt.executeQuery(sql);")
             index = {
-                "pkg.Ctrl.doPost()": _snapshot(
-                    "pkg.Ctrl.doPost()", ctrl_fp, calls=["pkg.Mid.process()"]
-                ),
-                "pkg.Mid.process()": _snapshot(
-                    "pkg.Mid.process()", mid_fp, calls=["pkg.Sink.run()"]
-                ),
+                "pkg.Ctrl.doPost()": _snapshot("pkg.Ctrl.doPost()", ctrl_fp, calls=["pkg.Mid.process()"]),
+                "pkg.Mid.process()": _snapshot("pkg.Mid.process()", mid_fp, calls=["pkg.Sink.run()"]),
                 "pkg.Sink.run()": _snapshot("pkg.Sink.run()", sink_fp),
             }
             finder = TaintPathFinder(index)
@@ -175,14 +171,10 @@ class TestTaintPathFinderCycles(unittest.TestCase):
 class TestTaintPathFinderPathSink(unittest.TestCase):
     def test_path_sink_detected_via_callee(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            ctrl_fp = _write_java(tmp, "Ctrl.java", "  String p = request.getParameter(\"p\");")
-            helper_fp = _write_java(
-                tmp, "PathHelper.java", "  new java.io.FileInputStream(userInput);"
-            )
+            ctrl_fp = _write_java(tmp, "Ctrl.java", '  String p = request.getParameter("p");')
+            helper_fp = _write_java(tmp, "PathHelper.java", "  new java.io.FileInputStream(userInput);")
             index = {
-                "pkg.Ctrl.doGet()": _snapshot(
-                    "pkg.Ctrl.doGet()", ctrl_fp, calls=["pkg.PathHelper.read()"]
-                ),
+                "pkg.Ctrl.doGet()": _snapshot("pkg.Ctrl.doGet()", ctrl_fp, calls=["pkg.PathHelper.read()"]),
                 "pkg.PathHelper.read()": _snapshot("pkg.PathHelper.read()", helper_fp),
             }
             finder = TaintPathFinder(index)

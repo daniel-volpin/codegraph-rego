@@ -212,8 +212,8 @@ class GenerationParsingTests(RemediationTestBase):
                     {
                         "start_line": 2,
                         "end_line": 2,
-                        "original_lines": ['    int size = 8;'],
-                        "replacement_lines": ['    int size = 16;'],
+                        "original_lines": ["    int size = 8;"],
+                        "replacement_lines": ["    int size = 16;"],
                     },
                 ],
                 "reason": "",
@@ -232,7 +232,7 @@ class GenerationParsingTests(RemediationTestBase):
             original_method_lines=original,
         )
         self.assertTrue(parsed["raw_response_valid"])
-        self.assertIn('int size = 16;', parsed["replacement_method_code"])
+        self.assertIn("int size = 16;", parsed["replacement_method_code"])
         self.assertIn('call("AES");', parsed["replacement_method_code"])
 
     def test_parse_structured_generation_accepts_adjacent_non_overlapping_edits(self):
@@ -243,8 +243,8 @@ class GenerationParsingTests(RemediationTestBase):
                     {
                         "start_line": 2,
                         "end_line": 2,
-                        "original_lines": ['    byte[] iv = random.generateSeed(8);'],
-                        "replacement_lines": ['    byte[] iv = random.generateSeed(12);'],
+                        "original_lines": ["    byte[] iv = random.generateSeed(8);"],
+                        "replacement_lines": ["    byte[] iv = random.generateSeed(12);"],
                     },
                     {
                         "start_line": 3,
@@ -275,7 +275,7 @@ class GenerationParsingTests(RemediationTestBase):
             original_method_lines=original,
         )
         self.assertTrue(parsed["raw_response_valid"])
-        self.assertIn('generateSeed(12)', parsed["replacement_method_code"])
+        self.assertIn("generateSeed(12)", parsed["replacement_method_code"])
         self.assertIn('Cipher.getInstance("AES/GCM/NoPadding")', parsed["replacement_method_code"])
 
     def test_parse_structured_generation_ignores_exact_noop_edits(self):
@@ -286,8 +286,8 @@ class GenerationParsingTests(RemediationTestBase):
                     {
                         "start_line": 2,
                         "end_line": 2,
-                        "original_lines": ['    int size = 8;'],
-                        "replacement_lines": ['    int size = 16;'],
+                        "original_lines": ["    int size = 8;"],
+                        "replacement_lines": ["    int size = 16;"],
                     },
                     {
                         "start_line": 3,
@@ -368,7 +368,7 @@ class GenerationParsingTests(RemediationTestBase):
             original_method_lines=original,
         )
         self.assertTrue(parsed["raw_response_valid"])
-        self.assertIn('int size = 16;', parsed["replacement_method_code"])
+        self.assertIn("int size = 16;", parsed["replacement_method_code"])
         self.assertIn('call("AES");', parsed["replacement_method_code"])
 
     def test_parse_structured_generation_rejects_ambiguous_local_exact_match(self):
@@ -379,8 +379,8 @@ class GenerationParsingTests(RemediationTestBase):
                     {
                         "start_line": 1,
                         "end_line": 1,
-                        "original_lines": ['    keep();'],
-                        "replacement_lines": ['    fix();'],
+                        "original_lines": ["    keep();"],
+                        "replacement_lines": ["    fix();"],
                     }
                 ],
                 "reason": "",
@@ -431,7 +431,9 @@ class GenerationParsingTests(RemediationTestBase):
                         "start_line": 24,
                         "end_line": 24,
                         "original_lines": ["        byte[] iv = random.generateSeed(8); // DES requires 8 byte keys"],
-                        "replacement_lines": ["        byte[] iv = random.generateSeed(12); // AES-GCM requires 12 byte IV"],
+                        "replacement_lines": [
+                            "        byte[] iv = random.generateSeed(12); // AES-GCM requires 12 byte IV"
+                        ],
                     },
                     {
                         "start_line": 31,
@@ -506,8 +508,8 @@ class GenerationParsingTests(RemediationTestBase):
         self.assertIn("GCMParameterSpec(128, iv)", parsed["replacement_method_code"])
 
     def test_parse_structured_generation_normalizes_embedded_newlines_in_edit_lines(self):
-        original = ['@Override', 'public void hash() {', '    System.out.println("old");', '}']
-        replacement = ['@Override\\npublic void hash() {', '    System.out.println("ok");', '}']
+        original = ["@Override", "public void hash() {", '    System.out.println("old");', "}"]
+        replacement = ["@Override\\npublic void hash() {", '    System.out.println("ok");', "}"]
         raw = _structured_apply_edits(
             original_method=original,
             replacement_method=replacement,
@@ -524,7 +526,7 @@ class GenerationParsingTests(RemediationTestBase):
         self.assertNotIn("\\n", parsed["replacement_method_code"])
 
     def test_parse_structured_generation_rejects_invalid_java_method_syntax(self):
-        original = ['public void hash() {', '    System.out.println("old");', '}']
+        original = ["public void hash() {", '    System.out.println("old");', "}"]
         raw = _structured_apply_edits(
             original_method=original,
             replacement_method='public void hash() { System.out.println("oops"; }',

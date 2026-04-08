@@ -62,7 +62,9 @@ class TestExplanationRuntime(unittest.TestCase):
 
             sample_lines = (output_dir / "explanation_samples.jsonl").read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(len(sample_lines), 1)
-            request_metric_lines = (output_dir / "request_metrics.jsonl").read_text(encoding="utf-8").strip().splitlines()
+            request_metric_lines = (
+                (output_dir / "request_metrics.jsonl").read_text(encoding="utf-8").strip().splitlines()
+            )
             self.assertEqual(len(request_metric_lines), 1)
 
             runtime.finalize(status="completed", metrics=metrics)

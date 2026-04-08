@@ -33,7 +33,9 @@ class TestOpenAICompatibleTransport(unittest.TestCase):
             },
         )
 
-        with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_base", "http://localhost:1234/v1"):
+        with patch(
+            "codegraph.llm.transport.openai_compatible_transport.settings.llm_api_base", "http://localhost:1234/v1"
+        ):
             with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_key", None):
                 transport = OpenAICompatibleTransport()
                 result = transport.generate(request)
@@ -113,12 +115,16 @@ class TestOpenAICompatibleTransport(unittest.TestCase):
             },
         )
 
-        with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_base", "http://localhost:1234/v1"):
+        with patch(
+            "codegraph.llm.transport.openai_compatible_transport.settings.llm_api_base", "http://localhost:1234/v1"
+        ):
             with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_key", None):
                 transport = OpenAICompatibleTransport()
                 result = transport.generate(request)
 
-        self.assertEqual(result, '{"citation":"src/Foo.java:10-18","why":"Weak hash is insecure.","fix":"Use SHA-256."}')
+        self.assertEqual(
+            result, '{"citation":"src/Foo.java:10-18","why":"Weak hash is insecure.","fix":"Use SHA-256."}'
+        )
 
     @patch("codegraph.llm.transport.openai_compatible_transport.OpenAI")
     def test_lm_studio_plain_text_does_not_salvage_reasoning_content(self, mock_openai_cls) -> None:
@@ -140,7 +146,9 @@ class TestOpenAICompatibleTransport(unittest.TestCase):
             raise_on_error=True,
         )
 
-        with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_base", "http://localhost:1234/v1"):
+        with patch(
+            "codegraph.llm.transport.openai_compatible_transport.settings.llm_api_base", "http://localhost:1234/v1"
+        ):
             with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_key", None):
                 transport = OpenAICompatibleTransport()
                 with self.assertRaisesRegex(LLMUnavailableError, "empty response"):

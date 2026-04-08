@@ -4,7 +4,11 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from codegraph.benchmark_registry import framework_demo_category_ids, framework_demo_rule_ids, policy_catalog_payload_from_registry
+from codegraph.benchmark_registry import (
+    framework_demo_category_ids,
+    framework_demo_rule_ids,
+    policy_catalog_payload_from_registry,
+)
 from tests._support import PROJECT_ROOT
 
 
@@ -34,9 +38,7 @@ class BenchmarkDemoPackTests(unittest.TestCase):
         api_payload = policy_catalog_payload_from_registry()
         self.assertEqual(api_payload["framework_demo_rule_ids"], framework_demo_rule_ids())
         demo_categories = {
-            entry["category_id"]
-            for entry in api_payload["benchmark_categories"]
-            if entry.get("framework_demo")
+            entry["category_id"] for entry in api_payload["benchmark_categories"] if entry.get("framework_demo")
         }
         self.assertEqual(demo_categories, set(framework_demo_category_ids()))
 
@@ -51,9 +53,7 @@ class BenchmarkDemoPackTests(unittest.TestCase):
 
             (benchmark_root / ".mvn").mkdir(parents=True)
             (benchmark_root / "src" / "main" / "resources").mkdir(parents=True)
-            (benchmark_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "helpers").mkdir(
-                parents=True
-            )
+            (benchmark_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "helpers").mkdir(parents=True)
             testcase_dir = benchmark_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "testcode"
             testcase_dir.mkdir(parents=True)
 
@@ -63,7 +63,9 @@ class BenchmarkDemoPackTests(unittest.TestCase):
                 "key=value\n",
                 encoding="utf-8",
             )
-            (benchmark_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "helpers" / "Thing.java").write_text(
+            (
+                benchmark_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "helpers" / "Thing.java"
+            ).write_text(
                 "package org.owasp.benchmark.helpers;\nclass Thing {}\n",
                 encoding="utf-8",
             )
@@ -86,7 +88,7 @@ class BenchmarkDemoPackTests(unittest.TestCase):
                                 "category_id": "rng-insecure",
                                 "rego_rule": "ISO-A.10-WEAK-RANDOM",
                                 "testcase_id": "BenchmarkTest00083",
-                            }
+                            },
                         ],
                     }
                 ),
@@ -106,15 +108,7 @@ class BenchmarkDemoPackTests(unittest.TestCase):
             self.assertTrue((pack_root / "src" / "main" / "resources" / "benchmark.properties").is_file())
             self.assertTrue(
                 (
-                    pack_root
-                    / "src"
-                    / "main"
-                    / "java"
-                    / "org"
-                    / "owasp"
-                    / "benchmark"
-                    / "helpers"
-                    / "Thing.java"
+                    pack_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "helpers" / "Thing.java"
                 ).is_file()
             )
             self.assertTrue(

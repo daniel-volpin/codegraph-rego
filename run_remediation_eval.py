@@ -193,7 +193,9 @@ def main() -> int:
                         case_span.set_attribute("violation_id", str(violation_id or ""))
                         case_span.set_attribute("target_method", str(target_method or ""))
                         case_span.set_attribute("category", str(violation.get("category") or ""))
-                        rule_id = violation.get("rule_id") or (violation.get("control_metadata") or {}).get("rule_id") or ""
+                        rule_id = (
+                            violation.get("rule_id") or (violation.get("control_metadata") or {}).get("rule_id") or ""
+                        )
                         case_span.set_attribute("rule_id", str(rule_id))
 
                         if not violation_id or not target_method or not file_path:

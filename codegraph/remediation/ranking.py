@@ -1,9 +1,10 @@
 """
 Shadow multi-candidate scoring and ranking framework.
 
-Scores and ranks remediation candidates (e.g. deterministic vs LLM) 
+Scores and ranks remediation candidates (e.g. deterministic vs LLM)
 based on normalized CandidateOutcomes using deterministic signals.
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,6 +20,7 @@ LOGGER = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
+
 
 class CandidateScore(BaseModel):
     """Score breakdown for a single candidate."""
@@ -57,6 +59,7 @@ class RankingSummary(BaseModel):
 # ---------------------------------------------------------------------------
 # Scoring Policy
 # ---------------------------------------------------------------------------
+
 
 def score_candidate(outcome: CandidateOutcome) -> CandidateScore:
     """Implement the deterministic point system for a candidate."""
@@ -103,6 +106,7 @@ def score_candidate(outcome: CandidateOutcome) -> CandidateScore:
 # Ranking Logic
 # ---------------------------------------------------------------------------
 
+
 def rank_candidates(
     violation_id: str,
     rule_id: str,
@@ -117,10 +121,7 @@ def rank_candidates(
     # Sort descending by primary score.
     # To tiebreak identical scores, we prefer 'deterministic' source explicitly.
     scored.sort(
-        key=lambda rc: (
-            rc.score.total_score,
-            1 if rc.score.source == "deterministic" else 0
-        ),
+        key=lambda rc: (rc.score.total_score, 1 if rc.score.source == "deterministic" else 0),
         reverse=True,
     )
 
@@ -134,7 +135,7 @@ def rank_candidates(
         )
 
     best = scored[0]
-    
+
     return RankingResult(
         violation_id=violation_id,
         rule_id=rule_id,
@@ -147,6 +148,7 @@ def rank_candidates(
 # ---------------------------------------------------------------------------
 # Aggregation
 # ---------------------------------------------------------------------------
+
 
 def build_ranking_summary(results: list[RankingResult]) -> RankingSummary:
     """Aggregate ranking recommendations."""

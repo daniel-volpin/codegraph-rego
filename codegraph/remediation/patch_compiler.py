@@ -36,6 +36,7 @@ class CompileError(Exception):
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def compile_repair_intent(
     intent: RepairIntent,
     source_lines: list[str],
@@ -93,6 +94,7 @@ def compile_repair_intent(
 # Per-operation compilers
 # ---------------------------------------------------------------------------
 
+
 def _compile_literal_replacement(
     op: LiteralReplacementOp,
     source_lines: list[str],
@@ -110,8 +112,7 @@ def _compile_literal_replacement(
         )
     if len(matching_indices) > 1:
         raise CompileError(
-            f"literal_replacement: target_value {target!r} found on {len(matching_indices)} lines, "
-            "ambiguous match"
+            f"literal_replacement: target_value {target!r} found on {len(matching_indices)} lines, ambiguous match"
         )
 
     line_idx = matching_indices[0]
@@ -153,13 +154,10 @@ def _compile_constructor_replacement(
             break
 
     if not matching_indices:
-        raise CompileError(
-            f"constructor_replacement: 'new {op.old_type}(' not found in source"
-        )
+        raise CompileError(f"constructor_replacement: 'new {op.old_type}(' not found in source")
     if len(matching_indices) > 1:
         raise CompileError(
-            f"constructor_replacement: 'new {op.old_type}(' found on {len(matching_indices)} lines, "
-            "ambiguous match"
+            f"constructor_replacement: 'new {op.old_type}(' found on {len(matching_indices)} lines, ambiguous match"
         )
 
     line_idx = matching_indices[0]
@@ -194,13 +192,10 @@ def _compile_method_call_replacement(
     matching_indices = [i for i, line in enumerate(source_lines) if pattern.search(line)]
 
     if not matching_indices:
-        raise CompileError(
-            f"method_call_replacement: pattern {call!r} not found in source"
-        )
+        raise CompileError(f"method_call_replacement: pattern {call!r} not found in source")
     if len(matching_indices) > 1:
         raise CompileError(
-            f"method_call_replacement: pattern {call!r} found on {len(matching_indices)} lines, "
-            "ambiguous match"
+            f"method_call_replacement: pattern {call!r} found on {len(matching_indices)} lines, ambiguous match"
         )
 
     line_idx = matching_indices[0]
@@ -220,6 +215,7 @@ def _compile_method_call_replacement(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _find_literal_lines(
     target_value: str,
@@ -254,7 +250,7 @@ def _case_insensitive_literal_replace(
     idx = line.lower().find(target.lower())
     if idx == -1:
         return line
-    return line[:idx] + replacement + line[idx + len(target):]
+    return line[:idx] + replacement + line[idx + len(target) :]
 
 
 def _call_pattern_to_regex(call_pattern: str) -> str:

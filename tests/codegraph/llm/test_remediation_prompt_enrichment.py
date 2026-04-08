@@ -21,7 +21,7 @@ def test_remediation_prompt_trace_enrichment_enabled():
             },
             "deterministic_baseline_available": True,
             "deterministic_diff_snippet": "--- before\n+++ after\n+ safeCipher()",
-        }
+        },
     }
 
     with patch("codegraph.llm.tasks.remediation.settings") as mock_settings:
@@ -51,7 +51,7 @@ def test_remediation_prompt_trace_enrichment_disabled():
         "prompt_context": {
             "normalized_trace_profile": {"is_vulnerable": True},
             "deterministic_baseline_available": True,
-        }
+        },
     }
 
     with patch("codegraph.llm.tasks.remediation.settings") as mock_settings:

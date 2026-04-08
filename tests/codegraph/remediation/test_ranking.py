@@ -82,7 +82,9 @@ def test_score_error():
 
 
 def test_candidate_ordering_success_vs_refusal():
-    succ = CandidateOutcome(source="deterministic", produced_edits=True, refused=False, edit_count=1, policy_resolved=True)
+    succ = CandidateOutcome(
+        source="deterministic", produced_edits=True, refused=False, edit_count=1, policy_resolved=True
+    )
     ref = CandidateOutcome(source="llm", produced_edits=False, refused=True)
 
     result = rank_candidates("case1", "rule1", [succ, ref])
@@ -112,7 +114,7 @@ def test_candidate_ordering_refusal_vs_policy_failure():
         compilation_success=True,
         policy_resolved=False,
     )
-    
+
     # Refusal (0) beats policy fail (-10 - 2 = -12)
     result = rank_candidates("case_x", "rule1", [ref, pol_fail])
     assert result.recommended_source == "deterministic"
@@ -122,7 +124,9 @@ def test_candidate_ordering_refusal_vs_policy_failure():
 
 def test_minimality_preference():
     big = CandidateOutcome(source="llm", produced_edits=True, refused=False, edit_count=10, policy_resolved=True)
-    small = CandidateOutcome(source="deterministic", produced_edits=True, refused=False, edit_count=2, policy_resolved=True)
+    small = CandidateOutcome(
+        source="deterministic", produced_edits=True, refused=False, edit_count=2, policy_resolved=True
+    )
 
     result = rank_candidates("case3", "rule1", [big, small])
     assert result.recommended_source == "deterministic"
@@ -141,16 +145,22 @@ def test_tiebreaker_preference_for_deterministic():
 
 def test_build_ranking_summary():
     r1 = rank_candidates(
-        "case1", "r1",
-        [CandidateOutcome(source="deterministic", produced_edits=True, refused=False, edit_count=1),
-         CandidateOutcome(source="llm", produced_edits=False, refused=True)],
+        "case1",
+        "r1",
+        [
+            CandidateOutcome(source="deterministic", produced_edits=True, refused=False, edit_count=1),
+            CandidateOutcome(source="llm", produced_edits=False, refused=True),
+        ],
     )
     r2 = rank_candidates(
-        "case2", "r1",
-        [CandidateOutcome(source="deterministic", produced_edits=False, refused=False, error="fail"),
-         CandidateOutcome(source="llm", produced_edits=True, refused=False, edit_count=3)],
+        "case2",
+        "r1",
+        [
+            CandidateOutcome(source="deterministic", produced_edits=False, refused=False, error="fail"),
+            CandidateOutcome(source="llm", produced_edits=True, refused=False, edit_count=3),
+        ],
     )
-    
+
     summary = build_ranking_summary([r1, r2])
     assert summary.total_cases == 2
     assert summary.recommended_counts["deterministic"] == 1
@@ -161,6 +171,7 @@ def test_build_ranking_summary():
 
 def test_config_flag_default_behavior():
     from codegraph.config import Settings
+
     settings = Settings(_env_file=None)
     assert settings.remediation_ranking_enabled is False
     assert settings.remediation_ranking_mode == "off"

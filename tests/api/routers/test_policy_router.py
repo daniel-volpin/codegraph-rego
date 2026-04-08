@@ -46,7 +46,10 @@ class TestPolicyRouter(unittest.IsolatedAsyncioTestCase):
         )
 
     @patch("api.routers.policy.generate_policy_explanation", return_value="Fallback plain explanation")
-    @patch("api.routers.policy.generate_policy_explanation_structured", side_effect=ValueError("invalid structured explanation payload"))
+    @patch(
+        "api.routers.policy.generate_policy_explanation_structured",
+        side_effect=ValueError("invalid structured explanation payload"),
+    )
     async def test_policy_explain_one_falls_back_to_plain_explanation(
         self,
         _mock_explain_structured,

@@ -34,7 +34,7 @@ from codegraph.policy.source_analysis_core import (
 
 
 SQL_BUILDER_APPEND_RE = re.compile(
-    r'([A-Za-z_][A-Za-z0-9_]*)\.append\(\s*([^;]+?)\s*\)\s*;',
+    r"([A-Za-z_][A-Za-z0-9_]*)\.append\(\s*([^;]+?)\s*\)\s*;",
     re.DOTALL,
 )
 
@@ -112,7 +112,9 @@ class PathSafetyAnalyzer:
             sink_vars=sink_vars,
             assignment_analyzer=self._assignment_analyzer,
         )
-        path_sink_uses_safe_resource_helper = any(pattern.search(source_code) for pattern in PATH_SAFE_RESOURCE_PATTERNS)
+        path_sink_uses_safe_resource_helper = any(
+            pattern.search(source_code) for pattern in PATH_SAFE_RESOURCE_PATTERNS
+        )
         path_sink_uses_tainted_input = self._sink_uses_tainted_input(source_code, state, sink_vars)
         compatibility_path_signal = self._compatibility_path_signal(source_code, sink_vars)
         path_traversal_detected = (
@@ -148,7 +150,9 @@ class PathSafetyAnalyzer:
         if any(pattern.search(source_code) for pattern in DIRECT_PATH_UNTRUSTED_PATTERNS):
             return True
         has_dynamic_sink_shape = any(pattern.search(source_code) for pattern in PATH_DYNAMIC_ARGUMENT_PATTERNS)
-        has_dynamic_path_construction = any(pattern.search(source_code) for pattern in PATH_DYNAMIC_CONSTRUCTION_PATTERNS)
+        has_dynamic_path_construction = any(
+            pattern.search(source_code) for pattern in PATH_DYNAMIC_CONSTRUCTION_PATTERNS
+        )
         return bool(sink_vars) and (has_dynamic_sink_shape or has_dynamic_path_construction)
 
 
@@ -168,8 +172,8 @@ class XPathSafetyAnalyzer:
         xpath_query_uses_tainted_input = self._sink_uses_tainted_input(source_code, state, sink_vars)
         compatibility_xpath_signal = self._compatibility_xpath_signal(source_code)
         xpath_injection_detected = (
-            (xpath_query_uses_tainted_input or compatibility_xpath_signal) and not xpath_query_uses_safe_constant
-        )
+            xpath_query_uses_tainted_input or compatibility_xpath_signal
+        ) and not xpath_query_uses_safe_constant
         return XPathAnalysis(
             xpath_query_uses_tainted_input=xpath_query_uses_tainted_input,
             xpath_query_uses_safe_constant=xpath_query_uses_safe_constant,
@@ -212,8 +216,8 @@ class LDAPSafetyAnalyzer:
         ldap_filter_uses_tainted_input = self._sink_uses_tainted_input(source_code, state, sink_vars)
         compatibility_ldap_signal = self._compatibility_ldap_signal(source_code, sink_vars)
         ldap_injection_detected = (
-            (ldap_filter_uses_tainted_input or compatibility_ldap_signal) and not ldap_filter_uses_safe_constant
-        )
+            ldap_filter_uses_tainted_input or compatibility_ldap_signal
+        ) and not ldap_filter_uses_safe_constant
         return LDAPAnalysis(
             ldap_filter_uses_tainted_input=ldap_filter_uses_tainted_input,
             ldap_filter_uses_safe_constant=ldap_filter_uses_safe_constant,

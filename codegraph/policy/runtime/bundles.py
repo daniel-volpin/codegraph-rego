@@ -292,11 +292,7 @@ def build_policy_input(
     hybrid_search = load_hybrid_search()
 
     workers = min(32, (os.cpu_count() or 4) + 4)
-    method_index = {
-        snapshot["signature"]: snapshot
-        for snapshot in methods
-        if snapshot.get("signature")
-    }
+    method_index = {snapshot["signature"]: snapshot for snapshot in methods if snapshot.get("signature")}
     taint_finder = TaintPathFinder(method_index)
     bundles: List[Dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
     with ThreadPoolExecutor(max_workers=workers) as pool:

@@ -5,23 +5,13 @@ from codegraph.policy.helper_summaries import HelperMethodAnalyzer
 
 class TestHelperMethodAnalyzer(unittest.TestCase):
     def test_marks_safe_constant_return(self) -> None:
-        source = (
-            "private String doSomething(String param) {"
-            'String bar = "safe!";'
-            "return bar;"
-            "}"
-        )
+        source = 'private String doSomething(String param) {String bar = "safe!";return bar;}'
         summary = HelperMethodAnalyzer().summarize(source)
         self.assertTrue(summary.returns_constant_string)
         self.assertFalse(summary.propagates_tainted_input)
 
     def test_marks_tainted_param_return(self) -> None:
-        source = (
-            "private String doSomething(String param) {"
-            "String bar = param;"
-            "return bar;"
-            "}"
-        )
+        source = "private String doSomething(String param) {String bar = param;return bar;}"
         summary = HelperMethodAnalyzer().summarize(source)
         self.assertFalse(summary.returns_constant_string)
         self.assertTrue(summary.propagates_tainted_input)

@@ -74,14 +74,18 @@ class ExplanationRuntime:
         self.total_target_violations = total_target_violations
         self.write_live_artifacts(status="running", stage="explanation", metrics=metrics)
 
-    def start_category(self, category_id: str, category_label: str, category_total: int, metrics: Dict[str, Any]) -> None:
+    def start_category(
+        self, category_id: str, category_label: str, category_total: int, metrics: Dict[str, Any]
+    ) -> None:
         self.current_category_id = category_id
         self.current_category_label = category_label
         self.current_category_done = 0
         self.current_category_total = category_total
         self.write_live_artifacts(status="running", stage="explanation", metrics=metrics)
 
-    def record_violation_result(self, with_context_hit: bool, without_context_hit: bool, metrics: Dict[str, Any]) -> None:
+    def record_violation_result(
+        self, with_context_hit: bool, without_context_hit: bool, metrics: Dict[str, Any]
+    ) -> None:
         self.total_count += 1
         self.current_category_done += 1
         if with_context_hit:
@@ -170,7 +174,9 @@ class ExplanationRuntime:
                     "with_context": self.total_with,
                     "without_context": self.total_without,
                     "rate_with_context": round((self.total_with / self.total_count) if self.total_count else 0.0, 4),
-                    "rate_without_context": round((self.total_without / self.total_count) if self.total_count else 0.0, 4),
+                    "rate_without_context": round(
+                        (self.total_without / self.total_count) if self.total_count else 0.0, 4
+                    ),
                 },
             },
             "sample_count": self.sample_count,

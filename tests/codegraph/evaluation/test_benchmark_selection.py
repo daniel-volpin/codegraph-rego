@@ -116,15 +116,7 @@ class TestBenchmarkSelectionCoverage(unittest.TestCase):
             self.assertTrue((dest_root / "src" / "main" / "resources" / "benchmark.properties").is_file())
             self.assertTrue(
                 (
-                    dest_root
-                    / "src"
-                    / "main"
-                    / "java"
-                    / "org"
-                    / "owasp"
-                    / "benchmark"
-                    / "helpers"
-                    / "Utils.java"
+                    dest_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "helpers" / "Utils.java"
                 ).is_file()
             )
             self.assertTrue(

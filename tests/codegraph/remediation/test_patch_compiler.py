@@ -37,6 +37,7 @@ def _make_intent(
 # Literal replacement
 # ---------------------------------------------------------------------------
 
+
 class TestLiteralReplacement(unittest.TestCase):
     """Compile literal replacement operations."""
 
@@ -47,13 +48,15 @@ class TestLiteralReplacement(unittest.TestCase):
             "    return md.digest(data);",
             "}",
         ]
-        intent = _make_intent(operations=[
-            LiteralReplacementOp(
-                target_value='"MD5"',
-                replacement_value='"SHA-256"',
-                qualifier_call="MessageDigest.getInstance",
-            ),
-        ])
+        intent = _make_intent(
+            operations=[
+                LiteralReplacementOp(
+                    target_value='"MD5"',
+                    replacement_value='"SHA-256"',
+                    qualifier_call="MessageDigest.getInstance",
+                ),
+            ]
+        )
         edits = compile_repair_intent(intent, source)
         self.assertEqual(len(edits), 1)
         edit = edits[0]
@@ -70,13 +73,15 @@ class TestLiteralReplacement(unittest.TestCase):
             '    MessageDigest.getInstance("md5");',
             "}",
         ]
-        intent = _make_intent(operations=[
-            LiteralReplacementOp(
-                target_value='"MD5"',
-                replacement_value='"SHA-256"',
-                qualifier_call="MessageDigest.getInstance",
-            ),
-        ])
+        intent = _make_intent(
+            operations=[
+                LiteralReplacementOp(
+                    target_value='"MD5"',
+                    replacement_value='"SHA-256"',
+                    qualifier_call="MessageDigest.getInstance",
+                ),
+            ]
+        )
         edits = compile_repair_intent(intent, source)
         self.assertEqual(len(edits), 1)
         self.assertIn('"SHA-256"', edits[0]["replacement_lines"][0])
@@ -89,13 +94,15 @@ class TestLiteralReplacement(unittest.TestCase):
             '    MessageDigest md = MessageDigest.getInstance("MD5");',
             "}",
         ]
-        intent = _make_intent(operations=[
-            LiteralReplacementOp(
-                target_value='"MD5"',
-                replacement_value='"SHA-256"',
-                qualifier_call="MessageDigest.getInstance",
-            ),
-        ])
+        intent = _make_intent(
+            operations=[
+                LiteralReplacementOp(
+                    target_value='"MD5"',
+                    replacement_value='"SHA-256"',
+                    qualifier_call="MessageDigest.getInstance",
+                ),
+            ]
+        )
         edits = compile_repair_intent(intent, source)
         self.assertEqual(len(edits), 1)
         self.assertEqual(edits[0]["start_line"], 3)
@@ -106,12 +113,14 @@ class TestLiteralReplacement(unittest.TestCase):
             '    String algo = "MD5";',
             "}",
         ]
-        intent = _make_intent(operations=[
-            LiteralReplacementOp(
-                target_value='"MD5"',
-                replacement_value='"SHA-256"',
-            ),
-        ])
+        intent = _make_intent(
+            operations=[
+                LiteralReplacementOp(
+                    target_value='"MD5"',
+                    replacement_value='"SHA-256"',
+                ),
+            ]
+        )
         edits = compile_repair_intent(intent, source)
         self.assertEqual(len(edits), 1)
         self.assertEqual(edits[0]["start_line"], 2)
@@ -122,13 +131,15 @@ class TestLiteralReplacement(unittest.TestCase):
             '    MessageDigest.getInstance("SHA-256");',
             "}",
         ]
-        intent = _make_intent(operations=[
-            LiteralReplacementOp(
-                target_value='"MD5"',
-                replacement_value='"SHA-256"',
-                qualifier_call="MessageDigest.getInstance",
-            ),
-        ])
+        intent = _make_intent(
+            operations=[
+                LiteralReplacementOp(
+                    target_value='"MD5"',
+                    replacement_value='"SHA-256"',
+                    qualifier_call="MessageDigest.getInstance",
+                ),
+            ]
+        )
         with self.assertRaises(CompileError):
             compile_repair_intent(intent, source)
 
@@ -139,13 +150,15 @@ class TestLiteralReplacement(unittest.TestCase):
             '    MessageDigest.getInstance("MD5");',
             "}",
         ]
-        intent = _make_intent(operations=[
-            LiteralReplacementOp(
-                target_value='"MD5"',
-                replacement_value='"SHA-256"',
-                qualifier_call="MessageDigest.getInstance",
-            ),
-        ])
+        intent = _make_intent(
+            operations=[
+                LiteralReplacementOp(
+                    target_value='"MD5"',
+                    replacement_value='"SHA-256"',
+                    qualifier_call="MessageDigest.getInstance",
+                ),
+            ]
+        )
         with self.assertRaises(CompileError):
             compile_repair_intent(intent, source)
 
@@ -155,13 +168,15 @@ class TestLiteralReplacement(unittest.TestCase):
             '    Cipher c = Cipher.getInstance("DES/CBC/PKCS5Padding");',
             "}",
         ]
-        intent = _make_intent(operations=[
-            LiteralReplacementOp(
-                target_value='"DES/CBC/PKCS5Padding"',
-                replacement_value='"AES/GCM/NoPadding"',
-                qualifier_call="Cipher.getInstance",
-            ),
-        ])
+        intent = _make_intent(
+            operations=[
+                LiteralReplacementOp(
+                    target_value='"DES/CBC/PKCS5Padding"',
+                    replacement_value='"AES/GCM/NoPadding"',
+                    qualifier_call="Cipher.getInstance",
+                ),
+            ]
+        )
         edits = compile_repair_intent(intent, source)
         self.assertEqual(len(edits), 1)
         self.assertIn('"AES/GCM/NoPadding"', edits[0]["replacement_lines"][0])
@@ -170,6 +185,7 @@ class TestLiteralReplacement(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Constructor replacement
 # ---------------------------------------------------------------------------
+
 
 class TestConstructorReplacement(unittest.TestCase):
     """Compile constructor replacement operations."""
@@ -256,6 +272,7 @@ class TestConstructorReplacement(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Method call replacement
 # ---------------------------------------------------------------------------
+
 
 class TestMethodCallReplacement(unittest.TestCase):
     """Compile method call replacement operations."""
@@ -360,6 +377,7 @@ class TestMethodCallReplacement(unittest.TestCase):
 # Import adjustment
 # ---------------------------------------------------------------------------
 
+
 class TestImportAdjustment(unittest.TestCase):
     """Import adjustments are informational-only in v1."""
 
@@ -369,9 +387,11 @@ class TestImportAdjustment(unittest.TestCase):
             '    MessageDigest.getInstance("MD5");',
             "}",
         ]
-        intent = _make_intent(operations=[
-            ImportAdjustmentOp(add_import="java.security.MessageDigest"),
-        ])
+        intent = _make_intent(
+            operations=[
+                ImportAdjustmentOp(add_import="java.security.MessageDigest"),
+            ]
+        )
         edits = compile_repair_intent(intent, source)
         self.assertEqual(edits, [])
 
@@ -379,6 +399,7 @@ class TestImportAdjustment(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestCompilerEdgeCases(unittest.TestCase):
     """Edge cases and safe-failure behavior."""
@@ -406,18 +427,20 @@ class TestCompilerEdgeCases(unittest.TestCase):
             '    SecretKey key = KeyGenerator.getInstance("DES").generateKey();',
             "}",
         ]
-        intent = _make_intent(operations=[
-            LiteralReplacementOp(
-                target_value='"DES/CBC/PKCS5Padding"',
-                replacement_value='"AES/GCM/NoPadding"',
-                qualifier_call="Cipher.getInstance",
-            ),
-            LiteralReplacementOp(
-                target_value='"DES"',
-                replacement_value='"AES"',
-                qualifier_call="KeyGenerator.getInstance",
-            ),
-        ])
+        intent = _make_intent(
+            operations=[
+                LiteralReplacementOp(
+                    target_value='"DES/CBC/PKCS5Padding"',
+                    replacement_value='"AES/GCM/NoPadding"',
+                    qualifier_call="Cipher.getInstance",
+                ),
+                LiteralReplacementOp(
+                    target_value='"DES"',
+                    replacement_value='"AES"',
+                    qualifier_call="KeyGenerator.getInstance",
+                ),
+            ]
+        )
         edits = compile_repair_intent(intent, source)
         self.assertEqual(len(edits), 2)
         self.assertIn('"AES/GCM/NoPadding"', edits[0]["replacement_lines"][0])
@@ -430,13 +453,15 @@ class TestCompilerEdgeCases(unittest.TestCase):
             '    MessageDigest.getInstance("MD5");',
             "}",
         ]
-        intent = _make_intent(operations=[
-            LiteralReplacementOp(
-                target_value='"MD5"',
-                replacement_value='"SHA-256"',
-                qualifier_call="MessageDigest.getInstance",
-            ),
-        ])
+        intent = _make_intent(
+            operations=[
+                LiteralReplacementOp(
+                    target_value='"MD5"',
+                    replacement_value='"SHA-256"',
+                    qualifier_call="MessageDigest.getInstance",
+                ),
+            ]
+        )
         edits = compile_repair_intent(intent, source)
         edit = edits[0]
         required_keys = {"start_line", "end_line", "original_lines", "replacement_lines"}

@@ -222,9 +222,7 @@ def apply_method_edits(
             return candidate_start, candidate_start + expected_length - 1
         raise ValueError("edit_original_mismatch")
 
-    effective_edits = [
-        edit for edit in edits if list(edit["original_lines"]) != list(edit["replacement_lines"])
-    ]
+    effective_edits = [edit for edit in edits if list(edit["original_lines"]) != list(edit["replacement_lines"])]
     if not effective_edits:
         raise ValueError("empty_edits")
 

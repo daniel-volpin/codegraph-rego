@@ -38,7 +38,7 @@ def test_build_dossier_extracts_trace_from_llm_outcome():
         predicate_trace={
             "before_trace_normalized": before_trace.model_dump(),
             "after_trace_normalized": after_trace.model_dump(),
-        }
+        },
     )
 
     ranking = RankingResult(
@@ -49,16 +49,12 @@ def test_build_dossier_extracts_trace_from_llm_outcome():
         candidate_scores={"llm": 100, "deterministic": 0},
         candidates=[
             RankedCandidate(outcome=det_outcome, score=score_candidate(det_outcome)),
-            RankedCandidate(outcome=llm_outcome, score=score_candidate(llm_outcome))
-        ]
+            RankedCandidate(outcome=llm_outcome, score=score_candidate(llm_outcome)),
+        ],
     )
 
     dossier = build_dossier(
-        case_id="case-001",
-        rule_id="CWE-328",
-        det_outcome=det_outcome,
-        llm_outcome=llm_outcome,
-        ranking=ranking
+        case_id="case-001", rule_id="CWE-328", det_outcome=det_outcome, llm_outcome=llm_outcome, ranking=ranking
     )
 
     assert dossier.case_id == "case-001"
@@ -75,9 +71,7 @@ def test_build_dossier_extracts_trace_from_llm_outcome():
 
 def test_build_dossier_handles_missing_traces_safely():
     # Setup missing inputs
-    det_outcome = CandidateOutcome(
-        source="deterministic", produced_edits=False, refused=True, error=None, edit_count=0
-    )
+    det_outcome = CandidateOutcome(source="deterministic", produced_edits=False, refused=True, error=None, edit_count=0)
     llm_outcome = CandidateOutcome(
         source="llm", produced_edits=False, refused=True, error=None, edit_count=0, predicate_trace=None
     )
@@ -89,16 +83,12 @@ def test_build_dossier_handles_missing_traces_safely():
         candidate_scores={"llm": 0, "deterministic": 0},
         candidates=[
             RankedCandidate(outcome=det_outcome, score=score_candidate(det_outcome)),
-            RankedCandidate(outcome=llm_outcome, score=score_candidate(llm_outcome))
-        ]
+            RankedCandidate(outcome=llm_outcome, score=score_candidate(llm_outcome)),
+        ],
     )
 
     dossier = build_dossier(
-        case_id="case-002",
-        rule_id="unknown_rule",
-        det_outcome=det_outcome,
-        llm_outcome=llm_outcome,
-        ranking=ranking
+        case_id="case-002", rule_id="unknown_rule", det_outcome=det_outcome, llm_outcome=llm_outcome, ranking=ranking
     )
 
     assert dossier.case_id == "case-002"

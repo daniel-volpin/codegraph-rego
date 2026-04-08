@@ -141,7 +141,7 @@ def evaluate_policies(
 
     opa_runs = len(bundles)
     for bundle, opa_result in zip(bundles, opa_results):
-        for violation in (opa_result or []):
+        for violation in opa_result or []:
             normalized = _normalize_violation_payload(violation)
             if normalized is None:
                 continue

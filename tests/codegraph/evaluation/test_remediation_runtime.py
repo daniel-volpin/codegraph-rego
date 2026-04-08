@@ -31,9 +31,7 @@ class TestRemediationRuntime(unittest.TestCase):
                 "Loaded remediation context",
                 selected_testcases=2,
             )
-            progress_selection = json.loads(
-                (output_dir / "progress.json").read_text(encoding="utf-8")
-            )
+            progress_selection = json.loads((output_dir / "progress.json").read_text(encoding="utf-8"))
             self.assertEqual(progress_selection["stage"], "selection")
             self.assertEqual(progress_selection["selected_testcases"], 2)
             self.assertEqual(progress_selection["mode"], "dry_run")
@@ -47,19 +45,14 @@ class TestRemediationRuntime(unittest.TestCase):
                 "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00001.java",
                 "category": "Hash (CWE-328)",
                 "evidence": {
-                    "file_path": (
-                        "src/main/java/org/owasp/benchmark/testcode/"
-                        "BenchmarkTest00001.java"
-                    ),
+                    "file_path": ("src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00001.java"),
                 },
             }
             case_id_ok, case_dir_ok = runtime.prepare_case(violation_ok)
             apply_result_ok = {
                 "status": "OK",
                 "error": None,
-                "updated_source_code": (
-                    'MessageDigest digest = MessageDigest.getInstance("SHA-256");'
-                ),
+                "updated_source_code": ('MessageDigest digest = MessageDigest.getInstance("SHA-256");'),
                 "confidence": {
                     "score": 0.91,
                     "band": "apply",
@@ -79,9 +72,7 @@ class TestRemediationRuntime(unittest.TestCase):
             )
             runtime.record_case(apply_result=apply_result_ok, result=result_ok)
 
-            progress_running = json.loads(
-                (output_dir / "progress.json").read_text(encoding="utf-8")
-            )
+            progress_running = json.loads((output_dir / "progress.json").read_text(encoding="utf-8"))
             self.assertEqual(progress_running["status"], "running")
             self.assertEqual(progress_running["processed_cases"], 1)
             self.assertEqual(progress_running["total_cases"], 2)
@@ -107,10 +98,7 @@ class TestRemediationRuntime(unittest.TestCase):
                 "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00002.java",
                 "category": "Crypto (CWE-327)",
                 "evidence": {
-                    "file_path": (
-                        "src/main/java/org/owasp/benchmark/testcode/"
-                        "BenchmarkTest00002.java"
-                    ),
+                    "file_path": ("src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00002.java"),
                 },
             }
             case_id_no_fix, _ = runtime.prepare_case(violation_no_fix)
@@ -149,12 +137,7 @@ class TestRemediationRuntime(unittest.TestCase):
             self.assertEqual(progress_two["final_status_counts"]["OK"], 1)
             self.assertEqual(progress_two["final_status_counts"]["NO_FIX"], 1)
 
-            result_lines = (
-                (output_dir / "results.jsonl")
-                .read_text(encoding="utf-8")
-                .strip()
-                .splitlines()
-            )
+            result_lines = (output_dir / "results.jsonl").read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(len(result_lines), 2)
             self.assertEqual(json.loads(result_lines[0])["case_id"], case_id_ok)
             self.assertEqual(json.loads(result_lines[1])["case_id"], case_id_no_fix)
@@ -173,15 +156,11 @@ class TestRemediationRuntime(unittest.TestCase):
             write_final_artifacts(output_dir, metrics, table_format="md")
             runtime.finalize(status="completed")
 
-            progress_completed = json.loads(
-                (output_dir / "progress.json").read_text(encoding="utf-8")
-            )
+            progress_completed = json.loads((output_dir / "progress.json").read_text(encoding="utf-8"))
             self.assertEqual(progress_completed["status"], "completed")
             self.assertEqual(progress_completed["stage"], "finalization")
 
-            remediation_metrics = json.loads(
-                (output_dir / "remediation_metrics.json").read_text(encoding="utf-8")
-            )
+            remediation_metrics = json.loads((output_dir / "remediation_metrics.json").read_text(encoding="utf-8"))
             self.assertEqual(remediation_metrics["attempted"], 2)
             self.assertEqual(remediation_metrics["final_status_counts"]["OK"], 1)
             self.assertEqual(remediation_metrics["final_status_counts"]["NO_FIX"], 1)

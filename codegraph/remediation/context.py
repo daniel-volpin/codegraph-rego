@@ -194,9 +194,7 @@ def build_virtual_graph_context(source_code: str, base_graph: dict[str, Any] | N
 
     method: MethodDeclaration = methods[0]
     ann_names = [
-        (ann.name or "").split(".")[-1].lstrip("@")
-        for ann in (method.annotations or [])
-        if getattr(ann, "name", None)
+        (ann.name or "").split(".")[-1].lstrip("@") for ann in (method.annotations or []) if getattr(ann, "name", None)
     ]
     context["annotations"] = sorted({*context["annotations"], *ann_names})
 

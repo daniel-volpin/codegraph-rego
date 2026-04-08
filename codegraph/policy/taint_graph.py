@@ -38,7 +38,7 @@ _SINK_SOURCE_PATTERNS: Dict[str, tuple[re.Pattern[str], ...]] = {
     "sql": SQL_EXECUTE_CALL_PATTERNS,
     "command": CMDI_PATTERNS,
     "path": PATH_TRAVERSAL_PATTERNS,
-    "ldap": (LDAP_PATTERNS[2],),    # .search(
+    "ldap": (LDAP_PATTERNS[2],),  # .search(
     "xpath": (XPATH_PATTERNS[1],),  # .evaluate(
 }
 

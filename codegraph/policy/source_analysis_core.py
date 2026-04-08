@@ -63,7 +63,9 @@ DIRECT_PATH_UNTRUSTED_PATTERNS = (
         re.IGNORECASE,
     ),
     re.compile(r"Paths\s*\.\s*get\s*\([^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(", re.IGNORECASE),
-    re.compile(r"\b(?:file|path|uri)\w*\s*=\s*[^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(", re.IGNORECASE),
+    re.compile(
+        r"\b(?:file|path|uri)\w*\s*=\s*[^;\n]*(?:getParameter|getHeader|getQueryString|getCookies)\s*\(", re.IGNORECASE
+    ),
 )
 PATH_SAFE_RESOURCE_PATTERNS = (
     re.compile(r"Utils\s*\.\s*getFileFromClasspath\s*\(", re.IGNORECASE),
@@ -77,29 +79,29 @@ CMDI_PATTERNS = (
     re.compile(r"\.command\s*\(", re.IGNORECASE),
 )
 COMMAND_VARIABLE_EXEC_PATTERN = re.compile(r"\.exec\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE)
-COMMAND_LIST_ADD_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)\s*;', re.DOTALL)
+COMMAND_LIST_ADD_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)\s*;", re.DOTALL)
 COMMAND_ARRAY_ASSIGNMENT_RE = re.compile(
-    r'(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>\[\]]*\[\]\s*)?\{(.*?)\}\s*;',
+    r"(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>\[\]]*\[\]\s*)?\{(.*?)\}\s*;",
     re.DOTALL,
 )
-COMMAND_APPEND_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.append\(\s*([^;]+?)\s*\)\s*;', re.DOTALL)
+COMMAND_APPEND_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.append\(\s*([^;]+?)\s*\)\s*;", re.DOTALL)
 COMMAND_EXEC_MULTI_ARG_RE = re.compile(
-    r'\.exec\s*\(\s*(?P<first>[^,]+?)\s*,\s*(?P<second>[A-Za-z_][A-Za-z0-9_]*)(?:\s*,\s*[^)]*)?\)',
+    r"\.exec\s*\(\s*(?P<first>[^,]+?)\s*,\s*(?P<second>[A-Za-z_][A-Za-z0-9_]*)(?:\s*,\s*[^)]*)?\)",
     re.DOTALL | re.IGNORECASE,
 )
 COMMAND_EXEC_SINGLE_ARG_RE = re.compile(
-    r'\.exec\s*\(\s*(?P<first>(?:[^()]|\([^)]*\))+?)\s*\)',
+    r"\.exec\s*\(\s*(?P<first>(?:[^()]|\([^)]*\))+?)\s*\)",
     re.DOTALL | re.IGNORECASE,
 )
 COMMAND_LIST_USAGE_RE = re.compile(
-    r'(?:new\s+ProcessBuilder\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)|\.command\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\))',
+    r"(?:new\s+ProcessBuilder\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)|\.command\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\))",
     re.IGNORECASE,
 )
 COMMAND_EXPR_USAGE_RE = re.compile(
-    r'(?:new\s+ProcessBuilder\s*\(\s*(?P<ctor>[^)]*?)\s*\)|\.command\s*\(\s*(?P<call>[^)]*?)\s*\))',
+    r"(?:new\s+ProcessBuilder\s*\(\s*(?P<ctor>[^)]*?)\s*\)|\.command\s*\(\s*(?P<call>[^)]*?)\s*\))",
     re.DOTALL | re.IGNORECASE,
 )
-BUILDER_TOSTRING_RE = re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\.toString\s*\(\s*\)', re.IGNORECASE)
+BUILDER_TOSTRING_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\.toString\s*\(\s*\)", re.IGNORECASE)
 LDAP_PATTERNS = (
     re.compile(r"InitialDirContext", re.IGNORECASE),
     re.compile(r"DirContext", re.IGNORECASE),
@@ -145,14 +147,20 @@ SQL_EXECUTE_CALL_PATTERNS = (
     ),
 )
 SQL_SINK_VARIABLE_PATTERNS = (
-    re.compile(r"(?:prepareStatement|prepareCall|executeQuery|executeUpdate|execute|addBatch)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE),
+    re.compile(
+        r"(?:prepareStatement|prepareCall|executeQuery|executeUpdate|execute|addBatch)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))",
+        re.IGNORECASE,
+    ),
     re.compile(
         r"JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|queryForLong|update|batchUpdate)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))",
         re.IGNORECASE,
     ),
 )
 SQL_SINK_TOSTRING_VARIABLE_PATTERNS = (
-    re.compile(r"(?:prepareStatement|prepareCall|executeQuery|executeUpdate|execute|addBatch)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\.toString\s*\(\s*\)\s*(?:,|\))", re.IGNORECASE),
+    re.compile(
+        r"(?:prepareStatement|prepareCall|executeQuery|executeUpdate|execute|addBatch)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\.toString\s*\(\s*\)\s*(?:,|\))",
+        re.IGNORECASE,
+    ),
     re.compile(
         r"JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|queryForLong|update|batchUpdate)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\.toString\s*\(\s*\)\s*(?:,|\))",
         re.IGNORECASE,
@@ -176,6 +184,8 @@ STRING_CONCAT_PATTERNS = (
     re.compile(r"[A-Za-z_][A-Za-z0-9_.)]*\s*\+\s*\"[^\n]*\"", re.IGNORECASE),
     re.compile(r"[A-Za-z_][A-Za-z0-9_.)]*\s*\+\s*[A-Za-z_][A-Za-z0-9_.(]*", re.IGNORECASE),
 )
+
+
 class PolicyIndicatorAnalyzer:
     def __init__(self) -> None:
         from codegraph.policy.analysis.command import CommandFlowAnalyzer
@@ -254,8 +264,10 @@ class PolicyIndicatorAnalyzer:
         sql_prepare_call_detected = bool(SQL_PREPARE_CALL_RE.search(source_code))
         sql_prepare_statement_detected = bool(SQL_PREPARE_STATEMENT_RE.search(source_code))
         sql_callable_statement_detected = bool(SQL_CALLABLE_STATEMENT_RE.search(source_code))
-        sql_execution_detected = sql_prepare_call_detected or sql_prepare_statement_detected or any(
-            pattern.search(source_code) for pattern in SQL_EXECUTE_CALL_PATTERNS
+        sql_execution_detected = (
+            sql_prepare_call_detected
+            or sql_prepare_statement_detected
+            or any(pattern.search(source_code) for pattern in SQL_EXECUTE_CALL_PATTERNS)
         )
         sql_dynamic_query_detected = bool(sql_execution_detected and sql_analysis.sql_dynamic_query_detected)
 

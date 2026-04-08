@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from tests._support import PROJECT_ROOT
+
 SCRIPT_PATH = PROJECT_ROOT / "scripts" / "start_backend_dev.sh"
 DEV_CONTAINER_SCRIPT_PATH = PROJECT_ROOT / "scripts" / "dev_container.sh"
 

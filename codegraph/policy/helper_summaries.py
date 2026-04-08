@@ -32,14 +32,14 @@ MAP_GET_ASSIGNMENT_RE = re.compile(
     r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*"([^"]+)"\s*\)\s*;',
     re.DOTALL,
 )
-LIST_ADD_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)\s*;', re.DOTALL)
-LIST_REMOVE_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.remove\(\s*(\d+)\s*\)\s*;', re.DOTALL)
+LIST_ADD_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)\s*;", re.DOTALL)
+LIST_REMOVE_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.remove\(\s*(\d+)\s*\)\s*;", re.DOTALL)
 LIST_GET_ASSIGNMENT_RE = re.compile(
-    r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*(\d+)\s*\)\s*;',
+    r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*(\d+)\s*\)\s*;",
     re.DOTALL,
 )
 ARRAY_ASSIGNMENT_RE = re.compile(
-    r'(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>\[\]]*\[\]\s*)?\{(.*?)\}\s*;',
+    r"(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>\[\]]*\[\]\s*)?\{(.*?)\}\s*;",
     re.DOTALL,
 )
 FILTER_ASSIGNMENT_TEMPLATE = r"\bfilter\w*\s*=\s*[^;]*\b%s\b"
@@ -59,14 +59,16 @@ SQL_USAGE_TEMPLATE = (
     r"|JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|update|batchUpdate)\s*\(\s*[^,;)]*\b%s\b)"
 )
 COMMAND_ASSIGNMENT_TEMPLATE = r"\b(?:cmd|command)\w*\s*=\s*[^;]*\b%s\b"
-COMMAND_USAGE_TEMPLATE = r"(?:\.exec\s*\(\s*[^,;)]*\b%s\b|\.command\s*\([^;)]*\b%s\b|new\s+ProcessBuilder\s*\([^;)]*\b%s\b)"
+COMMAND_USAGE_TEMPLATE = (
+    r"(?:\.exec\s*\(\s*[^,;)]*\b%s\b|\.command\s*\([^;)]*\b%s\b|new\s+ProcessBuilder\s*\([^;)]*\b%s\b)"
+)
 COMMAND_LIST_USAGE_RE = re.compile(
-    r'(?:new\s+ProcessBuilder\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)|\.command\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\))',
+    r"(?:new\s+ProcessBuilder\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)|\.command\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\))",
     re.IGNORECASE,
 )
-COMMAND_EXEC_FIRST_ARG_VAR_RE = re.compile(r'\.exec\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))', re.IGNORECASE)
+COMMAND_EXEC_FIRST_ARG_VAR_RE = re.compile(r"\.exec\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE)
 COMMAND_EXEC_ENV_ARG_VAR_RE = re.compile(
-    r'\.exec\s*\(\s*[^,]+,\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))',
+    r"\.exec\s*\(\s*[^,]+,\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))",
     re.IGNORECASE,
 )
 STRING_LITERAL_FULL_RE = re.compile(r'^"([^"\\]*(?:\\.[^"\\]*)*)"$', re.DOTALL)
@@ -106,7 +108,11 @@ class HelperMethodAnalyzer:
                 propagates_taint = True
             else:
                 map_match = MAP_GET_LITERAL_RE.search(expr)
-                if map_match and map_match.group(1) in map_constants and map_match.group(2) in map_constants[map_match.group(1)]:
+                if (
+                    map_match
+                    and map_match.group(1) in map_constants
+                    and map_match.group(2) in map_constants[map_match.group(1)]
+                ):
                     returns_constant = True
                 elif self._assigned_from_safe_call(expr, resolved_source, state):
                     returns_constant = True
@@ -290,10 +296,7 @@ class DirectCallSummaryBuilder:
             arg_is_safe_constant = bool(
                 raw_args.strip()
                 and not arg_has_tainted_input
-                and (
-                    STRING_LITERAL_FULL_RE.match(raw_args.strip())
-                    or arg_refs <= set(state.string_constants)
-                )
+                and (STRING_LITERAL_FULL_RE.match(raw_args.strip()) or arg_refs <= set(state.string_constants))
             )
             arg_is_known_safe = arg_is_safe_constant
             callee_snapshot = self._resolve_called_method(
@@ -341,8 +344,12 @@ class DirectCallSummaryBuilder:
             "tainted_return_vars": tainted_vars,
             "safe_constant_return_used_in_path_sink": self._vars_used_in_path_sink(current_source, path_safe_vars),
             "tainted_return_used_in_path_sink": self._vars_used_in_path_sink(current_source, path_tainted_vars),
-            "safe_constant_return_used_in_ldap_filter": self._vars_used_in_template(current_source, ldap_safe_vars, FILTER_ASSIGNMENT_TEMPLATE),
-            "tainted_return_used_in_ldap_filter": self._vars_used_in_template(current_source, ldap_tainted_vars, FILTER_ASSIGNMENT_TEMPLATE),
+            "safe_constant_return_used_in_ldap_filter": self._vars_used_in_template(
+                current_source, ldap_safe_vars, FILTER_ASSIGNMENT_TEMPLATE
+            ),
+            "tainted_return_used_in_ldap_filter": self._vars_used_in_template(
+                current_source, ldap_tainted_vars, FILTER_ASSIGNMENT_TEMPLATE
+            ),
             "safe_constant_return_used_in_xpath_query": self._vars_used_in_xpath(current_source, safe_vars),
             "safe_constant_return_used_in_sql_query": self._vars_used_in_sql(current_source, safe_vars),
             "safe_constant_return_used_in_command_sink": self._vars_used_in_command(current_source, safe_vars),
@@ -500,8 +507,7 @@ class DirectCallSummaryBuilder:
             if re.search(SQL_ASSIGNMENT_TEMPLATE % re.escape(var), source_code, re.IGNORECASE):
                 return True
             if re.search(
-                SQL_USAGE_TEMPLATE
-                % (re.escape(var), re.escape(var), re.escape(var), re.escape(var)),
+                SQL_USAGE_TEMPLATE % (re.escape(var), re.escape(var), re.escape(var), re.escape(var)),
                 source_code,
                 re.IGNORECASE,
             ):
@@ -534,10 +540,7 @@ class DirectCallSummaryBuilder:
     def _command_payload_vars(source_code: str) -> tuple[set[str], set[str]]:
         list_variables = {list_name for list_name, _expr in LIST_ADD_RE.findall(source_code)}
         payload_call_vars = {
-            candidate
-            for groups in COMMAND_LIST_USAGE_RE.findall(source_code)
-            for candidate in groups
-            if candidate
+            candidate for groups in COMMAND_LIST_USAGE_RE.findall(source_code) for candidate in groups if candidate
         }
         payload_lists = {candidate for candidate in payload_call_vars if candidate in list_variables}
         payload_arrays = (

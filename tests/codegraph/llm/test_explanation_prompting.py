@@ -104,8 +104,13 @@ class TestExplanationPrompting(unittest.TestCase):
 
         self.assertIn("Return a JSON object only", messages[0]["content"])
         self.assertIn('Return JSON only with keys "evidence_id", "why", and "fix".', messages[1]["content"])
-        self.assertIn("The evidence_id must exactly match one of the provided evidence card ids.", messages[1]["content"])
-        self.assertIn("Do not output Thinking Process, Analysis, or any text before or after the JSON object.", messages[1]["content"])
+        self.assertIn(
+            "The evidence_id must exactly match one of the provided evidence card ids.", messages[1]["content"]
+        )
+        self.assertIn(
+            "Do not output Thinking Process, Analysis, or any text before or after the JSON object.",
+            messages[1]["content"],
+        )
 
     def test_build_explanation_response_format_requires_evidence_id_when_cards_are_present(self) -> None:
         response_format = build_explanation_response_format(

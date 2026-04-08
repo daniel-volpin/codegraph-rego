@@ -61,9 +61,7 @@ def build_evidence_cards(
         if calls:
             summaries.append(f"calls={len(calls)}")
         if analysis_flags:
-            summaries.append(
-                "flags=" + ",".join(sorted(str(key) for key, value in analysis_flags.items() if value))
-            )
+            summaries.append("flags=" + ",".join(sorted(str(key) for key, value in analysis_flags.items() if value)))
         cards.append(
             {
                 "id": "E2",

@@ -173,7 +173,9 @@ class OpenAICompatibleTransport(LLMTransport):
             span.set_attribute("llm.model", model)
             span.set_attribute("llm.provider", _infer_provider(api_base))
             span.set_attribute("llm.base_url", api_base or "")
-            span.set_attribute("llm.temperature", request.temperature if request.temperature is not None else settings.llm_temperature)
+            span.set_attribute(
+                "llm.temperature", request.temperature if request.temperature is not None else settings.llm_temperature
+            )
             span.set_attribute("llm.max_tokens", effective_max_tokens if effective_max_tokens is not None else -1)
             span.set_attribute("llm.task_type", task_type)
             span.set_attribute("llm.response_format", str(request.response_format is not None))
@@ -186,7 +188,9 @@ class OpenAICompatibleTransport(LLMTransport):
                     params: dict[str, Any] = {
                         "model": model,
                         "messages": list(request.messages),
-                        "temperature": request.temperature if request.temperature is not None else settings.llm_temperature,
+                        "temperature": request.temperature
+                        if request.temperature is not None
+                        else settings.llm_temperature,
                     }
                     if effective_max_tokens is not None:
                         params["max_tokens"] = effective_max_tokens
@@ -208,7 +212,9 @@ class OpenAICompatibleTransport(LLMTransport):
                         span.set_attribute("llm.completion_tokens", -1)
                         span.set_attribute("llm.total_tokens", -1)
                     span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
-                    return _extract_message_content(response, allow_reasoning_content=request.response_format is not None)
+                    return _extract_message_content(
+                        response, allow_reasoning_content=request.response_format is not None
+                    )
 
                 params = {
                     "model": model,

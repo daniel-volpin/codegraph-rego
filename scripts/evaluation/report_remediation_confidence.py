@@ -23,8 +23,7 @@ def _load_results_jsonl(path: Path) -> list[dict[str, Any]]:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Generate confidence calibration metrics (Brier, ECE, reliability bins) "
-            "from remediation results.jsonl"
+            "Generate confidence calibration metrics (Brier, ECE, reliability bins) from remediation results.jsonl"
         )
     )
     parser.add_argument(

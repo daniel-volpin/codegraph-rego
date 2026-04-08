@@ -188,9 +188,7 @@ class RemediationService:
             )
             has_supported_literal = any(literal in source_lower for literal in weak_cipher_literals)
             if not has_supported_literal or "cipher.getinstance" not in source_lower:
-                return (
-                    "weak-crypto remediation only supports explicit DES/RC4/AES-ECB literal subcases with local cipher context"
-                )
+                return "weak-crypto remediation only supports explicit DES/RC4/AES-ECB literal subcases with local cipher context"
 
         if rule_id == "ISO-A.10-WEAK-RANDOM":
             supported_patterns = (
@@ -200,9 +198,7 @@ class RemediationService:
                 r"(?:java\.security\.)?securerandom\s*\.\s*getinstance\s*\(\s*\"sha1prng\"\s*\)",
             )
             if not any(re.search(pattern, source_lower) for pattern in supported_patterns):
-                return (
-                    "weak-random remediation only supports local Random/Math.random/ThreadLocalRandom/SHA1PRNG replacements"
-                )
+                return "weak-random remediation only supports local Random/Math.random/ThreadLocalRandom/SHA1PRNG replacements"
 
         return None
 

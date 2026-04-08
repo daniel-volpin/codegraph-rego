@@ -32,9 +32,7 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
     async def test_preview_returns_generation_payload(self, _mock_preview):
         from api.routers.remediation import remediation_preview
 
-        response = await remediation_preview(
-            RemediationPreviewRequest(violation_id="ISO-A.10-WEAK-HASH")
-        )
+        response = await remediation_preview(RemediationPreviewRequest(violation_id="ISO-A.10-WEAK-HASH"))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body)
@@ -63,9 +61,7 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
     async def test_preview_returns_no_fix_as_success_response(self, _mock_preview):
         from api.routers.remediation import remediation_preview
 
-        response = await remediation_preview(
-            RemediationPreviewRequest(violation_id="ISO-A.10-WEAK-CRYPTO")
-        )
+        response = await remediation_preview(RemediationPreviewRequest(violation_id="ISO-A.10-WEAK-CRYPTO"))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body)
@@ -92,9 +88,7 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
     async def test_preview_generation_error_returns_500(self, _mock_preview):
         from api.routers.remediation import remediation_preview
 
-        response = await remediation_preview(
-            RemediationPreviewRequest(violation_id="ISO-A.10-WEAK-HASH")
-        )
+        response = await remediation_preview(RemediationPreviewRequest(violation_id="ISO-A.10-WEAK-HASH"))
 
         self.assertEqual(response.status_code, 500)
         payload = json.loads(response.body)
@@ -127,9 +121,7 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
     async def test_apply_build_error_returns_500(self, _mock_apply):
         from api.routers.remediation import remediation_apply
 
-        response = await remediation_apply(
-            RemediationApplyRequest(violation_id="ISO-A.10-WEAK-HASH")
-        )
+        response = await remediation_apply(RemediationApplyRequest(violation_id="ISO-A.10-WEAK-HASH"))
 
         self.assertEqual(response.status_code, 500)
         payload = json.loads(response.body)

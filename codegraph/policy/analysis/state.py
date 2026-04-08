@@ -7,10 +7,10 @@ from typing import Dict
 from codegraph.policy.analysis.primitives import SourceSanitizer
 
 SIMPLE_ASSIGNMENT_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+);", re.DOTALL)
-LIST_ADD_VALUE_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)\s*;', re.DOTALL)
-LIST_REMOVE_INDEX_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.remove\(\s*(\d+)\s*\)\s*;', re.DOTALL)
+LIST_ADD_VALUE_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)\s*;", re.DOTALL)
+LIST_REMOVE_INDEX_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.remove\(\s*(\d+)\s*\)\s*;", re.DOTALL)
 LIST_GET_VALUE_RE = re.compile(
-    r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*(\d+)\s*\)\s*;',
+    r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*(\d+)\s*\)\s*;",
     re.DOTALL,
 )
 MAP_PUT_VALUE_RE = re.compile(
@@ -396,7 +396,7 @@ class AssignmentStateAnalyzer:
                 return ""
             case_match = re.search(rf"case\s+'{re.escape(constant)}'\s*:", body, re.DOTALL)
             if case_match:
-                tail = body[case_match.end():]
+                tail = body[case_match.end() :]
                 tail = re.sub(r"^(?:\s*case\s+'[^']+'\s*:\s*)+", "", tail, flags=re.DOTALL)
                 stmt_match = re.search(r"(.*?)(?=break;|default:|\Z)", tail, re.DOTALL)
                 if stmt_match:

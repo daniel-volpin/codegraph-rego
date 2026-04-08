@@ -214,7 +214,9 @@ def _terminate_process(process: subprocess.Popen[str], timeout_seconds: float = 
         return {"stdout": stdout, "stderr": stderr, "timed_out": True}
 
 
-def _wait_for_loaded_models(expected_loaded: List[str], timeout_seconds: float = 90.0, poll_seconds: float = 1.5) -> Dict[str, Any]:
+def _wait_for_loaded_models(
+    expected_loaded: List[str], timeout_seconds: float = 90.0, poll_seconds: float = 1.5
+) -> Dict[str, Any]:
     deadline = time.time() + timeout_seconds
     normalized_expected = sorted(_normalize_loaded_model_name(model) for model in expected_loaded)
     observations: List[List[str]] = []
@@ -359,7 +361,9 @@ def main() -> int:
             text=True,
             capture_output=True,
         )
-        (model_output_dir / "run.log").write_text(run.stdout + ("\n" + run.stderr if run.stderr else ""), encoding="utf-8")
+        (model_output_dir / "run.log").write_text(
+            run.stdout + ("\n" + run.stderr if run.stderr else ""), encoding="utf-8"
+        )
 
         metrics_path = model_output_dir / "remediation_metrics.json"
         if not metrics_path.exists():

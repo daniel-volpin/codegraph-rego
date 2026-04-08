@@ -544,26 +544,34 @@ def ingest_to_neo4j(
 
     def chunked_iterable(iterable, size):
         for i in range(0, len(iterable), size):
-            yield iterable[i:i + size]
+            yield iterable[i : i + size]
 
     driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
     with driver.session() as session:
         annotation_count = sum(len(m.annotations) for m in methods)
         unique_method_field_relations = list(dict.fromkeys(method_field_relations))
-        
+
         total_operations = (
             len(methods)
             + len(field_entities)
-            + (annotation_count // 5000) + 1
-            + (len(nested_relations) // 5000) + 1
-            + (len(extends_relations) // 5000) + 1
-            + (len(implements_relations) // 5000) + 1
-            + (len(uses_relations) // 5000) + 1
-            + (len(depends_on_relations) // 5000) + 1
-            + (len(calls_relations) // 5000) + 1
-            + (len(unique_method_field_relations) // 5000) + 1
+            + (annotation_count // 5000)
+            + 1
+            + (len(nested_relations) // 5000)
+            + 1
+            + (len(extends_relations) // 5000)
+            + 1
+            + (len(implements_relations) // 5000)
+            + 1
+            + (len(uses_relations) // 5000)
+            + 1
+            + (len(depends_on_relations) // 5000)
+            + 1
+            + (len(calls_relations) // 5000)
+            + 1
+            + (len(unique_method_field_relations) // 5000)
+            + 1
         ) or 1
-        
+
         processed = 0
 
         def notify(label: str, index: int, total: int) -> None:
@@ -629,7 +637,10 @@ def ingest_to_neo4j(
             notify("Calls relations chunks", idx, (len(relations_calls) // 5000) + 1)
 
         print(f"📦 Ingesting {len(unique_method_field_relations)} method-field uses relations...")
-        relations_mf = [{"method_sig": sig, "class_fqn": cls, "field_name": name} for sig, cls, name in unique_method_field_relations]
+        relations_mf = [
+            {"method_sig": sig, "class_fqn": cls, "field_name": name}
+            for sig, cls, name in unique_method_field_relations
+        ]
         for idx, chunk in enumerate(chunked_iterable(relations_mf, 5000), start=1):
             safe_write(session, link_method_field_use_batch, chunk)
             notify("Method-field uses chunks", idx, (len(relations_mf) // 5000) + 1)
@@ -703,7 +714,7 @@ def ingest(
                 # Find all file paths currently in DB
                 result = session.run("MATCH (m:Method) RETURN DISTINCT m.file_path as p")
                 db_paths = {record["p"] for record in result}
-                
+
                 # Also check fields in case there are files with fields but no methods (rare but possible)
                 result_fields = session.run("MATCH (f:Field) RETURN DISTINCT f.file_path as p")
                 db_paths.update({record["p"] for record in result_fields})

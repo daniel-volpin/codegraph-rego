@@ -121,6 +121,7 @@ def has_exact_citation(explanation_payload: Dict[str, Any] | None, expected_cita
         return False
     return actual_citation.strip() == expected_citation
 
+
 def _measure_prompt_chars(messages: List[Dict[str, str]]) -> int:
     return sum(len(message.get("content", "")) for message in messages)
 

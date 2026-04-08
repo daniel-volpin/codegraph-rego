@@ -126,8 +126,7 @@ def _section_tokens(by_name: dict[str, list]) -> list[str]:
             by_type[tt] += t
 
     lines = [
-        f"  Total       : {total_all:,}  "
-        f"(prompt {total_prompt:,} | completion {total_completion:,})",
+        f"  Total       : {total_all:,}  (prompt {total_prompt:,} | completion {total_completion:,})",
         f"  Per case    : {total_all // case_count:,}  (avg)",
         f"  Retry waste : {retry_tokens:,}  ({retry_pct:.1f}% of total)",
     ]
@@ -207,11 +206,7 @@ def _section_attempt_quality(by_name: dict[str, list]) -> list[str]:
     valid = sum(1 for s in spans if _attr(s, "schema_valid", False))
     pct = valid / len(spans) * 100
 
-    errors: list[str] = [
-        _attr(s, "error_summary", "").strip()
-        for s in spans
-        if _attr(s, "error_summary", "").strip()
-    ]
+    errors: list[str] = [_attr(s, "error_summary", "").strip() for s in spans if _attr(s, "error_summary", "").strip()]
     top_errors = Counter(errors).most_common(5)
 
     lines = [f"  Schema valid : {valid}/{len(spans)}  ({pct:.1f}%)"]
@@ -292,10 +287,7 @@ def build_json_report(spans: list[dict[str, Any]]) -> dict[str, Any]:
     retry_tokens = sum(valid_tokens(retry_spans, "llm.total_tokens"))
 
     build_spans = [s for s in by_name.get("build.verify", []) if not _attr(s, "build_skipped", False)]
-    build_durations = [
-        float(_attr(s, "build_duration_ms") or _duration_ms(s) or 0)
-        for s in build_spans
-    ]
+    build_durations = [float(_attr(s, "build_duration_ms") or _duration_ms(s) or 0) for s in build_spans]
     fix_statuses = Counter(_attr(s, "final_status") or "unknown" for s in by_name.get("remediation.fix", []))
     attempt_spans = by_name.get("remediation.attempt", [])
 

@@ -65,11 +65,11 @@ def load_signature_map(map_path: str = settings.signature_map_path) -> List[str]
 
 def load_embedding_model(model_name: str = settings.embedding_model_name) -> SentenceTransformer:
     global _MODEL
-    
+
     # Fast path without lock if already loaded
     if _MODEL is not None:
         return _MODEL
-        
+
     with _MODEL_LOCK:
         # Double-check inside the lock
         if _MODEL is None:

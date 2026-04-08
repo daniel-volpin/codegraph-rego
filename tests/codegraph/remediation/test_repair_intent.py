@@ -30,6 +30,7 @@ from codegraph.remediation.repair_intent import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_context(
     rule_id: str = "ISO-A.10-WEAK-HASH",
     target_method: str = "com.example.Foo.hash()",
@@ -49,6 +50,7 @@ def _make_context(
 # ---------------------------------------------------------------------------
 # Schema creation tests
 # ---------------------------------------------------------------------------
+
 
 class TestRepairIntentSchemaCreation(unittest.TestCase):
     """Validate that all model variants can be constructed correctly."""
@@ -179,6 +181,7 @@ class TestRepairIntentSchemaCreation(unittest.TestCase):
 # Refusal variant tests
 # ---------------------------------------------------------------------------
 
+
 class TestRefusalVariants(unittest.TestCase):
     """Validate refusal handling consistency."""
 
@@ -228,6 +231,7 @@ class TestRefusalVariants(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Round-trip serialization tests
 # ---------------------------------------------------------------------------
+
 
 class TestRoundTripSerialization(unittest.TestCase):
     """Verify model_dump / model_validate identity for all variants."""
@@ -345,6 +349,7 @@ class TestRoundTripSerialization(unittest.TestCase):
 # Validation / rejection tests
 # ---------------------------------------------------------------------------
 
+
 class TestValidationRejection(unittest.TestCase):
     """Bad data should be rejected by Pydantic."""
 
@@ -383,12 +388,14 @@ class TestValidationRejection(unittest.TestCase):
 
     def test_invalid_kind_string(self) -> None:
         with self.assertRaises(ValidationError):
-            RepairIntent.model_validate({
-                "kind": "invalid_kind_value",
-                "rule_id": "x",
-                "support_tier": "full",
-                "target": {"file_path": "x.java", "method_signature": "x()"},
-            })
+            RepairIntent.model_validate(
+                {
+                    "kind": "invalid_kind_value",
+                    "rule_id": "x",
+                    "support_tier": "full",
+                    "target": {"file_path": "x.java", "method_signature": "x()"},
+                }
+            )
 
     def test_missing_refusal_code(self) -> None:
         with self.assertRaises(ValidationError):
@@ -418,6 +425,7 @@ class TestValidationRejection(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Preflight refusal tests
 # ---------------------------------------------------------------------------
+
 
 class TestPreflightRefusal(unittest.TestCase):
     """Mirror the semantics of service._preflight_fixability_reason."""
@@ -489,6 +497,7 @@ class TestPreflightRefusal(unittest.TestCase):
 # Planner output tests
 # ---------------------------------------------------------------------------
 
+
 class TestPlanRepairIntent(unittest.TestCase):
     """Verify planner produces correct intents for each supported family."""
 
@@ -517,8 +526,7 @@ class TestPlanRepairIntent(unittest.TestCase):
         self.assertIsNone(intent.refusal)
         # Constructor replacement should have a terminal-invocation invariant.
         terminal_invariants = [
-            inv for inv in intent.invariants
-            if inv.kind == InvariantKind.PRESERVE_TERMINAL_INVOCATION
+            inv for inv in intent.invariants if inv.kind == InvariantKind.PRESERVE_TERMINAL_INVOCATION
         ]
         self.assertEqual(len(terminal_invariants), 1)
 
@@ -556,7 +564,7 @@ class TestPlanRepairIntent(unittest.TestCase):
     def test_unsupported_rule_produces_no_repair(self) -> None:
         ctx = _make_context(
             rule_id="ISO-A.8-SQL-INJECTION",
-            source_code="String sql = \"SELECT * FROM users WHERE id=\" + input;",
+            source_code='String sql = "SELECT * FROM users WHERE id=" + input;',
         )
         intent = plan_repair_intent(ctx)
         self.assertEqual(intent.kind, RepairIntentKind.NO_REPAIR)
@@ -623,6 +631,7 @@ class TestPlanRepairIntent(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Operation spec validation tests (Step 2)
 # ---------------------------------------------------------------------------
+
 
 class TestOperationSpecValidation(unittest.TestCase):
     """Validate creation and validation of all operation-spec types."""
@@ -697,24 +706,26 @@ class TestOperationSpecValidation(unittest.TestCase):
             )  # type: ignore[call-arg]
 
     def test_discriminated_union_via_model_validate(self) -> None:
-        intent = RepairIntent.model_validate({
-            "kind": "literal_replacement",
-            "rule_id": "ISO-A.10-WEAK-HASH",
-            "support_tier": "full",
-            "target": {"file_path": "x.java", "method_signature": "x()"},
-            "operations": [
-                {
-                    "op_type": "literal_replacement",
-                    "target_value": '"MD5"',
-                    "replacement_value": '"SHA-256"',
-                },
-                {
-                    "op_type": "constructor_replacement",
-                    "old_type": "java.util.Random",
-                    "new_type": "java.security.SecureRandom",
-                },
-            ],
-        })
+        intent = RepairIntent.model_validate(
+            {
+                "kind": "literal_replacement",
+                "rule_id": "ISO-A.10-WEAK-HASH",
+                "support_tier": "full",
+                "target": {"file_path": "x.java", "method_signature": "x()"},
+                "operations": [
+                    {
+                        "op_type": "literal_replacement",
+                        "target_value": '"MD5"',
+                        "replacement_value": '"SHA-256"',
+                    },
+                    {
+                        "op_type": "constructor_replacement",
+                        "old_type": "java.util.Random",
+                        "new_type": "java.security.SecureRandom",
+                    },
+                ],
+            }
+        )
         self.assertEqual(len(intent.operations), 2)
         self.assertIsInstance(intent.operations[0], LiteralReplacementOp)
         self.assertIsInstance(intent.operations[1], ConstructorReplacementOp)
@@ -723,6 +734,7 @@ class TestOperationSpecValidation(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Round-trip with operations (Step 2)
 # ---------------------------------------------------------------------------
+
 
 class TestRoundTripWithOperations(unittest.TestCase):
     """Verify round-trip serialization of RepairIntent with operations."""
@@ -836,6 +848,7 @@ class TestRoundTripWithOperations(unittest.TestCase):
 # Planner populates operations (Step 2)
 # ---------------------------------------------------------------------------
 
+
 class TestPlannerPopulatesOperations(unittest.TestCase):
     """Verify plan_repair_intent populates operations for supported families."""
 
@@ -860,8 +873,7 @@ class TestPlannerPopulatesOperations(unittest.TestCase):
         intent = plan_repair_intent(ctx)
         self.assertTrue(len(intent.operations) >= 1)
         sha1_ops = [
-            op for op in intent.operations
-            if isinstance(op, LiteralReplacementOp) and op.target_value == '"SHA-1"'
+            op for op in intent.operations if isinstance(op, LiteralReplacementOp) and op.target_value == '"SHA-1"'
         ]
         self.assertEqual(len(sha1_ops), 1)
 

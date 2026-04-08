@@ -96,7 +96,10 @@ def explain_policy_violations(
     subset = violations[:max_items]
     results: list[dict[str, Any]] = [None] * len(subset)  # type: ignore[list-item]
     with ThreadPoolExecutor(max_workers=max(1, settings.llm_concurrency)) as pool:
-        future_to_idx = {pool.submit(_explain_single_violation, v, model=model or settings.llm_model): i for i, v in enumerate(subset)}
+        future_to_idx = {
+            pool.submit(_explain_single_violation, v, model=model or settings.llm_model): i
+            for i, v in enumerate(subset)
+        }
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
             results[idx] = future.result()

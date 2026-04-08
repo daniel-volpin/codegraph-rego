@@ -338,7 +338,7 @@ def _execute_apply_fix_inner(
                 target_method,
                 source_path_override=temp_file_path.as_posix() if mode == "dry_run" else None,
             )
-            
+
             after_trace_raw = None
             try:
                 after_trace_raw = evaluator.trace(

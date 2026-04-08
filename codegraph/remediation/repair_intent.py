@@ -34,6 +34,7 @@ LOGGER = logging.getLogger(__name__)
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class RepairIntentKind(StrEnum):
     """Discriminator for the type of repair operation."""
 
@@ -66,6 +67,7 @@ class RefusalCode(StrEnum):
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
+
 
 class SourceSpan(BaseModel):
     """Identifies the Java method targeted for repair."""
@@ -101,6 +103,7 @@ class RefusalReason(BaseModel):
 # ---------------------------------------------------------------------------
 # Operation specs (Step 2) — typed executable descriptions of each edit
 # ---------------------------------------------------------------------------
+
 
 class LiteralReplacementOp(BaseModel):
     """Find an exact string literal in source and replace it."""
@@ -195,6 +198,7 @@ _DEFAULT_INVARIANTS: list[Invariant] = [
 # Preflight helpers (mirrors service._preflight_fixability_reason semantics)
 # ---------------------------------------------------------------------------
 
+
 def _preflight_refusal(rule_id: str, source_code: str) -> RefusalReason | None:
     """Check subcase-level fixability.
 
@@ -214,9 +218,7 @@ def _preflight_refusal(rule_id: str, source_code: str) -> RefusalReason | None:
             'cipher.getinstance("des")',
             'cipher.getinstance("rc4")',
         )
-        has_supported_literal = any(
-            literal in source_lower for literal in weak_cipher_literals
-        )
+        has_supported_literal = any(literal in source_lower for literal in weak_cipher_literals)
         if not has_supported_literal or "cipher.getinstance" not in source_lower:
             return RefusalReason(
                 code=RefusalCode.UNSUPPORTED_SUBCASE,
@@ -231,7 +233,7 @@ def _preflight_refusal(rule_id: str, source_code: str) -> RefusalReason | None:
             r"new\s+(?:java\.util\.)?random\s*\(",
             r"(?:java\.lang\.)?math\s*\.\s*random\s*\(",
             r"(?:java\.util\.concurrent\.)?threadlocalrandom\s*\.\s*current\s*\(",
-            r'(?:java\.security\.)?securerandom\s*\.\s*getinstance\s*\(\s*\"sha1prng\"\s*\)',
+            r"(?:java\.security\.)?securerandom\s*\.\s*getinstance\s*\(\s*\"sha1prng\"\s*\)",
         )
         if not any(re.search(pattern, source_lower) for pattern in supported_patterns):
             return RefusalReason(
@@ -248,6 +250,7 @@ def _preflight_refusal(rule_id: str, source_code: str) -> RefusalReason | None:
 # ---------------------------------------------------------------------------
 # Planner
 # ---------------------------------------------------------------------------
+
 
 def plan_repair_intent(
     context: dict[str, Any],
@@ -375,6 +378,7 @@ def plan_repair_intent(
 # Operation builders (per-rule)
 # ---------------------------------------------------------------------------
 
+
 def _build_operations(rule_id: str, source_code: str) -> list[RepairOperation]:
     """Derive typed executable operations from the rule and source code."""
     builder = _OPERATION_BUILDERS.get(rule_id)
@@ -446,7 +450,7 @@ def _build_weak_random_ops(source_code: str) -> list[RepairOperation]:
             )
         )
     if re.search(
-        r'(?:java\.security\.)?securerandom\s*\.\s*getinstance\s*\(\s*\"sha1prng\"\s*\)',
+        r"(?:java\.security\.)?securerandom\s*\.\s*getinstance\s*\(\s*\"sha1prng\"\s*\)",
         source_lower,
     ):
         ops.append(

@@ -29,6 +29,7 @@ LOGGER = logging.getLogger(__name__)
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class ComparisonLabel(StrEnum):
     """Outcome-oriented classification of a deterministic-vs-LLM comparison."""
 
@@ -44,6 +45,7 @@ class ComparisonLabel(StrEnum):
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
+
 
 class CandidateOutcome(BaseModel):
     """Normalized result from a single remediation path."""
@@ -83,6 +85,7 @@ class ComparisonSummary(BaseModel):
 # Classification
 # ---------------------------------------------------------------------------
 
+
 def classify_comparison(
     det: CandidateOutcome,
     llm: CandidateOutcome,
@@ -107,6 +110,7 @@ def classify_comparison(
 # ---------------------------------------------------------------------------
 # Outcome builders
 # ---------------------------------------------------------------------------
+
 
 def build_deterministic_outcome(
     context: dict[str, Any],
@@ -208,6 +212,7 @@ def build_llm_outcome(apply_result: dict[str, Any]) -> CandidateOutcome:
 # Comparison
 # ---------------------------------------------------------------------------
 
+
 def compare_remediation(
     violation_context: dict[str, Any],
     det_outcome: CandidateOutcome,
@@ -229,6 +234,7 @@ def compare_remediation(
 # ---------------------------------------------------------------------------
 # Aggregation
 # ---------------------------------------------------------------------------
+
 
 def build_comparison_summary(
     results: list[ComparisonResult],
@@ -286,6 +292,7 @@ def render_comparison_summary_markdown(summary: ComparisonSummary) -> str:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _edits_to_diff_snippet(edits: list[dict[str, Any]]) -> str:
     """Convert edit dicts to a unified-diff-style snippet."""

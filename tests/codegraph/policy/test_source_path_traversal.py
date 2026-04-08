@@ -5,7 +5,9 @@ from codegraph.policy.source_analysis import analyze_crypto_indicators
 
 class TestPathTraversalDetected(unittest.TestCase):
     def test_path_traversal_detected(self) -> None:
-        source = 'String fileName = base + request.getHeader("x"); new java.io.FileInputStream(new java.io.File(fileName));'
+        source = (
+            'String fileName = base + request.getHeader("x"); new java.io.FileInputStream(new java.io.File(fileName));'
+        )
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
         self.assertTrue(flags["path_sink_uses_tainted_input"])
@@ -14,7 +16,7 @@ class TestPathTraversalDetected(unittest.TestCase):
     def test_path_traversal_file_output_stream_detected(self) -> None:
         source = (
             'String value = request.getHeader("x");'
-            'String fileName = base + value;'
+            "String fileName = base + value;"
             "new java.io.FileOutputStream(fileName, false);"
         )
         flags = analyze_crypto_indicators(source)
@@ -28,18 +30,18 @@ class TestPathTraversalDetected(unittest.TestCase):
     def test_path_traversal_nested_parent_child_file_detected(self) -> None:
         source = (
             'String[] values = request.getParameterValues("x");'
-            'String bar = values[0];'
-            'new java.io.File(new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR), bar);'
+            "String bar = values[0];"
+            "new java.io.File(new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR), bar);"
         )
         flags = analyze_crypto_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
     def test_path_traversal_get_parameter_map_detected(self) -> None:
         source = (
-            'java.util.Map<String, String[]> map = request.getParameterMap();'
+            "java.util.Map<String, String[]> map = request.getParameterMap();"
             'String[] values = map.get("x");'
-            'String param = values[0];'
-            'String fileName = base + param;'
+            "String param = values[0];"
+            "String fileName = base + param;"
             "new java.io.FileOutputStream(fileName, false);"
         )
         flags = analyze_crypto_indicators(source)
@@ -48,8 +50,8 @@ class TestPathTraversalDetected(unittest.TestCase):
     def test_path_traversal_get_parameter_values_detected(self) -> None:
         source = (
             'String[] values = request.getParameterValues("x");'
-            'String param = values[0];'
-            'String fileName = base + param;'
+            "String param = values[0];"
+            "String fileName = base + param;"
             "new java.io.FileInputStream(new java.io.File(fileName));"
         )
         flags = analyze_crypto_indicators(source)
@@ -57,9 +59,9 @@ class TestPathTraversalDetected(unittest.TestCase):
 
     def test_path_traversal_get_the_parameter_detected(self) -> None:
         source = (
-            'org.owasp.benchmark.helpers.SeparateClassRequest scr = new org.owasp.benchmark.helpers.SeparateClassRequest(request);'
+            "org.owasp.benchmark.helpers.SeparateClassRequest scr = new org.owasp.benchmark.helpers.SeparateClassRequest(request);"
             'String param = scr.getTheParameter("x");'
-            'String bar = param;'
+            "String bar = param;"
             'new java.io.File(bar, "/Test.txt");'
         )
         flags = analyze_crypto_indicators(source)
@@ -71,7 +73,7 @@ class TestPathTraversalDetected(unittest.TestCase):
             "String bar;"
             "int num = 196;"
             'if ((500 / 42) + num > 200) bar = param; else bar = "This should never happen";'
-            'String fileName = base + bar;'
+            "String fileName = base + bar;"
             "new java.io.FileInputStream(fileName);"
         )
         flags = analyze_crypto_indicators(source)
@@ -95,14 +97,14 @@ class TestPathTraversalDetected(unittest.TestCase):
         source = (
             "java.util.Map<String, String[]> map = request.getParameterMap();"
             'String[] values = map.get("BenchmarkTest01329");'
-            'String param = values[0];'
+            "String param = values[0];"
             "java.util.List<String> valuesList = new java.util.ArrayList<String>();"
             'valuesList.add("safe");'
             "valuesList.add(param);"
             'valuesList.add("moresafe");'
             "valuesList.remove(0);"
             "String bar = valuesList.get(0);"
-            'String fileURI = base + bar;'
+            "String fileURI = base + bar;"
             "new java.io.File(fileURI);"
         )
         flags = analyze_crypto_indicators(source)
@@ -119,7 +121,7 @@ class TestPathTraversalDetected(unittest.TestCase):
             'valuesList.add("moresafe");'
             "valuesList.remove(0);"
             "bar = valuesList.get(0);"
-            'String fileName = base + bar;'
+            "String fileName = base + bar;"
             "new java.io.FileInputStream(fileName);"
         )
         flags = analyze_crypto_indicators(source)
@@ -132,7 +134,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
         source = (
             'String param = request.getHeader("x");'
             'String bar = "alsosafe";'
-            'String fileName = base + bar;'
+            "String fileName = base + bar;"
             "new java.io.FileOutputStream(fileName);"
         )
         flags = analyze_crypto_indicators(source)
@@ -144,7 +146,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             'String param = request.getHeader("x");'
             "int num = 106;"
             'String bar = (7 * 18) + num > 200 ? "This_should_always_happen" : param;'
-            'String fileName = base + bar;'
+            "String fileName = base + bar;"
             "new java.io.FileInputStream(new java.io.File(fileName));"
         )
         flags = analyze_crypto_indicators(source)
@@ -157,7 +159,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             "char switchTarget = guess.charAt(1);"
             "String bar = param;"
             "switch (switchTarget) { case 'A': bar = param; break; case 'B': bar = \"bob\"; break; default: bar = param; break; }"
-            'String fileName = base + bar;'
+            "String fileName = base + bar;"
             "new java.io.FileInputStream(fileName);"
         )
         flags = analyze_crypto_indicators(source)
@@ -169,7 +171,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             "String bar;"
             "int num = 86;"
             'if ((7 * 42) - num > 200) bar = "This_should_always_happen"; else bar = param;'
-            'String fileName = base + bar;'
+            "String fileName = base + bar;"
             "new java.io.FileInputStream(fileName);"
         )
         flags = analyze_crypto_indicators(source)
@@ -177,7 +179,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
 
     def test_classpath_file_read_not_flagged_as_path_traversal(self) -> None:
         source = (
-            'String param = request.getCookies()[0].getValue();'
+            "String param = request.getCookies()[0].getValue();"
             'new java.io.FileInputStream(org.owasp.benchmark.helpers.Utils.getFileFromClasspath("employees.xml", this.getClass().getClassLoader()));'
             'String expression = "/Employees/Employee[@emplid=\'" + param + "\']";'
         )
@@ -189,8 +191,8 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
         source = (
             'String param = request.getHeader("x");'
             'String bar = "safe.txt";'
-            'String fileName = bar;'
-            'String other = base + param;'
+            "String fileName = bar;"
+            "String other = base + param;"
             "new java.io.FileInputStream(fileName);"
         )
         flags = analyze_crypto_indicators(source)
@@ -201,7 +203,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
         source = (
             'String param = request.getHeader("x");'
             'String safeName = "safe.txt";'
-            'String fileName = base + param;'
+            "String fileName = base + param;"
             "new java.io.FileInputStream(fileName);"
         )
         flags = analyze_crypto_indicators(source)
@@ -219,7 +221,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             'valuesList.add("moresafe");'
             "valuesList.remove(0);"
             "bar = valuesList.get(1);"
-            'String fileName = base + bar;'
+            "String fileName = base + bar;"
             "new java.io.FileInputStream(fileName);"
         )
         flags = analyze_crypto_indicators(source)

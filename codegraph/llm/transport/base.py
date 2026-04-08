@@ -17,8 +17,7 @@ class LLMRequest:
 
 
 class LLMTransport(Protocol):
-    def generate(self, request: LLMRequest) -> str:
-        ...
+    def generate(self, request: LLMRequest) -> str: ...
 
 
 class LLMUnavailableError(RuntimeError):

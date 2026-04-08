@@ -31,7 +31,7 @@ class RemediationFlowTests(RemediationTestBase):
             "catalog_entry": {"title": "Cryptography (Weak Hash)"},
             "baseline_violations": [],
             "exact_method_source": exact_method_source,
-            "numbered_method_source": "1: public void hash() { java.security.MessageDigest.getInstance(\"MD5\"); }",
+            "numbered_method_source": '1: public void hash() { java.security.MessageDigest.getInstance("MD5"); }',
             "remediation_plan": svc_mod.build_remediation_plan(exact_method_source),
         }
 

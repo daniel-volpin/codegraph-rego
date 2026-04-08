@@ -3,7 +3,10 @@ from unittest.mock import patch
 
 
 class TestGeneratePolicyExplanationStructured(unittest.TestCase):
-    @patch("codegraph.llm.services.explanation_service.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.services.explanation_service.build_explanation_prompt",
+        return_value=[{"role": "user", "content": "prompt"}],
+    )
     @patch(
         "codegraph.llm.services.explanation_service.build_explanation_evidence",
         return_value={"evidence_cards": [{"id": "E1", "citation": "src/Foo.java lines 10-18"}]},
@@ -51,7 +54,10 @@ class TestGeneratePolicyExplanationStructured(unittest.TestCase):
         self.assertEqual(kwargs["stop"], ["<|im_end|>", "<|endoftext|>"])
         self.assertEqual(kwargs["response_format"]["type"], "json_schema")
 
-    @patch("codegraph.llm.services.explanation_service.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.services.explanation_service.build_explanation_prompt",
+        return_value=[{"role": "user", "content": "prompt"}],
+    )
     @patch(
         "codegraph.llm.services.explanation_service.build_explanation_evidence",
         return_value={"evidence_cards": [{"id": "E1", "citation": "src/Foo.java lines 10-18"}]},
@@ -74,7 +80,10 @@ class TestGeneratePolicyExplanationStructured(unittest.TestCase):
                 llm_client=lambda *_args, **_kwargs: "Thinking Process:\n1. Analyze\n2. Explain",
             )
 
-    @patch("codegraph.llm.services.explanation_service.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.services.explanation_service.build_explanation_prompt",
+        return_value=[{"role": "user", "content": "prompt"}],
+    )
     @patch(
         "codegraph.llm.services.explanation_service.build_explanation_evidence",
         return_value={"evidence_cards": []},
@@ -93,7 +102,9 @@ class TestGeneratePolicyExplanationStructured(unittest.TestCase):
             evidence_mode="lean",
             max_tokens=192,
             model="dummy-model",
-            llm_client=lambda *_args, **_kwargs: "Citation: src/Foo.java:10-18\nWhy: Weak hash is insecure.\nFix: Use SHA-256.",
+            llm_client=lambda *_args, **_kwargs: (
+                "Citation: src/Foo.java:10-18\nWhy: Weak hash is insecure.\nFix: Use SHA-256."
+            ),
         )
 
         self.assertEqual(
@@ -105,7 +116,10 @@ class TestGeneratePolicyExplanationStructured(unittest.TestCase):
             },
         )
 
-    @patch("codegraph.llm.services.explanation_service.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.services.explanation_service.build_explanation_prompt",
+        return_value=[{"role": "user", "content": "prompt"}],
+    )
     @patch(
         "codegraph.llm.services.explanation_service.build_explanation_evidence",
         return_value={"evidence_cards": [{"id": "E1", "citation": "src/Foo.java lines 10-18"}]},
@@ -125,10 +139,15 @@ class TestGeneratePolicyExplanationStructured(unittest.TestCase):
                 evidence_mode="lean",
                 max_tokens=192,
                 model="dummy-model",
-                llm_client=lambda *_args, **_kwargs: '{"evidence_id":"E99","why":"Weak hash is insecure.","fix":"Use SHA-256."}',
+                llm_client=lambda *_args, **_kwargs: (
+                    '{"evidence_id":"E99","why":"Weak hash is insecure.","fix":"Use SHA-256."}'
+                ),
             )
 
-    @patch("codegraph.llm.services.explanation_service.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.services.explanation_service.build_explanation_prompt",
+        return_value=[{"role": "user", "content": "prompt"}],
+    )
     @patch(
         "codegraph.llm.services.explanation_service.build_explanation_evidence",
         return_value={"evidence_cards": [{"id": "E1", "citation": "src/Foo.java lines 10-18"}]},

@@ -35,10 +35,7 @@ def _build_zip_bytes(*entries: tuple[str, str]) -> bytes:
 
 
 def _workspace_entries(root: Path) -> list[str]:
-    return sorted(
-        path.relative_to(root).as_posix()
-        for path in root.rglob("*")
-    )
+    return sorted(path.relative_to(root).as_posix() for path in root.rglob("*"))
 
 
 class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
@@ -179,7 +176,9 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
 
             upload = UploadFile(filename="code.zip", file=io.BytesIO(b"0123456789ABCDEF"))
 
-            with patch("api.routers.upload.settings", new=_test_settings(str(upload_dir), upload_max_archive_size_bytes=8)):
+            with patch(
+                "api.routers.upload.settings", new=_test_settings(str(upload_dir), upload_max_archive_size_bytes=8)
+            ):
                 response = await upload_zip(upload)
 
             self.assertEqual(response.status_code, 400)
@@ -245,7 +244,9 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
 
             upload = UploadFile(
                 filename="code.zip",
-                file=io.BytesIO(_build_zip_bytes(("new-module/src/main/java/com/example/NewApp.java", "class NewApp {}"))),
+                file=io.BytesIO(
+                    _build_zip_bytes(("new-module/src/main/java/com/example/NewApp.java", "class NewApp {}"))
+                ),
             )
 
             mock_ingest.side_effect = [RuntimeError("boom"), None, None]
@@ -291,7 +292,9 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
 
             upload = UploadFile(
                 filename="code.zip",
-                file=io.BytesIO(_build_zip_bytes(("new-module/src/main/java/com/example/NewApp.java", "class NewApp {}"))),
+                file=io.BytesIO(
+                    _build_zip_bytes(("new-module/src/main/java/com/example/NewApp.java", "class NewApp {}"))
+                ),
             )
 
             mock_ingest.side_effect = [

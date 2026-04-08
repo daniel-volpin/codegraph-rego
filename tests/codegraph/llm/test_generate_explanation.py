@@ -23,7 +23,10 @@ class TestExplainPolicyViolations(unittest.TestCase):
 
 
 class TestGeneratePolicyExplanation(unittest.TestCase):
-    @patch("codegraph.llm.services.explanation_service.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.services.explanation_service.build_explanation_prompt",
+        return_value=[{"role": "user", "content": "prompt"}],
+    )
     def test_generate_policy_explanation_passes_evidence_mode_and_max_tokens(
         self,
         mock_build_prompt,
@@ -110,7 +113,10 @@ class TestGeneratePolicyExplanation(unittest.TestCase):
         self.assertEqual(kwargs["response_format"]["type"], "json_schema")
         self.assertEqual(kwargs["response_format"]["json_schema"]["schema"]["required"], ["evidence_id", "why", "fix"])
 
-    @patch("codegraph.llm.services.explanation_service.build_explanation_prompt", return_value=[{"role": "user", "content": "prompt"}])
+    @patch(
+        "codegraph.llm.services.explanation_service.build_explanation_prompt",
+        return_value=[{"role": "user", "content": "prompt"}],
+    )
     @patch(
         "codegraph.llm.services.explanation_service.build_explanation_evidence",
         return_value={"evidence_cards": [{"id": "E1", "citation": "src/Foo.java lines 10-18"}]},
@@ -130,7 +136,9 @@ class TestGeneratePolicyExplanation(unittest.TestCase):
             structured_output=True,
             max_tokens=192,
             model="dummy-model",
-            llm_client=lambda *_args, **_kwargs: '{"evidence_id":"E1","why":"Weak hash is insecure.","fix":"Use SHA-256."}<|im_end|><|im_end|>',
+            llm_client=lambda *_args, **_kwargs: (
+                '{"evidence_id":"E1","why":"Weak hash is insecure.","fix":"Use SHA-256."}<|im_end|><|im_end|>'
+            ),
         )
 
         self.assertEqual(

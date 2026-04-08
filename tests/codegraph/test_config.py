@@ -58,5 +58,6 @@ class TestConfigSettings(unittest.TestCase):
         settings_c = get_settings()
         self.assertIsNot(settings_a, settings_c)
 
+
 if __name__ == "__main__":
     unittest.main()

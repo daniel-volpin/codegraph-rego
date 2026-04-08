@@ -75,7 +75,7 @@ class RemediationPromptTemplate:
             "When the user provides a remediation plan block, treat every listed invariant as mandatory.\n"
             "If the plan lists terminal invocation contracts, preserve each listed method name and arity unless returning no_fix.\n\n"
             "Return a JSON object only with exactly these fields:\n"
-            "- decision: \"apply_edits\" or \"no_fix\"\n"
+            '- decision: "apply_edits" or "no_fix"\n'
             "- edits: array of edit objects\n"
             "- reason: string\n\n"
             "Each edit object MUST have exactly these fields:\n"
@@ -84,9 +84,9 @@ class RemediationPromptTemplate:
             "- original_lines: array of strings copied EXACTLY from the selected source span\n"
             "- replacement_lines: array of strings for the replacement span\n\n"
             "Each original_lines entry must be a complete visible source line from the numbered method snippet, not a partial fragment.\n"
-            "If decision is \"apply_edits\", edits MUST be sorted by ascending line number, non-overlapping, and contain at least one item.\n"
+            'If decision is "apply_edits", edits MUST be sorted by ascending line number, non-overlapping, and contain at least one item.\n'
             "Each replacement_lines entry MUST be a complete source line. Do not split one logical source line across multiple array entries.\n"
-            "If decision is \"no_fix\", reason MUST explain why a safe minimal fix is not possible.\n"
+            'If decision is "no_fix", reason MUST explain why a safe minimal fix is not possible.\n'
             "When a field does not apply, return an empty array for edits and an empty string for reason.\n\n"
             "Do not modify lines outside the returned edit spans.\n"
             "Keep the exact method name, annotations, and parameter list unchanged unless a returned edit span explicitly includes them.\n"
@@ -177,7 +177,9 @@ class RemediationPromptTemplate:
         vector_context = list(evidence.get("vector_context") or [])[:_MAX_VECTOR_CONTEXT_ITEMS]
 
         violation_json = json.dumps(cls._build_violation_payload(context), indent=2, ensure_ascii=True, sort_keys=True)
-        control_json = json.dumps(cls._build_control_payload(catalog_entry), indent=2, ensure_ascii=True, sort_keys=True)
+        control_json = json.dumps(
+            cls._build_control_payload(catalog_entry), indent=2, ensure_ascii=True, sort_keys=True
+        )
         graph_json = json.dumps(graph_context, indent=2, ensure_ascii=True, sort_keys=True)
         vector_json = json.dumps(vector_context, indent=2, ensure_ascii=True, sort_keys=True)
 
@@ -212,19 +214,27 @@ class RemediationPromptTemplate:
             prompt_context = context.get("prompt_context") or {}
             normalized_trace = prompt_context.get("normalized_trace_profile")
             if normalized_trace:
-                trace_dict = normalized_trace.model_dump() if hasattr(normalized_trace, "model_dump") else (normalized_trace if isinstance(normalized_trace, dict) else vars(normalized_trace))
+                trace_dict = (
+                    normalized_trace.model_dump()
+                    if hasattr(normalized_trace, "model_dump")
+                    else (normalized_trace if isinstance(normalized_trace, dict) else vars(normalized_trace))
+                )
                 enriched_trace = {
                     "is_vulnerable": trace_dict.get("is_vulnerable"),
                     "detected_via_source": trace_dict.get("detected_via_source"),
                     "detected_via_graph": trace_dict.get("detected_via_graph"),
                     "detected_via_ast": trace_dict.get("detected_via_ast"),
                 }
-                sections.extend(["", cls.TRACE_PROFILE_BEGIN, json.dumps(enriched_trace, indent=2), cls.TRACE_PROFILE_END])
-            
+                sections.extend(
+                    ["", cls.TRACE_PROFILE_BEGIN, json.dumps(enriched_trace, indent=2), cls.TRACE_PROFILE_END]
+                )
+
             det_available = prompt_context.get("deterministic_baseline_available")
             if det_available:
                 shadow_summary = {"deterministic_baseline_available": True}
-                sections.extend(["", cls.SHADOW_CONTEXT_BEGIN, json.dumps(shadow_summary, indent=2), cls.SHADOW_CONTEXT_END])
+                sections.extend(
+                    ["", cls.SHADOW_CONTEXT_BEGIN, json.dumps(shadow_summary, indent=2), cls.SHADOW_CONTEXT_END]
+                )
 
         errors_note = "\n".join(previous_errors or [])
         if errors_note:

@@ -4,7 +4,14 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import javalang
-from javalang.tree import Assignment, ClassCreator, MethodDeclaration, MethodInvocation, ReturnStatement, VariableDeclarator
+from javalang.tree import (
+    Assignment,
+    ClassCreator,
+    MethodDeclaration,
+    MethodInvocation,
+    ReturnStatement,
+    VariableDeclarator,
+)
 
 
 @dataclass(frozen=True)
@@ -137,8 +144,5 @@ def validate_remediation_plan(plan: RemediationPlan | None, updated_source: str)
     for contract in plan.terminal_invocation_contracts:
         current_count = invocation_counts.get((contract.member, contract.arg_count), 0)
         if current_count < contract.occurrence_count:
-            return (
-                "plan_invariant_violation: "
-                f"missing_terminal_invocation:{contract.member}/{contract.arg_count}"
-            )
+            return f"plan_invariant_violation: missing_terminal_invocation:{contract.member}/{contract.arg_count}"
     return None

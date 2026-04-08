@@ -36,7 +36,7 @@ class TestLlmSchema(unittest.TestCase):
 
         original = ['public void hash() { java.security.MessageDigest.getInstance("MD5"); }']
         raw = (
-            'Analysis:\n'
+            "Analysis:\n"
             '{"decision":"apply_edits","edits":[{"start_line":1,"end_line":1,'
             '"original_lines":["public void hash() { java.security.MessageDigest.getInstance(\\"MD5\\"); }"],'
             '"replacement_lines":["public void hash() { java.security.MessageDigest.getInstance(\\"SHA-256\\"); }"]}],'
@@ -58,6 +58,7 @@ class TestLlmSchema(unittest.TestCase):
         self.assertEqual(strict["schema_error"], "invalid_json: malformed remediation generation payload")
         self.assertTrue(salvage["raw_response_valid"])
         self.assertIn("SHA-256", salvage["replacement_method_code"])
+
     test_remediation_strict_rejects_preamble_but_salvage_accepts = unittest.skipIf(
         javalang is None, "javalang not installed"
     )(test_remediation_strict_rejects_preamble_but_salvage_accepts)

@@ -6,13 +6,23 @@ from pydantic import BaseModel
 
 SUPPORTED_TRACE_PREDICATES = {
     # Weak Hash
-    "weak_hash_detected", "calls_md5", "calls_weak_hash",
-    "source_md5", "source_weak_hash", "analysis_md5", "analysis_weak_hash",
+    "weak_hash_detected",
+    "calls_md5",
+    "calls_weak_hash",
+    "source_md5",
+    "source_weak_hash",
+    "analysis_md5",
+    "analysis_weak_hash",
     # Weak Random
-    "insecure_random", "source_insecure_random", "calls_insecure_random",
-    "analysis_insecure_random", "random_context",
+    "insecure_random",
+    "source_insecure_random",
+    "calls_insecure_random",
+    "analysis_insecure_random",
+    "random_context",
     # Weak Crypto
-    "weak_cipher_detected", "source_weak_cipher", "analysis_weak_cipher",
+    "weak_cipher_detected",
+    "source_weak_cipher",
+    "analysis_weak_cipher",
 }
 
 

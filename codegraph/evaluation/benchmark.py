@@ -108,8 +108,12 @@ def load_mapping_config(path: Path) -> List[CategorySpec]:
                 id=str(entry.get("category_id") or entry.get("id") or entry.get("name")),
                 label=str(entry.get("label") or entry.get("name") or entry.get("category_id") or entry.get("id")),
                 cwes=[_normalize_cwe(cwe) for cwe in entry.get("cwes", []) if cwe],
-                rego_rules=[str(rule) for rule in (entry.get("rego_rule_ids") or entry.get("rego_rules") or []) if rule],
-                iso_controls=[str(ctrl) for ctrl in (entry.get("control_ids") or entry.get("iso_controls") or []) if ctrl],
+                rego_rules=[
+                    str(rule) for rule in (entry.get("rego_rule_ids") or entry.get("rego_rules") or []) if rule
+                ],
+                iso_controls=[
+                    str(ctrl) for ctrl in (entry.get("control_ids") or entry.get("iso_controls") or []) if ctrl
+                ],
                 remediation_tier=str(entry.get("remediation_tier") or "manual"),
                 framework_demo=bool(entry.get("framework_demo", False)),
             )

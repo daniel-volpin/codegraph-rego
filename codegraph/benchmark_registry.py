@@ -145,8 +145,12 @@ def _parse_categories(entries: Any) -> tuple[BenchmarkCategorySpec, ...]:
                 category_id=str(entry.get("category_id") or entry.get("id") or ""),
                 label=str(entry.get("label") or entry.get("category_id") or entry.get("id") or ""),
                 cwes=tuple(str(item) for item in (entry.get("cwes") or []) if item),
-                rego_rule_ids=tuple(str(item) for item in (entry.get("rego_rule_ids") or entry.get("rego_rules") or []) if item),
-                control_ids=tuple(str(item) for item in (entry.get("control_ids") or entry.get("iso_controls") or []) if item),
+                rego_rule_ids=tuple(
+                    str(item) for item in (entry.get("rego_rule_ids") or entry.get("rego_rules") or []) if item
+                ),
+                control_ids=tuple(
+                    str(item) for item in (entry.get("control_ids") or entry.get("iso_controls") or []) if item
+                ),
                 remediation_tier=tier,
                 framework_demo=bool(entry.get("framework_demo", False)),
             )
@@ -204,10 +208,7 @@ def _validate_registry(registry: PolicyRegistry) -> PolicyRegistry:
         category_ids.add(category.category_id)
 
     missing = sorted(
-        rule_id
-        for category in registry.categories
-        for rule_id in category.rego_rule_ids
-        if rule_id not in rule_ids
+        rule_id for category in registry.categories for rule_id in category.rego_rule_ids if rule_id not in rule_ids
     )
     if missing:
         raise ValueError(f"Policy registry categories reference unknown rule ids: {missing}")
@@ -268,11 +269,7 @@ def remediation_tier_by_rule_id(path: str | None = None) -> Dict[str, RegistryTi
 
 
 def supported_remediation_rule_ids(path: str | None = None) -> List[str]:
-    return [
-        rule_id
-        for rule_id, tier in remediation_tier_by_rule_id(path).items()
-        if tier in {"full", "guarded"}
-    ]
+    return [rule_id for rule_id, tier in remediation_tier_by_rule_id(path).items() if tier in {"full", "guarded"}]
 
 
 def policy_catalog_entries_from_registry(path: str | None = None) -> List[Dict[str, Any]]:

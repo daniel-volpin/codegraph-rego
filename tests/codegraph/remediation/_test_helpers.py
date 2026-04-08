@@ -15,7 +15,9 @@ def _structured_apply_edits(
     end_line: int | None = None,
 ) -> str:
     original_lines = original_method.splitlines() if isinstance(original_method, str) else list(original_method)
-    replacement_lines = replacement_method.splitlines() if isinstance(replacement_method, str) else list(replacement_method)
+    replacement_lines = (
+        replacement_method.splitlines() if isinstance(replacement_method, str) else list(replacement_method)
+    )
     if end_line is None:
         end_line = start_line + len(original_lines) - 1
     return json.dumps(

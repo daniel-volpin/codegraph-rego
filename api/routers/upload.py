@@ -133,7 +133,9 @@ async def upload_zip(file: UploadFile = File(...)):
         staging_dir = None
         update_progress("upload", "Resetting uploaded graph…", 20.0)
         purge_workspace_entities(os.path.abspath(settings.upload_dir))
-        final_java_roots = [os.path.join(os.path.abspath(settings.upload_dir), relative) for relative in java_root_relatives]
+        final_java_roots = [
+            os.path.join(os.path.abspath(settings.upload_dir), relative) for relative in java_root_relatives
+        ]
         _ingest_java_roots(final_java_roots)
     except IngestionError as exc:
         restore_error = None
@@ -185,7 +187,9 @@ async def upload_zip(file: UploadFile = File(...)):
         return JSONResponse(content={"error": f"Processing failed: {exc}"}, status_code=500)
     _cleanup_dir(backup_dir)
     complete_progress("Codebase processed!")
-    final_java_roots = [os.path.join(os.path.abspath(settings.upload_dir), relative) for relative in java_root_relatives]
+    final_java_roots = [
+        os.path.join(os.path.abspath(settings.upload_dir), relative) for relative in java_root_relatives
+    ]
     return UploadResponse(
         status="Codebase processed!",
         java_root=final_java_roots[0],

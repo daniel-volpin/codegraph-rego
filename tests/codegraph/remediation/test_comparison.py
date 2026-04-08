@@ -24,6 +24,7 @@ from codegraph.remediation.comparison import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _det(produced: bool = False, refused: bool = False, error: str | None = None, edits: int = 0) -> CandidateOutcome:
     return CandidateOutcome(
         source="deterministic",
@@ -63,6 +64,7 @@ def _ctx(
 # ---------------------------------------------------------------------------
 # Classification tests
 # ---------------------------------------------------------------------------
+
 
 class TestClassifyComparison(unittest.TestCase):
     """Test all branches of classify_comparison."""
@@ -127,6 +129,7 @@ class TestClassifyComparison(unittest.TestCase):
 # Deterministic outcome builder
 # ---------------------------------------------------------------------------
 
+
 class TestBuildDeterministicOutcome(unittest.TestCase):
     """Test build_deterministic_outcome with real planner + compiler."""
 
@@ -181,6 +184,7 @@ class TestBuildDeterministicOutcome(unittest.TestCase):
 # LLM outcome builder
 # ---------------------------------------------------------------------------
 
+
 class TestBuildLlmOutcome(unittest.TestCase):
     """Test build_llm_outcome with various apply_result shapes."""
 
@@ -233,6 +237,7 @@ class TestBuildLlmOutcome(unittest.TestCase):
 # Compare remediation
 # ---------------------------------------------------------------------------
 
+
 class TestCompareRemediation(unittest.TestCase):
     """Test the compare_remediation function."""
 
@@ -261,6 +266,7 @@ class TestCompareRemediation(unittest.TestCase):
 # Aggregate summary
 # ---------------------------------------------------------------------------
 
+
 class TestBuildComparisonSummary(unittest.TestCase):
     """Test aggregate summary building."""
 
@@ -272,22 +278,31 @@ class TestBuildComparisonSummary(unittest.TestCase):
     def test_counts_by_label(self) -> None:
         results = [
             ComparisonResult(
-                violation_id="v1", rule_id="ISO-A.10-WEAK-HASH",
-                file_path="a.java", target_method="a()",
+                violation_id="v1",
+                rule_id="ISO-A.10-WEAK-HASH",
+                file_path="a.java",
+                target_method="a()",
                 label=ComparisonLabel.BOTH_PRODUCED_EDITS,
-                deterministic=_det(produced=True), llm=_llm(produced=True),
+                deterministic=_det(produced=True),
+                llm=_llm(produced=True),
             ),
             ComparisonResult(
-                violation_id="v2", rule_id="ISO-A.10-WEAK-HASH",
-                file_path="b.java", target_method="b()",
+                violation_id="v2",
+                rule_id="ISO-A.10-WEAK-HASH",
+                file_path="b.java",
+                target_method="b()",
                 label=ComparisonLabel.BOTH_PRODUCED_EDITS,
-                deterministic=_det(produced=True), llm=_llm(produced=True),
+                deterministic=_det(produced=True),
+                llm=_llm(produced=True),
             ),
             ComparisonResult(
-                violation_id="v3", rule_id="ISO-A.10-WEAK-RANDOM",
-                file_path="c.java", target_method="c()",
+                violation_id="v3",
+                rule_id="ISO-A.10-WEAK-RANDOM",
+                file_path="c.java",
+                target_method="c()",
                 label=ComparisonLabel.DETERMINISTIC_ONLY,
-                deterministic=_det(produced=True), llm=_llm(error="x"),
+                deterministic=_det(produced=True),
+                llm=_llm(error="x"),
             ),
         ]
         summary = build_comparison_summary(results)
@@ -298,16 +313,22 @@ class TestBuildComparisonSummary(unittest.TestCase):
     def test_per_rule_breakdown(self) -> None:
         results = [
             ComparisonResult(
-                violation_id="v1", rule_id="ISO-A.10-WEAK-HASH",
-                file_path="a.java", target_method="a()",
+                violation_id="v1",
+                rule_id="ISO-A.10-WEAK-HASH",
+                file_path="a.java",
+                target_method="a()",
                 label=ComparisonLabel.BOTH_PRODUCED_EDITS,
-                deterministic=_det(produced=True), llm=_llm(produced=True),
+                deterministic=_det(produced=True),
+                llm=_llm(produced=True),
             ),
             ComparisonResult(
-                violation_id="v2", rule_id="ISO-A.10-WEAK-RANDOM",
-                file_path="b.java", target_method="b()",
+                violation_id="v2",
+                rule_id="ISO-A.10-WEAK-RANDOM",
+                file_path="b.java",
+                target_method="b()",
                 label=ComparisonLabel.LLM_ONLY,
-                deterministic=_det(error="x"), llm=_llm(produced=True),
+                deterministic=_det(error="x"),
+                llm=_llm(produced=True),
             ),
         ]
         summary = build_comparison_summary(results)
@@ -333,6 +354,7 @@ class TestBuildComparisonSummary(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Markdown rendering
 # ---------------------------------------------------------------------------
+
 
 class TestRenderMarkdown(unittest.TestCase):
     """Test markdown summary rendering."""

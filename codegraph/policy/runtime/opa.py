@@ -152,7 +152,9 @@ def evaluate_package_root(bundle: PolicyBundle | Mapping[str, Any], package: str
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
-            raise RuntimeError(f"OPA package evaluation failed for {serialized_bundle.get('target_method')}: {proc.stderr}")
+            raise RuntimeError(
+                f"OPA package evaluation failed for {serialized_bundle.get('target_method')}: {proc.stderr}"
+            )
         try:
             out = json.loads(proc.stdout)
         except json.JSONDecodeError as exc:

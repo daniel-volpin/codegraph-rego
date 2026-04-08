@@ -210,7 +210,10 @@ def main() -> int:
 
                 LOGGER.info(
                     "[%d/%d] %s %s",
-                    i, len(candidates), violation_id, target_method,
+                    i,
+                    len(candidates),
+                    violation_id,
+                    target_method,
                 )
 
                 # Build context for deterministic path.
@@ -228,7 +231,7 @@ def main() -> int:
                     }
                     if not shadow_context["deterministic_diff_snippet"]:
                         del shadow_context["deterministic_diff_snippet"]
-                        
+
                     apply_result = apply_remediation(
                         str(violation_id),
                         target_method=str(target_method),

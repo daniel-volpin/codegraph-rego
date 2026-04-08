@@ -119,11 +119,7 @@ def _safe_slug(value: str | None) -> str:
 def build_case_id(violation: Mapping[str, Any]) -> str:
     violation_id = str(violation.get("violation_id") or "unknown")
     target_method = str(violation.get("target_method") or "")
-    file_path = str(
-        (violation.get("evidence") or {}).get("file_path")
-        or violation.get("file_path")
-        or ""
-    )
+    file_path = str((violation.get("evidence") or {}).get("file_path") or violation.get("file_path") or "")
     testcase_id = extract_testcase_id(target_method or file_path) or "unknown"
     identity = "|".join((violation_id, target_method, file_path))
     digest = hashlib.sha1(identity.encode("utf-8")).hexdigest()[:10]
@@ -171,10 +167,7 @@ def build_remediation_result(
     compilation = apply_result.get("compilation") or {}
     generation = apply_result.get("generation")
     build_pass = compilation.get("success") if compilation.get("attempted") else None
-    policy_fixed = (
-        apply_result.get("status") == "OK"
-        and verification.get("target_rule_status") == "PASS"
-    )
+    policy_fixed = apply_result.get("status") == "OK" and verification.get("target_rule_status") == "PASS"
     replacement_applied = bool(apply_result.get("updated_source_code"))
     structured_valid = isinstance(generation, dict) and generation.get("raw_response_valid") is True
 
@@ -257,15 +250,9 @@ def build_metrics_payload(
 ) -> Dict[str, Any]:
     stage_counts = build_stage_counts(results)
     status_counts = tracked_status_counts(results)
-    fix_rate = (
-        stage_counts["policy_fixed"] / stage_counts["attempted"]
-        if stage_counts["attempted"]
-        else 0.0
-    )
+    fix_rate = stage_counts["policy_fixed"] / stage_counts["attempted"] if stage_counts["attempted"] else 0.0
     build_rate = (
-        stage_counts["build_success"] / stage_counts["build_attempted"]
-        if stage_counts["build_attempted"]
-        else 0.0
+        stage_counts["build_success"] / stage_counts["build_attempted"] if stage_counts["build_attempted"] else 0.0
     )
     return {
         "generated_at": utc_now_iso(),
@@ -307,9 +294,7 @@ def render_summary_markdown(
     untracked_counts: Mapping[str, int] | None = None,
 ) -> str:
     attempted = stage_counts.get("attempted", 0)
-    total_display = (
-        f"`{attempted}`" if total_cases is None else f"`{attempted}` / `{total_cases}`"
-    )
+    total_display = f"`{attempted}`" if total_cases is None else f"`{attempted}` / `{total_cases}`"
 
     lines = [
         "# Remediation Summary",
@@ -358,10 +343,7 @@ def render_summary_markdown(
         [
             "",
             "Interpretation:",
-            (
-                "- `Policy fixed` means the target rule was removed "
-                "and no new violations were introduced."
-            ),
+            ("- `Policy fixed` means the target rule was removed and no new violations were introduced."),
             "- `Build success` means compilation was attempted and passed.",
             "- `Fully verified` is the current remediation benchmark success metric.",
         ]
@@ -499,9 +481,7 @@ class RemediationRuntime:
             "build_attempted": 0,
             "build_success": 0,
             "policy_fixed": 0,
-            "final_status_counts": {
-                status: 0 for status in TRACKED_FINAL_STATUSES
-            },
+            "final_status_counts": {status: 0 for status in TRACKED_FINAL_STATUSES},
             "mode": self.mode,
             "max_attempts": self.max_attempts,
             **extra,
@@ -590,18 +570,12 @@ class RemediationRuntime:
             )
         else:
             eta_seconds = 0.0
-        percent_complete = (
-            (stage_counts["attempted"] / self.total_cases) if self.total_cases else 1.0
-        )
+        percent_complete = (stage_counts["attempted"] / self.total_cases) if self.total_cases else 1.0
         fix_success_rate = (
-            stage_counts["policy_fixed"] / stage_counts["attempted"]
-            if stage_counts["attempted"]
-            else 0.0
+            stage_counts["policy_fixed"] / stage_counts["attempted"] if stage_counts["attempted"] else 0.0
         )
         build_success_rate = (
-            stage_counts["build_success"] / stage_counts["build_attempted"]
-            if stage_counts["build_attempted"]
-            else 0.0
+            stage_counts["build_success"] / stage_counts["build_attempted"] if stage_counts["build_attempted"] else 0.0
         )
         progress_payload = {
             "status": status,

@@ -19,13 +19,9 @@ class ApplyFixTests(RemediationTestBase):
             src_path = Path(tmp) / "Example.java"
             src_path.write_text("class Example { void hash() {} }\n", encoding="utf-8")
 
-            context = (
-                ViolationContextBuilder()
-                .with_file_path(src_path.as_posix())
-                .build()
-            )
+            context = ViolationContextBuilder().with_file_path(src_path.as_posix()).build()
 
-            error_response = ProposalResponseBuilder().with_error("invalid_java_syntax: expected \")\"").build()
+            error_response = ProposalResponseBuilder().with_error('invalid_java_syntax: expected ")"').build()
 
             remediation = svc_mod.RemediationService(llm_client=lambda *_args, **_kwargs: "")
             remediation.get_violation_context = lambda *_args, **_kwargs: context  # type: ignore[method-assign]
@@ -44,7 +40,9 @@ class ApplyFixTests(RemediationTestBase):
             self.assertIn("invalid_java_syntax", out.get("errors", []))
 
     def test_retry_error_summary_is_structural(self):
-        self.assertEqual(self.service._summarize_retry_error("invalid_java_syntax: JavaSyntaxError"), "invalid_java_syntax")
+        self.assertEqual(
+            self.service._summarize_retry_error("invalid_java_syntax: JavaSyntaxError"), "invalid_java_syntax"
+        )
         self.assertEqual(self.service._summarize_retry_error("method_name_mismatch"), "method_name_mismatch")
         self.assertEqual(
             self.service._summarize_retry_error("Failed to produce a valid method replacement"),
@@ -182,7 +180,11 @@ class ApplyFixTests(RemediationTestBase):
             remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
             remediation.propose_method_edits = lambda *_args, **_kwargs: proposal_response  # type: ignore[method-assign]
             remediation._replace_method_in_source = (  # type: ignore[method-assign]
-                lambda *_args, **_kwargs: ("class Example { void a() { /* UPDATED */ } }\n", "void a() {}", "void a() { /* UPDATED */ }")
+                lambda *_args, **_kwargs: (
+                    "class Example { void a() { /* UPDATED */ } }\n",
+                    "void a() {}",
+                    "void a() { /* UPDATED */ }",
+                )
             )
             remediation._prepare_temp_workspace = (  # type: ignore[method-assign]
                 lambda tmp_root, _resolved: (tmp_root, Path(tmp_root) / "Example.java", Path(tmp_root))

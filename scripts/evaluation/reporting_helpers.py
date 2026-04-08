@@ -413,7 +413,9 @@ def derive_remediation_counts(results: list[dict[str, Any]]) -> dict[str, Any]:
     status_counts = Counter(str(item.get("status") or "UNKNOWN") for item in results)
     decision_counts = Counter(str((item.get("generation") or {}).get("decision") or "UNKNOWN") for item in results)
     structured_valid = sum(
-        1 for item in results if isinstance(item.get("generation"), dict) and item["generation"].get("raw_response_valid")
+        1
+        for item in results
+        if isinstance(item.get("generation"), dict) and item["generation"].get("raw_response_valid")
     )
     replacement_applied = sum(1 for item in results if item.get("patch_applied") is True)
     policy_pass_count = sum(1 for item in results if item.get("policy_pass") is True)
@@ -501,16 +503,16 @@ def render_comparison_table(comparisons: list[dict[str, Any]]) -> list[str]:
         lines.append(
             "| "
             + " | ".join(
-                    [
-                        item["stage"],
-                        item["current_label"],
-                        item["baseline_label"],
-                        str(item["current_attempted"]),
-                        str(item["baseline_attempted"]),
-                        str(delta["attempted"]),
-                        str(delta["fix_success"]),
-                        str(delta["fix_success_rate_points"]),
-                        str(delta["build_success"]),
+                [
+                    item["stage"],
+                    item["current_label"],
+                    item["baseline_label"],
+                    str(item["current_attempted"]),
+                    str(item["baseline_attempted"]),
+                    str(delta["attempted"]),
+                    str(delta["fix_success"]),
+                    str(delta["fix_success_rate_points"]),
+                    str(delta["build_success"]),
                     str(delta["build_success_rate_points"]),
                 ]
             )
