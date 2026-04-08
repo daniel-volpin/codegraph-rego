@@ -1,0 +1,615 @@
+{
+  "status": "OK",
+  "violation_id": "ISO-A.10-WEAK-CRYPTO",
+  "rule_id": "ISO-A.10-WEAK-CRYPTO",
+  "target_method": "org.owasp.benchmark.testcode.BenchmarkTest00055.doPost(HttpServletRequest,HttpServletResponse)",
+  "file_path": "/var/folders/fn/z3nms6697533xtmvms45z1n40000gp/T/tmpa9f8ihl6/src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00055.java",
+  "updated_source_code": "    @Override\n    public void doPost(HttpServletRequest request, HttpServletResponse response)\n            throws ServletException, IOException {\n        response.setContentType(\"text/html;charset=UTF-8\");\n\n        javax.servlet.http.Cookie[] theCookies = request.getCookies();\n\n        String param = \"noCookieValueSupplied\";\n        if (theCookies != null) {\n            for (javax.servlet.http.Cookie theCookie : theCookies) {\n                if (theCookie.getName().equals(\"BenchmarkTest00055\")) {\n                    param = java.net.URLDecoder.decode(theCookie.getValue(), \"UTF-8\");\n                    break;\n                }\n            }\n        }\n\n        String bar = param;\n\n        // Code based on example from:\n        // http://examples.javacodegeeks.com/core-java/crypto/encrypt-decrypt-file-stream-with-des/\n        // 8-byte initialization vector\n        //\t    byte[] iv = {\n        //\t    \t(byte)0xB2, (byte)0x12, (byte)0xD5, (byte)0xB2,\n        //\t    \t(byte)0x44, (byte)0x21, (byte)0xC3, (byte)0xC3033\n        //\t    };\n        java.security.SecureRandom random = new java.security.SecureRandom();\n        byte[] iv = random.generateSeed(8); // DES requires 8 byte keys\n\n        try {\njavax.crypto.Cipher c =\n        javax.crypto.Cipher.getInstance(\"AES/CBC/PKCS5Padding\", \"SunJCE\");\n            // Prepare the cipher to encrypt\njavax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance(\"AES\").generateKey();\n            java.security.spec.AlgorithmParameterSpec paramSpec =\n                    new javax.crypto.spec.IvParameterSpec(iv);\n            c.init(javax.crypto.Cipher.ENCRYPT_MODE, key, paramSpec);\n\n            // encrypt and store the results\n            byte[] input = {(byte) '?'};\n            Object inputParam = bar;\n            if (inputParam instanceof String) input = ((String) inputParam).getBytes();\n            if (inputParam instanceof java.io.InputStream) {\n                byte[] strInput = new byte[1000];\n                int i = ((java.io.InputStream) inputParam).read(strInput);\n                if (i == -1) {\n                    response.getWriter()\n                            .println(\n                                    \"This input source requires a POST, not a GET. Incompatible UI for the InputStream source.\");\n                    return;\n                }\n                input = java.util.Arrays.copyOf(strInput, i);\n            }\n            byte[] result = c.doFinal(input);\n\n            java.io.File fileTarget =\n                    new java.io.File(\n                            new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR),\n                            \"passwordFile.txt\");\n            java.io.FileWriter fw =\n                    new java.io.FileWriter(fileTarget, true); // the true will append the new data\n            fw.write(\n                    \"secret_value=\"\n                            + org.owasp.esapi.ESAPI.encoder().encodeForBase64(result, true)\n                            + \"\\n\");\n            fw.close();\n            response.getWriter()\n                    .println(\n                            \"Sensitive value: '\"\n                                    + org.owasp\n                                            .esapi\n                                            .ESAPI\n                                            .encoder()\n                                            .encodeForHTML(new String(input))\n                                    + \"' encrypted and stored<br/>\");\n\n        } catch (java.security.NoSuchAlgorithmException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.NoSuchProviderException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.NoSuchPaddingException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.IllegalBlockSizeException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.BadPaddingException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.InvalidKeyException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.InvalidAlgorithmParameterException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        }\n        response.getWriter()\n                .println(\n                        \"Crypto Test javax.crypto.Cipher.getInstance(java.lang.String,java.lang.String) executed\");\n    }",
+  "diff": "--- org.owasp.benchmark.testcode.BenchmarkTest00055.doPost(HttpServletRequest,HttpServletResponse) (before)\n+++ org.owasp.benchmark.testcode.BenchmarkTest00055.doPost(HttpServletRequest,HttpServletResponse) (after)\n@@ -28,10 +28,10 @@\n         byte[] iv = random.generateSeed(8); // DES requires 8 byte keys\n \n         try {\n-            javax.crypto.Cipher c =\n-                    javax.crypto.Cipher.getInstance(\"DES/CBC/PKCS5Padding\", \"SunJCE\");\n+javax.crypto.Cipher c =\n+        javax.crypto.Cipher.getInstance(\"AES/CBC/PKCS5Padding\", \"SunJCE\");\n             // Prepare the cipher to encrypt\n-            javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance(\"DES\").generateKey();\n+javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance(\"AES\").generateKey();\n             java.security.spec.AlgorithmParameterSpec paramSpec =\n                     new javax.crypto.spec.IvParameterSpec(iv);\n             c.init(javax.crypto.Cipher.ENCRYPT_MODE, key, paramSpec);",
+  "verification": {
+    "target_rule_status": "PASS",
+    "overall_status": "PASS",
+    "baseline": [
+      {
+        "violation_id": "ISO-A.10-WEAK-CRYPTO",
+        "target_method": "org.owasp.benchmark.testcode.BenchmarkTest00055.doPost(HttpServletRequest,HttpServletResponse)",
+        "file_path": "/var/folders/fn/z3nms6697533xtmvms45z1n40000gp/T/tmpa9f8ihl6/src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00055.java",
+        "reason": "Weak cipher usage detected",
+        "severity": "high",
+        "control_metadata": {
+          "id": "ISO-A.10-WEAK-CRYPTO",
+          "control": "A.10",
+          "title": "Cryptography (Weak Cipher)",
+          "reference": "ISO/IEC 27001:2022 A.10",
+          "summary": "Cryptographic controls should avoid weak or deprecated ciphers and insecure modes.",
+          "rego_module": "policy/iso_27001_crypto.rego",
+          "rego_rule": "violations",
+          "evidence_fields": [
+            "signature",
+            "file_path",
+            "called_signatures",
+            "source_code",
+            "analysis_flags"
+          ]
+        },
+        "remediation": {
+          "supported": true,
+          "support_tier": "guarded",
+          "reason_code": "supported_rule_for_auto_fix",
+          "strategy": "llm_method_replacement",
+          "preview_available": true,
+          "verify_available": true,
+          "ui_apply_mode": "dry_run",
+          "rationale": "Weak-cipher remediation is available only for explicit literal subcases where a safe minimal replacement is evident.",
+          "safe_refusal_possible": true
+        },
+        "code_snippet": "\n    @Override\n    public void doPost(HttpServletRequest request, HttpServletResponse response)\n            throws ServletException, IOException {\n        response.setContentType(\"text/html;charset=UTF-8\");\n\n        javax.servlet.http.Cookie[] theCookies = request.getCookies();\n\n        String param = \"noCookieValueSupplied\";\n        if (theCookies != null) {\n            for (javax.servlet.http.Cookie theCookie : theCookies) {\n                if (theCookie.getName().equals(\"BenchmarkTest00055\")) {\n                    param = java.net.URLDecoder.decode(theCookie.getValue(), \"UTF-8\");\n                    break;\n                }\n            }\n        }\n\n        String bar = param;\n\n        // Code based on example from:\n        // http://examples.javacodegeeks.com/core-java/crypto/encrypt-decrypt-file-stream-with-des/\n        // 8-byte initialization vector\n        //\t    byte[] iv = {\n        //\t    \t(byte)0xB2, (byte)0x12, (byte)0xD5, (byte)0xB2,\n        //\t    \t(byte)0x44, (byte)0x21, (byte)0xC3, (byte)0xC3033\n        //\t    };\n        java.security.SecureRandom random = new java.security.SecureRandom();\n        byte[] iv = random.generateSeed(8); // DES requires 8 byte keys\n\n        try {\n            javax.crypto.Cipher c =\n                    javax.crypto.Cipher.getInstance(\"DES/CBC/PKCS5Padding\", \"SunJCE\");\n            // Prepare the cipher to encrypt\n            javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance(\"DES\").generateKey();\n            java.security.spec.AlgorithmParameterSpec paramSpec =\n                    new javax.crypto.spec.IvParameterSpec(iv);\n            c.init(javax.crypto.Cipher.ENCRYPT_MODE, key, paramSpec);\n\n            // encrypt and store the results\n            byte[] input = {(byte) '?'};\n            Object inputParam = bar;\n            if (inputParam instanceof String) input = ((String) inputParam).getBytes();\n            if (inputParam instanceof java.io.InputStream) {\n                byte[] strInput = new byte[1000];\n                int i = ((java.io.InputStream) inputParam).read(strInput);\n                if (i == -1) {\n                    response.getWriter()\n                            .println(\n                                    \"This input source requires a POST, not a GET. Incompatible UI for the InputStream source.\");\n                    return;\n                }\n                input = java.util.Arrays.copyOf(strInput, i);\n            }\n            byte[] result = c.doFinal(input);\n\n            java.io.File fileTarget =\n                    new java.io.File(\n                            new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR),\n                            \"passwordFile.txt\");\n            java.io.FileWriter fw =\n                    new java.io.FileWriter(fileTarget, true); // the true will append the new data\n            fw.write(\n                    \"secret_value=\"\n                            + org.owasp.esapi.ESAPI.encoder().encodeForBase64(result, true)\n                            + \"\\n\");\n            fw.close();\n            response.getWriter()\n                    .println(\n                            \"Sensitive value: '\"\n                                    + org.owasp\n                                            .esapi\n                                            .ESAPI\n                                            .encoder()\n                                            .encodeForHTML(new String(input))\n                                    + \"' encrypted and stored<br/>\");\n\n        } catch (java.security.NoSuchAlgorithmException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.NoSuchProviderException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.NoSuchPaddingException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.IllegalBlockSizeException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.BadPaddingException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.InvalidKeyException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.InvalidAlgorithmParameterException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        }\n        response.getWriter()\n                .println(\n                        \"Crypto Test javax.crypto.Cipher.getInstance(java.lang.String,java.lang.String) executed\");\n    }\n}\n",
+        "snippet_available": true,
+        "snippet_start_line": 49,
+        "snippet_end_line": 170,
+        "evidence": {
+          "source_code": "\n    @Override\n    public void doPost(HttpServletRequest request, HttpServletResponse response)\n            throws ServletException, IOException {\n        response.setContentType(\"text/html;charset=UTF-8\");\n\n        javax.servlet.http.Cookie[] theCookies = request.getCookies();\n\n        String param = \"noCookieValueSupplied\";\n        if (theCookies != null) {\n            for (javax.servlet.http.Cookie theCookie : theCookies) {\n                if (theCookie.getName().equals(\"BenchmarkTest00055\")) {\n                    param = java.net.URLDecoder.decode(theCookie.getValue(), \"UTF-8\");\n                    break;\n                }\n            }\n        }\n\n        String bar = param;\n\n        // Code based on example from:\n        // http://examples.javacodegeeks.com/core-java/crypto/encrypt-decrypt-file-stream-with-des/\n        // 8-byte initialization vector\n        //\t    byte[] iv = {\n        //\t    \t(byte)0xB2, (byte)0x12, (byte)0xD5, (byte)0xB2,\n        //\t    \t(byte)0x44, (byte)0x21, (byte)0xC3, (byte)0xC3033\n        //\t    };\n        java.security.SecureRandom random = new java.security.SecureRandom();\n        byte[] iv = random.generateSeed(8); // DES requires 8 byte keys\n\n        try {\n            javax.crypto.Cipher c =\n                    javax.crypto.Cipher.getInstance(\"DES/CBC/PKCS5Padding\", \"SunJCE\");\n            // Prepare the cipher to encrypt\n            javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance(\"DES\").generateKey();\n            java.security.spec.AlgorithmParameterSpec paramSpec =\n                    new javax.crypto.spec.IvParameterSpec(iv);\n            c.init(javax.crypto.Cipher.ENCRYPT_MODE, key, paramSpec);\n\n            // encrypt and store the results\n            byte[] input = {(byte) '?'};\n            Object inputParam = bar;\n            if (inputParam instanceof String) input = ((String) inputParam).getBytes();\n            if (inputParam instanceof java.io.InputStream) {\n                byte[] strInput = new byte[1000];\n                int i = ((java.io.InputStream) inputParam).read(strInput);\n                if (i == -1) {\n                    response.getWriter()\n                            .println(\n                                    \"This input source requires a POST, not a GET. Incompatible UI for the InputStream source.\");\n                    return;\n                }\n                input = java.util.Arrays.copyOf(strInput, i);\n            }\n            byte[] result = c.doFinal(input);\n\n            java.io.File fileTarget =\n                    new java.io.File(\n                            new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR),\n                            \"passwordFile.txt\");\n            java.io.FileWriter fw =\n                    new java.io.FileWriter(fileTarget, true); // the true will append the new data\n            fw.write(\n                    \"secret_value=\"\n                            + org.owasp.esapi.ESAPI.encoder().encodeForBase64(result, true)\n                            + \"\\n\");\n            fw.close();\n            response.getWriter()\n                    .println(\n                            \"Sensitive value: '\"\n                                    + org.owasp\n                                            .esapi\n                                            .ESAPI\n                                            .encoder()\n                                            .encodeForHTML(new String(input))\n                                    + \"' encrypted and stored<br/>\");\n\n        } catch (java.security.NoSuchAlgorithmException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.NoSuchProviderException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.NoSuchPaddingException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.IllegalBlockSizeException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.BadPaddingException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.InvalidKeyException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.InvalidAlgorithmParameterException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        }\n        response.getWriter()\n                .println(\n                        \"Crypto Test javax.crypto.Cipher.getInstance(java.lang.String,java.lang.String) executed\");\n    }\n}\n",
+          "graph_context": {
+            "annotations": [
+              "Override"
+            ],
+            "uses_fields": [],
+            "calls": [],
+            "callers": []
+          },
+          "vector_context": [
+            "org.owasp.benchmark.testcode.BenchmarkTest00856.doGet(HttpServletRequest,HttpServletResponse)",
+            "org.owasp.benchmark.testcode.BenchmarkTest00868.doGet(HttpServletRequest,HttpServletResponse)",
+            "org.owasp.benchmark.testcode.BenchmarkTest00898.doGet(HttpServletRequest,HttpServletResponse)"
+          ],
+          "file_path": "/var/folders/fn/z3nms6697533xtmvms45z1n40000gp/T/tmpa9f8ihl6/src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00055.java",
+          "target_method": "org.owasp.benchmark.testcode.BenchmarkTest00055.doPost(HttpServletRequest,HttpServletResponse)",
+          "start_line": 49,
+          "end_line": 170,
+          "analysis_flags": {
+            "md5_literal": false,
+            "md5_variable": false,
+            "md5_detected": false,
+            "weak_hash_literal": false,
+            "weak_hash_variable": false,
+            "weak_hash_detected": false,
+            "weak_cipher_literal": true,
+            "weak_cipher_detected": true,
+            "insecure_random_detected": false,
+            "sha1prng_detected": false,
+            "path_traversal_detected": false,
+            "path_safe_constant_detected": false,
+            "path_sink_uses_tainted_input": false,
+            "path_sink_uses_safe_constant": false,
+            "path_sink_uses_safe_resource_helper": false,
+            "command_exec_string_tainted": false,
+            "command_exec_args_tainted": false,
+            "command_env_only_tainted": false,
+            "command_injection_detected": false,
+            "ldap_injection_detected": false,
+            "ldap_filter_uses_tainted_input": false,
+            "ldap_filter_uses_safe_constant": false,
+            "xpath_injection_detected": false,
+            "xpath_query_uses_tainted_input": false,
+            "xpath_query_uses_safe_constant": false,
+            "sql_query_uses_tainted_input": false,
+            "sql_query_uses_safe_constant": false,
+            "sql_prepare_call_detected": false,
+            "sql_callable_statement_detected": false,
+            "sql_dynamic_query_detected": false
+          },
+          "helper_summaries": {
+            "safe_constant_return_vars": [],
+            "tainted_return_vars": [],
+            "safe_constant_return_used_in_path_sink": false,
+            "tainted_return_used_in_path_sink": false,
+            "safe_constant_return_used_in_ldap_filter": false,
+            "tainted_return_used_in_ldap_filter": false,
+            "safe_constant_return_used_in_xpath_query": false,
+            "safe_constant_return_used_in_sql_query": false,
+            "safe_constant_return_used_in_command_sink": false,
+            "tainted_return_used_in_xpath_query": false,
+            "tainted_return_used_in_sql_query": false,
+            "tainted_return_used_in_command_sink": false,
+            "analyzed_call_count": 0
+          }
+        }
+      }
+    ],
+    "after": [],
+    "new_violations": [],
+    "remaining_violations": []
+  },
+  "compilation": {
+    "attempted": true,
+    "success": true,
+    "output_snippet": null
+  },
+  "metadata": {
+    "violation_id": "ISO-A.10-WEAK-CRYPTO",
+    "rule_id": "ISO-A.10-WEAK-CRYPTO",
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest00055.doPost(HttpServletRequest,HttpServletResponse)",
+    "file_path": "/var/folders/fn/z3nms6697533xtmvms45z1n40000gp/T/tmpa9f8ihl6/src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00055.java",
+    "attempt_count": 1,
+    "mode": "dry_run"
+  },
+  "generation": {
+    "decision": "apply_edits",
+    "edits": [
+      {
+        "start_line": 31,
+        "end_line": 32,
+        "original_lines": [
+          "javax.crypto.Cipher c =",
+          "        javax.crypto.Cipher.getInstance(\"DES/CBC/PKCS5Padding\", \"SunJCE\");"
+        ],
+        "replacement_lines": [
+          "javax.crypto.Cipher c =",
+          "        javax.crypto.Cipher.getInstance(\"AES/CBC/PKCS5Padding\", \"SunJCE\");"
+        ]
+      },
+      {
+        "start_line": 34,
+        "end_line": 34,
+        "original_lines": [
+          "javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance(\"DES\").generateKey();"
+        ],
+        "replacement_lines": [
+          "javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance(\"AES\").generateKey();"
+        ]
+      }
+    ],
+    "replacement_method_lines": [
+      "    @Override",
+      "    public void doPost(HttpServletRequest request, HttpServletResponse response)",
+      "            throws ServletException, IOException {",
+      "        response.setContentType(\"text/html;charset=UTF-8\");",
+      "",
+      "        javax.servlet.http.Cookie[] theCookies = request.getCookies();",
+      "",
+      "        String param = \"noCookieValueSupplied\";",
+      "        if (theCookies != null) {",
+      "            for (javax.servlet.http.Cookie theCookie : theCookies) {",
+      "                if (theCookie.getName().equals(\"BenchmarkTest00055\")) {",
+      "                    param = java.net.URLDecoder.decode(theCookie.getValue(), \"UTF-8\");",
+      "                    break;",
+      "                }",
+      "            }",
+      "        }",
+      "",
+      "        String bar = param;",
+      "",
+      "        // Code based on example from:",
+      "        // http://examples.javacodegeeks.com/core-java/crypto/encrypt-decrypt-file-stream-with-des/",
+      "        // 8-byte initialization vector",
+      "        //\t    byte[] iv = {",
+      "        //\t    \t(byte)0xB2, (byte)0x12, (byte)0xD5, (byte)0xB2,",
+      "        //\t    \t(byte)0x44, (byte)0x21, (byte)0xC3, (byte)0xC3033",
+      "        //\t    };",
+      "        java.security.SecureRandom random = new java.security.SecureRandom();",
+      "        byte[] iv = random.generateSeed(8); // DES requires 8 byte keys",
+      "",
+      "        try {",
+      "javax.crypto.Cipher c =",
+      "        javax.crypto.Cipher.getInstance(\"AES/CBC/PKCS5Padding\", \"SunJCE\");",
+      "            // Prepare the cipher to encrypt",
+      "javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance(\"AES\").generateKey();",
+      "            java.security.spec.AlgorithmParameterSpec paramSpec =",
+      "                    new javax.crypto.spec.IvParameterSpec(iv);",
+      "            c.init(javax.crypto.Cipher.ENCRYPT_MODE, key, paramSpec);",
+      "",
+      "            // encrypt and store the results",
+      "            byte[] input = {(byte) '?'};",
+      "            Object inputParam = bar;",
+      "            if (inputParam instanceof String) input = ((String) inputParam).getBytes();",
+      "            if (inputParam instanceof java.io.InputStream) {",
+      "                byte[] strInput = new byte[1000];",
+      "                int i = ((java.io.InputStream) inputParam).read(strInput);",
+      "                if (i == -1) {",
+      "                    response.getWriter()",
+      "                            .println(",
+      "                                    \"This input source requires a POST, not a GET. Incompatible UI for the InputStream source.\");",
+      "                    return;",
+      "                }",
+      "                input = java.util.Arrays.copyOf(strInput, i);",
+      "            }",
+      "            byte[] result = c.doFinal(input);",
+      "",
+      "            java.io.File fileTarget =",
+      "                    new java.io.File(",
+      "                            new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR),",
+      "                            \"passwordFile.txt\");",
+      "            java.io.FileWriter fw =",
+      "                    new java.io.FileWriter(fileTarget, true); // the true will append the new data",
+      "            fw.write(",
+      "                    \"secret_value=\"",
+      "                            + org.owasp.esapi.ESAPI.encoder().encodeForBase64(result, true)",
+      "                            + \"\\n\");",
+      "            fw.close();",
+      "            response.getWriter()",
+      "                    .println(",
+      "                            \"Sensitive value: '\"",
+      "                                    + org.owasp",
+      "                                            .esapi",
+      "                                            .ESAPI",
+      "                                            .encoder()",
+      "                                            .encodeForHTML(new String(input))",
+      "                                    + \"' encrypted and stored<br/>\");",
+      "",
+      "        } catch (java.security.NoSuchAlgorithmException e) {",
+      "            response.getWriter()",
+      "                    .println(",
+      "                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");",
+      "            e.printStackTrace(response.getWriter());",
+      "            throw new ServletException(e);",
+      "        } catch (java.security.NoSuchProviderException e) {",
+      "            response.getWriter()",
+      "                    .println(",
+      "                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");",
+      "            e.printStackTrace(response.getWriter());",
+      "            throw new ServletException(e);",
+      "        } catch (javax.crypto.NoSuchPaddingException e) {",
+      "            response.getWriter()",
+      "                    .println(",
+      "                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");",
+      "            e.printStackTrace(response.getWriter());",
+      "            throw new ServletException(e);",
+      "        } catch (javax.crypto.IllegalBlockSizeException e) {",
+      "            response.getWriter()",
+      "                    .println(",
+      "                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");",
+      "            e.printStackTrace(response.getWriter());",
+      "            throw new ServletException(e);",
+      "        } catch (javax.crypto.BadPaddingException e) {",
+      "            response.getWriter()",
+      "                    .println(",
+      "                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");",
+      "            e.printStackTrace(response.getWriter());",
+      "            throw new ServletException(e);",
+      "        } catch (java.security.InvalidKeyException e) {",
+      "            response.getWriter()",
+      "                    .println(",
+      "                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");",
+      "            e.printStackTrace(response.getWriter());",
+      "            throw new ServletException(e);",
+      "        } catch (java.security.InvalidAlgorithmParameterException e) {",
+      "            response.getWriter()",
+      "                    .println(",
+      "                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");",
+      "            e.printStackTrace(response.getWriter());",
+      "            throw new ServletException(e);",
+      "        }",
+      "        response.getWriter()",
+      "                .println(",
+      "                        \"Crypto Test javax.crypto.Cipher.getInstance(java.lang.String,java.lang.String) executed\");",
+      "    }"
+    ],
+    "replacement_method_code": "    @Override\n    public void doPost(HttpServletRequest request, HttpServletResponse response)\n            throws ServletException, IOException {\n        response.setContentType(\"text/html;charset=UTF-8\");\n\n        javax.servlet.http.Cookie[] theCookies = request.getCookies();\n\n        String param = \"noCookieValueSupplied\";\n        if (theCookies != null) {\n            for (javax.servlet.http.Cookie theCookie : theCookies) {\n                if (theCookie.getName().equals(\"BenchmarkTest00055\")) {\n                    param = java.net.URLDecoder.decode(theCookie.getValue(), \"UTF-8\");\n                    break;\n                }\n            }\n        }\n\n        String bar = param;\n\n        // Code based on example from:\n        // http://examples.javacodegeeks.com/core-java/crypto/encrypt-decrypt-file-stream-with-des/\n        // 8-byte initialization vector\n        //\t    byte[] iv = {\n        //\t    \t(byte)0xB2, (byte)0x12, (byte)0xD5, (byte)0xB2,\n        //\t    \t(byte)0x44, (byte)0x21, (byte)0xC3, (byte)0xC3033\n        //\t    };\n        java.security.SecureRandom random = new java.security.SecureRandom();\n        byte[] iv = random.generateSeed(8); // DES requires 8 byte keys\n\n        try {\njavax.crypto.Cipher c =\n        javax.crypto.Cipher.getInstance(\"AES/CBC/PKCS5Padding\", \"SunJCE\");\n            // Prepare the cipher to encrypt\njavax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance(\"AES\").generateKey();\n            java.security.spec.AlgorithmParameterSpec paramSpec =\n                    new javax.crypto.spec.IvParameterSpec(iv);\n            c.init(javax.crypto.Cipher.ENCRYPT_MODE, key, paramSpec);\n\n            // encrypt and store the results\n            byte[] input = {(byte) '?'};\n            Object inputParam = bar;\n            if (inputParam instanceof String) input = ((String) inputParam).getBytes();\n            if (inputParam instanceof java.io.InputStream) {\n                byte[] strInput = new byte[1000];\n                int i = ((java.io.InputStream) inputParam).read(strInput);\n                if (i == -1) {\n                    response.getWriter()\n                            .println(\n                                    \"This input source requires a POST, not a GET. Incompatible UI for the InputStream source.\");\n                    return;\n                }\n                input = java.util.Arrays.copyOf(strInput, i);\n            }\n            byte[] result = c.doFinal(input);\n\n            java.io.File fileTarget =\n                    new java.io.File(\n                            new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR),\n                            \"passwordFile.txt\");\n            java.io.FileWriter fw =\n                    new java.io.FileWriter(fileTarget, true); // the true will append the new data\n            fw.write(\n                    \"secret_value=\"\n                            + org.owasp.esapi.ESAPI.encoder().encodeForBase64(result, true)\n                            + \"\\n\");\n            fw.close();\n            response.getWriter()\n                    .println(\n                            \"Sensitive value: '\"\n                                    + org.owasp\n                                            .esapi\n                                            .ESAPI\n                                            .encoder()\n                                            .encodeForHTML(new String(input))\n                                    + \"' encrypted and stored<br/>\");\n\n        } catch (java.security.NoSuchAlgorithmException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.NoSuchProviderException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.NoSuchPaddingException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.IllegalBlockSizeException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (javax.crypto.BadPaddingException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.InvalidKeyException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        } catch (java.security.InvalidAlgorithmParameterException e) {\n            response.getWriter()\n                    .println(\n                            \"Problem executing crypto - javax.crypto.Cipher.getInstance(java.lang.String,java.security.Provider) Test Case\");\n            e.printStackTrace(response.getWriter());\n            throw new ServletException(e);\n        }\n        response.getWriter()\n                .println(\n                        \"Crypto Test javax.crypto.Cipher.getInstance(java.lang.String,java.lang.String) executed\");\n    }",
+    "reason": "",
+    "raw_response_valid": true,
+    "schema_error": null
+  },
+  "confidence": {
+    "score": 0.8909,
+    "band": "apply",
+    "threshold_apply": 0.75,
+    "threshold_review": 0.5,
+    "rationale": "tier=guarded; decision=apply_edits; structured_valid=True; attempts=1; score=0.891"
+  },
+  "error": null,
+  "predicate_trace": {
+    "package_path": "data.iso27001",
+    "rule_id": "ISO-A.10-WEAK-CRYPTO",
+    "trace_source": "package_root_eval",
+    "before_trace_raw": {
+      "analysis_weak_cipher": true,
+      "benchmark_context": true,
+      "command_keywords": [
+        "-c",
+        ".command(",
+        "/c",
+        "cmd.exe",
+        "processbuilder",
+        "runtime.getruntime().exec(",
+        "sh"
+      ],
+      "des_pattern": "cipher.getinstance(\"des",
+      "ecb_pattern": "cipher.getinstance(\"aes/ecb",
+      "endpoint_annotations": [
+        "deletemapping",
+        "getmapping",
+        "patchmapping",
+        "postmapping",
+        "putmapping",
+        "requestmapping",
+        "webservlet"
+      ],
+      "file_path_keywords": [
+        "../",
+        "..\\",
+        "fileinputstream",
+        "new java.io.file(",
+        "new java.io.filereader(",
+        "paths.get("
+      ],
+      "input_is_untrusted": true,
+      "insecure_random_patterns": [
+        "math.random(",
+        "new random(",
+        "threadlocalrandom.current("
+      ],
+      "ldap_keywords": [
+        ".search(",
+        "dircontext",
+        "initialdircontext",
+        "ldapcontext"
+      ],
+      "logger_indicators": [
+        "audit",
+        "logger",
+        "tracer"
+      ],
+      "math_random_pattern": "math.random(",
+      "md5_pattern": "messagedigest.getinstance(\"md5\"",
+      "method_name": "dopost",
+      "normalized_annotations": [
+        "override"
+      ],
+      "random_context": true,
+      "random_ctor_pattern": "new random(",
+      "rc4_pattern": "cipher.getinstance(\"rc4",
+      "security_annotations": [
+        "authorize",
+        "denyall",
+        "preauthorize",
+        "rolesallowed",
+        "secured"
+      ],
+      "sensitive_keywords": [
+        "delete",
+        "destroy",
+        "drop",
+        "modify",
+        "remove",
+        "update"
+      ],
+      "servlet_context": true,
+      "sha1_pattern": "messagedigest.getinstance(\"sha1\"",
+      "sha_dash_pattern": "messagedigest.getinstance(\"sha-1\"",
+      "source_weak_cipher": true,
+      "sql_execute_generic_pattern": "execute(",
+      "sql_execute_pattern": "executequery(",
+      "sql_execute_patterns": [
+        "execute(",
+        "executequery(",
+        "executeupdate("
+      ],
+      "sql_execute_update_pattern": "executeupdate(",
+      "sql_keywords": [
+        "delete ",
+        "insert ",
+        "select ",
+        "update "
+      ],
+      "sql_prepare_call_pattern": "preparecall(",
+      "sql_prepare_pattern": "preparestatement(",
+      "sql_prepare_patterns": [
+        "preparecall(",
+        "preparestatement("
+      ],
+      "threadlocal_random_pattern": "threadlocalrandom.current(",
+      "untrusted_input_markers": [
+        "getcookies(",
+        "getheader(",
+        "getparameter(",
+        "getquerystring("
+      ],
+      "violations": [
+        {
+          "reason": "Weak cipher usage detected",
+          "severity": "high",
+          "target_method": "org.owasp.benchmark.testcode.BenchmarkTest00055.doPost(HttpServletRequest,HttpServletResponse)",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO"
+        }
+      ],
+      "weak_cipher_detected": true,
+      "weak_cipher_patterns": [
+        "cipher.getinstance(\"aes/ecb",
+        "cipher.getinstance(\"des",
+        "cipher.getinstance(\"rc4"
+      ],
+      "weak_hash_patterns": [
+        "messagedigest.getinstance(\"md5\"",
+        "messagedigest.getinstance(\"sha-1\"",
+        "messagedigest.getinstance(\"sha1\""
+      ],
+      "xpath_keywords": [
+        ".compile(",
+        ".evaluate(",
+        "xpathfactory.newinstance("
+      ]
+    },
+    "after_trace_raw": {
+      "benchmark_context": true,
+      "command_keywords": [
+        "-c",
+        ".command(",
+        "/c",
+        "cmd.exe",
+        "processbuilder",
+        "runtime.getruntime().exec(",
+        "sh"
+      ],
+      "des_pattern": "cipher.getinstance(\"des",
+      "ecb_pattern": "cipher.getinstance(\"aes/ecb",
+      "endpoint_annotations": [
+        "deletemapping",
+        "getmapping",
+        "patchmapping",
+        "postmapping",
+        "putmapping",
+        "requestmapping",
+        "webservlet"
+      ],
+      "file_path_keywords": [
+        "../",
+        "..\\",
+        "fileinputstream",
+        "new java.io.file(",
+        "new java.io.filereader(",
+        "paths.get("
+      ],
+      "input_is_untrusted": true,
+      "insecure_random_patterns": [
+        "math.random(",
+        "new random(",
+        "threadlocalrandom.current("
+      ],
+      "ldap_keywords": [
+        ".search(",
+        "dircontext",
+        "initialdircontext",
+        "ldapcontext"
+      ],
+      "logger_indicators": [
+        "audit",
+        "logger",
+        "tracer"
+      ],
+      "math_random_pattern": "math.random(",
+      "md5_pattern": "messagedigest.getinstance(\"md5\"",
+      "method_name": "dopost",
+      "normalized_annotations": [
+        "override"
+      ],
+      "random_context": true,
+      "random_ctor_pattern": "new random(",
+      "rc4_pattern": "cipher.getinstance(\"rc4",
+      "security_annotations": [
+        "authorize",
+        "denyall",
+        "preauthorize",
+        "rolesallowed",
+        "secured"
+      ],
+      "sensitive_keywords": [
+        "delete",
+        "destroy",
+        "drop",
+        "modify",
+        "remove",
+        "update"
+      ],
+      "servlet_context": true,
+      "sha1_pattern": "messagedigest.getinstance(\"sha1\"",
+      "sha_dash_pattern": "messagedigest.getinstance(\"sha-1\"",
+      "sql_execute_generic_pattern": "execute(",
+      "sql_execute_pattern": "executequery(",
+      "sql_execute_patterns": [
+        "execute(",
+        "executequery(",
+        "executeupdate("
+      ],
+      "sql_execute_update_pattern": "executeupdate(",
+      "sql_keywords": [
+        "delete ",
+        "insert ",
+        "select ",
+        "update "
+      ],
+      "sql_prepare_call_pattern": "preparecall(",
+      "sql_prepare_pattern": "preparestatement(",
+      "sql_prepare_patterns": [
+        "preparecall(",
+        "preparestatement("
+      ],
+      "threadlocal_random_pattern": "threadlocalrandom.current(",
+      "untrusted_input_markers": [
+        "getcookies(",
+        "getheader(",
+        "getparameter(",
+        "getquerystring("
+      ],
+      "violations": [],
+      "weak_cipher_patterns": [
+        "cipher.getinstance(\"aes/ecb",
+        "cipher.getinstance(\"des",
+        "cipher.getinstance(\"rc4"
+      ],
+      "weak_hash_patterns": [
+        "messagedigest.getinstance(\"md5\"",
+        "messagedigest.getinstance(\"sha-1\"",
+        "messagedigest.getinstance(\"sha1\""
+      ],
+      "xpath_keywords": [
+        ".compile(",
+        ".evaluate(",
+        "xpathfactory.newinstance("
+      ]
+    },
+    "before_trace_filtered": {
+      "analysis_weak_cipher": true,
+      "random_context": true,
+      "source_weak_cipher": true,
+      "weak_cipher_detected": true
+    },
+    "after_trace_filtered": {
+      "random_context": true
+    },
+    "before_trace_normalized": {
+      "rule_id": "ISO-A.10-WEAK-CRYPTO",
+      "is_vulnerable": true,
+      "detected_via_source": true,
+      "detected_via_graph": false,
+      "detected_via_ast": true
+    },
+    "after_trace_normalized": {
+      "rule_id": "ISO-A.10-WEAK-CRYPTO",
+      "is_vulnerable": false,
+      "detected_via_source": false,
+      "detected_via_graph": false,
+      "detected_via_ast": false
+    },
+    "trace_fields_used": [
+      "analysis_weak_cipher",
+      "benchmark_context",
+      "command_keywords",
+      "des_pattern",
+      "ecb_pattern",
+      "endpoint_annotations",
+      "file_path_keywords",
+      "input_is_untrusted",
+      "insecure_random_patterns",
+      "ldap_keywords",
+      "logger_indicators",
+      "math_random_pattern",
+      "md5_pattern",
+      "method_name",
+      "normalized_annotations",
+      "random_context",
+      "random_ctor_pattern",
+      "rc4_pattern",
+      "security_annotations",
+      "sensitive_keywords",
+      "servlet_context",
+      "sha1_pattern",
+      "sha_dash_pattern",
+      "source_weak_cipher",
+      "sql_execute_generic_pattern",
+      "sql_execute_pattern",
+      "sql_execute_patterns",
+      "sql_execute_update_pattern",
+      "sql_keywords",
+      "sql_prepare_call_pattern",
+      "sql_prepare_pattern",
+      "sql_prepare_patterns",
+      "threadlocal_random_pattern",
+      "untrusted_input_markers",
+      "violations",
+      "weak_cipher_detected",
+      "weak_cipher_patterns",
+      "weak_hash_patterns",
+      "xpath_keywords"
+    ]
+  }
+}

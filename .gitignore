@@ -47,8 +47,18 @@ index/*
 !index/embedding_signature_map.json
 !index/embedding_full_signature_map.json
 
-# Generated evaluation outputs
-outputs/
+# Generated evaluation outputs — all ignored except thesis final baselines
+# Note: must use outputs/* (not outputs/) so negations can re-include subdirs
+outputs/*
+!outputs/thesis_final_detection_full/
+!outputs/thesis_final_explanation_full/
+!outputs/thesis_final_remediation_v2/
+# Ephemeral run artifacts within the thesis finals (not evidence)
+outputs/thesis_final_detection_full/progress.json
+outputs/thesis_final_explanation_full/progress.json
+outputs/thesis_final_explanation_full/partial_metrics.json
+outputs/thesis_final_explanation_full/request_metrics.jsonl
+outputs/thesis_final_remediation_v2/progress.json
 
 # Local UI triage artifacts (kept locally, never committed)
 policy_evaluate.json

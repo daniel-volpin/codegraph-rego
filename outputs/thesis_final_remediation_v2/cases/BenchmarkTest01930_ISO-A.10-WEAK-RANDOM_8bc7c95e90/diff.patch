@@ -1,0 +1,12 @@
+--- org.owasp.benchmark.testcode.BenchmarkTest01930.doPost(HttpServletRequest,HttpServletResponse) (before)
++++ org.owasp.benchmark.testcode.BenchmarkTest01930.doPost(HttpServletRequest,HttpServletResponse) (after)
+@@ -13,7 +13,8 @@
+ 
+         String bar = doSomething(request, param);
+ 
+-        double value = new java.util.Random().nextDouble();
++        java.security.SecureRandom secureRandom = new java.security.SecureRandom();
++        double value = secureRandom.nextDouble();
+         String rememberMeKey = Double.toString(value).substring(2); // Trim off the 0. at the front.
+ 
+         String user = "Donna";

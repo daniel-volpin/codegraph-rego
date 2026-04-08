@@ -1,0 +1,115 @@
+{
+  "target_rule_status": "PASS",
+  "overall_status": "PASS",
+  "baseline": [
+    {
+      "violation_id": "ISO-A.10-WEAK-RANDOM",
+      "target_method": "org.owasp.benchmark.testcode.BenchmarkTest00369.doPost(HttpServletRequest,HttpServletResponse)",
+      "file_path": "/var/folders/fn/z3nms6697533xtmvms45z1n40000gp/T/tmpa9f8ihl6/src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00369.java",
+      "reason": "Insecure randomness usage detected",
+      "severity": "high",
+      "control_metadata": {
+        "id": "ISO-A.10-WEAK-RANDOM",
+        "control": "A.10",
+        "title": "Cryptography (Insecure Randomness)",
+        "reference": "ISO/IEC 27001:2022 A.10",
+        "summary": "Security-sensitive code should use cryptographically strong randomness rather than predictable PRNGs.",
+        "rego_module": "policy/iso_27001_crypto.rego",
+        "rego_rule": "violations",
+        "evidence_fields": [
+          "signature",
+          "file_path",
+          "called_signatures",
+          "source_code"
+        ]
+      },
+      "remediation": {
+        "supported": true,
+        "support_tier": "full",
+        "reason_code": "supported_rule_for_auto_fix",
+        "strategy": "llm_method_replacement",
+        "preview_available": true,
+        "verify_available": true,
+        "ui_apply_mode": "dry_run",
+        "rationale": "Local randomness upgrades can often be made safely with narrow replacements to SecureRandom-based APIs.",
+        "safe_refusal_possible": true
+      },
+      "code_snippet": "\n    @Override\n    public void doPost(HttpServletRequest request, HttpServletResponse response)\n            throws ServletException, IOException {\n        response.setContentType(\"text/html;charset=UTF-8\");\n\n        String param = request.getParameter(\"BenchmarkTest00369\");\n        if (param == null) param = \"\";\n\n        String bar = param;\n        if (param != null && param.length() > 1) {\n            bar = param.substring(0, param.length() - 1);\n        }\n\n        double value = java.lang.Math.random();\n        String rememberMeKey = Double.toString(value).substring(2); // Trim off the 0. at the front.\n\n        String user = \"Doug\";\n        String fullClassName = this.getClass().getName();\n        String testCaseNumber =\n                fullClassName.substring(\n                        fullClassName.lastIndexOf('.') + 1 + \"BenchmarkTest\".length());\n        user += testCaseNumber;\n\n        String cookieName = \"rememberMe\" + testCaseNumber;\n\n        boolean foundUser = false;\n        javax.servlet.http.Cookie[] cookies = request.getCookies();\n        if (cookies != null) {\n            for (int i = 0; !foundUser && i < cookies.length; i++) {\n                javax.servlet.http.Cookie cookie = cookies[i];\n                if (cookieName.equals(cookie.getName())) {\n                    if (cookie.getValue().equals(request.getSession().getAttribute(cookieName))) {\n                        foundUser = true;\n                    }\n                }\n            }\n        }\n\n        if (foundUser) {\n            response.getWriter().println(\"Welcome back: \" + user + \"<br/>\");\n\n        } else {\n            javax.servlet.http.Cookie rememberMe =\n                    new javax.servlet.http.Cookie(cookieName, rememberMeKey);\n            rememberMe.setSecure(true);\n            rememberMe.setHttpOnly(true);\n            rememberMe.setDomain(new java.net.URL(request.getRequestURL().toString()).getHost());\n            rememberMe.setPath(request.getRequestURI()); // i.e., set path to JUST this servlet\n            // e.g., /benchmark/sql-01/BenchmarkTest01001\n            request.getSession().setAttribute(cookieName, rememberMeKey);\n            response.addCookie(rememberMe);\n            response.getWriter()\n                    .println(\n                            user\n                                    + \" has been remembered with cookie: \"\n                                    + rememberMe.getName()\n                                    + \" whose value is: \"\n                                    + rememberMe.getValue()\n                                    + \"<br/>\");\n        }\n        response.getWriter().println(\"Weak Randomness Test java.lang.Math.random() executed\");\n    }\n}\n",
+      "snippet_available": true,
+      "snippet_start_line": 39,
+      "snippet_end_line": 99,
+      "evidence": {
+        "source_code": "\n    @Override\n    public void doPost(HttpServletRequest request, HttpServletResponse response)\n            throws ServletException, IOException {\n        response.setContentType(\"text/html;charset=UTF-8\");\n\n        String param = request.getParameter(\"BenchmarkTest00369\");\n        if (param == null) param = \"\";\n\n        String bar = param;\n        if (param != null && param.length() > 1) {\n            bar = param.substring(0, param.length() - 1);\n        }\n\n        double value = java.lang.Math.random();\n        String rememberMeKey = Double.toString(value).substring(2); // Trim off the 0. at the front.\n\n        String user = \"Doug\";\n        String fullClassName = this.getClass().getName();\n        String testCaseNumber =\n                fullClassName.substring(\n                        fullClassName.lastIndexOf('.') + 1 + \"BenchmarkTest\".length());\n        user += testCaseNumber;\n\n        String cookieName = \"rememberMe\" + testCaseNumber;\n\n        boolean foundUser = false;\n        javax.servlet.http.Cookie[] cookies = request.getCookies();\n        if (cookies != null) {\n            for (int i = 0; !foundUser && i < cookies.length; i++) {\n                javax.servlet.http.Cookie cookie = cookies[i];\n                if (cookieName.equals(cookie.getName())) {\n                    if (cookie.getValue().equals(request.getSession().getAttribute(cookieName))) {\n                        foundUser = true;\n                    }\n                }\n            }\n        }\n\n        if (foundUser) {\n            response.getWriter().println(\"Welcome back: \" + user + \"<br/>\");\n\n        } else {\n            javax.servlet.http.Cookie rememberMe =\n                    new javax.servlet.http.Cookie(cookieName, rememberMeKey);\n            rememberMe.setSecure(true);\n            rememberMe.setHttpOnly(true);\n            rememberMe.setDomain(new java.net.URL(request.getRequestURL().toString()).getHost());\n            rememberMe.setPath(request.getRequestURI()); // i.e., set path to JUST this servlet\n            // e.g., /benchmark/sql-01/BenchmarkTest01001\n            request.getSession().setAttribute(cookieName, rememberMeKey);\n            response.addCookie(rememberMe);\n            response.getWriter()\n                    .println(\n                            user\n                                    + \" has been remembered with cookie: \"\n                                    + rememberMe.getName()\n                                    + \" whose value is: \"\n                                    + rememberMe.getValue()\n                                    + \"<br/>\");\n        }\n        response.getWriter().println(\"Weak Randomness Test java.lang.Math.random() executed\");\n    }\n}\n",
+        "graph_context": {
+          "annotations": [
+            "Override"
+          ],
+          "uses_fields": [],
+          "calls": [],
+          "callers": [
+            "org.owasp.benchmark.testcode.BenchmarkTest00369.doGet(HttpServletRequest,HttpServletResponse)"
+          ]
+        },
+        "vector_context": [
+          "org.owasp.benchmark.testcode.BenchmarkTest00856.doGet(HttpServletRequest,HttpServletResponse)",
+          "org.owasp.benchmark.testcode.BenchmarkTest00868.doGet(HttpServletRequest,HttpServletResponse)",
+          "org.owasp.benchmark.testcode.BenchmarkTest00898.doGet(HttpServletRequest,HttpServletResponse)"
+        ],
+        "file_path": "/var/folders/fn/z3nms6697533xtmvms45z1n40000gp/T/tmpa9f8ihl6/src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00369.java",
+        "target_method": "org.owasp.benchmark.testcode.BenchmarkTest00369.doPost(HttpServletRequest,HttpServletResponse)",
+        "start_line": 39,
+        "end_line": 99,
+        "analysis_flags": {
+          "md5_literal": false,
+          "md5_variable": false,
+          "md5_detected": false,
+          "weak_hash_literal": false,
+          "weak_hash_variable": false,
+          "weak_hash_detected": false,
+          "weak_cipher_literal": false,
+          "weak_cipher_detected": false,
+          "insecure_random_detected": true,
+          "sha1prng_detected": false,
+          "path_traversal_detected": false,
+          "path_safe_constant_detected": false,
+          "path_sink_uses_tainted_input": false,
+          "path_sink_uses_safe_constant": false,
+          "path_sink_uses_safe_resource_helper": false,
+          "command_exec_string_tainted": false,
+          "command_exec_args_tainted": false,
+          "command_env_only_tainted": false,
+          "command_injection_detected": false,
+          "ldap_injection_detected": false,
+          "ldap_filter_uses_tainted_input": false,
+          "ldap_filter_uses_safe_constant": false,
+          "xpath_injection_detected": false,
+          "xpath_query_uses_tainted_input": false,
+          "xpath_query_uses_safe_constant": false,
+          "sql_query_uses_tainted_input": false,
+          "sql_query_uses_safe_constant": false,
+          "sql_prepare_call_detected": false,
+          "sql_callable_statement_detected": false,
+          "sql_dynamic_query_detected": false
+        },
+        "helper_summaries": {
+          "safe_constant_return_vars": [],
+          "tainted_return_vars": [],
+          "safe_constant_return_used_in_path_sink": false,
+          "tainted_return_used_in_path_sink": false,
+          "safe_constant_return_used_in_ldap_filter": false,
+          "tainted_return_used_in_ldap_filter": false,
+          "safe_constant_return_used_in_xpath_query": false,
+          "safe_constant_return_used_in_sql_query": false,
+          "safe_constant_return_used_in_command_sink": false,
+          "tainted_return_used_in_xpath_query": false,
+          "tainted_return_used_in_sql_query": false,
+          "tainted_return_used_in_command_sink": false,
+          "analyzed_call_count": 0
+        }
+      }
+    }
+  ],
+  "after": [],
+  "new_violations": [],
+  "remaining_violations": []
+}

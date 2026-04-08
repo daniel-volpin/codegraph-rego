@@ -1,0 +1,176 @@
+{
+  "generated_at": "2026-03-22T18:23:58.312030+00:00",
+  "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+  "ground_truth_file": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+  "ground_truth_schema": {
+    "format": "csv",
+    "fieldnames": [
+      "# test name",
+      " category",
+      " real vulnerability",
+      " cwe",
+      " Benchmark version: 1.2",
+      " 2016-06-1"
+    ],
+    "normalized_fieldnames": [
+      "testname",
+      "category",
+      "realvulnerability",
+      "cwe",
+      "benchmarkversion:1.2",
+      "2016061"
+    ]
+  },
+  "selection": {
+    "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+    "java_relative_root": "src/main/java",
+    "ground_truth_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+    "categories": [
+      "crypto-md5",
+      "hash-md5",
+      "rng-insecure",
+      "sql-injection",
+      "path-traversal",
+      "command-injection",
+      "ldap-injection",
+      "xpath-injection"
+    ],
+    "testcase_ids": [],
+    "max_cases_per_category": 60,
+    "seed": 7,
+    "debug_fn_analysis": false,
+    "build_command": "mvn -q -DskipTests -Dspotless.apply.skip=true -Dspotless.check.skip=true compile"
+  },
+  "coverage_by_category": {
+    "crypto-md5": {
+      "available_cases": 246,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "hash-md5": {
+      "available_cases": 236,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "rng-insecure": {
+      "available_cases": 493,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "sql-injection": {
+      "available_cases": 504,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "path-traversal": {
+      "available_cases": 268,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "command-injection": {
+      "available_cases": 251,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "ldap-injection": {
+      "available_cases": 59,
+      "selected_cases": 59,
+      "sampled": false
+    },
+    "xpath-injection": {
+      "available_cases": 35,
+      "selected_cases": 35,
+      "sampled": false
+    }
+  },
+  "metrics": {
+    "crypto-md5": {
+      "count": 27,
+      "with_context": 27,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "available_cases": 246,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "hash-md5": {
+      "count": 22,
+      "with_context": 22,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "available_cases": 236,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "rng-insecure": {
+      "count": 32,
+      "with_context": 32,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "available_cases": 493,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "sql-injection": {
+      "count": 35,
+      "with_context": 35,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "available_cases": 504,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "path-traversal": {
+      "count": 29,
+      "with_context": 29,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "available_cases": 268,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "command-injection": {
+      "count": 35,
+      "with_context": 35,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "available_cases": 251,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "ldap-injection": {
+      "count": 27,
+      "with_context": 27,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "available_cases": 59,
+      "selected_cases": 59,
+      "sampled": false
+    },
+    "xpath-injection": {
+      "count": 15,
+      "with_context": 14,
+      "without_context": 0,
+      "rate_with_context": 0.9333,
+      "rate_without_context": 0.0,
+      "available_cases": 35,
+      "selected_cases": 35,
+      "sampled": false
+    },
+    "overall": {
+      "count": 222,
+      "with_context": 221,
+      "without_context": 0,
+      "rate_with_context": 0.9955,
+      "rate_without_context": 0.0
+    }
+  },
+  "sample_count": 24
+}

@@ -1,0 +1,14 @@
+--- org.owasp.benchmark.testcode.BenchmarkTest00081.doPost(HttpServletRequest,HttpServletResponse) (before)
++++ org.owasp.benchmark.testcode.BenchmarkTest00081.doPost(HttpServletRequest,HttpServletResponse) (after)
+@@ -17,8 +17,9 @@
+ 
+         String bar = org.springframework.web.util.HtmlUtils.htmlEscape(param);
+ 
+-        double stuff = new java.util.Random().nextGaussian();
+-        String rememberMeKey = Double.toString(stuff).substring(2); // Trim off the 0. at the front.
++java.security.SecureRandom random = new java.security.SecureRandom();
++double stuff = random.nextGaussian();
++String rememberMeKey = Double.toString(stuff).substring(2); // Trim off the 0. at the front.
+ 
+         String user = "Gayle";
+         String fullClassName = this.getClass().getName();

@@ -1,0 +1,14 @@
+--- org.owasp.benchmark.testcode.BenchmarkTest00369.doPost(HttpServletRequest,HttpServletResponse) (before)
++++ org.owasp.benchmark.testcode.BenchmarkTest00369.doPost(HttpServletRequest,HttpServletResponse) (after)
+@@ -11,8 +11,9 @@
+             bar = param.substring(0, param.length() - 1);
+         }
+ 
+-        double value = java.lang.Math.random();
+-        String rememberMeKey = Double.toString(value).substring(2); // Trim off the 0. at the front.
++java.security.SecureRandom secureRandom = new java.security.SecureRandom();
++double value = secureRandom.nextDouble();
++String rememberMeKey = Double.toString(value).substring(2); // Trim off the 0. at the front.
+ 
+         String user = "Doug";
+         String fullClassName = this.getClass().getName();

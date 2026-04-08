@@ -1,0 +1,14 @@
+--- org.owasp.benchmark.testcode.BenchmarkTest01480.doPost(HttpServletRequest,HttpServletResponse) (before)
++++ org.owasp.benchmark.testcode.BenchmarkTest01480.doPost(HttpServletRequest,HttpServletResponse) (after)
+@@ -21,9 +21,9 @@
+         byte[] iv = random.generateSeed(8); // DES requires 8 byte keys
+ 
+         try {
+-            javax.crypto.Cipher c =
++javax.crypto.Cipher c =
+                     javax.crypto.Cipher.getInstance(
+-                            "DES/CBC/PKCS5PADDING", java.security.Security.getProvider("SunJCE"));
++                            "AES/CBC/PKCS5PADDING", java.security.Security.getProvider("SunJCE"));
+ 
+             // Prepare the cipher to encrypt
+             javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance("DES").generateKey();

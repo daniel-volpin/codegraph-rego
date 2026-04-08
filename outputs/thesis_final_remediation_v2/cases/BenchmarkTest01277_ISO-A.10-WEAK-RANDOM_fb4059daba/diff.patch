@@ -1,0 +1,13 @@
+--- org.owasp.benchmark.testcode.BenchmarkTest01277.doPost(HttpServletRequest,HttpServletResponse) (before)
++++ org.owasp.benchmark.testcode.BenchmarkTest01277.doPost(HttpServletRequest,HttpServletResponse) (after)
+@@ -8,8 +8,8 @@
+ 
+         String bar = new Test().doSomething(request, param);
+ 
+-        long l = new java.util.Random().nextLong();
+-        String rememberMeKey = Long.toString(l);
++long l = new java.security.SecureRandom().nextLong();
++String rememberMeKey = Long.toString(l);
+ 
+         String user = "Logan";
+         String fullClassName = this.getClass().getName();

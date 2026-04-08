@@ -1,0 +1,11 @@
+--- org.owasp.benchmark.testcode.BenchmarkTest00070.doPost(HttpServletRequest,HttpServletResponse) (before)
++++ org.owasp.benchmark.testcode.BenchmarkTest00070.doPost(HttpServletRequest,HttpServletResponse) (after)
+@@ -23,7 +23,7 @@
+         bar = (7 * 42) - num > 200 ? "This should never happen" : param;
+ 
+         try {
+-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA1", "SUN");
++java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA256", "SUN");
+             byte[] input = {(byte) '?'};
+             Object inputParam = bar;
+             if (inputParam instanceof String) input = ((String) inputParam).getBytes();

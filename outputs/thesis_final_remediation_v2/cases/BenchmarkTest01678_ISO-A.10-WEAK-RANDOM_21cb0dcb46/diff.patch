@@ -1,0 +1,13 @@
+--- org.owasp.benchmark.testcode.BenchmarkTest01678.doPost(HttpServletRequest,HttpServletResponse) (before)
++++ org.owasp.benchmark.testcode.BenchmarkTest01678.doPost(HttpServletRequest,HttpServletResponse) (after)
+@@ -32,8 +32,8 @@
+ 
+         String bar = new Test().doSomething(request, param);
+ 
+-        float rand = new java.util.Random().nextFloat();
+-        String rememberMeKey = Float.toString(rand).substring(2); // Trim off the 0. at the front.
++java.security.SecureRandom rand = new java.security.SecureRandom();
++String rememberMeKey = Float.toString(rand.nextFloat()).substring(2); // Trim off the 0. at the front.
+ 
+         String user = "Floyd";
+         String fullClassName = this.getClass().getName();

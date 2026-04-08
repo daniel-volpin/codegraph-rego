@@ -1,0 +1,11 @@
+--- org.owasp.benchmark.testcode.BenchmarkTest01318.doPost(HttpServletRequest,HttpServletResponse) (before)
++++ org.owasp.benchmark.testcode.BenchmarkTest01318.doPost(HttpServletRequest,HttpServletResponse) (after)
+@@ -25,7 +25,7 @@
+         try {
+             javax.crypto.Cipher c =
+                     javax.crypto.Cipher.getInstance(
+-                            "DES/CBC/PKCS5PADDING", java.security.Security.getProvider("SunJCE"));
++                            "AES/CBC/PKCS5PADDING", java.security.Security.getProvider("SunJCE"));
+ 
+             // Prepare the cipher to encrypt
+             javax.crypto.SecretKey key = javax.crypto.KeyGenerator.getInstance("DES").generateKey();

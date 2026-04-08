@@ -1,0 +1,11 @@
+--- org.owasp.benchmark.testcode.BenchmarkTest00160.doPost(HttpServletRequest,HttpServletResponse) (before)
++++ org.owasp.benchmark.testcode.BenchmarkTest00160.doPost(HttpServletRequest,HttpServletResponse) (after)
+@@ -21,7 +21,7 @@
+         }
+ 
+         byte[] bytes = new byte[10];
+-        new java.util.Random().nextBytes(bytes);
++new java.security.SecureRandom().nextBytes(bytes);
+         String rememberMeKey = org.owasp.esapi.ESAPI.encoder().encodeForBase64(bytes, true);
+ 
+         String user = "Byron";

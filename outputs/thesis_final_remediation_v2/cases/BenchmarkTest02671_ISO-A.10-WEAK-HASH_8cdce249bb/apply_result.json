@@ -1,0 +1,558 @@
+{
+  "status": "OK",
+  "violation_id": "ISO-A.10-WEAK-HASH",
+  "rule_id": "ISO-A.10-WEAK-HASH",
+  "target_method": "org.owasp.benchmark.testcode.BenchmarkTest02671.doPost(HttpServletRequest,HttpServletResponse)",
+  "file_path": "/var/folders/fn/z3nms6697533xtmvms45z1n40000gp/T/tmpa9f8ihl6/src/main/java/org/owasp/benchmark/testcode/BenchmarkTest02671.java",
+  "updated_source_code": "    @Override\n    public void doPost(HttpServletRequest request, HttpServletResponse response)\n            throws ServletException, IOException {\n        response.setContentType(\"text/html;charset=UTF-8\");\n\n        org.owasp.benchmark.helpers.SeparateClassRequest scr =\n                new org.owasp.benchmark.helpers.SeparateClassRequest(request);\n        String param = scr.getTheValue(\"BenchmarkTest02671\");\n\n        String bar = doSomething(request, param);\n\n        java.security.Provider[] provider = java.security.Security.getProviders();\n        java.security.MessageDigest md;\n\n        try {\n            if (provider.length > 1) {\n\n                md = java.security.MessageDigest.getInstance(\"SHA-256\", provider[0]);\n            } else {\n                md = java.security.MessageDigest.getInstance(\"SHA-256\", \"SUN\");\n            }\n            byte[] input = {(byte) '?'};\n            Object inputParam = bar;\n            if (inputParam instanceof String) input = ((String) inputParam).getBytes();\n            if (inputParam instanceof java.io.InputStream) {\n                byte[] strInput = new byte[1000];\n                int i = ((java.io.InputStream) inputParam).read(strInput);\n                if (i == -1) {\n                    response.getWriter()\n                            .println(\n                                    \"This input source requires a POST, not a GET. Incompatible UI for the InputStream source.\");\n                    return;\n                }\n                input = java.util.Arrays.copyOf(strInput, i);\n            }\n            md.update(input);\n\n            byte[] result = md.digest();\n            java.io.File fileTarget =\n                    new java.io.File(\n                            new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR),\n                            \"passwordFile.txt\");\n            java.io.FileWriter fw =\n                    new java.io.FileWriter(fileTarget, true); // the true will append the new data\n            fw.write(\n                    \"hash_value=\"\n                            + org.owasp.esapi.ESAPI.encoder().encodeForBase64(result, true)\n                            + \"\\n\");\n            fw.close();\n            response.getWriter()\n                    .println(\n                            \"Sensitive value '\"\n                                    + org.owasp\n                                            .esapi\n                                            .ESAPI\n                                            .encoder()\n                                            .encodeForHTML(new String(input))\n                                    + \"' hashed and stored<br/>\");\n\n        } catch (java.security.NoSuchAlgorithmException e) {\n            System.out.println(\n                    \"Problem executing hash - TestCase java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider)\");\n            throw new ServletException(e);\n        } catch (java.security.NoSuchProviderException e) {\n            System.out.println(\n                    \"Problem executing hash - TestCase java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider)\");\n            throw new ServletException(e);\n        }\n\n        response.getWriter()\n                .println(\n                        \"Hash Test java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider) executed\");\n    } // end doPost",
+  "diff": "--- org.owasp.benchmark.testcode.BenchmarkTest02671.doPost(HttpServletRequest,HttpServletResponse) (before)\n+++ org.owasp.benchmark.testcode.BenchmarkTest02671.doPost(HttpServletRequest,HttpServletResponse) (after)\n@@ -15,9 +15,9 @@\n         try {\n             if (provider.length > 1) {\n \n-                md = java.security.MessageDigest.getInstance(\"SHA1\", provider[0]);\n+                md = java.security.MessageDigest.getInstance(\"SHA-256\", provider[0]);\n             } else {\n-                md = java.security.MessageDigest.getInstance(\"SHA1\", \"SUN\");\n+                md = java.security.MessageDigest.getInstance(\"SHA-256\", \"SUN\");\n             }\n             byte[] input = {(byte) '?'};\n             Object inputParam = bar;",
+  "verification": {
+    "target_rule_status": "PASS",
+    "overall_status": "PASS",
+    "baseline": [
+      {
+        "violation_id": "ISO-A.10-WEAK-HASH",
+        "target_method": "org.owasp.benchmark.testcode.BenchmarkTest02671.doPost(HttpServletRequest,HttpServletResponse)",
+        "file_path": "/var/folders/fn/z3nms6697533xtmvms45z1n40000gp/T/tmpa9f8ihl6/src/main/java/org/owasp/benchmark/testcode/BenchmarkTest02671.java",
+        "reason": "Weak hash usage detected",
+        "severity": "high",
+        "control_metadata": {
+          "id": "ISO-A.10-WEAK-HASH",
+          "control": "A.10",
+          "title": "Cryptography (Weak Hash)",
+          "reference": "ISO/IEC 27001:2022 A.10",
+          "summary": "Cryptographic controls should avoid weak hash algorithms such as MD5 and SHA-1.",
+          "rego_module": "policy/iso_27001_crypto.rego",
+          "rego_rule": "violations",
+          "evidence_fields": [
+            "signature",
+            "file_path",
+            "called_signatures",
+            "source_code",
+            "analysis_flags"
+          ]
+        },
+        "remediation": {
+          "supported": true,
+          "support_tier": "full",
+          "reason_code": "supported_rule_for_auto_fix",
+          "strategy": "llm_method_replacement",
+          "preview_available": true,
+          "verify_available": true,
+          "ui_apply_mode": "dry_run",
+          "rationale": "Bounded weak-hash replacements such as MD5 or SHA-1 to SHA-256 can be applied with minimal local edits.",
+          "safe_refusal_possible": false
+        },
+        "code_snippet": "\n    @Override\n    public void doPost(HttpServletRequest request, HttpServletResponse response)\n            throws ServletException, IOException {\n        response.setContentType(\"text/html;charset=UTF-8\");\n\n        org.owasp.benchmark.helpers.SeparateClassRequest scr =\n                new org.owasp.benchmark.helpers.SeparateClassRequest(request);\n        String param = scr.getTheValue(\"BenchmarkTest02671\");\n\n        String bar = doSomething(request, param);\n\n        java.security.Provider[] provider = java.security.Security.getProviders();\n        java.security.MessageDigest md;\n\n        try {\n            if (provider.length > 1) {\n\n                md = java.security.MessageDigest.getInstance(\"SHA1\", provider[0]);\n            } else {\n                md = java.security.MessageDigest.getInstance(\"SHA1\", \"SUN\");\n            }\n            byte[] input = {(byte) '?'};\n            Object inputParam = bar;\n            if (inputParam instanceof String) input = ((String) inputParam).getBytes();\n            if (inputParam instanceof java.io.InputStream) {\n                byte[] strInput = new byte[1000];\n                int i = ((java.io.InputStream) inputParam).read(strInput);\n                if (i == -1) {\n                    response.getWriter()\n                            .println(\n                                    \"This input source requires a POST, not a GET. Incompatible UI for the InputStream source.\");\n                    return;\n                }\n                input = java.util.Arrays.copyOf(strInput, i);\n            }\n            md.update(input);\n\n            byte[] result = md.digest();\n            java.io.File fileTarget =\n                    new java.io.File(\n                            new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR),\n                            \"passwordFile.txt\");\n            java.io.FileWriter fw =\n                    new java.io.FileWriter(fileTarget, true); // the true will append the new data\n            fw.write(\n                    \"hash_value=\"\n                            + org.owasp.esapi.ESAPI.encoder().encodeForBase64(result, true)\n                            + \"\\n\");\n            fw.close();\n            response.getWriter()\n                    .println(\n                            \"Sensitive value '\"\n                                    + org.owasp\n                                            .esapi\n                                            .ESAPI\n                                            .encoder()\n                                            .encodeForHTML(new String(input))\n                                    + \"' hashed and stored<br/>\");\n\n        } catch (java.security.NoSuchAlgorithmException e) {\n            System.out.println(\n                    \"Problem executing hash - TestCase java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider)\");\n            throw new ServletException(e);\n        } catch (java.security.NoSuchProviderException e) {\n            System.out.println(\n                    \"Problem executing hash - TestCase java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider)\");\n            throw new ServletException(e);\n        }\n\n        response.getWriter()\n                .println(\n                        \"Hash Test java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider) executed\");\n    } // end doPost\n\n    private static String doSomething(HttpServletRequest request, String param)\n",
+        "snippet_available": true,
+        "snippet_start_line": 39,
+        "snippet_end_line": 110,
+        "evidence": {
+          "source_code": "\n    @Override\n    public void doPost(HttpServletRequest request, HttpServletResponse response)\n            throws ServletException, IOException {\n        response.setContentType(\"text/html;charset=UTF-8\");\n\n        org.owasp.benchmark.helpers.SeparateClassRequest scr =\n                new org.owasp.benchmark.helpers.SeparateClassRequest(request);\n        String param = scr.getTheValue(\"BenchmarkTest02671\");\n\n        String bar = doSomething(request, param);\n\n        java.security.Provider[] provider = java.security.Security.getProviders();\n        java.security.MessageDigest md;\n\n        try {\n            if (provider.length > 1) {\n\n                md = java.security.MessageDigest.getInstance(\"SHA1\", provider[0]);\n            } else {\n                md = java.security.MessageDigest.getInstance(\"SHA1\", \"SUN\");\n            }\n            byte[] input = {(byte) '?'};\n            Object inputParam = bar;\n            if (inputParam instanceof String) input = ((String) inputParam).getBytes();\n            if (inputParam instanceof java.io.InputStream) {\n                byte[] strInput = new byte[1000];\n                int i = ((java.io.InputStream) inputParam).read(strInput);\n                if (i == -1) {\n                    response.getWriter()\n                            .println(\n                                    \"This input source requires a POST, not a GET. Incompatible UI for the InputStream source.\");\n                    return;\n                }\n                input = java.util.Arrays.copyOf(strInput, i);\n            }\n            md.update(input);\n\n            byte[] result = md.digest();\n            java.io.File fileTarget =\n                    new java.io.File(\n                            new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR),\n                            \"passwordFile.txt\");\n            java.io.FileWriter fw =\n                    new java.io.FileWriter(fileTarget, true); // the true will append the new data\n            fw.write(\n                    \"hash_value=\"\n                            + org.owasp.esapi.ESAPI.encoder().encodeForBase64(result, true)\n                            + \"\\n\");\n            fw.close();\n            response.getWriter()\n                    .println(\n                            \"Sensitive value '\"\n                                    + org.owasp\n                                            .esapi\n                                            .ESAPI\n                                            .encoder()\n                                            .encodeForHTML(new String(input))\n                                    + \"' hashed and stored<br/>\");\n\n        } catch (java.security.NoSuchAlgorithmException e) {\n            System.out.println(\n                    \"Problem executing hash - TestCase java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider)\");\n            throw new ServletException(e);\n        } catch (java.security.NoSuchProviderException e) {\n            System.out.println(\n                    \"Problem executing hash - TestCase java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider)\");\n            throw new ServletException(e);\n        }\n\n        response.getWriter()\n                .println(\n                        \"Hash Test java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider) executed\");\n    } // end doPost\n\n    private static String doSomething(HttpServletRequest request, String param)\n",
+          "graph_context": {
+            "annotations": [
+              "Override"
+            ],
+            "uses_fields": [],
+            "calls": [
+              "org.owasp.benchmark.testcode.BenchmarkTest02671.doSomething(HttpServletRequest,String)"
+            ],
+            "callers": [
+              "org.owasp.benchmark.testcode.BenchmarkTest02671.doGet(HttpServletRequest,HttpServletResponse)"
+            ]
+          },
+          "vector_context": [
+            "org.owasp.benchmark.testcode.BenchmarkTest00856.doGet(HttpServletRequest,HttpServletResponse)",
+            "org.owasp.benchmark.testcode.BenchmarkTest00868.doGet(HttpServletRequest,HttpServletResponse)",
+            "org.owasp.benchmark.testcode.BenchmarkTest00898.doGet(HttpServletRequest,HttpServletResponse)"
+          ],
+          "file_path": "/var/folders/fn/z3nms6697533xtmvms45z1n40000gp/T/tmpa9f8ihl6/src/main/java/org/owasp/benchmark/testcode/BenchmarkTest02671.java",
+          "target_method": "org.owasp.benchmark.testcode.BenchmarkTest02671.doPost(HttpServletRequest,HttpServletResponse)",
+          "start_line": 39,
+          "end_line": 110,
+          "analysis_flags": {
+            "md5_literal": false,
+            "md5_variable": false,
+            "md5_detected": false,
+            "weak_hash_literal": true,
+            "weak_hash_variable": false,
+            "weak_hash_detected": true,
+            "weak_cipher_literal": false,
+            "weak_cipher_detected": false,
+            "insecure_random_detected": false,
+            "sha1prng_detected": false,
+            "path_traversal_detected": false,
+            "path_safe_constant_detected": false,
+            "path_sink_uses_tainted_input": false,
+            "path_sink_uses_safe_constant": false,
+            "path_sink_uses_safe_resource_helper": false,
+            "command_exec_string_tainted": false,
+            "command_exec_args_tainted": false,
+            "command_env_only_tainted": false,
+            "command_injection_detected": false,
+            "ldap_injection_detected": false,
+            "ldap_filter_uses_tainted_input": false,
+            "ldap_filter_uses_safe_constant": false,
+            "xpath_injection_detected": false,
+            "xpath_query_uses_tainted_input": false,
+            "xpath_query_uses_safe_constant": false,
+            "sql_query_uses_tainted_input": false,
+            "sql_query_uses_safe_constant": false,
+            "sql_prepare_call_detected": false,
+            "sql_callable_statement_detected": false,
+            "sql_dynamic_query_detected": false
+          },
+          "helper_summaries": {
+            "safe_constant_return_vars": [],
+            "tainted_return_vars": [],
+            "safe_constant_return_used_in_path_sink": false,
+            "tainted_return_used_in_path_sink": false,
+            "safe_constant_return_used_in_ldap_filter": false,
+            "tainted_return_used_in_ldap_filter": false,
+            "safe_constant_return_used_in_xpath_query": false,
+            "safe_constant_return_used_in_sql_query": false,
+            "safe_constant_return_used_in_command_sink": false,
+            "tainted_return_used_in_xpath_query": false,
+            "tainted_return_used_in_sql_query": false,
+            "tainted_return_used_in_command_sink": false,
+            "analyzed_call_count": 0
+          }
+        }
+      }
+    ],
+    "after": [],
+    "new_violations": [],
+    "remaining_violations": []
+  },
+  "compilation": {
+    "attempted": true,
+    "success": true,
+    "output_snippet": null
+  },
+  "metadata": {
+    "violation_id": "ISO-A.10-WEAK-HASH",
+    "rule_id": "ISO-A.10-WEAK-HASH",
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest02671.doPost(HttpServletRequest,HttpServletResponse)",
+    "file_path": "/var/folders/fn/z3nms6697533xtmvms45z1n40000gp/T/tmpa9f8ihl6/src/main/java/org/owasp/benchmark/testcode/BenchmarkTest02671.java",
+    "attempt_count": 1,
+    "mode": "dry_run"
+  },
+  "generation": {
+    "decision": "apply_edits",
+    "edits": [
+      {
+        "start_line": 18,
+        "end_line": 20,
+        "original_lines": [
+          "                md = java.security.MessageDigest.getInstance(\"SHA1\", provider[0]);",
+          "            } else {",
+          "                md = java.security.MessageDigest.getInstance(\"SHA1\", \"SUN\");"
+        ],
+        "replacement_lines": [
+          "                md = java.security.MessageDigest.getInstance(\"SHA-256\", provider[0]);",
+          "            } else {",
+          "                md = java.security.MessageDigest.getInstance(\"SHA-256\", \"SUN\");"
+        ]
+      }
+    ],
+    "replacement_method_lines": [
+      "    @Override",
+      "    public void doPost(HttpServletRequest request, HttpServletResponse response)",
+      "            throws ServletException, IOException {",
+      "        response.setContentType(\"text/html;charset=UTF-8\");",
+      "",
+      "        org.owasp.benchmark.helpers.SeparateClassRequest scr =",
+      "                new org.owasp.benchmark.helpers.SeparateClassRequest(request);",
+      "        String param = scr.getTheValue(\"BenchmarkTest02671\");",
+      "",
+      "        String bar = doSomething(request, param);",
+      "",
+      "        java.security.Provider[] provider = java.security.Security.getProviders();",
+      "        java.security.MessageDigest md;",
+      "",
+      "        try {",
+      "            if (provider.length > 1) {",
+      "",
+      "                md = java.security.MessageDigest.getInstance(\"SHA-256\", provider[0]);",
+      "            } else {",
+      "                md = java.security.MessageDigest.getInstance(\"SHA-256\", \"SUN\");",
+      "            }",
+      "            byte[] input = {(byte) '?'};",
+      "            Object inputParam = bar;",
+      "            if (inputParam instanceof String) input = ((String) inputParam).getBytes();",
+      "            if (inputParam instanceof java.io.InputStream) {",
+      "                byte[] strInput = new byte[1000];",
+      "                int i = ((java.io.InputStream) inputParam).read(strInput);",
+      "                if (i == -1) {",
+      "                    response.getWriter()",
+      "                            .println(",
+      "                                    \"This input source requires a POST, not a GET. Incompatible UI for the InputStream source.\");",
+      "                    return;",
+      "                }",
+      "                input = java.util.Arrays.copyOf(strInput, i);",
+      "            }",
+      "            md.update(input);",
+      "",
+      "            byte[] result = md.digest();",
+      "            java.io.File fileTarget =",
+      "                    new java.io.File(",
+      "                            new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR),",
+      "                            \"passwordFile.txt\");",
+      "            java.io.FileWriter fw =",
+      "                    new java.io.FileWriter(fileTarget, true); // the true will append the new data",
+      "            fw.write(",
+      "                    \"hash_value=\"",
+      "                            + org.owasp.esapi.ESAPI.encoder().encodeForBase64(result, true)",
+      "                            + \"\\n\");",
+      "            fw.close();",
+      "            response.getWriter()",
+      "                    .println(",
+      "                            \"Sensitive value '\"",
+      "                                    + org.owasp",
+      "                                            .esapi",
+      "                                            .ESAPI",
+      "                                            .encoder()",
+      "                                            .encodeForHTML(new String(input))",
+      "                                    + \"' hashed and stored<br/>\");",
+      "",
+      "        } catch (java.security.NoSuchAlgorithmException e) {",
+      "            System.out.println(",
+      "                    \"Problem executing hash - TestCase java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider)\");",
+      "            throw new ServletException(e);",
+      "        } catch (java.security.NoSuchProviderException e) {",
+      "            System.out.println(",
+      "                    \"Problem executing hash - TestCase java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider)\");",
+      "            throw new ServletException(e);",
+      "        }",
+      "",
+      "        response.getWriter()",
+      "                .println(",
+      "                        \"Hash Test java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider) executed\");",
+      "    } // end doPost"
+    ],
+    "replacement_method_code": "    @Override\n    public void doPost(HttpServletRequest request, HttpServletResponse response)\n            throws ServletException, IOException {\n        response.setContentType(\"text/html;charset=UTF-8\");\n\n        org.owasp.benchmark.helpers.SeparateClassRequest scr =\n                new org.owasp.benchmark.helpers.SeparateClassRequest(request);\n        String param = scr.getTheValue(\"BenchmarkTest02671\");\n\n        String bar = doSomething(request, param);\n\n        java.security.Provider[] provider = java.security.Security.getProviders();\n        java.security.MessageDigest md;\n\n        try {\n            if (provider.length > 1) {\n\n                md = java.security.MessageDigest.getInstance(\"SHA-256\", provider[0]);\n            } else {\n                md = java.security.MessageDigest.getInstance(\"SHA-256\", \"SUN\");\n            }\n            byte[] input = {(byte) '?'};\n            Object inputParam = bar;\n            if (inputParam instanceof String) input = ((String) inputParam).getBytes();\n            if (inputParam instanceof java.io.InputStream) {\n                byte[] strInput = new byte[1000];\n                int i = ((java.io.InputStream) inputParam).read(strInput);\n                if (i == -1) {\n                    response.getWriter()\n                            .println(\n                                    \"This input source requires a POST, not a GET. Incompatible UI for the InputStream source.\");\n                    return;\n                }\n                input = java.util.Arrays.copyOf(strInput, i);\n            }\n            md.update(input);\n\n            byte[] result = md.digest();\n            java.io.File fileTarget =\n                    new java.io.File(\n                            new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR),\n                            \"passwordFile.txt\");\n            java.io.FileWriter fw =\n                    new java.io.FileWriter(fileTarget, true); // the true will append the new data\n            fw.write(\n                    \"hash_value=\"\n                            + org.owasp.esapi.ESAPI.encoder().encodeForBase64(result, true)\n                            + \"\\n\");\n            fw.close();\n            response.getWriter()\n                    .println(\n                            \"Sensitive value '\"\n                                    + org.owasp\n                                            .esapi\n                                            .ESAPI\n                                            .encoder()\n                                            .encodeForHTML(new String(input))\n                                    + \"' hashed and stored<br/>\");\n\n        } catch (java.security.NoSuchAlgorithmException e) {\n            System.out.println(\n                    \"Problem executing hash - TestCase java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider)\");\n            throw new ServletException(e);\n        } catch (java.security.NoSuchProviderException e) {\n            System.out.println(\n                    \"Problem executing hash - TestCase java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider)\");\n            throw new ServletException(e);\n        }\n\n        response.getWriter()\n                .println(\n                        \"Hash Test java.security.MessageDigest.getInstance(java.lang.String,java.security.Provider) executed\");\n    } // end doPost",
+    "reason": "",
+    "raw_response_valid": true,
+    "schema_error": null
+  },
+  "confidence": {
+    "score": 0.9526,
+    "band": "apply",
+    "threshold_apply": 0.75,
+    "threshold_review": 0.5,
+    "rationale": "tier=full; decision=apply_edits; structured_valid=True; attempts=1; score=0.953"
+  },
+  "error": null,
+  "predicate_trace": {
+    "package_path": "data.iso27001",
+    "rule_id": "ISO-A.10-WEAK-HASH",
+    "trace_source": "package_root_eval",
+    "before_trace_raw": {
+      "analysis_weak_hash": true,
+      "benchmark_context": true,
+      "command_keywords": [
+        "-c",
+        ".command(",
+        "/c",
+        "cmd.exe",
+        "processbuilder",
+        "runtime.getruntime().exec(",
+        "sh"
+      ],
+      "des_pattern": "cipher.getinstance(\"des",
+      "ecb_pattern": "cipher.getinstance(\"aes/ecb",
+      "endpoint_annotations": [
+        "deletemapping",
+        "getmapping",
+        "patchmapping",
+        "postmapping",
+        "putmapping",
+        "requestmapping",
+        "webservlet"
+      ],
+      "file_path_keywords": [
+        "../",
+        "..\\",
+        "fileinputstream",
+        "new java.io.file(",
+        "new java.io.filereader(",
+        "paths.get("
+      ],
+      "insecure_random_patterns": [
+        "math.random(",
+        "new random(",
+        "threadlocalrandom.current("
+      ],
+      "ldap_keywords": [
+        ".search(",
+        "dircontext",
+        "initialdircontext",
+        "ldapcontext"
+      ],
+      "logger_indicators": [
+        "audit",
+        "logger",
+        "tracer"
+      ],
+      "math_random_pattern": "math.random(",
+      "md5_pattern": "messagedigest.getinstance(\"md5\"",
+      "method_name": "dopost",
+      "normalized_annotations": [
+        "override"
+      ],
+      "random_context": true,
+      "random_ctor_pattern": "new random(",
+      "rc4_pattern": "cipher.getinstance(\"rc4",
+      "security_annotations": [
+        "authorize",
+        "denyall",
+        "preauthorize",
+        "rolesallowed",
+        "secured"
+      ],
+      "sensitive_keywords": [
+        "delete",
+        "destroy",
+        "drop",
+        "modify",
+        "remove",
+        "update"
+      ],
+      "servlet_context": true,
+      "sha1_pattern": "messagedigest.getinstance(\"sha1\"",
+      "sha_dash_pattern": "messagedigest.getinstance(\"sha-1\"",
+      "source_weak_hash": true,
+      "sql_execute_generic_pattern": "execute(",
+      "sql_execute_pattern": "executequery(",
+      "sql_execute_patterns": [
+        "execute(",
+        "executequery(",
+        "executeupdate("
+      ],
+      "sql_execute_update_pattern": "executeupdate(",
+      "sql_keywords": [
+        "delete ",
+        "insert ",
+        "select ",
+        "update "
+      ],
+      "sql_prepare_call_pattern": "preparecall(",
+      "sql_prepare_pattern": "preparestatement(",
+      "sql_prepare_patterns": [
+        "preparecall(",
+        "preparestatement("
+      ],
+      "threadlocal_random_pattern": "threadlocalrandom.current(",
+      "untrusted_input_markers": [
+        "getcookies(",
+        "getheader(",
+        "getparameter(",
+        "getquerystring("
+      ],
+      "violations": [
+        {
+          "reason": "Weak hash usage detected",
+          "severity": "high",
+          "target_method": "org.owasp.benchmark.testcode.BenchmarkTest02671.doPost(HttpServletRequest,HttpServletResponse)",
+          "violation_id": "ISO-A.10-WEAK-HASH"
+        }
+      ],
+      "weak_cipher_patterns": [
+        "cipher.getinstance(\"aes/ecb",
+        "cipher.getinstance(\"des",
+        "cipher.getinstance(\"rc4"
+      ],
+      "weak_hash_detected": true,
+      "weak_hash_patterns": [
+        "messagedigest.getinstance(\"md5\"",
+        "messagedigest.getinstance(\"sha-1\"",
+        "messagedigest.getinstance(\"sha1\""
+      ],
+      "xpath_keywords": [
+        ".compile(",
+        ".evaluate(",
+        "xpathfactory.newinstance("
+      ]
+    },
+    "after_trace_raw": {
+      "benchmark_context": true,
+      "command_keywords": [
+        "-c",
+        ".command(",
+        "/c",
+        "cmd.exe",
+        "processbuilder",
+        "runtime.getruntime().exec(",
+        "sh"
+      ],
+      "des_pattern": "cipher.getinstance(\"des",
+      "ecb_pattern": "cipher.getinstance(\"aes/ecb",
+      "endpoint_annotations": [
+        "deletemapping",
+        "getmapping",
+        "patchmapping",
+        "postmapping",
+        "putmapping",
+        "requestmapping",
+        "webservlet"
+      ],
+      "file_path_keywords": [
+        "../",
+        "..\\",
+        "fileinputstream",
+        "new java.io.file(",
+        "new java.io.filereader(",
+        "paths.get("
+      ],
+      "insecure_random_patterns": [
+        "math.random(",
+        "new random(",
+        "threadlocalrandom.current("
+      ],
+      "ldap_keywords": [
+        ".search(",
+        "dircontext",
+        "initialdircontext",
+        "ldapcontext"
+      ],
+      "logger_indicators": [
+        "audit",
+        "logger",
+        "tracer"
+      ],
+      "math_random_pattern": "math.random(",
+      "md5_pattern": "messagedigest.getinstance(\"md5\"",
+      "method_name": "dopost",
+      "normalized_annotations": [
+        "override"
+      ],
+      "random_context": true,
+      "random_ctor_pattern": "new random(",
+      "rc4_pattern": "cipher.getinstance(\"rc4",
+      "security_annotations": [
+        "authorize",
+        "denyall",
+        "preauthorize",
+        "rolesallowed",
+        "secured"
+      ],
+      "sensitive_keywords": [
+        "delete",
+        "destroy",
+        "drop",
+        "modify",
+        "remove",
+        "update"
+      ],
+      "servlet_context": true,
+      "sha1_pattern": "messagedigest.getinstance(\"sha1\"",
+      "sha_dash_pattern": "messagedigest.getinstance(\"sha-1\"",
+      "sql_execute_generic_pattern": "execute(",
+      "sql_execute_pattern": "executequery(",
+      "sql_execute_patterns": [
+        "execute(",
+        "executequery(",
+        "executeupdate("
+      ],
+      "sql_execute_update_pattern": "executeupdate(",
+      "sql_keywords": [
+        "delete ",
+        "insert ",
+        "select ",
+        "update "
+      ],
+      "sql_prepare_call_pattern": "preparecall(",
+      "sql_prepare_pattern": "preparestatement(",
+      "sql_prepare_patterns": [
+        "preparecall(",
+        "preparestatement("
+      ],
+      "threadlocal_random_pattern": "threadlocalrandom.current(",
+      "untrusted_input_markers": [
+        "getcookies(",
+        "getheader(",
+        "getparameter(",
+        "getquerystring("
+      ],
+      "violations": [],
+      "weak_cipher_patterns": [
+        "cipher.getinstance(\"aes/ecb",
+        "cipher.getinstance(\"des",
+        "cipher.getinstance(\"rc4"
+      ],
+      "weak_hash_patterns": [
+        "messagedigest.getinstance(\"md5\"",
+        "messagedigest.getinstance(\"sha-1\"",
+        "messagedigest.getinstance(\"sha1\""
+      ],
+      "xpath_keywords": [
+        ".compile(",
+        ".evaluate(",
+        "xpathfactory.newinstance("
+      ]
+    },
+    "before_trace_filtered": {
+      "analysis_weak_hash": true,
+      "random_context": true,
+      "source_weak_hash": true,
+      "weak_hash_detected": true
+    },
+    "after_trace_filtered": {
+      "random_context": true
+    },
+    "before_trace_normalized": {
+      "rule_id": "ISO-A.10-WEAK-HASH",
+      "is_vulnerable": true,
+      "detected_via_source": true,
+      "detected_via_graph": false,
+      "detected_via_ast": true
+    },
+    "after_trace_normalized": {
+      "rule_id": "ISO-A.10-WEAK-HASH",
+      "is_vulnerable": false,
+      "detected_via_source": false,
+      "detected_via_graph": false,
+      "detected_via_ast": false
+    },
+    "trace_fields_used": [
+      "analysis_weak_hash",
+      "benchmark_context",
+      "command_keywords",
+      "des_pattern",
+      "ecb_pattern",
+      "endpoint_annotations",
+      "file_path_keywords",
+      "insecure_random_patterns",
+      "ldap_keywords",
+      "logger_indicators",
+      "math_random_pattern",
+      "md5_pattern",
+      "method_name",
+      "normalized_annotations",
+      "random_context",
+      "random_ctor_pattern",
+      "rc4_pattern",
+      "security_annotations",
+      "sensitive_keywords",
+      "servlet_context",
+      "sha1_pattern",
+      "sha_dash_pattern",
+      "source_weak_hash",
+      "sql_execute_generic_pattern",
+      "sql_execute_pattern",
+      "sql_execute_patterns",
+      "sql_execute_update_pattern",
+      "sql_keywords",
+      "sql_prepare_call_pattern",
+      "sql_prepare_pattern",
+      "sql_prepare_patterns",
+      "threadlocal_random_pattern",
+      "untrusted_input_markers",
+      "violations",
+      "weak_cipher_patterns",
+      "weak_hash_detected",
+      "weak_hash_patterns",
+      "xpath_keywords"
+    ]
+  }
+}
