@@ -25,6 +25,10 @@ TRACKED_FINAL_STATUSES: Sequence[str] = (
     "VERIFICATION_ERROR",
 )
 
+FULLY_VERIFIED_LABEL_DEFINITION = (
+    "fully_verified := policy_fixed is true and build_success is true"
+)
+
 
 def _safe_float(value: Any) -> float | None:
     try:
@@ -36,18 +40,41 @@ def _safe_float(value: Any) -> float | None:
     return number
 
 
+def is_fully_verified(item: Mapping[str, Any]) -> bool:
+    value = item.get("fully_verified")
+    if isinstance(value, bool):
+        return value
+    return item.get("policy_fixed") is True and item.get("build_success") is True
+
+
 def build_confidence_calibration(
     results: Sequence[Mapping[str, Any]],
     *,
     bins: int = 10,
 ) -> Dict[str, Any] | None:
     points: list[tuple[float, int]] = []
+    cases: list[Dict[str, Any]] = []
+    missing_confidence_count = 0
     for item in results:
         confidence = item.get("confidence") or {}
         score = _safe_float((confidence or {}).get("score"))
         if score is None:
+            missing_confidence_count += 1
             continue
-        points.append((score, 1 if item.get("policy_fixed") is True else 0))
+        label = 1 if is_fully_verified(item) else 0
+        points.append((score, label))
+        cases.append(
+            {
+                "case_id": item.get("case_id"),
+                "violation_id": item.get("violation_id"),
+                "status": item.get("status"),
+                "confidence_score": score,
+                "confidence_band": confidence.get("band"),
+                "fully_verified": bool(label),
+                "policy_fixed": item.get("policy_fixed"),
+                "build_success": item.get("build_success"),
+            }
+        )
 
     if not points:
         return None
@@ -99,10 +126,16 @@ def build_confidence_calibration(
 
     return {
         "count": n,
+        "missing_confidence_count": missing_confidence_count,
+        "label": "fully_verified",
+        "label_definition": FULLY_VERIFIED_LABEL_DEFINITION,
+        "positive_count": sum(label for _, label in points),
+        "negative_count": n - sum(label for _, label in points),
         "brier_score": round(brier_score, 6),
         "ece": round(ece, 6),
         "reliability_bins": reliability_bins,
         "risk_coverage": risk_coverage,
+        "cases": cases,
     }
 
 
@@ -172,6 +205,9 @@ def build_remediation_result(
     structured_valid = isinstance(generation, dict) and generation.get("raw_response_valid") is True
 
     confidence = apply_result.get("confidence") or None
+    confidence_score = _safe_float((confidence or {}).get("score")) if confidence else None
+    confidence_band = (confidence or {}).get("band") if confidence else None
+    fully_verified = policy_fixed and build_pass is True
     evidence = violation.get("evidence") or {}
     return {
         "case_id": case_id,
@@ -197,7 +233,10 @@ def build_remediation_result(
         "build_attempted": compilation.get("attempted") is True,
         "build_success": build_pass is True,
         "policy_fixed": policy_fixed,
+        "fully_verified": fully_verified,
         "confidence": confidence,
+        "confidence_score": confidence_score,
+        "confidence_band": confidence_band,
     }
 
 
@@ -232,7 +271,10 @@ def build_skipped_result(
         "build_attempted": False,
         "build_success": False,
         "policy_fixed": False,
+        "fully_verified": False,
         "confidence": None,
+        "confidence_score": None,
+        "confidence_band": None,
     }
 
 
@@ -292,6 +334,7 @@ def render_summary_markdown(
     total_cases: int | None = None,
     recent_results: Sequence[Mapping[str, Any]] | None = None,
     untracked_counts: Mapping[str, int] | None = None,
+    calibration: Mapping[str, Any] | None = None,
 ) -> str:
     attempted = stage_counts.get("attempted", 0)
     total_display = f"`{attempted}`" if total_cases is None else f"`{attempted}` / `{total_cases}`"
@@ -328,16 +371,16 @@ def render_summary_markdown(
             violation_id = item.get("violation_id") or "unknown"
             lines.append(f"- `{case_id}`: `{status}` ({violation_id})")
 
-        calibration = build_confidence_calibration(list(recent_results), bins=10)
-        if calibration is not None:
-            lines.extend(
-                [
-                    "",
-                    "## Confidence Calibration",
-                    f"- `Brier`: `{calibration.get('brier_score', 'n/a')}`",
-                    f"- `ECE`: `{calibration.get('ece', 'n/a')}`",
-                ]
-            )
+    if calibration is not None:
+        lines.extend(
+            [
+                "",
+                "## Confidence Calibration",
+                f"- `Brier`: `{calibration.get('brier_score', 'n/a')}`",
+                f"- `ECE`: `{calibration.get('ece', 'n/a')}`",
+                "- Full reliability bins are in `remediation_calibration.json`.",
+            ]
+        )
 
     lines.extend(
         [
@@ -351,6 +394,38 @@ def render_summary_markdown(
     return "\n".join(lines)
 
 
+def render_calibration_markdown(calibration: Mapping[str, Any]) -> str:
+    lines = [
+        "# Remediation Calibration",
+        "",
+        f"- Cases with confidence: `{calibration.get('count', 0)}`",
+        f"- Missing confidence: `{calibration.get('missing_confidence_count', 0)}`",
+        f"- Label: `{calibration.get('label', 'fully_verified')}`",
+        f"- Label definition: `{calibration.get('label_definition', FULLY_VERIFIED_LABEL_DEFINITION)}`",
+        f"- Positive labels: `{calibration.get('positive_count', 0)}`",
+        f"- Negative labels: `{calibration.get('negative_count', 0)}`",
+        f"- Brier score: `{calibration.get('brier_score', 'n/a')}`",
+        f"- ECE: `{calibration.get('ece', 'n/a')}`",
+        "",
+        "## Reliability Bins",
+        "",
+        render_markdown_table(
+            ["Bin", "Count", "Avg confidence", "Empirical success", "Gap"],
+            [
+                [
+                    f"{item.get('bin_start')}-{item.get('bin_end')}",
+                    item.get("count"),
+                    item.get("avg_confidence"),
+                    item.get("empirical_success"),
+                    item.get("gap"),
+                ]
+                for item in calibration.get("reliability_bins", [])
+            ],
+        ).rstrip(),
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def write_final_artifacts(
     output_dir: Path,
     metrics: Mapping[str, Any],
@@ -361,6 +436,11 @@ def write_final_artifacts(
     calibration = metrics.get("confidence_calibration")
     if calibration is not None:
         write_json(output_dir / "confidence_calibration.json", calibration)
+        write_json(output_dir / "remediation_calibration.json", calibration)
+        (output_dir / "remediation_calibration.md").write_text(
+            render_calibration_markdown(calibration),
+            encoding="utf-8",
+        )
     results = metrics.get("results") or []
     write_csv(
         output_dir / "remediation_metrics.csv",
@@ -372,6 +452,9 @@ def write_final_artifacts(
                 "patch_applied": item.get("patch_applied"),
                 "policy_pass": item.get("policy_pass"),
                 "build_pass": item.get("build_pass"),
+                "fully_verified": item.get("fully_verified"),
+                "confidence_score": item.get("confidence_score"),
+                "confidence_band": item.get("confidence_band"),
                 "category": item.get("category"),
                 "error": item.get("error"),
             }
@@ -384,6 +467,9 @@ def write_final_artifacts(
             "patch_applied",
             "policy_pass",
             "build_pass",
+            "fully_verified",
+            "confidence_score",
+            "confidence_band",
             "category",
             "error",
         ],
@@ -422,14 +508,8 @@ def write_final_artifacts(
         total_cases=metrics.get("attempted"),
         recent_results=list(results)[-5:],
         untracked_counts=metrics.get("untracked_status_counts") or {},
+        calibration=calibration if isinstance(calibration, Mapping) else None,
     )
-    if calibration is not None:
-        summary += (
-            "\n\n## Confidence Calibration\n"
-            f"- `Brier`: `{calibration.get('brier_score', 'n/a')}`\n"
-            f"- `ECE`: `{calibration.get('ece', 'n/a')}`\n"
-            "- Full reliability bins are in `confidence_calibration.json`.\n"
-        )
     (output_dir / "summary.md").write_text(summary, encoding="utf-8")
 
 
@@ -610,5 +690,6 @@ class RemediationRuntime:
             total_cases=self.total_cases,
             recent_results=self.completed_results[-5:],
             untracked_counts=untracked_counts,
+            calibration=build_confidence_calibration(self.completed_results, bins=10),
         )
         self.summary_path.write_text(summary, encoding="utf-8")

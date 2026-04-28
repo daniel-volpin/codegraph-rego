@@ -83,6 +83,9 @@ class TestRemediationRuntime(unittest.TestCase):
             self.assertEqual(progress_running["build_success"], 1)
             self.assertEqual(progress_running["policy_fixed"], 1)
             self.assertEqual(progress_running["final_status_counts"]["OK"], 1)
+            self.assertTrue(result_ok["fully_verified"])
+            self.assertEqual(result_ok["confidence_score"], 0.91)
+            self.assertEqual(result_ok["confidence_band"], "apply")
 
             self.assertTrue((case_dir_ok / "violation.json").exists())
             self.assertTrue((case_dir_ok / "result.json").exists())
@@ -166,9 +169,15 @@ class TestRemediationRuntime(unittest.TestCase):
             self.assertEqual(remediation_metrics["final_status_counts"]["NO_FIX"], 1)
             self.assertIn("confidence_calibration", remediation_metrics)
             self.assertIsNotNone(remediation_metrics["confidence_calibration"])
+            calibration = remediation_metrics["confidence_calibration"]
+            self.assertEqual(calibration["label"], "fully_verified")
+            self.assertEqual(calibration["positive_count"], 1)
+            self.assertEqual(calibration["negative_count"], 1)
 
             self.assertTrue((output_dir / "remediation_metrics.csv").exists())
             self.assertTrue((output_dir / "confidence_calibration.json").exists())
+            self.assertTrue((output_dir / "remediation_calibration.json").exists())
+            self.assertTrue((output_dir / "remediation_calibration.md").exists())
             self.assertTrue((output_dir / "table.md").exists())
 
             summary = (output_dir / "summary.md").read_text(encoding="utf-8")
@@ -176,6 +185,7 @@ class TestRemediationRuntime(unittest.TestCase):
             self.assertIn("- `OK`: `1`", summary)
             self.assertIn("- `NO_FIX`: `1`", summary)
             self.assertIn("## Confidence Calibration", summary)
+            self.assertIn("remediation_calibration.json", summary)
             self.assertIn(case_id_no_fix, summary)
 
 
