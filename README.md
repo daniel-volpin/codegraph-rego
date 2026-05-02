@@ -159,6 +159,53 @@ Use `.env.example` as the canonical local template. Startup performs runtime val
 
 `GET /health` now reports explicit degraded startup state. It returns `200` only when startup preload and the core runtime checks are healthy; otherwise it returns `503` with structured details for the degraded component(s).
 
+## Deployment Model & Trust Boundary
+
+CodeGraph is designed and tested as a **single-user, loopback-only research
+service**. The deployment model is intentionally narrow; reading this section
+before exposing the service is mandatory.
+
+**Assumptions baked into the codebase.**
+
+- The HTTP API has **no authentication and no rate limiting**. Every endpoint
+  (upload, policy evaluation, remediation preview/apply) is fully open. CORS
+  defaults whitelist `localhost:5173/4173/8000` only.
+- The upload workspace is a **single shared directory** on the server
+  (`UPLOAD_DIR`, default `uploaded_code/`). There is no per-user or per-session
+  isolation; a second uploader will overwrite the first one's workspace.
+- Build verification (`mvn compile`, `gradle compileJava`) executes inside the
+  uploaded project. Maven and Gradle plugins declared in the project run
+  arbitrary code at compile time. **Treat every uploaded archive as untrusted
+  code that will execute on the host.** The default container runs as `root`
+  with full network egress and only a 120 s timeout.
+- LLM endpoints (`LLM_API_BASE`, `REMEDIATION_LLM_API_BASE`) are assumed to be
+  reachable on the same host or trusted network. API keys are read from env
+  and forwarded verbatim.
+
+**What this means for safe operation.**
+
+- Bind the API to `127.0.0.1` only. Do not expose it on a public interface
+  without first adding an authenticating reverse proxy and per-user workspace
+  isolation.
+- Run the backend container in a sandboxed environment if you accept arbitrary
+  uploads (firejail, nsjail, or a dedicated VM are reasonable starting points).
+  The current `Dockerfile.backend` is not a sufficient sandbox by itself.
+- Do not ingest source archives you have not personally vetted unless the
+  build-verification path is disabled or sandboxed.
+- Do not run remediation `mode="apply"` against codebases you do not control.
+  The `dry_run` path is safe; the live-apply path mutates the workspace.
+
+**What we explicitly do not claim.**
+
+- Multi-tenancy. Multiple concurrent users share the same workspace and
+  progress state.
+- Production-grade authentication or authorization.
+- Hermetic execution of arbitrary uploaded code. Maven plugin trust is
+  inherited from the JVM build ecosystem.
+
+If you intend to harden the service for any of these properties, treat that as
+a separate engineering effort beyond the thesis artifact.
+
 ## Reproducibility
 
 Use [REPRODUCIBILITY.md](./REPRODUCIBILITY.md) for the shortest path to rerun the benchmark pipeline.

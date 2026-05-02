@@ -38,6 +38,48 @@ export REMEDIATION_LLM_MODEL_TTL_SECONDS=300
 
 If you are using LM Studio with different explanation/remediation models, enable LM Studio's `Auto-Evict` setting. CodeGraph now sends per-request TTL hints so idle models can be unloaded automatically.
 
+### Environment Variable Reference
+
+Every variable consumed by `codegraph.config.Settings`, the upload pipeline, the
+remediation gate, and the OpenTelemetry layer. `.env.example` ships matching
+defaults — keep it in sync when adding new variables.
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `NEO4J_URI` | `bolt://127.0.0.1:7687` | Neo4j Bolt endpoint. Required at runtime. |
+| `NEO4J_USER` | `neo4j` | Neo4j auth user. Required. |
+| `NEO4J_PASS` | _unset_ | Neo4j auth password. Required (no default). |
+| `OWASP_BENCHMARK_ROOT` | _unset_ | Absolute path to the local `BenchmarkJava` checkout. Required for benchmark eval scripts. |
+| `LLM_PROVIDER` | `openai` | LLM transport family (currently OpenAI-compatible only). |
+| `LLM_API_BASE` | `http://localhost:1234/v1` | OpenAI-compatible base URL (LM Studio, vLLM, etc.). |
+| `LLM_API_KEY` | _unset_ | API key sent to the LLM endpoint. Use `lm-studio` for LM Studio. |
+| `LLM_MODEL` | `qwen3.5-9b-mlx` | Default explanation model. |
+| `LLM_TEMPERATURE` | `0.2` | Sampling temperature for explanation. Note: not zero; outputs are not bitwise reproducible. |
+| `LLM_ENABLE_THINKING` | `false` | Disable extended thinking on supported models. |
+| `LLM_CONCURRENCY` | `2` | Max parallel LLM requests during eval. |
+| `LLM_MAX_TOKENS_EXPLANATION` | `512` | Generation cap for the explanation task. |
+| `LLM_MAX_TOKENS_REMEDIATION` | `1024` | Generation cap for the remediation task. |
+| `LLM_MODEL_TTL_SECONDS` | `180` | Per-request TTL hint sent to LM Studio for auto-eviction. |
+| `REMEDIATION_LLM_MODEL` | `qwen/qwen3-coder-30b` | Override model for remediation generation. |
+| `REMEDIATION_LLM_MAX_TOKENS` | `2048` | Override max tokens for remediation. |
+| `REMEDIATION_LLM_TEMPERATURE` | `0.0` | Remediation sampling temperature. Lower than explanation; not strictly deterministic. |
+| `REMEDIATION_LLM_MODEL_TTL_SECONDS` | `300` | LM Studio TTL hint for the remediation model. |
+| `REMEDIATION_RAW_CAPTURE_ENABLED` | `0` | Persist raw LLM outputs alongside structured ones (audit aid). |
+| `REMEDIATION_CONFIDENCE_GATE_ENABLED` | `1` | Enforce the confidence gate on `mode="apply"`. **Disabling this allows low-confidence patches to apply.** |
+| `REMEDIATION_CONFIDENCE_THRESHOLD_APPLY` | `0.75` | Sigmoid threshold above which `apply_edits` proceeds. |
+| `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW` | `0.50` | Threshold for `review` band; below this falls to `abstain`. |
+| `REMEDIATION_CONFIDENCE_TEMPERATURE` | `1.0` | Sigmoid temperature scaling for confidence calibration. |
+| `REMEDIATION_TRACE_PROMPT_ENABLED` | `0` | Persist remediation prompt + trace context for audit. |
+| `UI_REVIEW_STORE_PATH` | `outputs/policy_ui_reviews/reviews.jsonl` | JSONL append target for human review feedback from the UI. |
+| `UPLOAD_MAX_ARCHIVE_SIZE_BYTES` | `104857600` | Max total upload archive size (100 MB). |
+| `UPLOAD_MAX_MEMBER_SIZE_BYTES` | `52428800` | Max single-file size inside an archive (50 MB). |
+| `UPLOAD_MAX_EXTRACTED_SIZE_BYTES` | `524288000` | Max total extracted size (500 MB). Bomb defence. |
+| `UPLOAD_MAX_ARCHIVE_ENTRIES` | `10000` | Max archive entry count. |
+| `UPLOAD_MAX_COMPRESSION_RATIO` | `100.0` | Max per-entry compression ratio. Bomb defence. |
+| `OTEL_SDK_DISABLED` | _unset_ | Set to `true` to silence all OpenTelemetry tracing. |
+| `OTEL_TRACE_FILE` | _unset_ | If set, write spans to this JSONL file instead of stdout. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | _unset_ | OTLP endpoint URL for an external collector (Grafana Tempo, etc.). |
+
 ## 3. Branch Verification Contract
 
 Use these commands as the baseline-recovery gate on this branch:
@@ -245,3 +287,46 @@ python scripts/evaluation/run_remediation_model_bakeoff.py \
   - `progress.json`
   - `request_metrics.jsonl`
   - LM Studio logs (`finish_reason`, completion tokens, stop behavior)
+
+## 13. Determinism and Reproducibility Caveats
+
+The eval pipeline is **as deterministic as the underlying components allow**.
+Read this section before treating any single re-run as canonical.
+
+**Deterministic by construction.**
+
+- Benchmark testcase selection is seeded (`seed` field in every config under
+  `configs/benchmark/`; `select_testcases()` is idempotent for a given seed).
+- Remediation sampling is seeded via `--seed` (default 11).
+- OPA / Rego evaluation is purely functional given an input bundle.
+- Confidence band computation in `codegraph/remediation/confidence.py` is a
+  closed-form sigmoid with no stochastic component.
+- Detection metrics, Brier, and ECE are deterministic given the same inputs.
+
+**Not deterministic across re-runs.**
+
+- LLM outputs depend on the model server (LM Studio / vLLM / etc.), the model
+  weights, the quantization, the runtime version, and the host hardware. Even
+  with `temperature=0.0` and a fixed seed, identical prompts can produce
+  different completions across server restarts and model versions.
+- This means `Citation@Context`, `Citation@TP`, and remediation `fix_success`
+  may shift by small amounts on re-run. Treat the headline values as a single
+  draw, not as point estimates of a fixed distribution.
+- Model TTL eviction in LM Studio (`LLM_MODEL_TTL_SECONDS`) reloads the model
+  on demand; immediately after a reload, the first few completions can differ
+  from later steady-state ones depending on backend-side caches.
+
+**Recommended practice.**
+
+- For headline numbers, run each eval **N=3 times** with different LLM seeds
+  (or restarts) and report mean ± standard deviation. The detection numbers
+  are deterministic and need no repetition.
+- Pin the model version explicitly in `LLM_MODEL` and
+  `REMEDIATION_LLM_MODEL`. Record the resolved model and runtime in the
+  artifact's `provenance.json` (written by every `run_*_eval.py` script).
+- For statistical claims (P, R, F1, Citation@*), prefer the bootstrap and
+  Wilson confidence intervals emitted next to the point estimates over
+  individual point values.
+- When citing thesis-final numbers, cite the artifact directory
+  (`outputs/thesis_final_*/`) plus the git tag (`thesis-final-v1`) — not the
+  README prose.

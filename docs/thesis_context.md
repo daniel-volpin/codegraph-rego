@@ -26,6 +26,45 @@
 - Do not overclaim full Code Property Graph / control-flow / data-dependency support unless it is explicitly implemented and verified.
 - The strongest thesis contribution is the integrated compliance workflow, not just one isolated model or one isolated detector.
 
+## Graph Scope and Approximation Disclosures
+- The Neo4j graph contains four node labels (`Class`, `Method`, `Field`,
+  `Annotation`) and the following relationship types: `CALLS`, `ANNOTATED_WITH`,
+  `USES`, `DECLARES`, `DECLARES_FIELD`, `EXTENDS`, `IMPLEMENTS`, `DEPENDS_ON`,
+  `NESTED_IN`. There are no AST-level, parameter-binding, or value-flow nodes.
+- "Taint" in this project means a bounded, conservative BFS over `CALLS` edges
+  (`codegraph/policy/taint_graph.py`), with `max_depth=4` and regex-based sink
+  matching at each hop. This is an **approximation, not formal taint analysis**.
+  It is sound by construction (visited set prevents loops) but incomplete: any
+  data flow that bypasses the call graph (e.g. through a primitive type passed
+  via a method we did not analyse) is missed.
+- Several Rego heuristics use case-insensitive `contains()` over the raw
+  source string. They do not strip comments or string literals. Be explicit
+  about this whenever describing detection behavior.
+
+## Ablation Semantics (Citation@Context vs Citation@NoContext)
+- Both modes share the same violation set and the same expected citation
+  string (`format_citation(file_path, start_line, end_line)`).
+- `with_context` provides the model with the evidence cards (E1/E2/E3),
+  graph context (annotations, calls, callers), and vector context (FAISS
+  neighbours). Citation IDs are constrained to an enum of card IDs, so the
+  model cannot invent a citation; the citation text is then resolved server
+  side from the chosen card.
+- `without_context` zeros the evidence cards, the graph context, and the
+  vector context. The schema for that mode requires a literal citation
+  string (no enum). The violation's `file_path` and line range remain visible
+  to the prompt assembly machinery via `build_expected_citation`, but the
+  evidence cards themselves are absent.
+- `Citation@NoContext = 0.000` therefore measures the model's behavior under
+  the **stricter, no-card schema** with zeroed graph + vector context. It is
+  not a test of whether the model could regurgitate a path it has never seen.
+  Document this distinction in the thesis methodology section.
+- The detection eval and the explanation eval currently use slightly
+  different testcase populations: detection scores all selected cases
+  (positives and negatives); explanation grounding is measured on positive
+  predictions only (filter at `codegraph/evaluation/pipeline.py`). The
+  PR `thesis/defensibility-pass` (F01) extends explanation eval to also
+  report grounding on false-positive predictions.
+
 ## Current System Design
 - Symbolic layer:
   - Java parsing + graph ingestion into Neo4j
