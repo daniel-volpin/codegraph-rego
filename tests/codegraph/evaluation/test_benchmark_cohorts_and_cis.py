@@ -22,7 +22,11 @@ from codegraph.evaluation.pipeline import (
 # `score_category` lives at the script top-level; importing the script module
 # triggers `argparse` only inside `main()`, so this is safe.
 import importlib.util
+import json
 import pathlib
+import tempfile
+
+from codegraph.evaluation.explanation_runtime import ExplanationRuntime
 
 _SCRIPT_PATH = pathlib.Path(__file__).resolve().parents[3] / "run_benchmark_eval.py"
 _spec = importlib.util.spec_from_file_location("_run_benchmark_eval", _SCRIPT_PATH)
@@ -150,6 +154,33 @@ class TestCollectCohortSplit(unittest.TestCase):
         fp_keys = {v["target_method"] for v in fp["sql"]}
         self.assertEqual(tp_keys & fp_keys, set())  # disjoint
         self.assertEqual(tp_keys | fp_keys, {"x", "y"})  # complete
+
+
+class TestExplanationProgressCohorts(unittest.TestCase):
+    def test_fp_progress_does_not_change_tp_headline_totals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = ExplanationRuntime(
+                output_dir=pathlib.Path(tmpdir),
+                benchmark_root=pathlib.Path(tmpdir),
+                truth_path=pathlib.Path(tmpdir) / "truth.csv",
+                truth_schema={},
+                selection_cfg={},
+                coverage_by_category={},
+                sample_per_category=0,
+            )
+            metrics: dict = {}
+            runtime.begin_explanations(total_target_violations=2, metrics=metrics)
+            runtime.start_category("sql", "SQL", 2, metrics)
+            runtime.record_violation_result(True, False, metrics)
+            runtime.record_nonheadline_violation_result(metrics)
+            runtime.finalize("completed", metrics)
+
+            progress = json.loads((pathlib.Path(tmpdir) / "progress.json").read_text())
+            self.assertEqual(progress["processed_violations"], 2)
+            self.assertEqual(progress["total_violations"], 2)
+            self.assertEqual(progress["percent_complete"], 1.0)
+            self.assertEqual(progress["overall_partial"]["with_context"], 1)
+            self.assertEqual(progress["overall_partial"]["without_context"], 0)
 
 
 if __name__ == "__main__":

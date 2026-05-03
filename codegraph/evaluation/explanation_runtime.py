@@ -34,6 +34,7 @@ class ExplanationRuntime:
         self.started_at = datetime.now(timezone.utc)
 
         self.total_target_violations = 0
+        self.processed_violations = 0
         self.total_count = 0
         self.total_with = 0
         self.total_without = 0
@@ -86,12 +87,19 @@ class ExplanationRuntime:
     def record_violation_result(
         self, with_context_hit: bool, without_context_hit: bool, metrics: Dict[str, Any]
     ) -> None:
+        self.processed_violations += 1
         self.total_count += 1
         self.current_category_done += 1
         if with_context_hit:
             self.total_with += 1
         if without_context_hit:
             self.total_without += 1
+        self.write_live_artifacts(status="running", stage="explanation", metrics=metrics)
+
+    def record_nonheadline_violation_result(self, metrics: Dict[str, Any]) -> None:
+        """Record progress for non-headline cohorts without changing TP totals."""
+        self.processed_violations += 1
+        self.current_category_done += 1
         self.write_live_artifacts(status="running", stage="explanation", metrics=metrics)
 
     def write_sample(self, sample: Dict[str, Any]) -> None:
@@ -121,12 +129,14 @@ class ExplanationRuntime:
 
     def write_live_artifacts(self, *, status: str, stage: str, metrics: Dict[str, Any]) -> None:
         elapsed = self.elapsed_seconds()
-        if self.total_count > 0 and self.total_target_violations > self.total_count:
-            seconds_per_item = elapsed / self.total_count
-            eta_seconds = round(seconds_per_item * (self.total_target_violations - self.total_count), 2)
+        if self.processed_violations > 0 and self.total_target_violations > self.processed_violations:
+            seconds_per_item = elapsed / self.processed_violations
+            eta_seconds = round(seconds_per_item * (self.total_target_violations - self.processed_violations), 2)
         else:
             eta_seconds = 0.0
-        percent_complete = (self.total_count / self.total_target_violations) if self.total_target_violations else 1.0
+        percent_complete = (
+            self.processed_violations / self.total_target_violations if self.total_target_violations else 1.0
+        )
         avg_request_latency_ms = (
             round(self.total_request_latency_ms / self.request_count, 2) if self.request_count > 0 else None
         )
@@ -137,7 +147,7 @@ class ExplanationRuntime:
             "started_at": self.started_at.isoformat(),
             "updated_at": utc_now_iso(),
             "elapsed_seconds": round(elapsed, 2),
-            "processed_violations": self.total_count,
+            "processed_violations": self.processed_violations,
             "total_violations": self.total_target_violations,
             "percent_complete": round(percent_complete, 4),
             "eta_seconds": eta_seconds,

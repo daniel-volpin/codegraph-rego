@@ -478,6 +478,7 @@ def main() -> int:
                                 fp_total_with += 1
                             if without_hit:
                                 fp_total_without += 1
+                            runtime.record_nonheadline_violation_result(metrics=metrics)
 
                     # Attach Wilson 95% CIs once each cohort finishes.
                     _attach_cohort_cis(metrics[category_id][cohort_label])
