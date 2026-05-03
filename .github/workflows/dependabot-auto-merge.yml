@@ -26,7 +26,7 @@ jobs:
             steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
             steps.metadata.outputs.update-type == 'version-update:semver-minor'
           }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
           script: |
@@ -44,7 +44,7 @@ jobs:
             steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
             steps.metadata.outputs.update-type == 'version-update:semver-minor'
           }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
           script: |
