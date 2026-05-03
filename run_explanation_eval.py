@@ -16,12 +16,15 @@ from codegraph.config import settings
 from codegraph.evaluation.explanation_runtime import ExplanationRuntime, utc_now_iso
 from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
 from codegraph.evaluation.pipeline import (
+    collect_category_false_positive_violations,
     collect_category_violations,
     group_violations_by_testcase as index_violations_by_testcase,
     ingest_and_evaluate_subset,
     load_benchmark_evaluation_context,
     staged_benchmark_workspace,
 )
+from codegraph.evaluation.provenance import collect_provenance, write_provenance
+from codegraph.evaluation.uncertainty import wilson_score_ci
 from codegraph.llm.evidence_cards import format_citation
 from codegraph.llm.explanation_prompting import build_explanation_evidence, build_explanation_prompt
 from codegraph.llm.integration import (
@@ -126,6 +129,32 @@ def _measure_prompt_chars(messages: List[Dict[str, str]]) -> int:
     return sum(len(message.get("content", "")) for message in messages)
 
 
+def _empty_cohort_block() -> Dict[str, Any]:
+    return {
+        "count": 0,
+        "with_context": 0,
+        "without_context": 0,
+        "rate_with_context": 0.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": None,
+        "rate_without_context_ci": None,
+    }
+
+
+def _attach_cohort_cis(block: Dict[str, Any]) -> Dict[str, Any]:
+    """Add Wilson 95% intervals for the with/without-context citation rates."""
+    n = int(block.get("count") or 0)
+    with_hits = int(block.get("with_context") or 0)
+    without_hits = int(block.get("without_context") or 0)
+    if n <= 0:
+        block["rate_with_context_ci"] = None
+        block["rate_without_context_ci"] = None
+        return block
+    block["rate_with_context_ci"] = wilson_score_ci(with_hits, n)
+    block["rate_without_context_ci"] = wilson_score_ci(without_hits, n)
+    return block
+
+
 def _run_explanation_request(
     *,
     violation: Dict[str, Any],
@@ -176,6 +205,30 @@ def main() -> int:
     selected_ids = context.selection.selected_testcase_ids
 
     output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # F27: capture provenance up front so it survives a mid-run crash.
+    provenance = collect_provenance(
+        eval_kind="explanation",
+        config_path=args.config,
+        output_dir=output_dir,
+        seed=int(context.selection_cfg.get("seed") or 7),
+        llm={
+            "model": getattr(settings, "llm_model", None),
+            "temperature": getattr(settings, "llm_temperature", None),
+            "max_tokens_explanation": getattr(settings, "llm_max_tokens_explanation", None),
+            "max_tokens_eval": args.llm_max_tokens_eval,
+            "concurrency": getattr(settings, "llm_concurrency", None),
+            "evidence_mode": args.evidence_mode,
+        },
+        extra={
+            "mapping_path": str(args.mapping),
+            "table_format": args.table_format,
+            "reset_neo4j": bool(args.reset_neo4j),
+        },
+    )
+    write_provenance(provenance, output_dir)
+
     runtime = ExplanationRuntime(
         output_dir=output_dir,
         benchmark_root=context.benchmark_root,
@@ -231,15 +284,35 @@ def main() -> int:
         detected_violations=len(violations),
     )
 
+    # F01: evaluate citation grounding on BOTH cohorts.
+    # - TP cohort: violations on positive testcases (legacy Citation@Context)
+    # - FP cohort: violations on benign testcases (new; measures grounding on
+    #   the detector's mistakes). The expected citation is built the same way
+    #   in both cohorts; only the underlying testcase label differs.
     category_violations_by_id = collect_category_violations(
         selected_category_ids=context.selected_category_ids,
         categories_by_id=categories_by_id,
         selection=context.selection,
         violations_by_testcase=violations_by_testcase,
     )
-    total_target_violations = sum(len(vios) for vios in category_violations_by_id.values())
+    category_fp_violations_by_id = collect_category_false_positive_violations(
+        selected_category_ids=context.selected_category_ids,
+        categories_by_id=categories_by_id,
+        selection=context.selection,
+        violations_by_testcase=violations_by_testcase,
+    )
+    total_target_violations = sum(
+        len(category_violations_by_id.get(cat_id, []))
+        + len(category_fp_violations_by_id.get(cat_id, []))
+        for cat_id in context.selected_category_ids
+    )
     runtime.begin_explanations(total_target_violations=total_target_violations, metrics=metrics)
     interrupted = False
+
+    fp_total_count = 0
+    fp_total_with = 0
+    fp_total_without = 0
+    fp_samples_per_category: Dict[str, int] = {}
 
     try:
         with ThreadPoolExecutor(max_workers=max(1, settings.llm_concurrency)) as pool:
@@ -247,127 +320,171 @@ def main() -> int:
                 spec = categories_by_id.get(category_id)
                 if not spec:
                     continue
-                category_violations = category_violations_by_id.get(category_id, [])
+                tp_violations = category_violations_by_id.get(category_id, [])
+                fp_violations = category_fp_violations_by_id.get(category_id, [])
                 runtime.start_category(
                     category_id=category_id,
                     category_label=spec.label,
-                    category_total=len(category_violations),
+                    category_total=len(tp_violations) + len(fp_violations),
                     metrics=metrics,
                 )
-                with_success = 0
-                without_success = 0
                 metrics[category_id] = {
+                    # Legacy top-level fields = TP cohort (backward compat).
                     "count": 0,
                     "with_context": 0,
                     "without_context": 0,
                     "rate_with_context": 0.0,
                     "rate_without_context": 0.0,
+                    "rate_with_context_ci": None,
+                    "rate_without_context_ci": None,
+                    # Cohort breakdown (F01).
+                    "tp": _empty_cohort_block(),
+                    "fp": _empty_cohort_block(),
                 }
                 if category_id in context.coverage_by_category:
                     metrics[category_id].update(context.coverage_by_category[category_id])
 
-                for idx, violation in enumerate(category_violations, start=1):
-                    with_expected_citation = build_expected_citation(
-                        violation,
-                        include_graph_context=True,
-                        evidence_mode=args.evidence_mode,
-                    )
-                    without_expected_citation = build_expected_citation(
-                        violation,
-                        include_graph_context=False,
-                        evidence_mode=args.evidence_mode,
-                    )
-                    fut_with = pool.submit(
-                        _run_explanation_request,
-                        violation=violation,
-                        include_graph_context=True,
-                        evidence_mode=args.evidence_mode,
-                        max_tokens=args.llm_max_tokens_eval,
-                    )
-                    fut_without = pool.submit(
-                        _run_explanation_request,
-                        violation=violation,
-                        include_graph_context=False,
-                        evidence_mode=args.evidence_mode,
-                        max_tokens=args.llm_max_tokens_eval,
-                    )
-                    with_result = fut_with.result()
-                    without_result = fut_without.result()
+                for cohort_label, cohort_violations in (("tp", tp_violations), ("fp", fp_violations)):
+                    cohort_with = 0
+                    cohort_without = 0
+                    for idx, violation in enumerate(cohort_violations, start=1):
+                        with_expected_citation = build_expected_citation(
+                            violation,
+                            include_graph_context=True,
+                            evidence_mode=args.evidence_mode,
+                        )
+                        without_expected_citation = build_expected_citation(
+                            violation,
+                            include_graph_context=False,
+                            evidence_mode=args.evidence_mode,
+                        )
+                        fut_with = pool.submit(
+                            _run_explanation_request,
+                            violation=violation,
+                            include_graph_context=True,
+                            evidence_mode=args.evidence_mode,
+                            max_tokens=args.llm_max_tokens_eval,
+                        )
+                        fut_without = pool.submit(
+                            _run_explanation_request,
+                            violation=violation,
+                            include_graph_context=False,
+                            evidence_mode=args.evidence_mode,
+                            max_tokens=args.llm_max_tokens_eval,
+                        )
+                        with_result = fut_with.result()
+                        without_result = fut_without.result()
 
-                    explanation_with = with_result["explanation"]
-                    explanation_without = without_result["explanation"]
-                    with_hit = has_exact_citation(with_result.get("structured_explanation"), with_expected_citation)
-                    without_hit = has_exact_citation(
-                        without_result.get("structured_explanation"),
-                        without_expected_citation,
-                    )
-                    if with_hit:
-                        with_success += 1
-                    if without_hit:
-                        without_success += 1
+                        explanation_with = with_result["explanation"]
+                        explanation_without = without_result["explanation"]
+                        with_hit = has_exact_citation(
+                            with_result.get("structured_explanation"), with_expected_citation
+                        )
+                        without_hit = has_exact_citation(
+                            without_result.get("structured_explanation"),
+                            without_expected_citation,
+                        )
+                        if with_hit:
+                            cohort_with += 1
+                        if without_hit:
+                            cohort_without += 1
 
-                    base_metric = {
-                        "timestamp": utc_now_iso(),
-                        "category_id": category_id,
-                        "category_label": spec.label,
-                        "violation_id": violation.get("violation_id"),
-                        "target_method": violation.get("target_method"),
-                        "evidence_mode": args.evidence_mode,
-                        "max_tokens": args.llm_max_tokens_eval,
-                    }
-                    runtime.write_request_metric(
-                        {
-                            **base_metric,
-                            "context_mode": "with_context",
-                            "prompt_chars": with_result["prompt_chars"],
-                            "response_chars": with_result["response_chars"],
-                            "latency_ms": with_result["latency_ms"],
-                            "citation_hit": with_hit,
-                            "error": with_result["error"],
+                        base_metric = {
+                            "timestamp": utc_now_iso(),
+                            "category_id": category_id,
+                            "category_label": spec.label,
+                            "cohort": cohort_label,
+                            "violation_id": violation.get("violation_id"),
+                            "target_method": violation.get("target_method"),
+                            "evidence_mode": args.evidence_mode,
+                            "max_tokens": args.llm_max_tokens_eval,
                         }
-                    )
-                    runtime.write_request_metric(
-                        {
-                            **base_metric,
-                            "context_mode": "without_context",
-                            "prompt_chars": without_result["prompt_chars"],
-                            "response_chars": without_result["response_chars"],
-                            "latency_ms": without_result["latency_ms"],
-                            "citation_hit": without_hit,
-                            "error": without_result["error"],
-                        }
-                    )
-
-                    if args.sample_per_category > 0:
-                        count = samples_per_category.get(category_id, 0)
-                        if count < args.sample_per_category:
-                            sample = {
-                                "category": spec.label,
-                                "violation_id": violation.get("violation_id"),
-                                "target_method": violation.get("target_method"),
-                                "file_path": violation.get("file_path"),
-                                "expected_citation_with_context": with_expected_citation,
-                                "expected_citation_without_context": without_expected_citation,
-                                "evidence_mode": args.evidence_mode,
-                                "explanation_with_context": explanation_with,
-                                "explanation_without_context": explanation_without,
+                        runtime.write_request_metric(
+                            {
+                                **base_metric,
+                                "context_mode": "with_context",
+                                "prompt_chars": with_result["prompt_chars"],
+                                "response_chars": with_result["response_chars"],
+                                "latency_ms": with_result["latency_ms"],
+                                "citation_hit": with_hit,
+                                "error": with_result["error"],
                             }
-                            runtime.write_sample(sample)
-                            samples_per_category[category_id] = count + 1
+                        )
+                        runtime.write_request_metric(
+                            {
+                                **base_metric,
+                                "context_mode": "without_context",
+                                "prompt_chars": without_result["prompt_chars"],
+                                "response_chars": without_result["response_chars"],
+                                "latency_ms": without_result["latency_ms"],
+                                "citation_hit": without_hit,
+                                "error": without_result["error"],
+                            }
+                        )
 
-                    metrics[category_id] = {
-                        **metrics[category_id],
-                        "count": idx,
-                        "with_context": with_success,
-                        "without_context": without_success,
-                        "rate_with_context": round((with_success / idx) if idx else 0.0, 4),
-                        "rate_without_context": round((without_success / idx) if idx else 0.0, 4),
-                    }
-                    runtime.record_violation_result(
-                        with_context_hit=with_hit,
-                        without_context_hit=without_hit,
-                        metrics=metrics,
-                    )
+                        # Sample budget per category, per cohort.
+                        if args.sample_per_category > 0:
+                            counter_map = (
+                                samples_per_category if cohort_label == "tp" else fp_samples_per_category
+                            )
+                            count = counter_map.get(category_id, 0)
+                            if count < args.sample_per_category:
+                                sample = {
+                                    "category": spec.label,
+                                    "cohort": cohort_label,
+                                    "violation_id": violation.get("violation_id"),
+                                    "target_method": violation.get("target_method"),
+                                    "file_path": violation.get("file_path"),
+                                    "expected_citation_with_context": with_expected_citation,
+                                    "expected_citation_without_context": without_expected_citation,
+                                    "evidence_mode": args.evidence_mode,
+                                    "explanation_with_context": explanation_with,
+                                    "explanation_without_context": explanation_without,
+                                }
+                                runtime.write_sample(sample)
+                                counter_map[category_id] = count + 1
+
+                        cohort_block = metrics[category_id][cohort_label]
+                        cohort_block["count"] = idx
+                        cohort_block["with_context"] = cohort_with
+                        cohort_block["without_context"] = cohort_without
+                        cohort_block["rate_with_context"] = round(
+                            (cohort_with / idx) if idx else 0.0, 4
+                        )
+                        cohort_block["rate_without_context"] = round(
+                            (cohort_without / idx) if idx else 0.0, 4
+                        )
+
+                        if cohort_label == "tp":
+                            # Legacy top-level fields stay synchronized with the TP cohort
+                            # so existing artifact consumers keep working.
+                            metrics[category_id].update(
+                                {
+                                    "count": cohort_block["count"],
+                                    "with_context": cohort_block["with_context"],
+                                    "without_context": cohort_block["without_context"],
+                                    "rate_with_context": cohort_block["rate_with_context"],
+                                    "rate_without_context": cohort_block["rate_without_context"],
+                                }
+                            )
+                            runtime.record_violation_result(
+                                with_context_hit=with_hit,
+                                without_context_hit=without_hit,
+                                metrics=metrics,
+                            )
+                        else:  # fp
+                            fp_total_count += 1
+                            if with_hit:
+                                fp_total_with += 1
+                            if without_hit:
+                                fp_total_without += 1
+
+                    # Attach Wilson 95% CIs once each cohort finishes.
+                    _attach_cohort_cis(metrics[category_id][cohort_label])
+                    if cohort_label == "tp":
+                        tp_block = metrics[category_id]["tp"]
+                        metrics[category_id]["rate_with_context_ci"] = tp_block["rate_with_context_ci"]
+                        metrics[category_id]["rate_without_context_ci"] = tp_block["rate_without_context_ci"]
     except KeyboardInterrupt:
         interrupted = True
         LOGGER.warning("Interrupted by user. Writing partial artifacts to %s", output_dir)
@@ -378,25 +495,72 @@ def main() -> int:
         spec = categories_by_id.get(category_id)
         if not spec or category_id not in metrics:
             continue
+        cat = metrics[category_id]
+        tp_block = cat.get("tp") or _empty_cohort_block()
+        fp_block = cat.get("fp") or _empty_cohort_block()
         rows.append(
             [
                 spec.label,
-                metrics[category_id]["count"],
-                metrics[category_id]["rate_with_context"],
-                metrics[category_id]["rate_without_context"],
+                tp_block["count"],
+                tp_block["rate_with_context"],
+                tp_block["rate_without_context"],
+                fp_block["count"],
+                fp_block["rate_with_context"],
+                fp_block["rate_without_context"],
             ]
         )
 
-    overall_rate_with = runtime.total_with / runtime.total_count if runtime.total_count else 0.0
-    overall_rate_without = runtime.total_without / runtime.total_count if runtime.total_count else 0.0
+    # Overall (TP cohort) — preserves the legacy "Citation@Context" semantics.
+    overall_tp_rate_with = runtime.total_with / runtime.total_count if runtime.total_count else 0.0
+    overall_tp_rate_without = runtime.total_without / runtime.total_count if runtime.total_count else 0.0
+    overall_tp_block = _attach_cohort_cis(
+        {
+            "count": runtime.total_count,
+            "with_context": runtime.total_with,
+            "without_context": runtime.total_without,
+            "rate_with_context": round(overall_tp_rate_with, 4),
+            "rate_without_context": round(overall_tp_rate_without, 4),
+            "rate_with_context_ci": None,
+            "rate_without_context_ci": None,
+        }
+    )
+    overall_fp_rate_with = fp_total_with / fp_total_count if fp_total_count else 0.0
+    overall_fp_rate_without = fp_total_without / fp_total_count if fp_total_count else 0.0
+    overall_fp_block = _attach_cohort_cis(
+        {
+            "count": fp_total_count,
+            "with_context": fp_total_with,
+            "without_context": fp_total_without,
+            "rate_with_context": round(overall_fp_rate_with, 4),
+            "rate_without_context": round(overall_fp_rate_without, 4),
+            "rate_with_context_ci": None,
+            "rate_without_context_ci": None,
+        }
+    )
     metrics["overall"] = {
+        # Legacy top-level (TP) — backward-compatible.
         "count": runtime.total_count,
         "with_context": runtime.total_with,
         "without_context": runtime.total_without,
-        "rate_with_context": round(overall_rate_with, 4),
-        "rate_without_context": round(overall_rate_without, 4),
+        "rate_with_context": round(overall_tp_rate_with, 4),
+        "rate_without_context": round(overall_tp_rate_without, 4),
+        "rate_with_context_ci": overall_tp_block["rate_with_context_ci"],
+        "rate_without_context_ci": overall_tp_block["rate_without_context_ci"],
+        # Cohort breakdown (F01).
+        "tp": overall_tp_block,
+        "fp": overall_fp_block,
     }
-    rows.append(["Overall", runtime.total_count, round(overall_rate_with, 4), round(overall_rate_without, 4)])
+    rows.append(
+        [
+            "Overall",
+            runtime.total_count,
+            round(overall_tp_rate_with, 4),
+            round(overall_tp_rate_without, 4),
+            fp_total_count,
+            round(overall_fp_rate_with, 4),
+            round(overall_fp_rate_without, 4),
+        ]
+    )
 
     payload = {
         "generated_at": utc_now_iso(),
@@ -406,6 +570,13 @@ def main() -> int:
         "selection": context.selection_cfg,
         "coverage_by_category": context.coverage_by_category,
         "metrics": metrics,
+        "metric_definitions": {
+            "Citation@TP": "share of TP-cohort violations whose model citation matches the expected citation when graph context is provided",
+            "Citation@FP": "share of FP-cohort violations whose model citation matches the expected citation when graph context is provided",
+            "Citation@NoContext": "with the evidence cards and graph context zeroed (per cohort)",
+            "rate_with_context_ci": "Wilson 95% interval for the corresponding rate",
+            "legacy_top_level_fields_alias": "tp",
+        },
         "sample_count": runtime.sample_count,
     }
 
@@ -415,18 +586,37 @@ def main() -> int:
         [
             {
                 "category": row[0],
-                "count": row[1],
-                "citation_rate_with_context": row[2],
-                "citation_rate_without_context": row[3],
+                "tp_count": row[1],
+                "citation_at_tp_with_context": row[2],
+                "citation_at_tp_without_context": row[3],
+                "fp_count": row[4],
+                "citation_at_fp_with_context": row[5],
+                "citation_at_fp_without_context": row[6],
             }
             for row in rows
         ],
-        fieldnames=["category", "count", "citation_rate_with_context", "citation_rate_without_context"],
+        fieldnames=[
+            "category",
+            "tp_count",
+            "citation_at_tp_with_context",
+            "citation_at_tp_without_context",
+            "fp_count",
+            "citation_at_fp_with_context",
+            "citation_at_fp_without_context",
+        ],
     )
 
-    headers = ["Category", "TP Count", "Citation@Context", "Citation@NoContext"]
+    headers = [
+        "Category",
+        "TP Count",
+        "Citation@TP (ctx)",
+        "Citation@TP (no-ctx)",
+        "FP Count",
+        "Citation@FP (ctx)",
+        "Citation@FP (no-ctx)",
+    ]
     if args.table_format == "tex":
-        table = render_latex_table(headers, rows, caption="Citation Success Rates")
+        table = render_latex_table(headers, rows, caption="Citation Success Rates (TP and FP cohorts)")
         (output_dir / "table.tex").write_text(table, encoding="utf-8")
     else:
         table = render_markdown_table(headers, rows)
