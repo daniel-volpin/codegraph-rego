@@ -53,12 +53,13 @@ Thesis-final benchmark outputs produced on `main` on 2026-03-22 (tagged
     `NO_FIX` abstentions). The v3 artifact set adds a per-population
     breakdown that isolates attempted-only and no_fix-only Brier/ECE.
 
-### Defensibility Pass (PR `thesis/defensibility-pass`, in progress)
+### Defensibility Pass (PR #107)
 
 The defensibility pass introduces three additive metric surfaces. The
 legacy headline numbers above remain valid; the new surfaces appear
 alongside them in a fresh `_v2`/`_v3` artifact namespace so that v1 stays
-recoverable as the thesis-locked baseline.
+recoverable as the thesis-locked baseline. Latest reruns were produced on
+branch `claude/codegraph-deep-review-6QdUw` on 2026-05-03.
 
 - detection v2 — `outputs/thesis_final_detection_full_v2/`
   - same point estimates (P/R/F1) plus bootstrap 95% CIs
@@ -66,6 +67,9 @@ recoverable as the thesis-locked baseline.
     closed-form sanity check (`precision_ci_wilson`, `recall_ci_wilson`).
   - new `provenance.json` capturing git SHA, OPA version, model id,
     seed, and config hash.
+  - latest overall: precision `0.9528` (95% bootstrap CI
+    `[0.9253, 0.9780]`), recall `0.9528` (`[0.9253, 0.9774]`), F1
+    `0.9528` (`[0.9314, 0.9709]`), provenance SHA `7ad90a2`.
 - explanation v2 — `outputs/thesis_final_explanation_full_v2/`
   - **TP cohort** (legacy semantics): `Citation@TP = with-context citation
     rate over violations on positive testcases`. Reported as the legacy
@@ -74,6 +78,9 @@ recoverable as the thesis-locked baseline.
     violations on benign testcases` — i.e. grounding on the detector's
     false positives. Reported in a `fp.*` block.
   - `Citation@NoContext` reported per cohort.
+  - latest overall: `Citation@TP=1.000` (`222/222`), `Citation@TP@NoContext=0.009`
+    (`2/222`), `Citation@FP=1.000` (`9/9`), `Citation@FP@NoContext=0.000`
+    (`0/9`), provenance SHA `701d051`.
 - remediation v3 — `outputs/thesis_final_remediation_v3/`
   - Calibration computed over **three populations** simultaneously:
     `full` (legacy headline; matches the v2 artifact above), `attempted_only`
@@ -83,6 +90,11 @@ recoverable as the thesis-locked baseline.
     measures calibrated success probability; the no_fix-only block measures
     knew-when-to-abstain behavior. Legacy top-level Brier/ECE remains an
     alias of the full population so existing artifact consumers keep working.
+  - latest overall: fully verified success rate `0.72` (`18/25`), build
+    success rate `0.90` (`18/20` attempted builds), full-population
+    Brier `0.095431` / ECE `0.095705`, attempted-only Brier `0.094698`
+    / ECE `0.083900`, no-fix-only Brier `0.110091` / ECE `0.331800`,
+    provenance SHA `7ad90a2`.
 
 When citing thesis-final numbers in prose, cite the artifact directory
 plus the git tag (`thesis-final-v1`). When citing the v2/v3 numbers, cite

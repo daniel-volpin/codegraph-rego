@@ -127,6 +127,19 @@ Cite the artifact directory **plus the SHA recorded in
 `provenance.json`** when referring to v2/v3 numbers. v1 numbers are
 addressable via the `thesis-final-v1` git tag.
 
+Latest PR #107 reruns (2026-05-03):
+
+- detection v2: `outputs/thesis_final_detection_full_v2/`, provenance
+  SHA `7ad90a2`, precision/recall/F1 all `0.9528` with bootstrap 95%
+  CIs.
+- explanation v2: `outputs/thesis_final_explanation_full_v2/`,
+  provenance SHA `701d051`, `Citation@TP=1.000` (`222/222`),
+  `Citation@TP@NoContext=0.009` (`2/222`), `Citation@FP=1.000`
+  (`9/9`), `Citation@FP@NoContext=0.000` (`0/9`).
+- remediation v3: `outputs/thesis_final_remediation_v3/`, provenance
+  SHA `7ad90a2`, fully verified success rate `0.72` (`18/25`),
+  attempted-only calibration Brier `0.094698` / ECE `0.083900`.
+
 ## Current System Design
 - Symbolic layer:
   - Java parsing + graph ingestion into Neo4j

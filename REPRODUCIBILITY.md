@@ -107,7 +107,7 @@ python run_remediation_eval.py \
   --reset-neo4j
 ```
 
-Thesis-final authoritative outputs are under `outputs/thesis_final_detection_full/`, `outputs/thesis_final_explanation_full/`, and `outputs/thesis_final_remediation_v2/` (all produced on `main` on 2026-03-22). The earlier runs under `outputs/detection_calibration_path_precision_v4/` and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` are preserved as historical reference only.
+Thesis-final v1 authoritative outputs are under `outputs/thesis_final_detection_full/`, `outputs/thesis_final_explanation_full/`, and `outputs/thesis_final_remediation_v2/` (all produced on `main` on 2026-03-22). The PR #107 defensibility reruns are under `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v3/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier runs under `outputs/detection_calibration_path_precision_v4/` and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` are preserved as historical reference only.
 
 ## 4. Recommended Explanation-Eval Defaults
 
@@ -251,6 +251,22 @@ Every eval run also writes a `provenance.json` with the git SHA, OPA
 version, model id, seed, config sha256, uv.lock hash, and pyproject hash.
 This is the canonical per-run manifest; cite it alongside any number you
 quote from the artifact.
+
+Latest PR #107 rerun snapshot (2026-05-03):
+
+- detection v2 (`outputs/thesis_final_detection_full_v2/`): precision
+  `0.9528` (95% bootstrap CI `[0.9253, 0.9780]`), recall `0.9528`
+  (`[0.9253, 0.9774]`), F1 `0.9528` (`[0.9314, 0.9709]`);
+  provenance SHA `7ad90a2`.
+- explanation v2 (`outputs/thesis_final_explanation_full_v2/`):
+  `Citation@TP=1.000` (`222/222`), `Citation@TP@NoContext=0.009`
+  (`2/222`), `Citation@FP=1.000` (`9/9`),
+  `Citation@FP@NoContext=0.000` (`0/9`); provenance SHA `701d051`.
+- remediation v3 (`outputs/thesis_final_remediation_v3/`): fully verified
+  success rate `0.72` (`18/25`), build success rate `0.90` (`18/20`
+  attempted builds), full-population Brier `0.095431` / ECE `0.095705`,
+  attempted-only Brier `0.094698` / ECE `0.083900`, no-fix-only Brier
+  `0.110091` / ECE `0.331800`; provenance SHA `7ad90a2`.
 
 ### Detection
 
