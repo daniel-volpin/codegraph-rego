@@ -25,6 +25,19 @@ TRACKED_FINAL_STATUSES: Sequence[str] = (
     "VERIFICATION_ERROR",
 )
 
+# F05: statuses where the system actually attempted to apply a remediation.
+# NO_FIX is a deliberate, declared abstention (typically because the support
+# tier is "guarded" and evidence is insufficient); SKIPPED is missing-fields
+# preflight failure. Excluding both isolates the calibration of attempted
+# remediations from the "knew-when-to-abstain" calibration of the full set.
+ATTEMPTED_REMEDIATION_STATUSES: Sequence[str] = (
+    "OK",
+    "GENERATION_ERROR",
+    "REPLACEMENT_ERROR",
+    "BUILD_ERROR",
+    "VERIFICATION_ERROR",
+)
+
 FULLY_VERIFIED_LABEL_DEFINITION = (
     "fully_verified := policy_fixed is true and build_success is true"
 )
@@ -47,35 +60,14 @@ def is_fully_verified(item: Mapping[str, Any]) -> bool:
     return item.get("policy_fixed") is True and item.get("build_success") is True
 
 
-def build_confidence_calibration(
-    results: Sequence[Mapping[str, Any]],
+def _calibration_block(
+    points: list[tuple[float, int]],
+    cases: list[Dict[str, Any]],
+    missing_confidence_count: int,
     *,
-    bins: int = 10,
+    bins: int,
+    population: str,
 ) -> Dict[str, Any] | None:
-    points: list[tuple[float, int]] = []
-    cases: list[Dict[str, Any]] = []
-    missing_confidence_count = 0
-    for item in results:
-        confidence = item.get("confidence") or {}
-        score = _safe_float((confidence or {}).get("score"))
-        if score is None:
-            missing_confidence_count += 1
-            continue
-        label = 1 if is_fully_verified(item) else 0
-        points.append((score, label))
-        cases.append(
-            {
-                "case_id": item.get("case_id"),
-                "violation_id": item.get("violation_id"),
-                "status": item.get("status"),
-                "confidence_score": score,
-                "confidence_band": confidence.get("band"),
-                "fully_verified": bool(label),
-                "policy_fixed": item.get("policy_fixed"),
-                "build_success": item.get("build_success"),
-            }
-        )
-
     if not points:
         return None
 
@@ -125,6 +117,7 @@ def build_confidence_calibration(
         )
 
     return {
+        "population": population,
         "count": n,
         "missing_confidence_count": missing_confidence_count,
         "label": "fully_verified",
@@ -136,6 +129,84 @@ def build_confidence_calibration(
         "reliability_bins": reliability_bins,
         "risk_coverage": risk_coverage,
         "cases": cases,
+    }
+
+
+def _collect_calibration_points(
+    results: Sequence[Mapping[str, Any]],
+    *,
+    status_filter: set[str] | None = None,
+) -> tuple[list[tuple[float, int]], list[Dict[str, Any]], int]:
+    points: list[tuple[float, int]] = []
+    cases: list[Dict[str, Any]] = []
+    missing_confidence_count = 0
+    for item in results:
+        if status_filter is not None:
+            status = str(item.get("status") or "")
+            if status not in status_filter:
+                continue
+        confidence = item.get("confidence") or {}
+        score = _safe_float((confidence or {}).get("score"))
+        if score is None:
+            missing_confidence_count += 1
+            continue
+        label = 1 if is_fully_verified(item) else 0
+        points.append((score, label))
+        cases.append(
+            {
+                "case_id": item.get("case_id"),
+                "violation_id": item.get("violation_id"),
+                "status": item.get("status"),
+                "confidence_score": score,
+                "confidence_band": confidence.get("band"),
+                "fully_verified": bool(label),
+                "policy_fixed": item.get("policy_fixed"),
+                "build_success": item.get("build_success"),
+            }
+        )
+    return points, cases, missing_confidence_count
+
+
+def build_confidence_calibration(
+    results: Sequence[Mapping[str, Any]],
+    *,
+    bins: int = 10,
+) -> Dict[str, Any] | None:
+    """Compute confidence calibration over the remediation results.
+
+    F05 (PR thesis/defensibility-pass): the headline calibration is computed
+    over the **full** population (every result with a confidence score),
+    matching the legacy semantics. A second block, ``populations.attempted_only``,
+    restricts to results where the system actually attempted to apply a
+    remediation (``ATTEMPTED_REMEDIATION_STATUSES``); ``populations.no_fix_only``
+    isolates the declared-abstention cases. Reporting all three lets the
+    thesis distinguish "calibrated success probability" from
+    "knew-when-to-abstain".
+
+    The legacy top-level fields (``count``, ``brier_score``, ``ece``,
+    ``reliability_bins``, ``risk_coverage``, ``cases``) remain populated and
+    refer to the full population, so existing artifact consumers keep
+    working.
+    """
+    full_points, full_cases, full_missing = _collect_calibration_points(results)
+    full = _calibration_block(full_points, full_cases, full_missing, bins=bins, population="full")
+    if full is None:
+        return None
+
+    attempted_filter = set(ATTEMPTED_REMEDIATION_STATUSES)
+    a_points, a_cases, a_missing = _collect_calibration_points(results, status_filter=attempted_filter)
+    attempted = _calibration_block(a_points, a_cases, a_missing, bins=bins, population="attempted_only")
+
+    n_points, n_cases, n_missing = _collect_calibration_points(results, status_filter={"NO_FIX"})
+    no_fix = _calibration_block(n_points, n_cases, n_missing, bins=bins, population="no_fix_only")
+
+    return {
+        **full,  # legacy top-level fields = full population (backward compatible)
+        "populations": {
+            "full": full,
+            "attempted_only": attempted,
+            "no_fix_only": no_fix,
+        },
     }
 
 
@@ -398,16 +469,22 @@ def render_calibration_markdown(calibration: Mapping[str, Any]) -> str:
     lines = [
         "# Remediation Calibration",
         "",
+        "Headline numbers below are computed over the **full** population (every "
+        "result that carries a confidence score, including `NO_FIX` abstentions). "
+        "F05 (PR thesis/defensibility-pass) adds a per-population breakdown to "
+        "distinguish calibrated success probability from "
+        "knew-when-to-abstain behavior.",
+        "",
         f"- Cases with confidence: `{calibration.get('count', 0)}`",
         f"- Missing confidence: `{calibration.get('missing_confidence_count', 0)}`",
         f"- Label: `{calibration.get('label', 'fully_verified')}`",
         f"- Label definition: `{calibration.get('label_definition', FULLY_VERIFIED_LABEL_DEFINITION)}`",
         f"- Positive labels: `{calibration.get('positive_count', 0)}`",
         f"- Negative labels: `{calibration.get('negative_count', 0)}`",
-        f"- Brier score: `{calibration.get('brier_score', 'n/a')}`",
-        f"- ECE: `{calibration.get('ece', 'n/a')}`",
+        f"- Brier score (full): `{calibration.get('brier_score', 'n/a')}`",
+        f"- ECE (full): `{calibration.get('ece', 'n/a')}`",
         "",
-        "## Reliability Bins",
+        "## Reliability Bins (full population)",
         "",
         render_markdown_table(
             ["Bin", "Count", "Avg confidence", "Empirical success", "Gap"],
@@ -423,6 +500,44 @@ def render_calibration_markdown(calibration: Mapping[str, Any]) -> str:
             ],
         ).rstrip(),
     ]
+
+    populations = calibration.get("populations") if isinstance(calibration, Mapping) else None
+    if isinstance(populations, Mapping):
+        rows = []
+        for name in ("full", "attempted_only", "no_fix_only"):
+            block = populations.get(name)
+            if not isinstance(block, Mapping):
+                rows.append([name, "0", "n/a", "n/a", "n/a", "n/a"])
+                continue
+            rows.append(
+                [
+                    name,
+                    block.get("count", 0),
+                    block.get("positive_count", 0),
+                    block.get("negative_count", 0),
+                    block.get("brier_score", "n/a"),
+                    block.get("ece", "n/a"),
+                ]
+            )
+        lines.extend(
+            [
+                "",
+                "## Calibration by Population (F05)",
+                "",
+                render_markdown_table(
+                    ["Population", "Count", "Positive", "Negative", "Brier", "ECE"],
+                    rows,
+                ).rstrip(),
+                "",
+                "Population definitions:",
+                "- `full`: every result with a confidence score (legacy headline).",
+                "- `attempted_only`: results where the system attempted to apply a"
+                " remediation (status in OK / GENERATION_ERROR / REPLACEMENT_ERROR /"
+                " BUILD_ERROR / VERIFICATION_ERROR).",
+                "- `no_fix_only`: declared-abstention cases (status NO_FIX).",
+            ]
+        )
+
     return "\n".join(lines) + "\n"
 
 

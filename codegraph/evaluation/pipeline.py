@@ -168,16 +168,60 @@ def collect_category_violations(
     selection: SelectionResult,
     violations_by_testcase: ViolationIndex,
 ) -> Dict[str, List[Dict[str, Any]]]:
+    """Collect TP-cohort violations: violations on positive (vulnerable) testcases.
+
+    Used by run_explanation_eval and run_remediation_eval. Preserved as the
+    canonical "true-positive" cohort accessor; do not change its semantics
+    without auditing both callers.
+    """
+    return _collect_category_violations_by_label(
+        selected_category_ids=selected_category_ids,
+        categories_by_id=categories_by_id,
+        selection=selection,
+        violations_by_testcase=violations_by_testcase,
+        positive_label=True,
+    )
+
+
+def collect_category_false_positive_violations(
+    *,
+    selected_category_ids: List[str],
+    categories_by_id: Dict[str, CategorySpec],
+    selection: SelectionResult,
+    violations_by_testcase: ViolationIndex,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Collect FP-cohort violations: violations fired on benign (label=False)
+    testcases. These are the false-positive predictions of the detection
+    layer; the explanation eval (PR thesis/defensibility-pass, F01) uses
+    them to measure citation grounding on the detector's mistakes.
+    """
+    return _collect_category_violations_by_label(
+        selected_category_ids=selected_category_ids,
+        categories_by_id=categories_by_id,
+        selection=selection,
+        violations_by_testcase=violations_by_testcase,
+        positive_label=False,
+    )
+
+
+def _collect_category_violations_by_label(
+    *,
+    selected_category_ids: List[str],
+    categories_by_id: Dict[str, CategorySpec],
+    selection: SelectionResult,
+    violations_by_testcase: ViolationIndex,
+    positive_label: bool,
+) -> Dict[str, List[Dict[str, Any]]]:
     category_violations_by_id: Dict[str, List[Dict[str, Any]]] = {}
     for category_id in selected_category_ids:
         spec = categories_by_id.get(category_id)
         if not spec:
             continue
         records = selection.selected_by_category.get(category_id, [])
-        positive_testcases = {rec.testcase_id for rec in records if rec.label}
+        cohort_testcases = {rec.testcase_id for rec in records if bool(rec.label) is positive_label}
         seen_keys: set[ViolationKey] = set()
         category_violations: List[Dict[str, Any]] = []
-        for testcase_id in positive_testcases:
+        for testcase_id in cohort_testcases:
             for violation in violations_by_testcase.get(testcase_id, []):
                 if violation.get("violation_id") not in spec.rego_rules:
                     continue

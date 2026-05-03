@@ -19,6 +19,7 @@ from codegraph.evaluation.pipeline import (
     load_benchmark_evaluation_context,
     staged_benchmark_workspace,
 )
+from codegraph.evaluation.provenance import collect_provenance, write_provenance
 from codegraph.evaluation.remediation_runtime import (
     RemediationRuntime,
     build_metrics_payload,
@@ -110,6 +111,34 @@ def main() -> int:
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # F27: capture provenance up front (git SHA, OPA version, model id, seed,
+    # config hash). Failures inside the collector degrade to {"error": ...}
+    # fields rather than aborting the run.
+    from codegraph.config import settings as _provenance_settings  # noqa: PLC0415
+    provenance = collect_provenance(
+        eval_kind="remediation",
+        config_path=args.config,
+        output_dir=output_dir,
+        seed=args.seed,
+        llm={
+            "model": getattr(_provenance_settings, "llm_model", None),
+            "remediation_model": getattr(_provenance_settings, "remediation_llm_model", None) or None,
+            "temperature": getattr(_provenance_settings, "remediation_llm_temperature", None),
+            "max_tokens": getattr(_provenance_settings, "remediation_llm_max_tokens", None),
+        },
+        extra={
+            "mapping_path": str(args.mapping),
+            "table_format": args.table_format,
+            "mode": args.mode,
+            "max_attempts": args.max_attempts,
+            "sample_size": args.sample_size,
+            "reset_neo4j": bool(args.reset_neo4j),
+            "build_command": args.build_command or "",
+        },
+    )
+    write_provenance(provenance, output_dir)
+
     runtime = RemediationRuntime(
         output_dir=output_dir,
         benchmark_root=context.benchmark_root,

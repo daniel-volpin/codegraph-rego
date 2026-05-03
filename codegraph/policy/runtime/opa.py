@@ -5,6 +5,8 @@ import os
 import subprocess
 import tempfile
 import time
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional
 
 from codegraph.remediation.capabilities import remediation_capability_dict
@@ -37,10 +39,21 @@ def normalize_violation_payload(payload: Any, logger) -> Optional[Dict[str, Any]
     return None
 
 
+def _generate_decision_id() -> str:
+    return uuid.uuid4().hex
+
+
+def _now_iso_utc() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+
+
 def build_violation_response(
     normalized: Dict[str, Any],
     bundle: Mapping[str, Any],
     control_meta: Optional[Dict[str, Any]],
+    *,
+    decision_id: Optional[str] = None,
+    evaluated_at: Optional[str] = None,
 ) -> Dict[str, Any]:
     violation_id = normalized.get("violation_id") or normalized.get("id")
     source_code = bundle.get("source_code", "") or ""
@@ -59,6 +72,8 @@ def build_violation_response(
     }
     return {
         "violation_id": violation_id,
+        "decision_id": decision_id or _generate_decision_id(),
+        "evaluated_at": evaluated_at or _now_iso_utc(),
         "target_method": bundle.get("target_method"),
         "file_path": bundle.get("file_path"),
         "reason": normalized.get("reason"),

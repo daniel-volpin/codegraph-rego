@@ -24,6 +24,8 @@ from codegraph.evaluation.pipeline import (
     load_benchmark_evaluation_context,
     staged_benchmark_workspace,
 )
+from codegraph.evaluation.provenance import collect_provenance, write_provenance
+from codegraph.evaluation.uncertainty import bootstrap_prf_ci, wilson_score_ci
 
 LOGGER = logging.getLogger("codegraph.eval.benchmark")
 
@@ -112,14 +114,20 @@ def score_category(
     ground_truth: Dict[str, bool],
     testcases: List[str],
     violations_by_testcase: Dict[str, List[Dict[str, Any]]],
+    *,
+    ci_seed: int | None = 7,
+    ci_resamples: int = 2000,
+    ci_confidence: float = 0.95,
 ) -> Dict[str, Any]:
     tp = fp = tn = fn = 0
+    outcomes: List[tuple[bool, bool]] = []
     for testcase_id in testcases:
         label = ground_truth.get(testcase_id)
         if label is None:
             continue
         violations = violations_by_testcase.get(testcase_id, [])
         predicted = any(v.get("violation_id") in category.rego_rules for v in violations)
+        outcomes.append((bool(predicted), bool(label)))
         if label and predicted:
             tp += 1
         elif label and not predicted:
@@ -131,6 +139,19 @@ def score_category(
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+
+    # F02: percentile bootstrap CIs over per-testcase outcomes (precision, recall, F1)
+    # share resamples so the three intervals are jointly comparable.
+    prf_cis = bootstrap_prf_ci(
+        outcomes,
+        n_resamples=ci_resamples,
+        confidence=ci_confidence,
+        seed=ci_seed,
+    )
+    # Wilson interval for precision and recall as a closed-form sanity check.
+    precision_wilson = wilson_score_ci(tp, tp + fp, confidence=ci_confidence)
+    recall_wilson = wilson_score_ci(tp, tp + fn, confidence=ci_confidence)
+
     return {
         "tp": tp,
         "fp": fp,
@@ -140,6 +161,11 @@ def score_category(
         "recall": round(recall, 4),
         "f1": round(f1, 4),
         "support": len(testcases),
+        "precision_ci": prf_cis["precision"],
+        "recall_ci": prf_cis["recall"],
+        "f1_ci": prf_cis["f1"],
+        "precision_ci_wilson": precision_wilson,
+        "recall_ci_wilson": recall_wilson,
     }
 
 
@@ -161,8 +187,28 @@ def main() -> int:
     ground_truth_lookup = {rec.testcase_id: rec.label for rec in context.truth_records}
     categories_by_id = context.categories_by_id
 
+    # F02: derive a deterministic CI seed from the selection seed (defaults to 7)
+    # so re-runs over the same config produce the same intervals.
+    ci_seed = int(context.selection_cfg.get("seed") or 7)
+
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # F27: capture provenance for the run before any work begins. Failures inside
+    # the collector degrade to {"error": ...} fields rather than aborting.
+    provenance = collect_provenance(
+        eval_kind="detection",
+        config_path=args.config,
+        output_dir=output_dir,
+        seed=ci_seed,
+        llm=None,  # detection eval does not call the LLM.
+        extra={
+            "mapping_path": str(args.mapping),
+            "table_format": args.table_format,
+            "reset_neo4j": bool(args.reset_neo4j),
+        },
+    )
+    write_provenance(provenance, output_dir)
 
     with staged_benchmark_workspace(
         benchmark_root=context.benchmark_root,
@@ -189,7 +235,13 @@ def main() -> int:
             if not spec:
                 continue
             testcase_ids = sampled_by_category.get(category_id, [])
-            stats = score_category(spec, ground_truth_lookup, testcase_ids, violations_by_testcase)
+            stats = score_category(
+                spec,
+                ground_truth_lookup,
+                testcase_ids,
+                violations_by_testcase,
+                ci_seed=ci_seed,
+            )
             if category_id in context.coverage_by_category and isinstance(stats, dict):
                 stats.update(context.coverage_by_category[category_id])
             metrics[category_id] = stats
@@ -252,6 +304,7 @@ def main() -> int:
         ground_truth_lookup,
         sampled_union,
         violations_by_testcase,
+        ci_seed=ci_seed,
     )
     metrics["overall"] = overall
     rows.append(
