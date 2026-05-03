@@ -163,22 +163,32 @@ For the UI thesis/demo, use the Policy page's `Framework demo focus` preset afte
 
 ## 6. Run Thesis-Final Detection
 
+The v1 baseline (locked at git tag `thesis-final-v1`) is preserved at
+`outputs/thesis_final_detection_full/`. The PR `thesis/defensibility-pass`
+adds bootstrap CIs and a per-run `provenance.json`; produce that artifact
+set under a fresh `_v2` directory rather than overwriting v1:
+
 ```bash
 python run_benchmark_eval.py \
   --config configs/benchmark/multicat_full.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/thesis_final_detection_full \
+  --output-dir outputs/thesis_final_detection_full_v2 \
   --reset-neo4j
 ```
 
 ## 7. Run Thesis-Final Explanation Evaluation
+
+The v1 baseline measured `Citation@Context` on the TP cohort only. The v2
+run additionally evaluates the FP cohort (citation grounding on the
+detector's false positives) and emits Wilson 95% CIs on every rate.
+Re-run into a fresh directory:
 
 ```bash
 LLM_CONCURRENCY=1 \
 python run_explanation_eval.py \
   --config configs/benchmark/multicat_full.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/thesis_final_explanation_full \
+  --output-dir outputs/thesis_final_explanation_full_v2 \
   --evidence-mode lean \
   --llm-max-tokens-eval 192 \
   --reset-neo4j
@@ -186,11 +196,16 @@ python run_explanation_eval.py \
 
 ## 8. Run Thesis-Final Supported Remediation
 
+The v2 baseline at `outputs/thesis_final_remediation_v2/` is preserved.
+The defensibility pass splits the calibration into three populations
+(full / attempted_only / no_fix_only). Re-run into a fresh `_v3`
+directory:
+
 ```bash
 python run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/thesis_final_remediation_v2 \
+  --output-dir outputs/thesis_final_remediation_v3 \
   --sample-size 60 \
   --reset-neo4j
 ```
@@ -232,38 +247,100 @@ python scripts/evaluation/run_remediation_model_bakeoff.py \
 
 ## 10. Expected Outputs
 
+Every eval run also writes a `provenance.json` with the git SHA, OPA
+version, model id, seed, config sha256, uv.lock hash, and pyproject hash.
+This is the canonical per-run manifest; cite it alongside any number you
+quote from the artifact.
+
 ### Detection
 
-- `metrics.json`
-- `metrics.csv`
+- `metrics.json` — per-category `tp/fp/fn/precision/recall/f1` and overall.
+  v2 adds `precision_ci`, `recall_ci`, `f1_ci` (percentile bootstrap, 2000
+  resamples by default, deterministic given the selection seed) and
+  `precision_ci_wilson`, `recall_ci_wilson` (closed-form sanity checks).
+- `metrics.csv` — point estimates only (CSV stays backward-compatible;
+  CIs live in JSON).
 - `table.md` or `table.tex`
+- `provenance.json`
 
 ### Explanation
 
-- `citation_metrics.json`
-- `citation_metrics.csv`
-- `table.md` or `table.tex`
-- `explanation_samples.jsonl`
-- `progress.json`
-- `partial_metrics.json`
-- `request_metrics.jsonl`
+- `citation_metrics.json` — per-category and overall metrics.
+  - **Legacy top-level fields** (`count`, `with_context`, `without_context`,
+    `rate_with_context`, `rate_without_context`) preserve their prior
+    meaning: they refer to the **TP cohort**.
+  - v2 adds `tp.*` and `fp.*` blocks with the same shape; each carries
+    Wilson 95% CIs as `rate_with_context_ci` and `rate_without_context_ci`.
+  - v2 adds a `metric_definitions` block that documents `Citation@TP`,
+    `Citation@FP`, `Citation@NoContext`, and the legacy alias.
+- `citation_metrics.csv` — v2 has columns
+  `tp_count, citation_at_tp_with_context, citation_at_tp_without_context,
+  fp_count, citation_at_fp_with_context, citation_at_fp_without_context`.
+- `table.md` or `table.tex` — v2 columns:
+  `Category, TP Count, Citation@TP (ctx), Citation@TP (no-ctx), FP Count,
+  Citation@FP (ctx), Citation@FP (no-ctx)`.
+- `explanation_samples.jsonl` — v2 entries carry a new `cohort` field
+  (`"tp"` or `"fp"`).
+- `request_metrics.jsonl` — v2 entries carry the same `cohort` field.
+- `progress.json`, `partial_metrics.json`
+- `provenance.json`
 
 ### Remediation
 
 - `remediation_metrics.json`
 - `remediation_metrics.csv`
+- `confidence_calibration.json` / `remediation_calibration.json`
+  - **Legacy top-level fields** (`count`, `brier_score`, `ece`,
+    `reliability_bins`, `risk_coverage`, `cases`) preserve their prior
+    meaning: they refer to the **full population**.
+  - v3 adds a `populations` block with three sub-blocks: `full`,
+    `attempted_only` (status in `OK / GENERATION_ERROR / REPLACEMENT_ERROR
+    / BUILD_ERROR / VERIFICATION_ERROR`), and `no_fix_only` (status
+    `NO_FIX`). Each has its own `count`, `brier_score`, `ece`,
+    `reliability_bins`, `risk_coverage`, `cases`.
+- `remediation_calibration.md` — v3 includes a "Calibration by Population"
+  table.
 - `table.md` or `table.tex`
+- `summary.md`
+- `provenance.json`
 
 ## 11. Interpretation
 
 - Detection is the baseline validity check.
+  - v2 adds bootstrap CIs alongside the point estimates. Quote both when
+    reporting per-category numbers; the per-category sample sizes (60 by
+    default) make the intervals informative.
 - Explanation evaluation is mainly about citation grounding, not prose quality.
+  - **Citation@TP** is the v1 metric (renamed for clarity): with-context
+    citation rate over violations on positive testcases.
+  - **Citation@FP** (new in v2) measures the same grounding behavior on
+    the detector's false positives. A high Citation@FP means the model
+    grounds its answer correctly even when the underlying detection is
+    wrong; a low Citation@FP means the model wanders off-evidence on the
+    detector's mistakes. Both are useful — Citation@TP is the headline,
+    Citation@FP is the defensibility check.
+  - **Citation@NoContext** is reported per cohort. It measures the
+    model's behavior under a stricter, no-evidence-card schema with
+    zeroed graph + vector context, **not** the model's ability to recover
+    a path it has never seen (the violation's `file_path` and line range
+    are still part of the prompt assembly inputs). See
+    `docs/thesis_context.md` § "Ablation Semantics".
 - Remediation is judged by fix success and re-verification, not just patch text.
 - Production-minded remediation is intentionally bounded:
   - full support for weak hash and weak randomness
   - guarded support for weak crypto
   - explanation/manual-only for SQL injection, path traversal, command injection, LDAP injection, XPath injection, and broad access-control/logging findings
 - `NO_FIX` is an expected safe outcome for guarded remediation, not a crash.
+  - v3 reports calibration over **three populations**:
+    - `full` — every result with a confidence score (legacy headline).
+    - `attempted_only` — calibrated success probability on cases the
+      system actually tried to fix. This is the right number for
+      "is the confidence score predictive of fix success?".
+    - `no_fix_only` — knew-when-to-abstain calibration on declared
+      abstentions. Treat low confidence on `NO_FIX` cases as
+      well-calibrated abstention, not as failure.
+  - Cite the population explicitly when quoting Brier/ECE; the legacy
+    top-level Brier/ECE is the full-population alias.
 - Remediation preview/apply now use a strict structured generation contract:
   - `decision`
   - `replacement_method_lines`

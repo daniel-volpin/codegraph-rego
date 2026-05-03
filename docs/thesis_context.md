@@ -58,12 +58,74 @@
   the **stricter, no-card schema** with zeroed graph + vector context. It is
   not a test of whether the model could regurgitate a path it has never seen.
   Document this distinction in the thesis methodology section.
-- The detection eval and the explanation eval currently use slightly
-  different testcase populations: detection scores all selected cases
-  (positives and negatives); explanation grounding is measured on positive
-  predictions only (filter at `codegraph/evaluation/pipeline.py`). The
-  PR `thesis/defensibility-pass` (F01) extends explanation eval to also
-  report grounding on false-positive predictions.
+- The detection eval and the explanation eval used to operate on
+  different testcase populations: detection scored all selected cases
+  (positives and negatives); explanation grounding was measured on
+  positive predictions only. PR `thesis/defensibility-pass` (F01) closed
+  this gap. As of commit `10d56ea` the explanation eval evaluates **two
+  cohorts** per category:
+  - **TP cohort** (`Citation@TP`): violations on positive testcases.
+    This is the legacy `Citation@Context` metric, renamed for clarity.
+  - **FP cohort** (`Citation@FP`): violations on benign testcases — i.e.
+    citation grounding on the detector's false positives.
+  Legacy artifact fields (top-level `count` / `with_context` /
+  `rate_with_context` / etc.) remain populated and alias the TP cohort,
+  so existing downstream tooling keeps working. The new `tp.*` and
+  `fp.*` blocks (with Wilson 95% CIs on each rate) are additive.
+
+## Calibration Populations (F05)
+
+PR `thesis/defensibility-pass` also splits the remediation calibration
+into three populations so reviewers can distinguish "calibrated success
+probability" from "knew-when-to-abstain":
+
+- `full` — every result with a confidence score, including `NO_FIX`
+  abstentions. Matches the v1/v2 headline; remains the legacy
+  top-level Brier/ECE.
+- `attempted_only` — results where the system actually tried to apply
+  a remediation (status in OK / GENERATION_ERROR / REPLACEMENT_ERROR /
+  BUILD_ERROR / VERIFICATION_ERROR). The right number when arguing
+  that confidence predicts fix success.
+- `no_fix_only` — declared abstentions (status NO_FIX). Low confidence
+  on these cases is well-calibrated abstention, not failure.
+
+Cite the population explicitly when quoting Brier/ECE; do not use the
+legacy top-level number without naming the population it refers to.
+
+## Uncertainty Quantification (F02)
+
+`codegraph/evaluation/uncertainty.py` provides:
+
+- `wilson_score_ci(successes, trials, confidence=0.95)` — closed-form
+  binomial proportion CI. Used for precision, recall, and
+  `Citation@*` rates.
+- `bootstrap_prf_ci(outcomes, n_resamples=2000, confidence=0.95, seed=...)` —
+  percentile bootstrap over per-testcase `(predicted, label)` outcomes.
+  Returns `precision`, `recall`, `f1` intervals computed from the same
+  resamples (deterministic given the seed).
+
+The detection eval emits both Wilson and bootstrap CIs; the explanation
+eval emits Wilson CIs (each rate is a binomial proportion). Cite the CI
+alongside the point estimate; for per-category numbers (n=60) the
+intervals are informative, not cosmetic.
+
+## Provenance Manifest (F27)
+
+Every eval run writes a `provenance.json` next to its other artifacts
+(see `codegraph/evaluation/provenance.py`). It records:
+
+- `git`: SHA, branch, dirty flag, last commit subject
+- `python`, `platform`, `package_version`
+- `opa.raw` (output of `opa version`)
+- `neo4j.uri` with credentials redacted
+- `config.path` + `config.sha256`
+- `uv_lock_sha256`, `pyproject_sha256`
+- `seed`
+- `llm` block (model, temperature, max_tokens) when applicable
+
+Cite the artifact directory **plus the SHA recorded in
+`provenance.json`** when referring to v2/v3 numbers. v1 numbers are
+addressable via the `thesis-final-v1` git tag.
 
 ## Current System Design
 - Symbolic layer:

@@ -35,7 +35,8 @@ Remediation support tiers:
 
 ## Authoritative Baselines
 
-Thesis-final benchmark outputs produced on `main` on 2026-03-22:
+Thesis-final benchmark outputs produced on `main` on 2026-03-22 (tagged
+`thesis-final-v1`):
 
 - detection: `outputs/thesis_final_detection_full/`
   - precision `0.953`, recall `0.953`, F1 `0.953`
@@ -43,9 +44,50 @@ Thesis-final benchmark outputs produced on `main` on 2026-03-22:
 - explanation: `outputs/thesis_final_explanation_full/`
   - 222 true positives evaluated across all 8 categories
   - `Citation@Context=0.9955` · `Citation@NoContext=0.000`
+  - These v1 numbers measure grounding on the **TP cohort only**; the v2
+    artifact set (see below) extends this with a parallel FP cohort.
 - remediation: `outputs/thesis_final_remediation_v2/`
   - 25/25 fully verified (`dry_run`, fix and build success rate 1.000)
-  - confidence calibration populated: Brier=0.006, ECE=0.070
+  - confidence calibration: Brier=0.006, ECE=0.070, computed over the
+    **full** population (every result with a confidence score, including
+    `NO_FIX` abstentions). The v3 artifact set adds a per-population
+    breakdown that isolates attempted-only and no_fix-only Brier/ECE.
+
+### Defensibility Pass (PR `thesis/defensibility-pass`, in progress)
+
+The defensibility pass introduces three additive metric surfaces. The
+legacy headline numbers above remain valid; the new surfaces appear
+alongside them in a fresh `_v2`/`_v3` artifact namespace so that v1 stays
+recoverable as the thesis-locked baseline.
+
+- detection v2 — `outputs/thesis_final_detection_full_v2/`
+  - same point estimates (P/R/F1) plus bootstrap 95% CIs
+    (`precision_ci`, `recall_ci`, `f1_ci`) and Wilson 95% intervals as a
+    closed-form sanity check (`precision_ci_wilson`, `recall_ci_wilson`).
+  - new `provenance.json` capturing git SHA, OPA version, model id,
+    seed, and config hash.
+- explanation v2 — `outputs/thesis_final_explanation_full_v2/`
+  - **TP cohort** (legacy semantics): `Citation@TP = with-context citation
+    rate over violations on positive testcases`. Reported as the legacy
+    top-level fields plus an explicit `tp.*` block, with Wilson 95% CIs.
+  - **FP cohort** (new): `Citation@FP = with-context citation rate over
+    violations on benign testcases` — i.e. grounding on the detector's
+    false positives. Reported in a `fp.*` block.
+  - `Citation@NoContext` reported per cohort.
+- remediation v3 — `outputs/thesis_final_remediation_v3/`
+  - Calibration computed over **three populations** simultaneously:
+    `full` (legacy headline; matches the v2 artifact above), `attempted_only`
+    (status in `OK / GENERATION_ERROR / REPLACEMENT_ERROR / BUILD_ERROR /
+    VERIFICATION_ERROR` — i.e. the system actually tried to fix something),
+    and `no_fix_only` (declared abstentions). The attempted-only Brier/ECE
+    measures calibrated success probability; the no_fix-only block measures
+    knew-when-to-abstain behavior. Legacy top-level Brier/ECE remains an
+    alias of the full population so existing artifact consumers keep working.
+
+When citing thesis-final numbers in prose, cite the artifact directory
+plus the git tag (`thesis-final-v1`). When citing the v2/v3 numbers, cite
+the artifact directory plus the commit SHA recorded in its
+`provenance.json`.
 
 Historical runs (preserved for provenance, not for citation):
 
