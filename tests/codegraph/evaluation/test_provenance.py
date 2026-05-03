@@ -10,8 +10,8 @@ Provenance capture must:
 from __future__ import annotations
 
 import json
-import os
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
@@ -52,8 +52,12 @@ class TestCollectProvenance(unittest.TestCase):
         self.assertIsNone(p["seed"])
         self.assertIsNone(p["llm"])
 
-    def test_redacts_neo4j_credentials_from_env(self) -> None:
-        with mock.patch.dict(os.environ, {"NEO4J_URI": "bolt://neo4j:supersecret@host:7687", "NEO4J_USER": "neo4j"}):
+    def test_redacts_neo4j_credentials_from_settings(self) -> None:
+        fake_settings = SimpleNamespace(
+            neo4j_uri="bolt://neo4j:supersecret@host:7687",
+            neo4j_user="neo4j",
+        )
+        with mock.patch.object(prov_module, "settings", fake_settings):
             p = collect_provenance(eval_kind="explanation")
         self.assertEqual(p["neo4j"]["uri"], "bolt://***@host:7687")
         self.assertEqual(p["neo4j"]["user"], "neo4j")

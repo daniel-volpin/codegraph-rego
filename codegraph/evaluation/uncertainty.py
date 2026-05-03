@@ -136,10 +136,16 @@ def wilson_score_ci(
     denom = 1 + z2 / trials
     center = (p + z2 / (2 * trials)) / denom
     half = z * math.sqrt(p * (1 - p) / trials + z2 / (4 * trials * trials)) / denom
+    ci_low = max(0.0, center - half)
+    ci_high = min(1.0, center + half)
+    if successes == 0:
+        ci_low = 0.0
+    if successes == trials:
+        ci_high = 1.0
     return {
         "point": p,
-        "ci_low": max(0.0, center - half),
-        "ci_high": min(1.0, center + half),
+        "ci_low": ci_low,
+        "ci_high": ci_high,
         "n": trials,
         "method": "wilson",
         "confidence": confidence,

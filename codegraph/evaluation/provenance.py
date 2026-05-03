@@ -34,6 +34,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from codegraph.config import settings
+
 _HERE = Path(__file__).resolve()
 _PROJECT_ROOT = _HERE.parents[2]
 
@@ -133,6 +135,13 @@ def _redact_uri(uri: Optional[str]) -> Optional[str]:
     return f"{scheme}://***@{host}"
 
 
+def _neo4j_settings() -> Dict[str, Any]:
+    return {
+        "uri": _redact_uri(getattr(settings, "neo4j_uri", None)),
+        "user": getattr(settings, "neo4j_user", None),
+    }
+
+
 def collect_provenance(
     *,
     eval_kind: str,
@@ -172,10 +181,7 @@ def collect_provenance(
         "uv_lock_sha256": _file_sha256(uv_lock) if uv_lock.exists() else None,
         "pyproject_sha256": _file_sha256(pyproject) if pyproject.exists() else None,
         "opa": _opa_version(),
-        "neo4j": {
-            "uri": _redact_uri(os.environ.get("NEO4J_URI")),
-            "user": os.environ.get("NEO4J_USER"),
-        },
+        "neo4j": _neo4j_settings(),
         "config": {
             "path": str(config_path_obj) if config_path_obj else None,
             "sha256": _file_sha256(config_path_obj) if config_path_obj and config_path_obj.exists() else None,
