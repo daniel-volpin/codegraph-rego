@@ -13,7 +13,11 @@ from typing import Any, Dict, List, Optional
 
 from codegraph.telemetry import install_log_correlation
 from codegraph.config import settings
-from codegraph.evaluation.explanation_runtime import ExplanationRuntime, utc_now_iso
+from codegraph.evaluation.explanation_runtime import (
+    ExplanationRuntime,
+    load_completed_violation_outcomes,
+    utc_now_iso,
+)
 from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
 from codegraph.evaluation.pipeline import (
     collect_category_false_positive_violations,
@@ -85,6 +89,15 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=192,
         help="Maximum tokens for explanation-eval LLM calls (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume from a prior run's output directory. Reads "
+            "request_metrics.jsonl, skips violations whose with/without-context "
+            "pair is already recorded, and appends to existing artifacts."
+        ),
     )
     return parser.parse_args()
 
@@ -207,7 +220,6 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # F27: capture provenance up front so it survives a mid-run crash.
     provenance = collect_provenance(
         eval_kind="explanation",
         config_path=args.config,
@@ -229,6 +241,17 @@ def main() -> int:
     )
     write_provenance(provenance, output_dir)
 
+    # Load prior outcomes BEFORE the runtime opens its file handles —
+    # the runtime opens in append mode under resume.
+    prior_outcomes = (
+        load_completed_violation_outcomes(output_dir / "request_metrics.jsonl") if args.resume else {}
+    )
+    if args.resume:
+        LOGGER.info(
+            "Resume requested; %d violation pairs already on disk will be skipped.",
+            len(prior_outcomes),
+        )
+
     runtime = ExplanationRuntime(
         output_dir=output_dir,
         benchmark_root=context.benchmark_root,
@@ -239,6 +262,7 @@ def main() -> int:
         sample_per_category=args.sample_per_category,
         evidence_mode=args.evidence_mode,
         llm_max_tokens_eval=args.llm_max_tokens_eval,
+        resume=args.resume,
     )
     runtime.write_stage_progress("initialization", "Loading configs and benchmark ground truth")
     runtime.write_stage_progress(
@@ -284,11 +308,9 @@ def main() -> int:
         detected_violations=len(violations),
     )
 
-    # F01: evaluate citation grounding on BOTH cohorts.
-    # - TP cohort: violations on positive testcases (legacy Citation@Context)
-    # - FP cohort: violations on benign testcases (new; measures grounding on
-    #   the detector's mistakes). The expected citation is built the same way
-    #   in both cohorts; only the underlying testcase label differs.
+    # Two cohorts per category: TP (rules fired on positive testcases) and
+    # FP (rules fired on benign testcases). The expected citation is built
+    # identically in both; only the underlying testcase label differs.
     category_violations_by_id = collect_category_violations(
         selected_category_ids=context.selected_category_ids,
         categories_by_id=categories_by_id,
@@ -337,7 +359,7 @@ def main() -> int:
                     "rate_without_context": 0.0,
                     "rate_with_context_ci": None,
                     "rate_without_context_ci": None,
-                    # Cohort breakdown (F01).
+                    # Cohort breakdown.
                     "tp": _empty_cohort_block(),
                     "fp": _empty_cohort_block(),
                 }
@@ -348,6 +370,15 @@ def main() -> int:
                     cohort_with = 0
                     cohort_without = 0
                     for idx, violation in enumerate(cohort_violations, start=1):
+                        # If this pair was completed in a prior run, reuse
+                        # the cached hits and skip the LLM calls.
+                        resume_key = (
+                            cohort_label,
+                            str(category_id),
+                            str(violation.get("violation_id") or ""),
+                        )
+                        prior = prior_outcomes.get(resume_key)
+
                         with_expected_citation = build_expected_citation(
                             violation,
                             include_graph_context=True,
@@ -358,72 +389,88 @@ def main() -> int:
                             include_graph_context=False,
                             evidence_mode=args.evidence_mode,
                         )
-                        fut_with = pool.submit(
-                            _run_explanation_request,
-                            violation=violation,
-                            include_graph_context=True,
-                            evidence_mode=args.evidence_mode,
-                            max_tokens=args.llm_max_tokens_eval,
-                        )
-                        fut_without = pool.submit(
-                            _run_explanation_request,
-                            violation=violation,
-                            include_graph_context=False,
-                            evidence_mode=args.evidence_mode,
-                            max_tokens=args.llm_max_tokens_eval,
-                        )
-                        with_result = fut_with.result()
-                        without_result = fut_without.result()
 
-                        explanation_with = with_result["explanation"]
-                        explanation_without = without_result["explanation"]
-                        with_hit = has_exact_citation(
-                            with_result.get("structured_explanation"), with_expected_citation
-                        )
-                        without_hit = has_exact_citation(
-                            without_result.get("structured_explanation"),
-                            without_expected_citation,
-                        )
-                        if with_hit:
-                            cohort_with += 1
-                        if without_hit:
-                            cohort_without += 1
+                        if prior is not None:
+                            # Resume path: do not re-invoke the LLM; do not append
+                            # new request_metrics rows (they already exist).
+                            with_hit = bool(prior.get("with_context_hit", False))
+                            without_hit = bool(prior.get("without_context_hit", False))
+                            explanation_with = "[resumed from prior run]"
+                            explanation_without = "[resumed from prior run]"
+                            with_result = {"prompt_chars": 0, "response_chars": 0, "latency_ms": 0.0, "error": None}
+                            without_result = with_result
+                            if with_hit:
+                                cohort_with += 1
+                            if without_hit:
+                                cohort_without += 1
+                        else:
+                            fut_with = pool.submit(
+                                _run_explanation_request,
+                                violation=violation,
+                                include_graph_context=True,
+                                evidence_mode=args.evidence_mode,
+                                max_tokens=args.llm_max_tokens_eval,
+                            )
+                            fut_without = pool.submit(
+                                _run_explanation_request,
+                                violation=violation,
+                                include_graph_context=False,
+                                evidence_mode=args.evidence_mode,
+                                max_tokens=args.llm_max_tokens_eval,
+                            )
+                            with_result = fut_with.result()
+                            without_result = fut_without.result()
 
-                        base_metric = {
-                            "timestamp": utc_now_iso(),
-                            "category_id": category_id,
-                            "category_label": spec.label,
-                            "cohort": cohort_label,
-                            "violation_id": violation.get("violation_id"),
-                            "target_method": violation.get("target_method"),
-                            "evidence_mode": args.evidence_mode,
-                            "max_tokens": args.llm_max_tokens_eval,
-                        }
-                        runtime.write_request_metric(
-                            {
-                                **base_metric,
-                                "context_mode": "with_context",
-                                "prompt_chars": with_result["prompt_chars"],
-                                "response_chars": with_result["response_chars"],
-                                "latency_ms": with_result["latency_ms"],
-                                "citation_hit": with_hit,
-                                "error": with_result["error"],
+                            explanation_with = with_result["explanation"]
+                            explanation_without = without_result["explanation"]
+                            with_hit = has_exact_citation(
+                                with_result.get("structured_explanation"), with_expected_citation
+                            )
+                            without_hit = has_exact_citation(
+                                without_result.get("structured_explanation"),
+                                without_expected_citation,
+                            )
+                            if with_hit:
+                                cohort_with += 1
+                            if without_hit:
+                                cohort_without += 1
+
+                            base_metric = {
+                                "timestamp": utc_now_iso(),
+                                "category_id": category_id,
+                                "category_label": spec.label,
+                                "cohort": cohort_label,
+                                "violation_id": violation.get("violation_id"),
+                                "target_method": violation.get("target_method"),
+                                "evidence_mode": args.evidence_mode,
+                                "max_tokens": args.llm_max_tokens_eval,
                             }
-                        )
-                        runtime.write_request_metric(
-                            {
-                                **base_metric,
-                                "context_mode": "without_context",
-                                "prompt_chars": without_result["prompt_chars"],
-                                "response_chars": without_result["response_chars"],
-                                "latency_ms": without_result["latency_ms"],
-                                "citation_hit": without_hit,
-                                "error": without_result["error"],
-                            }
-                        )
+                            runtime.write_request_metric(
+                                {
+                                    **base_metric,
+                                    "context_mode": "with_context",
+                                    "prompt_chars": with_result["prompt_chars"],
+                                    "response_chars": with_result["response_chars"],
+                                    "latency_ms": with_result["latency_ms"],
+                                    "citation_hit": with_hit,
+                                    "error": with_result["error"],
+                                }
+                            )
+                            runtime.write_request_metric(
+                                {
+                                    **base_metric,
+                                    "context_mode": "without_context",
+                                    "prompt_chars": without_result["prompt_chars"],
+                                    "response_chars": without_result["response_chars"],
+                                    "latency_ms": without_result["latency_ms"],
+                                    "citation_hit": without_hit,
+                                    "error": without_result["error"],
+                                }
+                            )
 
-                        # Sample budget per category, per cohort.
-                        if args.sample_per_category > 0:
+                        # On resume the original row is already on disk;
+                        # do not append a duplicate sample.
+                        if args.sample_per_category > 0 and prior is None:
                             counter_map = (
                                 samples_per_category if cohort_label == "tp" else fp_samples_per_category
                             )
@@ -547,7 +594,6 @@ def main() -> int:
         "rate_without_context": round(overall_tp_rate_without, 4),
         "rate_with_context_ci": overall_tp_block["rate_with_context_ci"],
         "rate_without_context_ci": overall_tp_block["rate_without_context_ci"],
-        # Cohort breakdown (F01).
         "tp": overall_tp_block,
         "fp": overall_fp_block,
     }

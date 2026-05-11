@@ -168,11 +168,10 @@ def collect_category_violations(
     selection: SelectionResult,
     violations_by_testcase: ViolationIndex,
 ) -> Dict[str, List[Dict[str, Any]]]:
-    """Collect TP-cohort violations: violations on positive (vulnerable) testcases.
+    """Collect TP-cohort violations: rules fired on positive testcases.
 
-    Used by run_explanation_eval and run_remediation_eval. Preserved as the
-    canonical "true-positive" cohort accessor; do not change its semantics
-    without auditing both callers.
+    Both ``run_explanation_eval`` and ``run_remediation_eval`` depend on
+    this exact semantics; audit both callers before changing it.
     """
     return _collect_category_violations_by_label(
         selected_category_ids=selected_category_ids,
@@ -190,10 +189,9 @@ def collect_category_false_positive_violations(
     selection: SelectionResult,
     violations_by_testcase: ViolationIndex,
 ) -> Dict[str, List[Dict[str, Any]]]:
-    """Collect FP-cohort violations: violations fired on benign (label=False)
-    testcases. These are the false-positive predictions of the detection
-    layer; the explanation eval (PR thesis/defensibility-pass, F01) uses
-    them to measure citation grounding on the detector's mistakes.
+    """Collect FP-cohort violations: rules fired on benign (label=False)
+    testcases. Used by the explanation eval to measure citation grounding
+    on the detector's false positives.
     """
     return _collect_category_violations_by_label(
         selected_category_ids=selected_category_ids,

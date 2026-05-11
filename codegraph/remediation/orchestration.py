@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from typing import Any
 
 from codegraph.remediation.service import RemediationService
 
 LOGGER = logging.getLogger(__name__)
-_SERVICE: RemediationService | None = None
 
 
+@lru_cache(maxsize=1)
 def _get_service() -> RemediationService:
-    global _SERVICE
-    if _SERVICE is None:
-        _SERVICE = RemediationService()
-    return _SERVICE
+    """Process-wide singleton; tests can reset it via ``cache_clear()``."""
+    return RemediationService()
 
 
 def preview_virtual_remediation(

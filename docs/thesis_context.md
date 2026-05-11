@@ -58,12 +58,10 @@
   the **stricter, no-card schema** with zeroed graph + vector context. It is
   not a test of whether the model could regurgitate a path it has never seen.
   Document this distinction in the thesis methodology section.
-- The detection eval and the explanation eval used to operate on
-  different testcase populations: detection scored all selected cases
-  (positives and negatives); explanation grounding was measured on
-  positive predictions only. PR `thesis/defensibility-pass` (F01) closed
-  this gap. As of commit `10d56ea` the explanation eval evaluates **two
-  cohorts** per category:
+- Earlier revisions of the explanation eval measured citation grounding
+  only on positive predictions, while the detection eval scored every
+  selected case. The current explanation eval evaluates **two cohorts**
+  per category:
   - **TP cohort** (`Citation@TP`): violations on positive testcases.
     This is the legacy `Citation@Context` metric, renamed for clarity.
   - **FP cohort** (`Citation@FP`): violations on benign testcases — i.e.
@@ -73,11 +71,11 @@
   so existing downstream tooling keeps working. The new `tp.*` and
   `fp.*` blocks (with Wilson 95% CIs on each rate) are additive.
 
-## Calibration Populations (F05)
+## Calibration Populations
 
-PR `thesis/defensibility-pass` also splits the remediation calibration
-into three populations so reviewers can distinguish "calibrated success
-probability" from "knew-when-to-abstain":
+The remediation calibration is reported over three populations so
+reviewers can separate "calibrated success probability" from
+"knew-when-to-abstain":
 
 - `full` — every result with a confidence score, including `NO_FIX`
   abstentions. Matches the v1/v2 headline; remains the legacy
@@ -92,7 +90,7 @@ probability" from "knew-when-to-abstain":
 Cite the population explicitly when quoting Brier/ECE; do not use the
 legacy top-level number without naming the population it refers to.
 
-## Uncertainty Quantification (F02)
+## Uncertainty Quantification
 
 `codegraph/evaluation/uncertainty.py` provides:
 
@@ -109,7 +107,7 @@ eval emits Wilson CIs (each rate is a binomial proportion). Cite the CI
 alongside the point estimate; for per-category numbers (n=60) the
 intervals are informative, not cosmetic.
 
-## Provenance Manifest (F27)
+## Provenance Manifest
 
 Every eval run writes a `provenance.json` next to its other artifacts
 (see `codegraph/evaluation/provenance.py`). It records:
@@ -139,6 +137,37 @@ Latest PR #107 reruns (2026-05-03):
 - remediation v3: `outputs/thesis_final_remediation_v3/`, provenance
   SHA `7ad90a2`, fully verified success rate `0.72` (`18/25`),
   attempted-only calibration Brier `0.094698` / ECE `0.083900`.
+
+## Remediation IR (`RepairIntent`)
+
+`codegraph/remediation/repair_intent.py` defines a typed intermediate
+representation for bounded JVM security repairs. Its own header
+self-describes the module as *"shadow-mode only"* with respect to the
+production remediation pipeline (`apply_flow.py` does not call
+`plan_repair_intent`), and an earlier draft of this review framed the
+module as dead code. That framing was wrong.
+
+The IR is not dead: it is the backbone of the **deterministic-vs-LLM
+remediation comparison harness**. `comparison.py:144` consumes a
+`RepairIntent` via `compile_repair_intent` (from `patch_compiler.py`),
+and `run_comparison_eval.py` drives this end-to-end as a separate
+evaluation surface from the live `run_remediation_eval.py` flow.
+
+Practical implications for the thesis:
+
+- Frame `RepairIntent` as *"a typed IR that lets the deterministic
+  comparison harness emit the exact same patch shape as the LLM-driven
+  pipeline, so the two can be evaluated head-to-head."* That sentence
+  is true today; "the system uses an IR-based repair planner in
+  production" is not.
+- The production live path (`apply_flow.py → service.propose_method_edits`)
+  goes LLM-output → structured edit dicts → `editing.apply_method_edits`
+  directly. The IR is not yet on this path; deciding whether to
+  promote it onto the live path is a design choice for a future PR,
+  not a clean-up item for this one.
+- Keep `repair_intent.py` and `patch_compiler.py` as comparison-eval
+  infrastructure. Removing them would delete a non-trivial chunk of the
+  comparison-eval surface that `run_comparison_eval.py` depends on.
 
 ## Current System Design
 - Symbolic layer:

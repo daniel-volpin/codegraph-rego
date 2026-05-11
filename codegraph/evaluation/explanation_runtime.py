@@ -4,13 +4,54 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from codegraph.evaluation.io import write_json
 
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+CompletedKey = Tuple[str, str, str]  # (cohort, category_id, violation_id)
+
+
+def load_completed_violation_outcomes(path: Path) -> Dict[CompletedKey, Dict[str, bool]]:
+    """Read ``request_metrics.jsonl`` and return paired outcomes per violation.
+
+    Returns a mapping from ``(cohort, category_id, violation_id)`` to
+    ``{"with_context_hit": bool, "without_context_hit": bool}``. Only
+    violations with **both** context modes on disk are included; partial
+    pairs are re-evaluated on resume so the with/without semantics stay
+    symmetric. Malformed JSON and rows lacking required fields are
+    skipped silently. Rows without a ``cohort`` field default to ``tp``
+    for backward compatibility with pre-cohort-split runs.
+    """
+    by_key: Dict[CompletedKey, Dict[str, bool]] = {}
+    if not path.exists():
+        return {}
+
+    with path.open("r", encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            category_id = entry.get("category_id")
+            violation_id = entry.get("violation_id")
+            context_mode = entry.get("context_mode")
+            if not (category_id and violation_id and context_mode):
+                continue
+            cohort = entry.get("cohort") or "tp"
+            citation_hit = entry.get("citation_hit")
+            key: CompletedKey = (str(cohort), str(category_id), str(violation_id))
+            mode_field = "with_context_hit" if context_mode == "with_context" else "without_context_hit"
+            by_key.setdefault(key, {})[mode_field] = bool(citation_hit)
+
+    return {k: v for k, v in by_key.items() if "with_context_hit" in v and "without_context_hit" in v}
 
 
 @dataclass
@@ -24,6 +65,7 @@ class ExplanationRuntime:
     sample_per_category: int
     evidence_mode: str = "full"
     llm_max_tokens_eval: int | None = None
+    resume: bool = False
 
     def __post_init__(self) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -47,8 +89,11 @@ class ExplanationRuntime:
         self.current_category_done = 0
         self.current_category_total = 0
 
-        self.samples_handle = self.samples_path.open("w", encoding="utf-8") if self.sample_per_category > 0 else None
-        self.request_metrics_handle = self.request_metrics_path.open("w", encoding="utf-8")
+        file_mode = "a" if self.resume else "w"
+        self.samples_handle = (
+            self.samples_path.open(file_mode, encoding="utf-8") if self.sample_per_category > 0 else None
+        )
+        self.request_metrics_handle = self.request_metrics_path.open(file_mode, encoding="utf-8")
 
     def elapsed_seconds(self) -> float:
         return (datetime.now(timezone.utc) - self.started_at).total_seconds()

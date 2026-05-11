@@ -112,9 +112,6 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # F27: capture provenance up front (git SHA, OPA version, model id, seed,
-    # config hash). Failures inside the collector degrade to {"error": ...}
-    # fields rather than aborting the run.
     from codegraph.config import settings as _provenance_settings  # noqa: PLC0415
     provenance = collect_provenance(
         eval_kind="remediation",

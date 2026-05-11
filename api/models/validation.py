@@ -9,11 +9,18 @@ class HealthStartupStatus(BaseModel):
     errors: dict = Field(default_factory=dict)
 
 
+class LivenessResponse(BaseModel):
+    """Liveness response: process is up; says nothing about dependencies."""
+
+    status: Literal["alive"]
+
+
 class UploadResponse(BaseModel):
     status: str
     java_root: Optional[str] = None
     java_roots: List[str] = Field(default_factory=list)
     error: Optional[str] = None
+    request_id: Optional[str] = None
 
 
 class UploadStatusResponse(BaseModel):
@@ -24,6 +31,7 @@ class UploadStatusResponse(BaseModel):
     error: Optional[str] = None
     updated_at: str
     started_at: Optional[str] = None
+    request_id: Optional[str] = None
 
 
 class HealthCheckResponse(BaseModel):

@@ -1,8 +1,8 @@
 """Tests for codegraph/evaluation/uncertainty.py.
 
 These intervals back the headline detection metrics in the thesis chapter
-(PR thesis/defensibility-pass, F02). The contract is: closed-form Wilson for
-proportions and percentile bootstrap for F1, both deterministic given a seed.
+Contract: closed-form Wilson for proportions and percentile bootstrap
+for F1, both deterministic given a seed.
 """
 
 from __future__ import annotations

@@ -1,6 +1,12 @@
+import asyncio
+import json
+import logging
+from collections import deque
+
 from fastapi import APIRouter
 from fastapi import Query
 from fastapi.responses import JSONResponse
+
 from api.models.validation import (
     PolicyEvaluateResponse,
     PolicyCatalogResponse,
@@ -21,9 +27,6 @@ from codegraph.llm.integration import (
 from codegraph.llm.client import LLMUnavailableError
 from codegraph.config import settings
 from codegraph.policy.review_store import append_review_jsonl, resolve_review_store_path
-import logging
-from collections import deque
-import json
 
 router = APIRouter()
 logger = logging.getLogger("codegraph.api.routers.policy")
@@ -37,7 +40,9 @@ async def policy_evaluate(
     rule_ids: list[str] | None = Query(default=None),
 ):
     try:
-        result = evaluate_policies(
+        # OPA subprocess + Neo4j: blocking; run on a worker thread.
+        result = await asyncio.to_thread(
+            evaluate_policies,
             max_bundles=max_bundles,
             max_total_violations=max_total_violations,
             max_per_violation_id=max_per_violation_id,
@@ -52,7 +57,8 @@ async def policy_evaluate(
 
 @router.post("/policy/evaluate_with_llm", response_model=PolicyEvaluateResponse)
 async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
-    res = evaluate_policies(
+    res = await asyncio.to_thread(
+        evaluate_policies,
         max_bundles=payload.max_bundles,
         max_total_violations=payload.max_total_violations,
         max_per_violation_id=payload.max_per_violation_id,
@@ -63,7 +69,8 @@ async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
     safe_limit = max(1, payload.limit)
     safe_limit = min(safe_limit, 100)
     vio = (res.get("violations", []) or [])[:safe_limit]
-    enriched = explain_policy_violations(
+    enriched = await asyncio.to_thread(
+        explain_policy_violations,
         vio,
         max_items=safe_limit,
         model=(payload.model or "").strip() or settings.llm_model,
@@ -76,7 +83,8 @@ async def policy_explain_one(payload: PolicyExplainOneRequest):
     model = (payload.model or "").strip() or settings.llm_model
     try:
         try:
-            explanation_structured = generate_policy_explanation_structured(
+            explanation_structured = await asyncio.to_thread(
+                generate_policy_explanation_structured,
                 payload.violation,
                 include_graph_context=bool(payload.include_graph_context),
                 model=model,
@@ -86,7 +94,8 @@ async def policy_explain_one(payload: PolicyExplainOneRequest):
         except ValueError as exc:
             logger.warning("Explain-one structured parse failed; falling back to plain explanation: %s", exc)
             explanation_structured = None
-            explanation = generate_policy_explanation(
+            explanation = await asyncio.to_thread(
+                generate_policy_explanation,
                 payload.violation,
                 include_graph_context=bool(payload.include_graph_context),
                 structured_output=False,
@@ -130,7 +139,8 @@ async def policy_explain_one(payload: PolicyExplainOneRequest):
 
 @router.post("/policy/reviews", response_model=PolicyReviewCreateResponse)
 async def policy_create_review(payload: PolicyReviewCreateRequest):
-    result = append_review_jsonl(
+    result = await asyncio.to_thread(
+        append_review_jsonl,
         store_path=settings.ui_review_store_path,
         label=payload.label,
         notes=payload.notes,
@@ -167,8 +177,8 @@ async def policy_list_reviews(
     if not resolved.exists():
         return JSONResponse({"status": "OK", "error": None, "reviews": []}, status_code=200)
 
-    buffer: deque[dict] = deque(maxlen=limit)
-    try:
+    def _scan_jsonl() -> deque[dict]:
+        buffer: deque[dict] = deque(maxlen=limit)
         with open(resolved.as_posix(), "r", encoding="utf-8") as handle:
             for line in handle:
                 raw = line.strip()
@@ -192,6 +202,10 @@ async def policy_list_reviews(
                         "notes": obj.get("notes"),
                     }
                 )
+        return buffer
+
+    try:
+        buffer = await asyncio.to_thread(_scan_jsonl)
     except Exception as exc:
         logger.exception("List reviews failed: %s", exc)
         return JSONResponse({"status": "ERROR", "error": str(exc), "reviews": []}, status_code=500)
@@ -202,7 +216,7 @@ async def policy_list_reviews(
 @router.get("/policy/catalog", response_model=PolicyCatalogResponse)
 async def policy_catalog():
     try:
-        payload = get_policy_catalog_payload()
+        payload = await asyncio.to_thread(get_policy_catalog_payload)
         controls = payload.get("controls", [])
         controls_sorted = sorted(controls, key=lambda item: item.get("control") or item.get("id") or "")
         response = dict(payload)

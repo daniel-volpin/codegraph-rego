@@ -1,25 +1,10 @@
-"""Provenance capture for benchmark eval runs.
+"""Per-run provenance manifest.
 
-Every run script under ``run_*_eval.py`` should write a ``provenance.json``
-next to its other artifacts so that a future reader can answer: which code,
-which configs, which dependency versions, which LLM model and temperature,
-and which seed produced this number?
-
-Usage:
-
-    from codegraph.evaluation.provenance import collect_provenance, write_provenance
-
-    provenance = collect_provenance(
-        eval_kind="detection",
-        config_path=args.config,
-        output_dir=args.output_dir,
-        seed=args.seed,
-        llm={"model": settings.llm_model, "temperature": settings.llm_temperature},
-    )
-    write_provenance(provenance, args.output_dir)
-
-The collector never raises: every probe is wrapped so a missing tool degrades
-to ``{"error": "..."}`` in the manifest rather than aborting the run.
+``collect_provenance`` captures git SHA, OPA version, config sha256,
+lock-file hashes, seed, and LLM block; ``write_provenance`` persists it
+as ``provenance.json`` next to other run artifacts. Every probe is
+wrapped so a missing tool degrades to ``{"error": "..."}`` rather than
+aborting the run.
 """
 
 from __future__ import annotations
@@ -152,10 +137,9 @@ def collect_provenance(
     extra: Optional[Dict[str, Any]] = None,
     repo_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Capture a snapshot of everything that influences this eval run.
+    """Return a JSON-serialisable snapshot of inputs influencing this run.
 
-    The result is JSON-serializable and intentionally flat at the top level so
-    that ``jq .git.sha provenance.json`` works without indirection.
+    Flat top level so ``jq .git.sha provenance.json`` works directly.
     """
     root = Path(repo_root) if repo_root else _PROJECT_ROOT
     config_path_obj = Path(config_path) if config_path else None
@@ -196,7 +180,7 @@ def collect_provenance(
 
 
 def write_provenance(provenance: Dict[str, Any], output_dir: str | os.PathLike) -> Path:
-    """Write ``provenance.json`` into ``output_dir``. Returns the path written."""
+    """Write ``provenance.json`` into ``output_dir`` and return the path."""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     path = out / "provenance.json"
