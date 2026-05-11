@@ -26,6 +26,9 @@ class UploadResponse(BaseModel):
     java_root: Optional[str] = None
     java_roots: List[str] = Field(default_factory=list)
     error: Optional[str] = None
+    # F13: per-request progress key returned to the client so it can poll
+    # GET /upload/status?request_id=<id> for its own upload's progress.
+    request_id: Optional[str] = None
 
 
 class UploadStatusResponse(BaseModel):
@@ -36,6 +39,9 @@ class UploadStatusResponse(BaseModel):
     error: Optional[str] = None
     updated_at: str
     started_at: Optional[str] = None
+    # F13: the slot's request_id. Omitted on the back-compat path
+    # (GET /upload/status with no query string) when no job is in flight.
+    request_id: Optional[str] = None
 
 
 class HealthCheckResponse(BaseModel):

@@ -181,7 +181,9 @@ python run_remediation_eval.py \
 
 Key endpoints:
 
-- `POST /upload`
+- `POST /upload` (response carries a per-upload `request_id`)
+- `GET /upload/status?request_id=<id>` (per-upload progress; defaults to
+  the latest job when `request_id` is omitted for backward compatibility)
 - `POST /search`
 - `GET /policy/evaluate`
 - `POST /policy/evaluate_with_llm`
@@ -197,6 +199,11 @@ the header on the inbound request, it is echoed back; otherwise a fresh
 UUID4 hex is generated. Unhandled exceptions return
 `{"error": "internal", "request_id": "..."}` — the matching id appears in
 the server log for forensic correlation.
+
+`POST /upload` returns its own per-upload `request_id` in the JSON body
+(distinct from the per-HTTP-request `X-Request-Id` header). Clients
+should pass it to `GET /upload/status?request_id=<id>` so concurrent
+uploads no longer overwrite each other's progress state.
 
 ## Configuration
 

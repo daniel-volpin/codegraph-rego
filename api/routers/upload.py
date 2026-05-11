@@ -5,7 +5,7 @@ import tempfile
 import zipfile
 
 import aiofiles
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Query, UploadFile
 from fastapi.responses import JSONResponse
 
 from codegraph.ingestion.utils import UploadValidationError, find_java_roots, safe_extract_zip
@@ -86,10 +86,16 @@ def _ingest_java_roots(java_roots: list[str]) -> None:
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_zip(file: UploadFile = File(...)):
-    start_progress("upload", "Validating upload…", 2.0)
+    # F13: allocate a per-request progress slot. The returned request_id
+    # is surfaced on every response branch below so the client can poll
+    # GET /upload/status?request_id=<id> for its specific upload.
+    request_id = start_progress("upload", "Validating upload…", 2.0)
     if not file.filename or not file.filename.endswith(".zip"):
         error_progress("Only zip files allowed")
-        return JSONResponse(content={"error": "Only zip files allowed"}, status_code=400)
+        return JSONResponse(
+            content={"error": "Only zip files allowed", "request_id": request_id},
+            status_code=400,
+        )
     staging_dir = None
     backup_dir = None
     zip_path = None
@@ -120,15 +126,24 @@ async def upload_zip(file: UploadFile = File(...)):
     except zipfile.BadZipFile:
         _cleanup_dir(staging_dir)
         error_progress("Uploaded file is not a valid ZIP archive.")
-        return JSONResponse(content={"error": "Uploaded file is not a valid ZIP archive."}, status_code=400)
+        return JSONResponse(
+            content={"error": "Uploaded file is not a valid ZIP archive.", "request_id": request_id},
+            status_code=400,
+        )
     except UploadValidationError as exc:
         _cleanup_dir(staging_dir)
         error_progress(str(exc))
-        return JSONResponse(content={"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            content={"error": str(exc), "request_id": request_id},
+            status_code=400,
+        )
     except Exception as exc:
         _cleanup_dir(staging_dir)
         error_progress(f"Failed to prepare upload: {exc}")
-        return JSONResponse(content={"error": f"Failed to prepare upload: {exc}"}, status_code=500)
+        return JSONResponse(
+            content={"error": f"Failed to prepare upload: {exc}", "request_id": request_id},
+            status_code=500,
+        )
     update_progress("upload", "Locating Java roots…", 18.0)
     # F08: directory walks, Neo4j writes, FAISS embedding builds, and
     # filesystem renames are all synchronous. Each gets its own thread hop
@@ -137,7 +152,10 @@ async def upload_zip(file: UploadFile = File(...)):
     if not java_roots:
         await asyncio.to_thread(_cleanup_dir, staging_dir)
         error_progress("Java root directories not found in uploaded ZIP.")
-        return JSONResponse(content={"error": "Java root directories not found in uploaded ZIP."}, status_code=400)
+        return JSONResponse(
+            content={"error": "Java root directories not found in uploaded ZIP.", "request_id": request_id},
+            status_code=400,
+        )
     java_root_relatives = [os.path.relpath(java_root, staging_dir) for java_root in java_roots]
     try:
         update_progress("upload", "Replacing workspace…", 19.0)
@@ -170,11 +188,17 @@ async def upload_zip(file: UploadFile = File(...)):
         if restore_error is not None:
             error_progress(f"Processing failed and restore failed: {exc}; restore error: {restore_error}")
             return JSONResponse(
-                content={"error": f"Processing failed: {exc}. Restore also failed: {restore_error}"},
+                content={
+                    "error": f"Processing failed: {exc}. Restore also failed: {restore_error}",
+                    "request_id": request_id,
+                },
                 status_code=500,
             )
         error_progress(f"Processing failed: {exc}")
-        return JSONResponse(content={"error": f"Processing failed: {exc}"}, status_code=500)
+        return JSONResponse(
+            content={"error": f"Processing failed: {exc}", "request_id": request_id},
+            status_code=500,
+        )
     except Exception as exc:
         restore_error = None
         try:
@@ -196,11 +220,17 @@ async def upload_zip(file: UploadFile = File(...)):
         if restore_error is not None:
             error_progress(f"Processing failed and restore failed: {exc}; restore error: {restore_error}")
             return JSONResponse(
-                content={"error": f"Processing failed: {exc}. Restore also failed: {restore_error}"},
+                content={
+                    "error": f"Processing failed: {exc}. Restore also failed: {restore_error}",
+                    "request_id": request_id,
+                },
                 status_code=500,
             )
         error_progress(f"Processing failed: {exc}")
-        return JSONResponse(content={"error": f"Processing failed: {exc}"}, status_code=500)
+        return JSONResponse(
+            content={"error": f"Processing failed: {exc}", "request_id": request_id},
+            status_code=500,
+        )
     await asyncio.to_thread(_cleanup_dir, backup_dir)
     complete_progress("Codebase processed!")
     final_java_roots = [
@@ -210,9 +240,21 @@ async def upload_zip(file: UploadFile = File(...)):
         status="Codebase processed!",
         java_root=final_java_roots[0],
         java_roots=final_java_roots,
+        request_id=request_id,
     )
 
 
 @router.get("/upload/status", response_model=UploadStatusResponse)
-async def upload_status():
-    return UploadStatusResponse(**get_progress())
+async def upload_status(
+    request_id: str | None = Query(
+        default=None,
+        description=(
+            "Per-request progress key returned by POST /upload. When omitted, "
+            "returns the latest-started job's state for backward compatibility."
+        ),
+    ),
+):
+    # F13: explicit request_id targets the caller's own upload; the
+    # back-compat path (no request_id) falls back to the latest job so
+    # pre-F13 frontend clients keep working unchanged.
+    return UploadStatusResponse(**get_progress(request_id=request_id))
