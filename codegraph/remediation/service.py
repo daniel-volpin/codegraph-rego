@@ -303,10 +303,11 @@ class RemediationService:
         try:
             opa_raw = evaluate_bundle(bundle)
         except Exception as exc:  # pragma: no cover - runtime guard
+            _err = {"err": str(exc), "err_type": type(exc).__name__}
             if LOGGER.isEnabledFor(logging.DEBUG):
-                LOGGER.exception("OPA evaluation failed for virtual fix: %s", exc)
+                LOGGER.exception("OPA evaluation failed for virtual fix", extra=_err)
             else:
-                LOGGER.error("OPA evaluation failed for virtual fix: %s", exc)
+                LOGGER.error("OPA evaluation failed for virtual fix", extra=_err)
             return {
                 "status": "VERIFICATION_ERROR",
                 "error": str(exc),

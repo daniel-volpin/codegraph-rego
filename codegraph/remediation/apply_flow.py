@@ -323,10 +323,11 @@ def _execute_apply_fix_inner(
                 graph_modified = True
                 process_single_file_content(file_path, updated_content)
             except Exception as exc:  # pragma: no cover - runtime guard
+                _err = {"err": str(exc), "err_type": type(exc).__name__, "file_path": str(resolved_path)}
                 if LOGGER.isEnabledFor(logging.DEBUG):
-                    LOGGER.exception("Failed to re-ingest updated file: %s", exc)
+                    LOGGER.exception("Failed to re-ingest updated file", extra=_err)
                 else:
-                    LOGGER.error("Failed to re-ingest updated file: %s", exc)
+                    LOGGER.error("Failed to re-ingest updated file", extra=_err)
                 return partial_error_result(
                     violation_id=violation_id,
                     error=str(exc),
@@ -375,10 +376,11 @@ def _execute_apply_fix_inner(
             )
             apply_successful = bool(can_apply)
     except Exception as exc:  # pragma: no cover - runtime guard
+        _err = {"err": str(exc), "err_type": type(exc).__name__, "violation_id": violation_id}
         if LOGGER.isEnabledFor(logging.DEBUG):
-            LOGGER.exception("Apply remediation failed: %s", exc)
+            LOGGER.exception("Apply remediation failed", extra=_err)
         else:
-            LOGGER.error("Apply remediation failed: %s", exc)
+            LOGGER.error("Apply remediation failed", extra=_err)
         return partial_error_result(
             violation_id=violation_id,
             error=str(exc),

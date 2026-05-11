@@ -32,7 +32,10 @@ def preview_virtual_remediation(
     try:
         return service.preview_virtual_fix(violation_id, target_method=target_method, file_path=file_path)
     except Exception as exc:  # pragma: no cover - runtime guard
-        LOGGER.exception("Virtual remediation preview failed: %s", exc)
+        LOGGER.exception(
+            "Virtual remediation preview failed",
+            extra={"err": str(exc), "err_type": type(exc).__name__, "violation_id": violation_id},
+        )
         return {"status": "ERROR", "error": str(exc), "violation_id": violation_id}
 
 
@@ -67,5 +70,8 @@ def apply_remediation(
             prompt_context=prompt_context,
         )
     except Exception as exc:  # pragma: no cover - runtime guard
-        LOGGER.exception("Remediation apply failed: %s", exc)
+        LOGGER.exception(
+            "Remediation apply failed",
+            extra={"err": str(exc), "err_type": type(exc).__name__, "violation_id": violation_id},
+        )
         return {"status": "ERROR", "error": str(exc), "violation_id": violation_id}

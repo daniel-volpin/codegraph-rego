@@ -125,7 +125,7 @@ async def policy_explain_one(payload: PolicyExplainOneRequest):
             status_code=503,
         )
     except Exception as exc:
-        logger.exception("Explain-one failed: %s", exc)
+        logger.exception("Explain-one failed", extra={"err": str(exc), "err_type": type(exc).__name__})
         return JSONResponse(
             {
                 "status": "ERROR",
@@ -207,7 +207,7 @@ async def policy_list_reviews(
     try:
         buffer = await asyncio.to_thread(_scan_jsonl)
     except Exception as exc:
-        logger.exception("List reviews failed: %s", exc)
+        logger.exception("List reviews failed", extra={"err": str(exc), "err_type": type(exc).__name__})
         return JSONResponse({"status": "ERROR", "error": str(exc), "reviews": []}, status_code=500)
 
     return JSONResponse({"status": "OK", "error": None, "reviews": list(buffer)}, status_code=200)
