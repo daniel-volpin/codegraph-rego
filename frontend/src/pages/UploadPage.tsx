@@ -62,9 +62,14 @@ const UploadPage = () => {
     },
   });
 
+  // Bind the status query to the per-upload request_id so concurrent
+  // uploads in other tabs/sessions don't clobber this one's progress.
+  // When result.request_id is absent (no upload yet, or pre-F13 response)
+  // we fall back to the back-compat path that returns the latest job.
+  const trackedRequestId = result?.request_id ?? null;
   const { data: statusData, refetch: refetchStatus } = useQuery({
-    queryKey: ["uploadStatus"],
-    queryFn: fetchUploadStatus,
+    queryKey: ["uploadStatus", trackedRequestId],
+    queryFn: () => fetchUploadStatus(trackedRequestId),
     staleTime: 0,
     refetchInterval: (query) => {
       const nextStatus = query.state.data as UploadStatus | undefined;

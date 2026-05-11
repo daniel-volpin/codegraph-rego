@@ -3,6 +3,7 @@ export interface UploadResponse {
   java_root?: string | null;
   java_roots?: string[];
   error?: string | null;
+  request_id?: string | null;
 }
 
 export interface UploadStatus {
@@ -13,6 +14,7 @@ export interface UploadStatus {
   error?: string | null;
   updated_at: string;
   started_at?: string | null;
+  request_id?: string | null;
 }
 
 export interface SearchMatch {

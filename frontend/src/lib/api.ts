@@ -235,8 +235,12 @@ export async function fetchHealth(): Promise<HealthCheckResponse> {
   return handleStatusPayloadResponse<HealthCheckResponse>(response);
 }
 
-export async function fetchUploadStatus(): Promise<UploadStatus> {
-  const response = await fetch(`${API_BASE_URL}/upload/status`, {
+export async function fetchUploadStatus(requestId?: string | null): Promise<UploadStatus> {
+  const url = new URL(`${API_BASE_URL}/upload/status`);
+  if (requestId) {
+    url.searchParams.set("request_id", requestId);
+  }
+  const response = await fetch(url.toString(), {
     method: "GET",
     headers: defaultHeaders,
   });
