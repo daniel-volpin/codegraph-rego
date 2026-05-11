@@ -1,10 +1,11 @@
+import asyncio
 import os
 import shutil
 import tempfile
 import zipfile
 
 import aiofiles
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Query, UploadFile
 from fastapi.responses import JSONResponse
 
 from codegraph.ingestion.utils import UploadValidationError, find_java_roots, safe_extract_zip
@@ -85,10 +86,15 @@ def _ingest_java_roots(java_roots: list[str]) -> None:
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_zip(file: UploadFile = File(...)):
-    start_progress("upload", "Validating upload…", 2.0)
+    # request_id is echoed on every response so the caller can poll
+    # GET /upload/status?request_id=<id> for its own upload's progress.
+    request_id = start_progress("upload", "Validating upload…", 2.0)
     if not file.filename or not file.filename.endswith(".zip"):
         error_progress("Only zip files allowed")
-        return JSONResponse(content={"error": "Only zip files allowed"}, status_code=400)
+        return JSONResponse(
+            content={"error": "Only zip files allowed", "request_id": request_id},
+            status_code=400,
+        )
     staging_dir = None
     backup_dir = None
     zip_path = None
@@ -97,95 +103,129 @@ async def upload_zip(file: UploadFile = File(...)):
         staging_dir, zip_path = _stage_upload_archive("code.zip")
         await _stream_upload_to_disk(file, zip_path)
         update_progress("upload", "Extracting archive…", 12.0)
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            safe_extract_zip(
-                zip_ref,
-                staging_dir,
-                max_file_size=settings.upload_max_member_size_bytes,
-                max_total_size=settings.upload_max_extracted_size_bytes,
-                max_entries=settings.upload_max_archive_entries,
-                max_compression_ratio=settings.upload_max_compression_ratio,
-            )
+
+        # Open+extract on a single thread; never hold the zip handle
+        # across the loop boundary.
+        def _extract_zip_sync() -> None:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                safe_extract_zip(
+                    zip_ref,
+                    staging_dir,
+                    max_file_size=settings.upload_max_member_size_bytes,
+                    max_total_size=settings.upload_max_extracted_size_bytes,
+                    max_entries=settings.upload_max_archive_entries,
+                    max_compression_ratio=settings.upload_max_compression_ratio,
+                )
+
+        await asyncio.to_thread(_extract_zip_sync)
         if zip_path and os.path.exists(zip_path):
             os.remove(zip_path)
     except zipfile.BadZipFile:
         _cleanup_dir(staging_dir)
         error_progress("Uploaded file is not a valid ZIP archive.")
-        return JSONResponse(content={"error": "Uploaded file is not a valid ZIP archive."}, status_code=400)
+        return JSONResponse(
+            content={"error": "Uploaded file is not a valid ZIP archive.", "request_id": request_id},
+            status_code=400,
+        )
     except UploadValidationError as exc:
         _cleanup_dir(staging_dir)
         error_progress(str(exc))
-        return JSONResponse(content={"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            content={"error": str(exc), "request_id": request_id},
+            status_code=400,
+        )
     except Exception as exc:
         _cleanup_dir(staging_dir)
         error_progress(f"Failed to prepare upload: {exc}")
-        return JSONResponse(content={"error": f"Failed to prepare upload: {exc}"}, status_code=500)
+        return JSONResponse(
+            content={"error": f"Failed to prepare upload: {exc}", "request_id": request_id},
+            status_code=500,
+        )
     update_progress("upload", "Locating Java roots…", 18.0)
-    java_roots = find_java_roots(staging_dir)
+    java_roots = await asyncio.to_thread(find_java_roots, staging_dir)
     if not java_roots:
-        _cleanup_dir(staging_dir)
+        await asyncio.to_thread(_cleanup_dir, staging_dir)
         error_progress("Java root directories not found in uploaded ZIP.")
-        return JSONResponse(content={"error": "Java root directories not found in uploaded ZIP."}, status_code=400)
+        return JSONResponse(
+            content={"error": "Java root directories not found in uploaded ZIP.", "request_id": request_id},
+            status_code=400,
+        )
     java_root_relatives = [os.path.relpath(java_root, staging_dir) for java_root in java_roots]
     try:
         update_progress("upload", "Replacing workspace…", 19.0)
-        backup_dir = _swap_workspace(staging_dir)
+        backup_dir = await asyncio.to_thread(_swap_workspace, staging_dir)
         staging_dir = None
         update_progress("upload", "Resetting uploaded graph…", 20.0)
-        purge_workspace_entities(os.path.abspath(settings.upload_dir))
+        await asyncio.to_thread(purge_workspace_entities, os.path.abspath(settings.upload_dir))
         final_java_roots = [
             os.path.join(os.path.abspath(settings.upload_dir), relative) for relative in java_root_relatives
         ]
-        _ingest_java_roots(final_java_roots)
+        await asyncio.to_thread(_ingest_java_roots, final_java_roots)
     except IngestionError as exc:
         restore_error = None
         try:
             update_progress("upload", "Restoring previous workspace…", 21.0)
-            _restore_workspace(backup_dir)
+            await asyncio.to_thread(_restore_workspace, backup_dir)
             backup_dir = None
             if os.path.exists(os.path.abspath(settings.upload_dir)):
-                restored_java_roots = find_java_roots(os.path.abspath(settings.upload_dir))
-                purge_workspace_entities(os.path.abspath(settings.upload_dir))
+                restored_java_roots = await asyncio.to_thread(
+                    find_java_roots, os.path.abspath(settings.upload_dir)
+                )
+                await asyncio.to_thread(purge_workspace_entities, os.path.abspath(settings.upload_dir))
                 if restored_java_roots:
-                    _ingest_java_roots(restored_java_roots)
+                    await asyncio.to_thread(_ingest_java_roots, restored_java_roots)
         except Exception as restore_exc:  # pragma: no cover - defensive fallback
             restore_error = restore_exc
         finally:
-            _cleanup_dir(staging_dir)
-            _cleanup_dir(backup_dir)
+            await asyncio.to_thread(_cleanup_dir, staging_dir)
+            await asyncio.to_thread(_cleanup_dir, backup_dir)
         if restore_error is not None:
             error_progress(f"Processing failed and restore failed: {exc}; restore error: {restore_error}")
             return JSONResponse(
-                content={"error": f"Processing failed: {exc}. Restore also failed: {restore_error}"},
+                content={
+                    "error": f"Processing failed: {exc}. Restore also failed: {restore_error}",
+                    "request_id": request_id,
+                },
                 status_code=500,
             )
         error_progress(f"Processing failed: {exc}")
-        return JSONResponse(content={"error": f"Processing failed: {exc}"}, status_code=500)
+        return JSONResponse(
+            content={"error": f"Processing failed: {exc}", "request_id": request_id},
+            status_code=500,
+        )
     except Exception as exc:
         restore_error = None
         try:
             update_progress("upload", "Restoring previous workspace…", 21.0)
-            _restore_workspace(backup_dir)
+            await asyncio.to_thread(_restore_workspace, backup_dir)
             backup_dir = None
             if os.path.exists(os.path.abspath(settings.upload_dir)):
-                restored_java_roots = find_java_roots(os.path.abspath(settings.upload_dir))
-                purge_workspace_entities(os.path.abspath(settings.upload_dir))
+                restored_java_roots = await asyncio.to_thread(
+                    find_java_roots, os.path.abspath(settings.upload_dir)
+                )
+                await asyncio.to_thread(purge_workspace_entities, os.path.abspath(settings.upload_dir))
                 if restored_java_roots:
-                    _ingest_java_roots(restored_java_roots)
+                    await asyncio.to_thread(_ingest_java_roots, restored_java_roots)
         except Exception as restore_exc:  # pragma: no cover - defensive fallback
             restore_error = restore_exc
         finally:
-            _cleanup_dir(staging_dir)
-            _cleanup_dir(backup_dir)
+            await asyncio.to_thread(_cleanup_dir, staging_dir)
+            await asyncio.to_thread(_cleanup_dir, backup_dir)
         if restore_error is not None:
             error_progress(f"Processing failed and restore failed: {exc}; restore error: {restore_error}")
             return JSONResponse(
-                content={"error": f"Processing failed: {exc}. Restore also failed: {restore_error}"},
+                content={
+                    "error": f"Processing failed: {exc}. Restore also failed: {restore_error}",
+                    "request_id": request_id,
+                },
                 status_code=500,
             )
         error_progress(f"Processing failed: {exc}")
-        return JSONResponse(content={"error": f"Processing failed: {exc}"}, status_code=500)
-    _cleanup_dir(backup_dir)
+        return JSONResponse(
+            content={"error": f"Processing failed: {exc}", "request_id": request_id},
+            status_code=500,
+        )
+    await asyncio.to_thread(_cleanup_dir, backup_dir)
     complete_progress("Codebase processed!")
     final_java_roots = [
         os.path.join(os.path.abspath(settings.upload_dir), relative) for relative in java_root_relatives
@@ -194,9 +234,18 @@ async def upload_zip(file: UploadFile = File(...)):
         status="Codebase processed!",
         java_root=final_java_roots[0],
         java_roots=final_java_roots,
+        request_id=request_id,
     )
 
 
 @router.get("/upload/status", response_model=UploadStatusResponse)
-async def upload_status():
-    return UploadStatusResponse(**get_progress())
+async def upload_status(
+    request_id: str | None = Query(
+        default=None,
+        description=(
+            "Per-request progress key returned by POST /upload. When omitted, "
+            "returns the latest-started job's state for backward compatibility."
+        ),
+    ),
+):
+    return UploadStatusResponse(**get_progress(request_id=request_id))

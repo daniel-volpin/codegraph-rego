@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter
@@ -22,7 +23,8 @@ LOGGER = logging.getLogger("codegraph.api.routers.remediation")
 
 @router.post("/remediation/preview", response_model=RemediationPreviewResponse)
 async def remediation_preview(payload: RemediationPreviewRequest):
-    result = preview_virtual_remediation(
+    result = await asyncio.to_thread(
+        preview_virtual_remediation,
         payload.violation_id,
         target_method=payload.target_method,
         file_path=payload.file_path,
@@ -39,7 +41,8 @@ async def remediation_preview(payload: RemediationPreviewRequest):
 
 @router.post("/remediation/apply", response_model=RemediationApplyResponse)
 async def remediation_apply(payload: RemediationApplyRequest):
-    result = apply_remediation(
+    result = await asyncio.to_thread(
+        apply_remediation,
         payload.violation_id,
         target_method=payload.target_method,
         file_path=payload.file_path,

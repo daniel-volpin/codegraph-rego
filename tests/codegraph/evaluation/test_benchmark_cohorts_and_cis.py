@@ -1,7 +1,6 @@
-"""Tests for the F01 cohort split and F02 CI integration in run_benchmark_eval.
+"""TP/FP cohort split and CI wiring in ``run_benchmark_eval``.
 
-These cover the additive surfaces only — actual benchmark behavior is
-unchanged when CIs are computed (point estimates remain identical).
+Covers the additive surfaces only; point estimates are unchanged.
 """
 
 from __future__ import annotations

@@ -40,3 +40,6 @@ dev = [
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

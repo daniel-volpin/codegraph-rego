@@ -25,11 +25,10 @@ TRACKED_FINAL_STATUSES: Sequence[str] = (
     "VERIFICATION_ERROR",
 )
 
-# F05: statuses where the system actually attempted to apply a remediation.
-# NO_FIX is a deliberate, declared abstention (typically because the support
-# tier is "guarded" and evidence is insufficient); SKIPPED is missing-fields
-# preflight failure. Excluding both isolates the calibration of attempted
-# remediations from the "knew-when-to-abstain" calibration of the full set.
+# Statuses where the system actually attempted to apply a remediation.
+# Excluding NO_FIX (declared abstention) and SKIPPED (preflight failure)
+# isolates "calibrated success probability on attempted fixes" from
+# "knew-when-to-abstain" calibration over the full set.
 ATTEMPTED_REMEDIATION_STATUSES: Sequence[str] = (
     "OK",
     "GENERATION_ERROR",
@@ -174,19 +173,13 @@ def build_confidence_calibration(
 ) -> Dict[str, Any] | None:
     """Compute confidence calibration over the remediation results.
 
-    F05 (PR thesis/defensibility-pass): the headline calibration is computed
-    over the **full** population (every result with a confidence score),
-    matching the legacy semantics. A second block, ``populations.attempted_only``,
-    restricts to results where the system actually attempted to apply a
-    remediation (``ATTEMPTED_REMEDIATION_STATUSES``); ``populations.no_fix_only``
-    isolates the declared-abstention cases. Reporting all three lets the
-    thesis distinguish "calibrated success probability" from
-    "knew-when-to-abstain".
-
-    The legacy top-level fields (``count``, ``brier_score``, ``ece``,
-    ``reliability_bins``, ``risk_coverage``, ``cases``) remain populated and
-    refer to the full population, so existing artifact consumers keep
-    working.
+    The top-level fields (``count``, ``brier_score``, ``ece``,
+    ``reliability_bins``, ``risk_coverage``, ``cases``) describe the
+    full population. The ``populations`` sub-block additionally exposes
+    ``full``, ``attempted_only`` (status in
+    :data:`ATTEMPTED_REMEDIATION_STATUSES`), and ``no_fix_only``
+    (declared abstentions). Reporting all three separates calibrated
+    success probability from knew-when-to-abstain calibration.
     """
     full_points, full_cases, full_missing = _collect_calibration_points(results)
     full = _calibration_block(full_points, full_cases, full_missing, bins=bins, population="full")
@@ -471,9 +464,8 @@ def render_calibration_markdown(calibration: Mapping[str, Any]) -> str:
         "",
         "Headline numbers below are computed over the **full** population (every "
         "result that carries a confidence score, including `NO_FIX` abstentions). "
-        "F05 (PR thesis/defensibility-pass) adds a per-population breakdown to "
-        "distinguish calibrated success probability from "
-        "knew-when-to-abstain behavior.",
+        "The per-population breakdown distinguishes calibrated success "
+        "probability from knew-when-to-abstain behavior.",
         "",
         f"- Cases with confidence: `{calibration.get('count', 0)}`",
         f"- Missing confidence: `{calibration.get('missing_confidence_count', 0)}`",
@@ -522,7 +514,7 @@ def render_calibration_markdown(calibration: Mapping[str, Any]) -> str:
         lines.extend(
             [
                 "",
-                "## Calibration by Population (F05)",
+                "## Calibration by Population",
                 "",
                 render_markdown_table(
                     ["Population", "Count", "Positive", "Negative", "Brier", "ECE"],

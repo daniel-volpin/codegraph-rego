@@ -1,6 +1,24 @@
+"""Per-request upload progress tracking.
+
+Progress slots are keyed by ``request_id`` (UUID4 hex returned to the
+client from ``POST /upload``). ``update_progress`` and its siblings
+resolve the target slot via a ``contextvars.ContextVar`` set on
+``start_progress``; that context variable survives ``asyncio.to_thread``
+(PEP 567), so sync progress callbacks invoked from a worker thread
+land on the correct slot without threading a request_id through every
+caller.
+
+``get_progress(request_id=None)`` falls back to the latest-started job
+so callers that don't yet send a request_id still observe a meaningful
+state. The job map is FIFO-capped at ``_MAX_TRACKED_JOBS``.
+"""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+import contextvars
+import uuid
+from collections import OrderedDict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, Dict, Optional
@@ -19,73 +37,130 @@ class ProgressState:
     error: Optional[str] = None
     updated_at: str = field(default_factory=_now)
     started_at: Optional[str] = None
+    request_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
 
-_state = ProgressState()
+_MAX_TRACKED_JOBS = 64
+_states: "OrderedDict[str, ProgressState]" = OrderedDict()
 _lock = Lock()
+_latest_request_id: Optional[str] = None
+_current_request_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "codegraph_progress_request_id", default=None
+)
 
 
-def start_progress(phase: str = "upload", message: str = "Starting", progress: float = 0.0) -> None:
-    """Reset the tracker and mark a new job in progress."""
+def _idle_state() -> ProgressState:
+    return ProgressState()
+
+
+def _resolve_request_id(explicit: Optional[str]) -> Optional[str]:
+    if explicit is not None:
+        return explicit
+    rid = _current_request_id.get()
+    if rid is not None:
+        return rid
+    return _latest_request_id
+
+
+def _trim_locked() -> None:
+    while len(_states) > _MAX_TRACKED_JOBS:
+        _states.popitem(last=False)
+
+
+def start_progress(
+    phase: str = "upload",
+    message: str = "Starting",
+    progress: float = 0.0,
+    *,
+    request_id: Optional[str] = None,
+) -> str:
+    """Allocate a new progress slot and return its ``request_id``."""
+    global _latest_request_id
     normalized = max(0.0, min(progress, 100.0))
+    rid = request_id or uuid.uuid4().hex
+    timestamp = _now()
     with _lock:
-        _state.phase = phase
-        _state.message = message
-        _state.progress = normalized
-        _state.complete = False
-        _state.error = None
-        timestamp = _now()
-        _state.started_at = timestamp
-        _state.updated_at = timestamp
+        _states[rid] = ProgressState(
+            phase=phase,
+            message=message,
+            progress=normalized,
+            complete=False,
+            error=None,
+            started_at=timestamp,
+            updated_at=timestamp,
+            request_id=rid,
+        )
+        _states.move_to_end(rid)
+        _trim_locked()
+        _latest_request_id = rid
+    _current_request_id.set(rid)
+    return rid
 
 
 def update_progress(phase: str, message: str, progress: float) -> None:
-    """Update progress information for the ongoing job."""
     normalized = max(0.0, min(progress, 100.0))
+    rid = _resolve_request_id(None)
+    if rid is None:
+        return
     with _lock:
-        _state.phase = phase
-        _state.message = message
-        _state.progress = normalized
-        _state.updated_at = _now()
+        state = _states.get(rid)
+        if state is None:
+            return
+        state.phase = phase
+        state.message = message
+        state.progress = normalized
+        state.updated_at = _now()
 
 
 def complete_progress(message: str = "Completed") -> None:
-    """Mark the current job as completed successfully."""
+    rid = _resolve_request_id(None)
+    if rid is None:
+        return
     with _lock:
-        _state.phase = "complete"
-        _state.message = message
-        _state.progress = 100.0
-        _state.complete = True
-        _state.updated_at = _now()
+        state = _states.get(rid)
+        if state is None:
+            return
+        state.phase = "complete"
+        state.message = message
+        state.progress = 100.0
+        state.complete = True
+        state.error = None
+        state.updated_at = _now()
 
 
 def error_progress(message: str) -> None:
-    """Mark the current job as completed with error information."""
+    rid = _resolve_request_id(None)
+    if rid is None:
+        return
     with _lock:
-        _state.phase = "error"
-        _state.message = message
-        _state.progress = 100.0
-        _state.error = message
-        _state.complete = True
-        _state.updated_at = _now()
+        state = _states.get(rid)
+        if state is None:
+            return
+        state.phase = "error"
+        state.message = message
+        state.progress = 100.0
+        state.error = message
+        state.complete = True
+        state.updated_at = _now()
 
 
-def get_progress() -> Dict[str, Any]:
-    """Return a snapshot of the current progress state."""
+def get_progress(*, request_id: Optional[str] = None) -> Dict[str, Any]:
+    rid = _resolve_request_id(request_id)
     with _lock:
-        return _state.to_dict()
+        if rid is None:
+            return _idle_state().to_dict()
+        state = _states.get(rid)
+        if state is None:
+            return _idle_state().to_dict()
+        return state.to_dict()
 
 
 def reset_progress() -> None:
-    """Reset the tracker back to its idle state."""
+    global _latest_request_id
     with _lock:
-        _state.phase = "idle"
-        _state.message = "Idle"
-        _state.progress = 0.0
-        _state.complete = True
-        _state.error = None
-        _state.started_at = None
-        _state.updated_at = _now()
+        _states.clear()
+        _latest_request_id = None
+    _current_request_id.set(None)

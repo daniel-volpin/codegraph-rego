@@ -1,9 +1,8 @@
-"""Tests for F05 calibration population split.
+"""Calibration population split for ``build_confidence_calibration``.
 
-Asserts that build_confidence_calibration:
-  * preserves the legacy top-level shape (count, brier_score, ece, ...)
-  * adds a populations block with full / attempted_only / no_fix_only
-  * separates NO_FIX results from attempted-but-failed results
+Asserts that the function preserves its top-level shape (count,
+brier_score, ece, ...) and adds a populations block exposing
+full / attempted_only / no_fix_only sub-blocks.
 """
 
 from __future__ import annotations

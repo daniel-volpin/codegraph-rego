@@ -1,8 +1,8 @@
 """Tests for decision_id and evaluated_at metadata on violation records.
 
-These fields underpin audit and replay (PR thesis/defensibility-pass, F19): every
-violation must carry a unique decision id and a UTC ISO-8601 timestamp so that
-artifacts can be correlated back to the exact OPA evaluation that produced them.
+Every violation must carry a unique decision id and a UTC ISO-8601
+timestamp so that artifacts can be correlated back to the exact OPA
+evaluation that produced them.
 """
 
 from __future__ import annotations

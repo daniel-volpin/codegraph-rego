@@ -140,15 +140,13 @@ def score_category(
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
 
-    # F02: percentile bootstrap CIs over per-testcase outcomes (precision, recall, F1)
-    # share resamples so the three intervals are jointly comparable.
+    # Shared resamples keep the P/R/F1 intervals jointly comparable.
     prf_cis = bootstrap_prf_ci(
         outcomes,
         n_resamples=ci_resamples,
         confidence=ci_confidence,
         seed=ci_seed,
     )
-    # Wilson interval for precision and recall as a closed-form sanity check.
     precision_wilson = wilson_score_ci(tp, tp + fp, confidence=ci_confidence)
     recall_wilson = wilson_score_ci(tp, tp + fn, confidence=ci_confidence)
 
@@ -187,15 +185,15 @@ def main() -> int:
     ground_truth_lookup = {rec.testcase_id: rec.label for rec in context.truth_records}
     categories_by_id = context.categories_by_id
 
-    # F02: derive a deterministic CI seed from the selection seed (defaults to 7)
-    # so re-runs over the same config produce the same intervals.
+    # Bind the CI seed to the selection seed so re-runs of the same
+    # config yield byte-identical intervals.
     ci_seed = int(context.selection_cfg.get("seed") or 7)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # F27: capture provenance for the run before any work begins. Failures inside
-    # the collector degrade to {"error": ...} fields rather than aborting.
+    # Write provenance before any work begins so a crash still leaves
+    # a manifest on disk.
     provenance = collect_provenance(
         eval_kind="detection",
         config_path=args.config,
