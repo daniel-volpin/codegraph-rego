@@ -9,6 +9,18 @@ class HealthStartupStatus(BaseModel):
     errors: dict = Field(default_factory=dict)
 
 
+class LivenessResponse(BaseModel):
+    """Minimal liveness probe response.
+
+    Returned by ``GET /healthz`` (F30). Intended for fast, cheap polling
+    by orchestrators (Docker healthcheck, k8s liveness). Performs no
+    external I/O — a 200 here means the process is running, not that
+    dependencies are reachable. Use ``GET /readyz`` for that.
+    """
+
+    status: Literal["alive"]
+
+
 class UploadResponse(BaseModel):
     status: str
     java_root: Optional[str] = None

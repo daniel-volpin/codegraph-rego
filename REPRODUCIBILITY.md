@@ -194,6 +194,39 @@ python run_explanation_eval.py \
   --reset-neo4j
 ```
 
+### Resuming a crashed or interrupted explanation run (F21)
+
+The explanation eval (~90 min wall-clock) is the longest leg of the
+pipeline. If it is interrupted, pass `--resume` on the next invocation
+with the same `--output-dir`: the runner reads `request_metrics.jsonl`,
+treats every violation whose `with_context` and `without_context` rows
+are both already on disk as complete (no LLM calls), and appends to
+the existing artifacts rather than truncating them.
+
+```bash
+# First run is interrupted after, say, 4 of 8 categories.
+LLM_CONCURRENCY=1 \
+python run_explanation_eval.py \
+  --config configs/benchmark/multicat_full.json \
+  --mapping configs/benchmark/policy_registry.json \
+  --output-dir outputs/thesis_final_explanation_full_v2 \
+  --evidence-mode lean \
+  --llm-max-tokens-eval 192 \
+  --reset-neo4j \
+  --resume
+```
+
+Notes:
+
+- Violations with a partially-complete pair (only one context mode on disk)
+  are redone so the with/without semantics stay symmetric.
+- `--reset-neo4j` is still safe with `--resume`: the graph is rebuilt
+  from the same staged subset deterministically, and the OPA evaluation
+  is a pure function of the bundle.
+- Per-category sample budget (`--sample-per-category`) applies only to
+  newly-executed violations on the resume run; samples written by the
+  prior run remain untouched.
+
 ## 8. Run Thesis-Final Supported Remediation
 
 The v2 baseline at `outputs/thesis_final_remediation_v2/` is preserved.

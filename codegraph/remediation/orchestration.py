@@ -1,19 +1,28 @@
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from typing import Any
 
 from codegraph.remediation.service import RemediationService
 
 LOGGER = logging.getLogger(__name__)
-_SERVICE: RemediationService | None = None
 
 
+@lru_cache(maxsize=1)
 def _get_service() -> RemediationService:
-    global _SERVICE
-    if _SERVICE is None:
-        _SERVICE = RemediationService()
-    return _SERVICE
+    """Return the process-wide RemediationService (F32).
+
+    Replaces the previous module-level ``_SERVICE`` singleton. The
+    ``lru_cache(maxsize=1)`` decorator gives us the same one-per-process
+    semantics with two advantages:
+
+    * the cache is introspectable and test-clearable via
+      ``_get_service.cache_clear()``;
+    * the no-arg signature documents the singleton intent at the call
+      site (no implicit mutation of a module global).
+    """
+    return RemediationService()
 
 
 def preview_virtual_remediation(

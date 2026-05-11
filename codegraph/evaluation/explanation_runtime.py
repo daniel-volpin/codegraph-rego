@@ -4,13 +4,63 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from codegraph.evaluation.io import write_json
 
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# F21: resume support
+# A completed violation is identified by (cohort, category_id, violation_id).
+# A violation is "complete" only when BOTH context modes have a row in
+# request_metrics.jsonl — partial pairs are redone on resume so the
+# with/without semantics stay symmetric.
+CompletedKey = Tuple[str, str, str]
+
+
+def load_completed_violation_outcomes(path: Path) -> Dict[CompletedKey, Dict[str, bool]]:
+    """Parse a ``request_metrics.jsonl`` file and return completed outcomes.
+
+    Returns a mapping from ``(cohort, category_id, violation_id)`` to
+    ``{"with_context_hit": bool, "without_context_hit": bool}``. Entries
+    lacking either context mode are excluded — those violations will be
+    re-evaluated on resume to preserve the paired with/without semantics.
+
+    Malformed JSON lines and rows missing required fields are skipped
+    silently; resume is best-effort and must not crash a recovery run.
+
+    Legacy rows (written before F01 added the ``cohort`` field) are treated
+    as belonging to the TP cohort, which matches the pre-F01 behavior of
+    the explanation eval.
+    """
+    by_key: Dict[CompletedKey, Dict[str, bool]] = {}
+    if not path.exists():
+        return {}
+
+    with path.open("r", encoding="utf-8") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            category_id = entry.get("category_id")
+            violation_id = entry.get("violation_id")
+            context_mode = entry.get("context_mode")
+            if not (category_id and violation_id and context_mode):
+                continue
+            cohort = entry.get("cohort") or "tp"
+            citation_hit = entry.get("citation_hit")
+            key: CompletedKey = (str(cohort), str(category_id), str(violation_id))
+            mode_field = "with_context_hit" if context_mode == "with_context" else "without_context_hit"
+            by_key.setdefault(key, {})[mode_field] = bool(citation_hit)
+
+    return {k: v for k, v in by_key.items() if "with_context_hit" in v and "without_context_hit" in v}
 
 
 @dataclass
@@ -24,6 +74,10 @@ class ExplanationRuntime:
     sample_per_category: int
     evidence_mode: str = "full"
     llm_max_tokens_eval: int | None = None
+    # F21: when True, append to existing samples and request_metrics rather
+    # than truncating, so a crashed/interrupted run can be resumed without
+    # losing the work already on disk.
+    resume: bool = False
 
     def __post_init__(self) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -47,8 +101,12 @@ class ExplanationRuntime:
         self.current_category_done = 0
         self.current_category_total = 0
 
-        self.samples_handle = self.samples_path.open("w", encoding="utf-8") if self.sample_per_category > 0 else None
-        self.request_metrics_handle = self.request_metrics_path.open("w", encoding="utf-8")
+        # F21: append on resume so prior rows are preserved; truncate otherwise.
+        file_mode = "a" if self.resume else "w"
+        self.samples_handle = (
+            self.samples_path.open(file_mode, encoding="utf-8") if self.sample_per_category > 0 else None
+        )
+        self.request_metrics_handle = self.request_metrics_path.open(file_mode, encoding="utf-8")
 
     def elapsed_seconds(self) -> float:
         return (datetime.now(timezone.utc) - self.started_at).total_seconds()

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.routers.health import router as health_router
 from api.routers.policy import router as policy_router
@@ -15,6 +17,8 @@ from api.routers.search import router as search_router
 from api.routers.upload import router as upload_router
 
 LOGGER = logging.getLogger("codegraph.app")
+
+REQUEST_ID_HEADER = "X-Request-Id"
 
 
 def _default_startup_status() -> dict[str, Any]:
@@ -100,9 +104,59 @@ async def _preload_resources(application: FastAPI) -> None:
         application.state.startup_status = startup_status
 
 
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Stamp every request with a stable ``X-Request-Id`` (F12).
+
+    Honors an inbound ``X-Request-Id`` header if the caller provides one
+    (useful for tracing across systems); otherwise generates a fresh
+    UUID4 hex. The id is stashed on ``request.state.request_id`` so
+    handlers, the generic exception handler, and structured logs can
+    reference it; it is also echoed in the response header.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        incoming = request.headers.get(REQUEST_ID_HEADER)
+        request_id = incoming.strip() if isinstance(incoming, str) and incoming.strip() else uuid.uuid4().hex
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers[REQUEST_ID_HEADER] = request_id
+        return response
+
+
+def _request_id_from(request: Request) -> str:
+    """Best-effort accessor for the request id stamped by the middleware.
+
+    Falls back to a freshly generated id if the middleware did not run
+    (e.g. in tests that bypass the middleware stack). The fallback is
+    still logged so server-side traces are complete.
+    """
+    rid = getattr(getattr(request, "state", None), "request_id", None)
+    if isinstance(rid, str) and rid:
+        return rid
+    return uuid.uuid4().hex
+
+
 async def _generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    LOGGER.error("Unhandled error on %s: %s", request.url.path, exc)
-    return JSONResponse(status_code=500, content={"error": "Internal server error", "details": str(exc)})
+    """Return a sanitized error envelope (F12).
+
+    The full traceback is logged server-side keyed by ``request_id``;
+    the client receives only ``{"error": "internal", "request_id": ...}``
+    so internal paths, exception messages, and stack frames never leak.
+    The ``X-Request-Id`` header is also set on the response so the
+    operator can correlate the client-visible id with the server log.
+    """
+    request_id = _request_id_from(request)
+    LOGGER.exception(
+        "Unhandled error on %s (request_id=%s): %s",
+        request.url.path,
+        request_id,
+        exc.__class__.__name__,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal", "request_id": request_id},
+        headers={REQUEST_ID_HEADER: request_id},
+    )
 
 
 def create_app() -> FastAPI:
@@ -125,12 +179,16 @@ def create_app() -> FastAPI:
     except Exception:
         pass
 
+    # F12: request-id middleware runs first so every downstream layer
+    # (CORS, exception handler, structured logs) sees the same id.
+    application.add_middleware(RequestIDMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[REQUEST_ID_HEADER],
     )
 
     application.include_router(upload_router)

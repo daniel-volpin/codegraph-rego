@@ -188,7 +188,15 @@ Key endpoints:
 - `POST /policy/explain_one`
 - `POST /remediation/preview`
 - `POST /remediation/apply`
-- `GET /health`
+- `GET /healthz` (cheap liveness probe; no external I/O)
+- `GET /readyz` (deep readiness probe; cached for 30 s)
+- `GET /health` (legacy alias of `/readyz`; backward-compatible)
+
+Every response also carries an `X-Request-Id` header. If a caller supplies
+the header on the inbound request, it is echoed back; otherwise a fresh
+UUID4 hex is generated. Unhandled exceptions return
+`{"error": "internal", "request_id": "..."}` — the matching id appears in
+the server log for forensic correlation.
 
 ## Configuration
 
@@ -211,7 +219,12 @@ Key environment variables:
 
 Use `.env.example` as the canonical local template. Startup performs runtime validation and reports degraded startup status if required runtime settings are missing.
 
-`GET /health` now reports explicit degraded startup state. It returns `200` only when startup preload and the core runtime checks are healthy; otherwise it returns `503` with structured details for the degraded component(s).
+`GET /readyz` (and its `GET /health` alias) reports explicit degraded
+startup state. It returns `200` only when startup preload and the core
+runtime checks are healthy; otherwise it returns `503` with structured
+details for the degraded component(s). The deep probe is cached for 30 s
+so polling is bounded; for high-frequency liveness checks, use `GET /healthz`
+instead — it performs no external I/O.
 
 ## Deployment Model & Trust Boundary
 
