@@ -14,8 +14,6 @@ logger = logging.getLogger("codegraph.api.routers.search")
 @router.post("/search", response_model=SearchResponse)
 async def search(request: SearchRequest):
     try:
-        # F08: run_search exercises FAISS + Neo4j synchronously; hop to a
-        # worker thread to keep the event loop unblocked.
         matched_signatures, graph_contexts = await asyncio.to_thread(
             run_search, request.query, k=5
         )

@@ -1,22 +1,13 @@
-"""Uncertainty quantification helpers for headline benchmark metrics.
+"""Uncertainty quantification helpers for benchmark metrics.
 
-This module exists because every cited number in the thesis (precision, recall,
-F1, Citation@Context, Citation@TP, Brier, ECE) is currently a point estimate
-over a finite sample. PR `thesis/defensibility-pass` (F02) wires these helpers
-into the eval scripts so each metric is reported with a 95% interval alongside
-its point estimate.
+Two interval methods, stdlib only:
 
-Two interval methods are provided:
-
-* ``wilson_score_ci`` — closed-form binomial proportion CI. Use it for
-  precision, recall, and any rate-style metric (Citation@*). It is robust at
-  small n and at the 0/1 boundaries.
-* ``bootstrap_metric_ci`` — percentile bootstrap over per-case outcomes. Use it
-  for F1 and any other metric that is not a simple proportion. Resampling
-  preserves the dependence structure between TP/FP/FN counts.
-
-Implemented in stdlib only (``math`` + ``random``). No numpy / scipy
-dependency, so this can be called from any eval script without extra setup.
+* ``wilson_score_ci`` — closed-form binomial proportion CI for rate-style
+  metrics (precision, recall, citation rates). Robust at small n and at
+  the 0/1 boundaries.
+* ``bootstrap_metric_ci`` / ``bootstrap_prf_ci`` — percentile bootstrap
+  over per-case outcomes. Use for F1 and other non-proportion metrics;
+  resampling preserves the dependence structure between TP/FP/FN counts.
 """
 
 from __future__ import annotations
@@ -27,8 +18,6 @@ from typing import Any, Callable, Dict, Sequence, Tuple
 
 Outcome = Tuple[bool, bool]  # (predicted, label)
 
-
-# --- normal-quantile helpers -------------------------------------------------
 
 # Hardcoded common z-values avoid pulling scipy in for the typical case.
 _COMMON_Z = {
@@ -41,11 +30,13 @@ _COMMON_Z = {
 
 
 def _probit(p: float) -> float:
-    """Inverse normal CDF via Acklam's approximation. Accurate to ~1e-9."""
+    """Inverse normal CDF via Acklam's approximation (~1e-9 accuracy).
+
+    Reference: Acklam, P. J., "An algorithm for computing the inverse
+    normal cumulative distribution function" (2003).
+    """
     if not 0.0 < p < 1.0:
         raise ValueError("p must be in (0, 1)")
-    # Coefficients from Acklam, P. J. "An algorithm for computing the inverse
-    # normal cumulative distribution function." (2003).
     a = (
         -3.969683028665376e01,
         2.209460984245205e02,
@@ -102,9 +93,6 @@ def _two_sided_z(confidence: float) -> float:
     return _probit((1 + confidence) / 2)
 
 
-# --- closed-form proportion CI -----------------------------------------------
-
-
 def wilson_score_ci(
     successes: int,
     trials: int,
@@ -152,9 +140,6 @@ def wilson_score_ci(
     }
 
 
-# --- per-case metric helpers -------------------------------------------------
-
-
 def precision_from_outcomes(outcomes: Sequence[Outcome]) -> float:
     tp = sum(1 for predicted, label in outcomes if predicted and label)
     fp = sum(1 for predicted, label in outcomes if predicted and not label)
@@ -171,9 +156,6 @@ def f1_from_outcomes(outcomes: Sequence[Outcome]) -> float:
     p = precision_from_outcomes(outcomes)
     r = recall_from_outcomes(outcomes)
     return (2 * p * r / (p + r)) if (p + r) > 0 else 0.0
-
-
-# --- bootstrap CI ------------------------------------------------------------
 
 
 def bootstrap_metric_ci(

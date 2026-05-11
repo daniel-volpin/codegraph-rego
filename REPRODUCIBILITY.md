@@ -194,7 +194,7 @@ python run_explanation_eval.py \
   --reset-neo4j
 ```
 
-### Resuming a crashed or interrupted explanation run (F21)
+### Resuming a crashed or interrupted explanation run
 
 The explanation eval (~90 min wall-clock) is the longest leg of the
 pipeline. If it is interrupted, pass `--resume` on the next invocation

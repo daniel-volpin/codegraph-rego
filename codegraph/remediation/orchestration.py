@@ -11,17 +11,7 @@ LOGGER = logging.getLogger(__name__)
 
 @lru_cache(maxsize=1)
 def _get_service() -> RemediationService:
-    """Return the process-wide RemediationService (F32).
-
-    Replaces the previous module-level ``_SERVICE`` singleton. The
-    ``lru_cache(maxsize=1)`` decorator gives us the same one-per-process
-    semantics with two advantages:
-
-    * the cache is introspectable and test-clearable via
-      ``_get_service.cache_clear()``;
-    * the no-arg signature documents the singleton intent at the call
-      site (no implicit mutation of a module global).
-    """
+    """Process-wide singleton; tests can reset it via ``cache_clear()``."""
     return RemediationService()
 
 

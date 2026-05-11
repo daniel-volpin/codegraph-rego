@@ -58,12 +58,10 @@
   the **stricter, no-card schema** with zeroed graph + vector context. It is
   not a test of whether the model could regurgitate a path it has never seen.
   Document this distinction in the thesis methodology section.
-- The detection eval and the explanation eval used to operate on
-  different testcase populations: detection scored all selected cases
-  (positives and negatives); explanation grounding was measured on
-  positive predictions only. PR `thesis/defensibility-pass` (F01) closed
-  this gap. As of commit `10d56ea` the explanation eval evaluates **two
-  cohorts** per category:
+- Earlier revisions of the explanation eval measured citation grounding
+  only on positive predictions, while the detection eval scored every
+  selected case. The current explanation eval evaluates **two cohorts**
+  per category:
   - **TP cohort** (`Citation@TP`): violations on positive testcases.
     This is the legacy `Citation@Context` metric, renamed for clarity.
   - **FP cohort** (`Citation@FP`): violations on benign testcases — i.e.
@@ -73,11 +71,11 @@
   so existing downstream tooling keeps working. The new `tp.*` and
   `fp.*` blocks (with Wilson 95% CIs on each rate) are additive.
 
-## Calibration Populations (F05)
+## Calibration Populations
 
-PR `thesis/defensibility-pass` also splits the remediation calibration
-into three populations so reviewers can distinguish "calibrated success
-probability" from "knew-when-to-abstain":
+The remediation calibration is reported over three populations so
+reviewers can separate "calibrated success probability" from
+"knew-when-to-abstain":
 
 - `full` — every result with a confidence score, including `NO_FIX`
   abstentions. Matches the v1/v2 headline; remains the legacy
@@ -92,7 +90,7 @@ probability" from "knew-when-to-abstain":
 Cite the population explicitly when quoting Brier/ECE; do not use the
 legacy top-level number without naming the population it refers to.
 
-## Uncertainty Quantification (F02)
+## Uncertainty Quantification
 
 `codegraph/evaluation/uncertainty.py` provides:
 
@@ -109,7 +107,7 @@ eval emits Wilson CIs (each rate is a binomial proportion). Cite the CI
 alongside the point estimate; for per-category numbers (n=60) the
 intervals are informative, not cosmetic.
 
-## Provenance Manifest (F27)
+## Provenance Manifest
 
 Every eval run writes a `provenance.json` next to its other artifacts
 (see `codegraph/evaluation/provenance.py`). It records:

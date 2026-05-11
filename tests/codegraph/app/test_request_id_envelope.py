@@ -1,12 +1,11 @@
-"""Tests for the F12 sanitized error envelope and X-Request-Id middleware.
+"""Sanitized error envelope + ``X-Request-Id`` middleware contract.
 
-Contract:
-  * Every request gets a stable request_id (server-generated UUID4 hex by
-    default; honors inbound X-Request-Id when provided).
-  * The id is echoed on the response in the X-Request-Id header.
-  * Unhandled exceptions return ``{"error": "internal", "request_id": ...}``
-    — never the raw exception message or stack trace.
-  * The server-side log records the request_id for forensic correlation.
+* Every request gets a stable request_id (UUID4 hex by default;
+  honors an inbound ``X-Request-Id`` if present).
+* The id is echoed in the response header.
+* Unhandled exceptions return ``{"error": "internal", "request_id": ...}``,
+  never the raw exception message or stack trace.
+* The server-side log records the request_id for correlation.
 """
 
 from __future__ import annotations
@@ -32,7 +31,7 @@ def _build_test_app() -> FastAPI:
     """Minimal FastAPI app wired with the middleware + handler under test.
 
     We don't use ``create_app()`` here because that bootstraps Neo4j, FAISS,
-    and the embedding model; the F12 contract is independent of those.
+    and the embedding model; this contract is independent of those.
     """
     app = FastAPI()
     app.add_middleware(RequestIDMiddleware)

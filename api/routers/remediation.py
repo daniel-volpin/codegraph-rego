@@ -23,8 +23,6 @@ LOGGER = logging.getLogger("codegraph.api.routers.remediation")
 
 @router.post("/remediation/preview", response_model=RemediationPreviewResponse)
 async def remediation_preview(payload: RemediationPreviewRequest):
-    # F08: preview_virtual_remediation calls Neo4j, the LLM HTTP endpoint,
-    # and OPA via subprocess — all synchronous. Hop to a worker thread.
     result = await asyncio.to_thread(
         preview_virtual_remediation,
         payload.violation_id,
@@ -43,8 +41,6 @@ async def remediation_preview(payload: RemediationPreviewRequest):
 
 @router.post("/remediation/apply", response_model=RemediationApplyResponse)
 async def remediation_apply(payload: RemediationApplyRequest):
-    # F08: apply_remediation drives the whole patch/build/verify loop —
-    # Neo4j, LLM, OPA, mvn build. All synchronous; run off the event loop.
     result = await asyncio.to_thread(
         apply_remediation,
         payload.violation_id,

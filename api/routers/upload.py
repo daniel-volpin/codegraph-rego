@@ -86,9 +86,8 @@ def _ingest_java_roots(java_roots: list[str]) -> None:
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_zip(file: UploadFile = File(...)):
-    # F13: allocate a per-request progress slot. The returned request_id
-    # is surfaced on every response branch below so the client can poll
-    # GET /upload/status?request_id=<id> for its specific upload.
+    # request_id is echoed on every response so the caller can poll
+    # GET /upload/status?request_id=<id> for its own upload's progress.
     request_id = start_progress("upload", "Validating upload…", 2.0)
     if not file.filename or not file.filename.endswith(".zip"):
         error_progress("Only zip files allowed")
@@ -105,10 +104,8 @@ async def upload_zip(file: UploadFile = File(...)):
         await _stream_upload_to_disk(file, zip_path)
         update_progress("upload", "Extracting archive…", 12.0)
 
-        # F08: zip extraction is CPU+I/O bound; hop to a worker thread so the
-        # event loop stays responsive. The whole "open zip + safe_extract"
-        # pair runs on the thread to avoid holding the zip handle across
-        # the loop boundary.
+        # Open+extract on a single thread; never hold the zip handle
+        # across the loop boundary.
         def _extract_zip_sync() -> None:
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 safe_extract_zip(
@@ -145,9 +142,6 @@ async def upload_zip(file: UploadFile = File(...)):
             status_code=500,
         )
     update_progress("upload", "Locating Java roots…", 18.0)
-    # F08: directory walks, Neo4j writes, FAISS embedding builds, and
-    # filesystem renames are all synchronous. Each gets its own thread hop
-    # so progress updates between them keep flowing on the event loop.
     java_roots = await asyncio.to_thread(find_java_roots, staging_dir)
     if not java_roots:
         await asyncio.to_thread(_cleanup_dir, staging_dir)
@@ -254,7 +248,4 @@ async def upload_status(
         ),
     ),
 ):
-    # F13: explicit request_id targets the caller's own upload; the
-    # back-compat path (no request_id) falls back to the latest job so
-    # pre-F13 frontend clients keep working unchanged.
     return UploadStatusResponse(**get_progress(request_id=request_id))

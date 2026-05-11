@@ -94,10 +94,9 @@ def parse_args() -> argparse.Namespace:
         "--resume",
         action="store_true",
         help=(
-            "Resume from a prior run's output directory (F21). Reads "
-            "request_metrics.jsonl from --output-dir, skips violations whose "
-            "with/without-context pair is already recorded, and appends to "
-            "existing artifacts rather than truncating them."
+            "Resume from a prior run's output directory. Reads "
+            "request_metrics.jsonl, skips violations whose with/without-context "
+            "pair is already recorded, and appends to existing artifacts."
         ),
     )
     return parser.parse_args()
@@ -221,7 +220,6 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # F27: capture provenance up front so it survives a mid-run crash.
     provenance = collect_provenance(
         eval_kind="explanation",
         config_path=args.config,
@@ -243,9 +241,8 @@ def main() -> int:
     )
     write_provenance(provenance, output_dir)
 
-    # F21: when resuming, load the already-completed (cohort, category, violation)
-    # tuples from the prior run's request_metrics.jsonl before opening the file
-    # in append mode (the runtime constructor opens the handles).
+    # Load prior outcomes BEFORE the runtime opens its file handles —
+    # the runtime opens in append mode under resume.
     prior_outcomes = (
         load_completed_violation_outcomes(output_dir / "request_metrics.jsonl") if args.resume else {}
     )
@@ -311,11 +308,9 @@ def main() -> int:
         detected_violations=len(violations),
     )
 
-    # F01: evaluate citation grounding on BOTH cohorts.
-    # - TP cohort: violations on positive testcases (legacy Citation@Context)
-    # - FP cohort: violations on benign testcases (new; measures grounding on
-    #   the detector's mistakes). The expected citation is built the same way
-    #   in both cohorts; only the underlying testcase label differs.
+    # Two cohorts per category: TP (rules fired on positive testcases) and
+    # FP (rules fired on benign testcases). The expected citation is built
+    # identically in both; only the underlying testcase label differs.
     category_violations_by_id = collect_category_violations(
         selected_category_ids=context.selected_category_ids,
         categories_by_id=categories_by_id,
@@ -364,7 +359,7 @@ def main() -> int:
                     "rate_without_context": 0.0,
                     "rate_with_context_ci": None,
                     "rate_without_context_ci": None,
-                    # Cohort breakdown (F01).
+                    # Cohort breakdown.
                     "tp": _empty_cohort_block(),
                     "fp": _empty_cohort_block(),
                 }
@@ -375,8 +370,8 @@ def main() -> int:
                     cohort_with = 0
                     cohort_without = 0
                     for idx, violation in enumerate(cohort_violations, start=1):
-                        # F21: if this violation pair was completed in a prior
-                        # run, reuse the cached hits and skip the LLM calls.
+                        # If this pair was completed in a prior run, reuse
+                        # the cached hits and skip the LLM calls.
                         resume_key = (
                             cohort_label,
                             str(category_id),
@@ -473,9 +468,8 @@ def main() -> int:
                                 }
                             )
 
-                        # Sample budget per category, per cohort. F21: on resume,
-                        # do not append a duplicate sample — the original row is
-                        # already on disk from the prior run.
+                        # On resume the original row is already on disk;
+                        # do not append a duplicate sample.
                         if args.sample_per_category > 0 and prior is None:
                             counter_map = (
                                 samples_per_category if cohort_label == "tp" else fp_samples_per_category
@@ -600,7 +594,6 @@ def main() -> int:
         "rate_without_context": round(overall_tp_rate_without, 4),
         "rate_with_context_ci": overall_tp_block["rate_with_context_ci"],
         "rate_without_context_ci": overall_tp_block["rate_without_context_ci"],
-        # Cohort breakdown (F01).
         "tp": overall_tp_block,
         "fp": overall_fp_block,
     }

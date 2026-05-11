@@ -15,10 +15,8 @@ from codegraph.db import get_neo4j_driver
 router = APIRouter()
 
 
-# F30: cache the deep-readiness probe so polling at 1Hz doesn't reload FAISS,
-# the signature map, and the embedding model on every call. 30s is short
-# enough that a degraded dependency is surfaced quickly and long enough that
-# the probe is not a hot path.
+# 30 s is short enough to surface a degraded dependency quickly and long
+# enough that 1 Hz polling doesn't reload FAISS / the embedding model.
 _READINESS_TTL_SECONDS = 30.0
 _readiness_cache: dict[str, Any] = {"expires_at": 0.0, "payload": None, "status_code": 503}
 _readiness_lock = Lock()
@@ -140,37 +138,22 @@ def reset_readiness_cache() -> None:
 
 @router.get("/healthz", response_model=LivenessResponse)
 async def healthz() -> LivenessResponse:
-    """Cheap liveness probe (F30).
-
-    Returns 200 with ``{"status": "alive"}`` as long as the process is
-    serving requests. No external I/O; safe to poll at high frequency.
-    """
+    """Liveness probe: no external I/O, safe for high-frequency polling."""
     return LivenessResponse(status="alive")
 
 
 @router.get("/readyz", response_model=HealthCheckResponse)
 async def readyz(request: Request):
-    """Deep readiness probe (F30).
-
-    Exercises Neo4j, FAISS, signature map, embedding model, and OPA. Result
-    is cached for 30s to keep polling cost bounded; the cache is shared
-    with the legacy ``/health`` alias.
-    """
-    # F08: when the cache is cold, _cached_readiness performs blocking
-    # I/O (Neo4j session, FAISS load). Hop to a worker thread so the
-    # event loop stays responsive. The lock-guarded cache hit path is
-    # near-instant, so the to_thread cost is negligible for cached hits.
+    """Readiness probe: exercises every runtime dependency, cached 30 s."""
     payload, status_code = await asyncio.to_thread(_cached_readiness, request)
     return JSONResponse(payload, status_code=status_code)
 
 
 @router.get("/health", response_model=HealthCheckResponse)
 async def health(request: Request):
-    """Backward-compatible alias of ``/readyz``.
+    """Alias of ``/readyz`` retained for pre-existing callers.
 
-    Pre-F30 callers (frontend, monitoring scripts) keep working unchanged;
-    new callers should prefer ``/healthz`` (liveness) or ``/readyz``
-    (readiness). The cache is shared so calling both does not double-probe.
+    Shares the readiness cache so calling both does not double-probe.
     """
     payload, status_code = await asyncio.to_thread(_cached_readiness, request)
     return JSONResponse(payload, status_code=status_code)

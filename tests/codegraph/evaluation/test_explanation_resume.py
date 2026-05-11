@@ -1,13 +1,12 @@
-"""Tests for the F21 resume helper in codegraph.evaluation.explanation_runtime.
+"""Resume helper contract for ``ExplanationRuntime``.
 
-The resume contract:
-  * ``load_completed_violation_outcomes`` returns
-    ``{(cohort, category_id, violation_id): {with_context_hit, without_context_hit}}``
-    only for entries where BOTH context modes are present.
-  * Partial pairs (one mode missing) are omitted so the eval re-runs them.
-  * Legacy rows (no ``cohort`` field) are treated as TP cohort.
-  * Malformed JSON lines and rows lacking required fields are skipped.
-  * ``ExplanationRuntime(resume=True)`` opens artifact files in append mode.
+* ``load_completed_violation_outcomes`` returns only fully-paired
+  ``(cohort, category_id, violation_id)`` rows (with_context AND
+  without_context); partial pairs are omitted so the eval re-runs them.
+* Legacy rows without a ``cohort`` field default to ``tp``.
+* Malformed JSON and rows lacking required fields are skipped.
+* ``ExplanationRuntime(resume=True)`` opens artifact files in append
+  mode rather than truncating.
 """
 
 from __future__ import annotations

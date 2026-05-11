@@ -40,9 +40,7 @@ async def policy_evaluate(
     rule_ids: list[str] | None = Query(default=None),
 ):
     try:
-        # F08: evaluate_policies shells out to OPA via subprocess.run and
-        # calls Neo4j synchronously. Run it on a worker thread so the
-        # event loop stays responsive while OPA is computing.
+        # OPA subprocess + Neo4j: blocking; run on a worker thread.
         result = await asyncio.to_thread(
             evaluate_policies,
             max_bundles=max_bundles,
@@ -59,8 +57,6 @@ async def policy_evaluate(
 
 @router.post("/policy/evaluate_with_llm", response_model=PolicyEvaluateResponse)
 async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
-    # F08: both legs (OPA evaluation and LLM enrichment) are sync I/O.
-    # Hop to a worker thread for each so the event loop stays responsive.
     res = await asyncio.to_thread(
         evaluate_policies,
         max_bundles=payload.max_bundles,
@@ -87,8 +83,6 @@ async def policy_explain_one(payload: PolicyExplainOneRequest):
     model = (payload.model or "").strip() or settings.llm_model
     try:
         try:
-            # F08: structured-explanation generation makes a blocking HTTP call
-            # to the LLM server; push it to a worker thread.
             explanation_structured = await asyncio.to_thread(
                 generate_policy_explanation_structured,
                 payload.violation,
@@ -145,7 +139,6 @@ async def policy_explain_one(payload: PolicyExplainOneRequest):
 
 @router.post("/policy/reviews", response_model=PolicyReviewCreateResponse)
 async def policy_create_review(payload: PolicyReviewCreateRequest):
-    # F08: append_review_jsonl does synchronous filesystem I/O.
     result = await asyncio.to_thread(
         append_review_jsonl,
         store_path=settings.ui_review_store_path,
@@ -184,8 +177,6 @@ async def policy_list_reviews(
     if not resolved.exists():
         return JSONResponse({"status": "OK", "error": None, "reviews": []}, status_code=200)
 
-    # F08: line-by-line JSONL scan is synchronous filesystem I/O; do it in a
-    # worker thread so the event loop stays responsive on large stores.
     def _scan_jsonl() -> deque[dict]:
         buffer: deque[dict] = deque(maxlen=limit)
         with open(resolved.as_posix(), "r", encoding="utf-8") as handle:
@@ -225,9 +216,6 @@ async def policy_list_reviews(
 @router.get("/policy/catalog", response_model=PolicyCatalogResponse)
 async def policy_catalog():
     try:
-        # F08: get_policy_catalog_payload reads catalog JSON from disk; small
-        # cost but still blocking I/O, so push to a worker thread for
-        # consistency with the other policy endpoints.
         payload = await asyncio.to_thread(get_policy_catalog_payload)
         controls = payload.get("controls", [])
         controls_sorted = sorted(controls, key=lambda item: item.get("control") or item.get("id") or "")

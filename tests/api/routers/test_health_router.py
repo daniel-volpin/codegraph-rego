@@ -80,8 +80,7 @@ def _ready_search_deps() -> dict:
 
 class HealthRouterTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        # F30: the readiness probe is cached for 30s. Tests must reset the
-        # cache so a previous test's outcome doesn't leak into the current one.
+        # Reset the readiness cache between tests so outcomes don't leak.
         from api.routers.health import reset_readiness_cache
 
         reset_readiness_cache()
@@ -131,7 +130,7 @@ class HealthRouterTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HealthzLivenessTests(unittest.IsolatedAsyncioTestCase):
-    """F30: GET /healthz is a cheap liveness probe with no external I/O."""
+    """GET /healthz is a cheap liveness probe with no external I/O."""
 
     async def test_healthz_returns_200_alive(self) -> None:
         from api.routers.health import healthz
@@ -159,7 +158,7 @@ class HealthzLivenessTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
-    """F30: GET /readyz exercises every dependency, but caches for 30 seconds."""
+    """GET /readyz exercises every dependency, but caches for 30 seconds."""
 
     def setUp(self) -> None:
         from api.routers.health import reset_readiness_cache

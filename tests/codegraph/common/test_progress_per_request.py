@@ -1,10 +1,9 @@
-"""F13: per-request progress isolation tests.
+"""Per-request progress isolation.
 
-Pre-F13 the module held a single global ProgressState — two concurrent
-uploads silently overwrote each other. F13 keys progress by ``request_id``
-(returned from ``start_progress``), uses a ``contextvars.ContextVar`` so
-callbacks deep in worker threads target the right slot, and exposes a
-back-compat path on ``get_progress(request_id=None)``.
+Progress is keyed by the ``request_id`` returned from ``start_progress``;
+a ``contextvars.ContextVar`` routes ``update_progress`` from worker
+threads to the right slot; ``get_progress(request_id=None)`` falls back
+to the latest job for callers that don't yet pass a request_id.
 """
 
 from __future__ import annotations
@@ -55,8 +54,7 @@ class ConcurrentJobsAreIsolatedTests(unittest.TestCase):
         progress_module.start_progress("upload", "A starting", 5.0)
         rid_b = progress_module.start_progress("upload", "B starting", 5.0)
 
-        # Pre-F13 clients call get_progress() with no argument; they get
-        # the most recent job, which is the next-best behavior.
+        # Clients that don't pass a request_id get the most recent job.
         state = progress_module.get_progress()
         self.assertEqual(state["request_id"], rid_b)
         self.assertEqual(state["message"], "B starting")
@@ -111,8 +109,7 @@ class ContextVarRoutesUpdatesTests(unittest.IsolatedAsyncioTestCase):
     async def test_context_var_propagates_through_to_thread(self) -> None:
         """The progress context var must survive asyncio.to_thread, so
         sync callbacks invoked from inside a worker thread target the
-        right slot. This is the property that makes F08 + F13 compose
-        cleanly without threading request_id through every helper.
+        right slot, without threading request_id through every helper.
         """
 
         def _sync_workload() -> None:

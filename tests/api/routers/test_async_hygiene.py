@@ -1,15 +1,8 @@
-"""F08: async-handler-doesn't-block-the-event-loop tests.
+"""Async router handlers must not block the event loop.
 
-Each async router handler that drives sync I/O (Neo4j, OPA subprocess,
-LLM HTTP, FAISS, file I/O) now hops to a worker thread via
-``asyncio.to_thread``. These tests pin that contract with a single,
-straightforward check: while the slow sync call is running, the event
-loop must still accept and progress *other* coroutines.
-
-We intentionally do not check thread identity here. ``asyncio.to_thread``
-is the mechanism; the property under test is *non-blocking*, and the
-cleanest test is: schedule a concurrent ``asyncio.sleep(0)`` task and
-assert it completes before the slow sync call returns.
+Each test schedules a slow sync stub behind a handler and a concurrent
+ticker coroutine; the ticker accumulates iterations only if the loop
+keeps making progress while the handler's sync work is in flight.
 """
 
 from __future__ import annotations
@@ -60,8 +53,7 @@ class _SlowDriver:
 
 class HealthDoesNotBlockEventLoop(unittest.IsolatedAsyncioTestCase):
     """When /readyz performs slow synchronous I/O, concurrent coroutines
-    must keep making progress on the event loop. Pre-F08 this test
-    would fail because health() called Neo4j inline on the loop.
+    must keep making progress on the event loop.
     """
 
     def setUp(self) -> None:

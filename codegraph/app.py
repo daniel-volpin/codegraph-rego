@@ -105,13 +105,11 @@ async def _preload_resources(application: FastAPI) -> None:
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
-    """Stamp every request with a stable ``X-Request-Id`` (F12).
+    """Stamp every request with a stable ``X-Request-Id``.
 
-    Honors an inbound ``X-Request-Id`` header if the caller provides one
-    (useful for tracing across systems); otherwise generates a fresh
-    UUID4 hex. The id is stashed on ``request.state.request_id`` so
-    handlers, the generic exception handler, and structured logs can
-    reference it; it is also echoed in the response header.
+    Honors an inbound header if present; otherwise generates a UUID4 hex.
+    The id is stashed on ``request.state.request_id`` and echoed in the
+    response header so clients and server logs can be correlated.
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -124,12 +122,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 def _request_id_from(request: Request) -> str:
-    """Best-effort accessor for the request id stamped by the middleware.
-
-    Falls back to a freshly generated id if the middleware did not run
-    (e.g. in tests that bypass the middleware stack). The fallback is
-    still logged so server-side traces are complete.
-    """
+    """Return the middleware-stamped id, generating a fallback if absent."""
     rid = getattr(getattr(request, "state", None), "request_id", None)
     if isinstance(rid, str) and rid:
         return rid
@@ -137,13 +130,11 @@ def _request_id_from(request: Request) -> str:
 
 
 async def _generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Return a sanitized error envelope (F12).
+    """Return ``{"error": "internal", "request_id": ...}`` with status 500.
 
-    The full traceback is logged server-side keyed by ``request_id``;
-    the client receives only ``{"error": "internal", "request_id": ...}``
-    so internal paths, exception messages, and stack frames never leak.
-    The ``X-Request-Id`` header is also set on the response so the
-    operator can correlate the client-visible id with the server log.
+    The full traceback is logged server-side keyed by request_id; the
+    client envelope deliberately omits exception messages, internal
+    paths, and stack frames.
     """
     request_id = _request_id_from(request)
     LOGGER.exception(
@@ -179,8 +170,7 @@ def create_app() -> FastAPI:
     except Exception:
         pass
 
-    # F12: request-id middleware runs first so every downstream layer
-    # (CORS, exception handler, structured logs) sees the same id.
+    # Stamp request_id before CORS so it appears in downstream logs.
     application.add_middleware(RequestIDMiddleware)
     application.add_middleware(
         CORSMiddleware,

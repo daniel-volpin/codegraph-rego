@@ -1,9 +1,8 @@
-"""Tests for the F32 lru_cache-based RemediationService singleton.
+"""``_get_service`` provides one process-wide ``RemediationService``.
 
-The orchestration module exposes one process-wide RemediationService via
-``_get_service``. Replacing the prior module-level ``_SERVICE`` global with
-``functools.lru_cache(maxsize=1)`` preserves the one-per-process contract
-while giving tests an explicit ``cache_clear()`` to isolate runs.
+``functools.lru_cache(maxsize=1)`` gives tests an explicit
+``cache_clear()`` for run isolation and exposes ``cache_info()`` for
+hit/miss assertions.
 """
 
 from __future__ import annotations
@@ -16,7 +15,6 @@ from codegraph.remediation import orchestration
 
 class OrchestrationSingletonTests(unittest.TestCase):
     def setUp(self) -> None:
-        # F32: clear the lru_cache so each test starts from a known state.
         orchestration._get_service.cache_clear()
 
     def tearDown(self) -> None:
