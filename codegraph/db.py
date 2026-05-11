@@ -28,6 +28,11 @@ def ensure_constraints(driver=None):
             session.run(
                 "CREATE INDEX method_full_signature_index IF NOT EXISTS FOR (m:Method) ON (m.full_signature)"
             ).consume()
+            # m.file_path drives the workspace-root filter at policy eval
+            # time and the per-file purge in purge_workspace_entities.
+            session.run(
+                "CREATE INDEX method_file_path_index IF NOT EXISTS FOR (m:Method) ON (m.file_path)"
+            ).consume()
             session.run(
                 "CREATE CONSTRAINT field_unique IF NOT EXISTS FOR (f:Field) REQUIRE (f.class_fqn, f.name) IS UNIQUE"
             ).consume()

@@ -51,7 +51,7 @@ async def policy_evaluate(
         status = 200 if "violations" in result or "opa_output" in result else 500
         return JSONResponse(result, status_code=status)
     except Exception as e:
-        logger.error(f"Policy evaluation failed: {e}")
+        logger.exception("Policy evaluation failed")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -223,5 +223,5 @@ async def policy_catalog():
         response["controls"] = controls_sorted
         return JSONResponse(response)
     except Exception as exc:
-        logger.error(f"Policy catalog error: {exc}")
+        logger.exception("Policy catalog error")
         return JSONResponse({"error": str(exc)}, status_code=500)

@@ -26,8 +26,8 @@ async def search(request: SearchRequest):
             contexts_model.append(ctx_entries)
         return SearchResponse(matches=matched_signatures, contexts=contexts_model)
     except FileNotFoundError as e:
-        logger.warning(f"Search file not found: {e}")
+        logger.warning("Search file not found: %s", e)
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception as e:
-        logger.error(f"Search failed: {e}")
+        logger.exception("Search failed")
         return JSONResponse({"error": f"search_failed: {e}"}, status_code=500)

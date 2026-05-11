@@ -41,13 +41,13 @@ def safe_extract_zip(
     for member in members:
         member_path = os.path.realpath(os.path.join(dest_dir, member.filename))
         if not member_path.startswith(dest_root + os.sep) and member_path != dest_root:
-            logger.warning(f"Skipping suspicious entry: {member.filename}")
+            logger.warning("Skipping suspicious entry: %s", member.filename)
             continue
         if member.is_dir():
             os.makedirs(member_path, exist_ok=True)
         else:
             if member.file_size > max_file_size:
-                logger.error(f"File {member.filename} exceeds size limit ({member.file_size} bytes)")
+                logger.error("File %s exceeds size limit (%d bytes)", member.filename, member.file_size)
                 raise UploadValidationError(f"File {member.filename} exceeds size limit")
 
             compressed_size = member.compress_size
@@ -63,7 +63,7 @@ def safe_extract_zip(
 
             ext = os.path.splitext(member.filename)[1].lower()
             if allowed_exts and ext not in allowed_exts:
-                logger.warning(f"Skipping file with forbidden extension: {member.filename}")
+                logger.warning("Skipping file with forbidden extension: %s", member.filename)
                 continue
 
             extracted_total += member.file_size
@@ -75,7 +75,7 @@ def safe_extract_zip(
             os.makedirs(os.path.dirname(member_path), exist_ok=True)
             with zip_file.open(member, "r") as src, open(member_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
-            logger.debug(f"Extracted: {member.filename}")
+            logger.debug("Extracted: %s", member.filename)
 
 
 def find_java_roots(base: str) -> list[str]:

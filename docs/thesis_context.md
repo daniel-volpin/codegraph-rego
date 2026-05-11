@@ -169,6 +169,29 @@ Practical implications for the thesis:
   infrastructure. Removing them would delete a non-trivial chunk of the
   comparison-eval surface that `run_comparison_eval.py` depends on.
 
+## Control ID Conventions
+
+`policy/catalog.json` lists each control under a single canonical `id`
+of the form `ISO-A.<clause>` (for example `ISO-A.9.4.1`,
+`ISO-A.10-WEAK-HASH`). New code, tests, configs, and prose should use
+this short form exclusively.
+
+The longer `ISO-27001-<clause>` form survives only inside the
+`alias_ids` arrays of `policy/catalog.json` and
+`configs/benchmark/policy_registry.json`, and is resolved at runtime by
+`codegraph/policy/runtime/catalog.py::violation_id_variants` and
+`codegraph/remediation/capabilities.py`. It exists exclusively for
+backward compatibility with pre-existing artifacts and external clients
+that may have stored the long form. Treat it as deprecated:
+
+- Do not introduce new `ISO-27001-…` references in code, tests,
+  configs, dashboards, frontend, or thesis prose.
+- Do not delete `alias_ids` from the catalogs without a deprecation
+  cycle that includes a runtime warning and an audit of every
+  downstream artifact.
+
+When citing a control in the thesis, use the short canonical form.
+
 ## Current System Design
 - Symbolic layer:
   - Java parsing + graph ingestion into Neo4j
