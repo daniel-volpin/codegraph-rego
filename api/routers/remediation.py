@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter
@@ -22,7 +23,10 @@ LOGGER = logging.getLogger("codegraph.api.routers.remediation")
 
 @router.post("/remediation/preview", response_model=RemediationPreviewResponse)
 async def remediation_preview(payload: RemediationPreviewRequest):
-    result = preview_virtual_remediation(
+    # F08: preview_virtual_remediation calls Neo4j, the LLM HTTP endpoint,
+    # and OPA via subprocess — all synchronous. Hop to a worker thread.
+    result = await asyncio.to_thread(
+        preview_virtual_remediation,
         payload.violation_id,
         target_method=payload.target_method,
         file_path=payload.file_path,
@@ -39,7 +43,10 @@ async def remediation_preview(payload: RemediationPreviewRequest):
 
 @router.post("/remediation/apply", response_model=RemediationApplyResponse)
 async def remediation_apply(payload: RemediationApplyRequest):
-    result = apply_remediation(
+    # F08: apply_remediation drives the whole patch/build/verify loop —
+    # Neo4j, LLM, OPA, mvn build. All synchronous; run off the event loop.
+    result = await asyncio.to_thread(
+        apply_remediation,
         payload.violation_id,
         target_method=payload.target_method,
         file_path=payload.file_path,

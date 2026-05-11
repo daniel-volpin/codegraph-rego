@@ -1,8 +1,11 @@
+import asyncio
+import logging
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+
 from api.models.validation import SearchRequest, SearchResponse, SearchMatch
 from codegraph.search.service import run_search
-import logging
 
 router = APIRouter()
 logger = logging.getLogger("codegraph.api.routers.search")
@@ -11,7 +14,11 @@ logger = logging.getLogger("codegraph.api.routers.search")
 @router.post("/search", response_model=SearchResponse)
 async def search(request: SearchRequest):
     try:
-        matched_signatures, graph_contexts = run_search(request.query, k=5)
+        # F08: run_search exercises FAISS + Neo4j synchronously; hop to a
+        # worker thread to keep the event loop unblocked.
+        matched_signatures, graph_contexts = await asyncio.to_thread(
+            run_search, request.query, k=5
+        )
         contexts_model = []
         for ctx in graph_contexts:
             ctx_entries = []

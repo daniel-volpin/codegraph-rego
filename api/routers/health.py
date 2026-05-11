@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import shutil
 import time
 from threading import Lock
@@ -155,7 +156,11 @@ async def readyz(request: Request):
     is cached for 30s to keep polling cost bounded; the cache is shared
     with the legacy ``/health`` alias.
     """
-    payload, status_code = _cached_readiness(request)
+    # F08: when the cache is cold, _cached_readiness performs blocking
+    # I/O (Neo4j session, FAISS load). Hop to a worker thread so the
+    # event loop stays responsive. The lock-guarded cache hit path is
+    # near-instant, so the to_thread cost is negligible for cached hits.
+    payload, status_code = await asyncio.to_thread(_cached_readiness, request)
     return JSONResponse(payload, status_code=status_code)
 
 
@@ -167,5 +172,5 @@ async def health(request: Request):
     new callers should prefer ``/healthz`` (liveness) or ``/readyz``
     (readiness). The cache is shared so calling both does not double-probe.
     """
-    payload, status_code = _cached_readiness(request)
+    payload, status_code = await asyncio.to_thread(_cached_readiness, request)
     return JSONResponse(payload, status_code=status_code)
