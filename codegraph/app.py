@@ -158,7 +158,9 @@ def create_app() -> FastAPI:
     configure_telemetry()
     install_log_correlation()
 
-    LOGGER.info("Runtime Neo4j target: uri=%s user=%s", settings.neo4j_uri, settings.neo4j_user)
+    # DEBUG, not INFO: connection target shouldn't sit in default stdout
+    # logs where it gets ingested by aggregators with broader access.
+    LOGGER.debug("Runtime Neo4j target: uri=%s user=%s", settings.neo4j_uri, settings.neo4j_user)
 
     application = FastAPI()
     application.state.startup_status = _default_startup_status()
