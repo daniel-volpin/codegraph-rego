@@ -11,6 +11,10 @@ from codegraph.ingestion.service import process_single_file_content
 from codegraph.policy.integration import PolicyEvaluator
 from codegraph.remediation.capabilities import get_remediation_capability
 from codegraph.policy.trace import PolicyStateTrace, filter_predicate_trace, project_trace_profile
+from codegraph.remediation.editing import (
+    read_source_preserving_format,
+    write_source_preserving_format,
+)
 from codegraph.remediation.metrics import (
     capture_raw_llm_output,
     extract_testcase_id,
@@ -157,7 +161,10 @@ def _execute_apply_fix_inner(
             file_path=file_path,
         )
 
-    original_content = resolved_path.read_text(encoding="utf-8")
+    # Detect encoding + line ending up-front so the write-back path
+    # preserves Windows-authored sources (CRLF) and BOM-prefixed files
+    # rather than silently rewriting them to LF / no-BOM.
+    original_content, source_encoding, source_newline = read_source_preserving_format(resolved_path)
     baseline_violations = context.get("baseline_violations") or []
     attempt_errors: list[str] = []
     updated_content = None
@@ -305,13 +312,13 @@ def _execute_apply_fix_inner(
     try:
         with tempfile.TemporaryDirectory() as tmp:
             _temp_root, temp_file_path, temp_build_root = service._prepare_temp_workspace(Path(tmp), resolved_path)
-            temp_file_path.write_text(updated_content, encoding="utf-8")
+            write_source_preserving_format(temp_file_path, updated_content, source_encoding, source_newline)
             compilation = service._compile_project(temp_build_root, build_command=build_command)
 
             try:
                 if mode == "apply":
                     live_workspace_modified = True
-                    resolved_path.write_text(updated_content, encoding="utf-8")
+                    write_source_preserving_format(resolved_path, updated_content, source_encoding, source_newline)
 
                 graph_modified = True
                 process_single_file_content(file_path, updated_content)
@@ -392,7 +399,7 @@ def _execute_apply_fix_inner(
                 LOGGER.warning("Failed to restore original graph content for %s: %s", file_path, exc)
         if live_workspace_modified and (mode != "apply" or not apply_successful):
             try:
-                resolved_path.write_text(original_content, encoding="utf-8")
+                write_source_preserving_format(resolved_path, original_content, source_encoding, source_newline)
             except Exception as exc:  # pragma: no cover - filesystem guard
                 LOGGER.warning("Failed to restore original content for %s: %s", resolved_path, exc)
 

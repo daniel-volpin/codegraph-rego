@@ -12,6 +12,46 @@ from codegraph.config import settings
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
+def detect_text_format(raw_bytes: bytes) -> tuple[str, str]:
+    """Return ``(encoding, newline)`` for round-tripping a source file.
+
+    ``encoding`` is ``"utf-8-sig"`` when a UTF-8 BOM is present so a
+    re-encode preserves it; otherwise plain ``"utf-8"``. ``newline`` is
+    ``"\\r\\n"`` when any CRLF appears in the first 4 KB (Windows-authored
+    sources) and ``"\\n"`` otherwise. Sampling rather than scanning the
+    whole file keeps detection bounded for large Java files.
+    """
+    encoding = "utf-8-sig" if raw_bytes.startswith(b"\xef\xbb\xbf") else "utf-8"
+    newline = "\r\n" if b"\r\n" in raw_bytes[:4096] else "\n"
+    return encoding, newline
+
+
+def read_source_preserving_format(path: Path) -> tuple[str, str, str]:
+    """Read ``path`` and return ``(text, encoding, newline)``.
+
+    Text is returned with line endings normalised to ``"\\n"`` so callers
+    can transform it uniformly; the original encoding and newline are
+    returned alongside so :func:`write_source_preserving_format` can
+    round-trip the write.
+    """
+    raw = path.read_bytes()
+    encoding, newline = detect_text_format(raw)
+    text = raw.decode(encoding)
+    if newline == "\r\n":
+        text = text.replace("\r\n", "\n")
+    return text, encoding, newline
+
+
+def write_source_preserving_format(path: Path, text: str, encoding: str, newline: str) -> None:
+    """Write ``text`` to ``path`` re-applying the detected format.
+
+    ``write_text(..., encoding="utf-8")`` would silently strip a UTF-8
+    BOM and rewrite CRLF to LF; this helper preserves both.
+    """
+    payload = text.replace("\n", "\r\n") if newline == "\r\n" else text
+    path.write_bytes(payload.encode(encoding))
+
+
 def format_java_parse_error(exc: Exception) -> str:
     detail = str(exc).strip()
     if detail:
