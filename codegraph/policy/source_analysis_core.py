@@ -3,6 +3,195 @@ from __future__ import annotations
 import re
 from typing import Dict
 
+
+def strip_java_lexical_noise(source: str) -> str:
+    """Return ``source`` with lexically-inactive content blanked.
+
+    Replaces line comments, block comments, javadoc, char literals,
+    string literals, and text-block contents with space characters of
+    equal length. Newline characters are preserved verbatim so that
+    line numbers, line counts, and per-line character offsets in the
+    returned string match the input exactly. The original (unmodified)
+    source remains available to callers that need it for human-readable
+    citations.
+
+    The transformation prevents tokens that appear only inside
+    lexically-inactive spans (for example, ``MD5`` mentioned in a
+    documentation comment, or ``executeQuery(`` quoted inside a string
+    literal) from triggering the substring heuristics used by the OPA
+    policies and the Python pre-analysis layer.
+
+    The state machine recognises:
+
+    * line comments (``// ... \\n``)
+    * block comments and javadoc (``/* ... */``, ``/** ... */``)
+    * char literals (``'c'`` with ``\\'`` escape)
+    * string literals (``"..."`` with ``\\"`` escape)
+    * text blocks (``\"\"\" ... \"\"\"`` — Java 13+)
+
+    Known limitations (acceptable for the OWASP Benchmark + JHipster /
+    PetClinic real-world corpora):
+
+    * Unicode escapes of the form ``\\uXXXX`` are not pre-processed.
+      Java's compiler resolves them before tokenisation, so technically
+      a quote written as ``\\u0022`` would still toggle string state
+      in real Java. We treat ``\\uXXXX`` as ordinary characters; this
+      mismatches the language spec only on adversarially obfuscated
+      sources, which are out of scope.
+    * Nested block comments are not a Java construct (the compiler
+      terminates at the first ``*/``); we match that behaviour.
+    """
+    # Local aliases to keep the inner loop tight.
+    src_len = len(source)
+    out: list[str] = []
+    i = 0
+
+    # States: code | line_comment | block_comment | string | char | text_block
+    state = "code"
+    # Track whether we just consumed a backslash inside a string/char so
+    # the next character is escaped and cannot terminate the literal.
+    escaped = False
+
+    while i < src_len:
+        ch = source[i]
+        nxt = source[i + 1] if i + 1 < src_len else ""
+        nxt2 = source[i + 2] if i + 2 < src_len else ""
+
+        if state == "code":
+            if ch == "/" and nxt == "/":
+                out.extend(("  ",))
+                state = "line_comment"
+                i += 2
+                continue
+            if ch == "/" and nxt == "*":
+                out.extend(("  ",))
+                state = "block_comment"
+                i += 2
+                continue
+            # Text block start must come before string-literal check.
+            if ch == '"' and nxt == '"' and nxt2 == '"':
+                out.extend(("   ",))
+                state = "text_block"
+                i += 3
+                continue
+            if ch == '"':
+                out.append(" ")
+                state = "string"
+                escaped = False
+                i += 1
+                continue
+            if ch == "'":
+                out.append(" ")
+                state = "char"
+                escaped = False
+                i += 1
+                continue
+            out.append(ch)
+            i += 1
+            continue
+
+        if state == "line_comment":
+            if ch == "\n":
+                out.append("\n")
+                state = "code"
+                i += 1
+                continue
+            out.append(" ")
+            i += 1
+            continue
+
+        if state == "block_comment":
+            if ch == "*" and nxt == "/":
+                out.extend(("  ",))
+                state = "code"
+                i += 2
+                continue
+            # Preserve newlines so line offsets stay aligned.
+            out.append("\n" if ch == "\n" else " ")
+            i += 1
+            continue
+
+        if state == "string":
+            if escaped:
+                out.append(" ")
+                escaped = False
+                i += 1
+                continue
+            if ch == "\\":
+                out.append(" ")
+                escaped = True
+                i += 1
+                continue
+            if ch == '"':
+                out.append(" ")
+                state = "code"
+                i += 1
+                continue
+            # An unescaped newline is a syntax error in standard string
+            # literals; we treat it defensively by closing the literal
+            # so a malformed source can't silently consume the rest of
+            # the file. Real javac would reject it.
+            if ch == "\n":
+                out.append("\n")
+                state = "code"
+                i += 1
+                continue
+            out.append(" ")
+            i += 1
+            continue
+
+        if state == "char":
+            if escaped:
+                out.append(" ")
+                escaped = False
+                i += 1
+                continue
+            if ch == "\\":
+                out.append(" ")
+                escaped = True
+                i += 1
+                continue
+            if ch == "'":
+                out.append(" ")
+                state = "code"
+                i += 1
+                continue
+            if ch == "\n":
+                out.append("\n")
+                state = "code"
+                i += 1
+                continue
+            out.append(" ")
+            i += 1
+            continue
+
+        # state == "text_block"
+        # The closing delimiter is exactly three consecutive double quotes.
+        # Inside a text block, single and double quotes (not preceded by
+        # the escape \") do NOT close the block unless three appear in a
+        # row. Backslash escapes work the same as regular strings, but the
+        # critical termination rule is the """ trigraph.
+        if ch == "\\" and not escaped:
+            out.append(" ")
+            escaped = True
+            i += 1
+            continue
+        if escaped:
+            out.append("\n" if ch == "\n" else " ")
+            escaped = False
+            i += 1
+            continue
+        if ch == '"' and nxt == '"' and nxt2 == '"':
+            out.extend(("   ",))
+            state = "code"
+            i += 3
+            continue
+        out.append("\n" if ch == "\n" else " ")
+        i += 1
+
+    return "".join(out)
+
+
 UNTRUSTED_INPUT_PATTERNS = (
     re.compile(r"getParameter\s*\(", re.IGNORECASE),
     re.compile(r"getHeader\s*\(", re.IGNORECASE),

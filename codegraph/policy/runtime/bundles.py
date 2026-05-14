@@ -10,6 +10,7 @@ from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet
 from codegraph.db import get_neo4j_driver
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.source_analysis import analyze_policy_indicators
+from codegraph.policy.source_analysis_core import strip_java_lexical_noise
 from codegraph.search.service import HybridSearchService
 from codegraph.policy.taint_graph import TaintPathFinder
 from codegraph.telemetry import get_tracer
@@ -209,16 +210,26 @@ def build_evidence_bundle(
             )
             if not source_code and method_snapshot.get("name"):
                 source_code = extract_code_snippet(source_path.as_posix(), method_snapshot.get("name", ""))
+
+        # Lexically active view of the source: comments, char/string literal
+        # contents, and text-block contents replaced by spaces while line
+        # and column offsets are preserved. The Rego policies, the Python
+        # regex pre-analysis, and the helper-summary builder all operate
+        # on this view so a token mentioned only in a comment or a string
+        # literal cannot trigger a violation. The raw source is preserved
+        # below for human-readable citation grounding by the LLM.
+        source_code_active = strip_java_lexical_noise(source_code) if source_code else source_code
+
         graph_context = {
             "annotations": method_snapshot.get("annotations") or [],
             "uses_fields": method_snapshot.get("uses_fields") or [],
             "calls": method_snapshot.get("calls") or [],
             "callers": method_snapshot.get("callers") or [],
         }
-        analysis_flags = analyze_policy_indicators(source_code)
+        analysis_flags = analyze_policy_indicators(source_code_active)
         helper_summaries = (
             _HELPER_SUMMARY_BUILDER.build(
-                current_source=source_code,
+                current_source=source_code_active,
                 method_snapshot=method_snapshot,
                 method_index=method_index or {},
             )
@@ -239,13 +250,18 @@ def build_evidence_bundle(
             start_line=method_snapshot.get("start_line"),
             end_line=method_snapshot.get("end_line"),
             modifiers=method_snapshot.get("modifiers") or [],
-            source_code=source_code,
+            source_code=source_code_active,
             graph_context=graph_context,
             vector_context=vector_context,
             analysis_flags=analysis_flags,
             helper_summaries=helper_summaries,
         )
         result = serialize_policy_bundle(bundle)
+        # Preserve the original source so downstream consumers that need
+        # human-readable text (LLM citation grounding, evidence-card
+        # rendering, audit excerpts) can opt back into it. Rego policies
+        # see ``source_code`` (the active view) and never read this field.
+        result["source_code_raw"] = source_code
 
         taint_paths = (
             taint_path_finder.find_reachable_sinks(method_snapshot["signature"])
