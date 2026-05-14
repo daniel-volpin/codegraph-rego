@@ -4,26 +4,34 @@ import re
 from typing import Dict
 
 
-def strip_java_lexical_noise(source: str) -> str:
+def strip_java_lexical_noise(source: str, *, strip_string_literals: bool = True) -> str:
     """Return ``source`` with lexically-inactive content blanked.
 
-    Replaces line comments, block comments, javadoc, char literals,
-    string literals, and text-block contents with space characters of
-    equal length. Newline characters are preserved verbatim so that
-    line numbers, line counts, and per-line character offsets in the
-    returned string match the input exactly. The original (unmodified)
-    source remains available to callers that need it for human-readable
-    citations.
+    Two modes are supported via ``strip_string_literals``:
 
-    The transformation prevents tokens that appear only inside
-    lexically-inactive spans (for example, ``MD5`` mentioned in a
-    documentation comment, or ``executeQuery(`` quoted inside a string
-    literal) from triggering the substring heuristics used by the OPA
-    policies and the Python pre-analysis layer.
+    * ``True`` (default) — comments, char literals, string literals,
+      and text-block contents are blanked. Produces the *substring-safe*
+      view used by the OPA/Rego rules that perform naive
+      ``contains(...)`` matching on ``input.source_code``. A token
+      mentioned only inside a comment or quoted string cannot trigger a
+      substring rule on this view.
+    * ``False`` — only comments are blanked; the contents of string
+      literals, char literals, and text blocks are preserved. Produces
+      the *active-code* view used by the Python regex pre-analysis
+      layer (``codegraph.policy.analysis``), whose patterns are
+      structurally anchored and intentionally inspect the contents of
+      string-literal arguments (for example, the ``"MD5"`` inside
+      ``MessageDigest.getInstance("MD5")``). Preserving literals here
+      keeps algorithm-name detection working post-F10.
+
+    In both modes, newline characters are emitted verbatim so that
+    line numbers, line counts, and per-line character offsets in the
+    returned string match the input exactly — the citation-grounding
+    contract for evidence cards.
 
     The state machine recognises:
 
-    * line comments (``// ... \\n``)
+    * line comments (``// ... \\n`` or ``... \\r``, JLS §3.4)
     * block comments and javadoc (``/* ... */``, ``/** ... */``)
     * char literals (``'c'`` with ``\\'`` escape)
     * string literals (``"..."`` with ``\\"`` escape)
@@ -41,15 +49,11 @@ def strip_java_lexical_noise(source: str) -> str:
     * Nested block comments are not a Java construct (the compiler
       terminates at the first ``*/``); we match that behaviour.
     """
-    # Local aliases to keep the inner loop tight.
     src_len = len(source)
     out: list[str] = []
     i = 0
 
-    # States: code | line_comment | block_comment | string | char | text_block
     state = "code"
-    # Track whether we just consumed a backslash inside a string/char so
-    # the next character is escaped and cannot terminate the literal.
     escaped = False
 
     while i < src_len:
@@ -68,21 +72,20 @@ def strip_java_lexical_noise(source: str) -> str:
                 state = "block_comment"
                 i += 2
                 continue
-            # Text block start must come before string-literal check.
             if ch == '"' and nxt == '"' and nxt2 == '"':
-                out.append("   ")
+                out.append("   " if strip_string_literals else '"""')
                 state = "text_block"
                 escaped = False
                 i += 3
                 continue
             if ch == '"':
-                out.append(" ")
+                out.append(" " if strip_string_literals else '"')
                 state = "string"
                 escaped = False
                 i += 1
                 continue
             if ch == "'":
-                out.append(" ")
+                out.append(" " if strip_string_literals else "'")
                 state = "char"
                 escaped = False
                 i += 1
@@ -110,53 +113,51 @@ def strip_java_lexical_noise(source: str) -> str:
                 state = "code"
                 i += 2
                 continue
-            # Preserve newlines so line offsets stay aligned.
             out.append("\n" if ch == "\n" else " ")
             i += 1
             continue
 
         if state == "string":
             if escaped:
-                out.append(" ")
+                out.append(" " if strip_string_literals else ch)
                 escaped = False
                 i += 1
                 continue
             if ch == "\\":
-                out.append(" ")
+                out.append(" " if strip_string_literals else "\\")
                 escaped = True
                 i += 1
                 continue
             if ch == '"':
-                out.append(" ")
+                out.append(" " if strip_string_literals else '"')
                 state = "code"
                 i += 1
                 continue
             # An unescaped newline is a syntax error in standard string
-            # literals; we treat it defensively by closing the literal
-            # so a malformed source can't silently consume the rest of
-            # the file. Real javac would reject it.
+            # literals; close the literal defensively so a malformed
+            # source can't silently consume the rest of the file.
             if ch == "\n":
                 out.append("\n")
                 state = "code"
                 i += 1
                 continue
-            out.append(" ")
+            out.append(" " if strip_string_literals else ch)
             i += 1
             continue
 
         if state == "char":
             if escaped:
-                out.append(" ")
+                out.append(" " if strip_string_literals else ch)
                 escaped = False
                 i += 1
                 continue
             if ch == "\\":
-                out.append(" ")
+                out.append(" " if strip_string_literals else "\\")
                 escaped = True
                 i += 1
                 continue
             if ch == "'":
-                out.append(" ")
+                out.append(" " if strip_string_literals else "'")
                 state = "code"
                 i += 1
                 continue
@@ -165,35 +166,42 @@ def strip_java_lexical_noise(source: str) -> str:
                 state = "code"
                 i += 1
                 continue
-            out.append(" ")
+            out.append(" " if strip_string_literals else ch)
             i += 1
             continue
 
         # state == "text_block"
-        # The closing delimiter is exactly three consecutive double quotes.
-        # Inside a text block, single and double quotes (not preceded by
-        # the escape \") do NOT close the block unless three appear in a
-        # row. Backslash escapes work the same as regular strings, but the
-        # critical termination rule is the """ trigraph.
+        # The closing delimiter is exactly three consecutive double
+        # quotes. Inside a text block, single and double quotes (not
+        # preceded by the escape \\") do NOT close the block unless
+        # three appear in a row.
         if ch == "\\" and not escaped:
-            out.append(" ")
+            out.append(" " if strip_string_literals else "\\")
             escaped = True
             i += 1
             continue
         if escaped:
-            out.append("\n" if ch == "\n" else " ")
+            if ch == "\n":
+                out.append("\n")
+            else:
+                out.append(" " if strip_string_literals else ch)
             escaped = False
             i += 1
             continue
         if ch == '"' and nxt == '"' and nxt2 == '"':
-            out.extend(("   ",))
+            out.append("   " if strip_string_literals else '"""')
             state = "code"
             i += 3
             continue
-        out.append("\n" if ch == "\n" else " ")
+        if ch == "\n":
+            out.append("\n")
+        else:
+            out.append(" " if strip_string_literals else ch)
         i += 1
 
     return "".join(out)
+
+
 
 
 UNTRUSTED_INPUT_PATTERNS = (

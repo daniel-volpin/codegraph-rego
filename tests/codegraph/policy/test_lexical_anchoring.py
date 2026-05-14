@@ -235,5 +235,61 @@ public byte[] hash(String input) {
         self.assertNotIn("preparestatement", cleaned)
 
 
+class DualModeLexerTests(unittest.TestCase):
+    """``strip_string_literals=False`` retains literal contents while still
+    blanking comments. This is the *active-code* view the Python regex
+    pre-analysis layer needs in order to keep matching algorithm names
+    that legitimately live inside string-literal arguments.
+    """
+
+    def test_default_mode_strips_literals(self) -> None:
+        src = 'String s = "MD5";\n'
+        cleaned = strip_java_lexical_noise(src)
+        self.assertNotIn("MD5", cleaned)
+        # Default kwarg is True (substring-safe).
+        self.assertEqual(cleaned, strip_java_lexical_noise(src, strip_string_literals=True))
+
+    def test_active_mode_preserves_string_literal_contents(self) -> None:
+        src = 'MessageDigest.getInstance("MD5");\n'
+        active = strip_java_lexical_noise(src, strip_string_literals=False)
+        self.assertIn('"MD5"', active)
+        self.assertIn("MessageDigest.getInstance(", active)
+
+    def test_active_mode_still_strips_comments(self) -> None:
+        src = '// MD5 was here\nString s = "ok";\n'
+        active = strip_java_lexical_noise(src, strip_string_literals=False)
+        self.assertNotIn("MD5", active)  # comment was stripped
+        self.assertIn('"ok"', active)  # literal content preserved
+
+    def test_active_mode_preserves_text_block_contents(self) -> None:
+        src = '''String s = """
+                MessageDigest.getInstance("MD5")
+                """;
+'''
+        active = strip_java_lexical_noise(src, strip_string_literals=False)
+        # Text-block content is preserved in active mode.
+        self.assertIn("MessageDigest.getInstance", active)
+        self.assertIn('"MD5"', active)
+
+    def test_active_mode_preserves_char_literal_value(self) -> None:
+        src = "char c = 'M';\n"
+        active = strip_java_lexical_noise(src, strip_string_literals=False)
+        self.assertIn("'M'", active)
+
+    def test_both_modes_preserve_byte_length_and_line_count(self) -> None:
+        src = '''/**
+ * doc: MD5 is bad
+ */
+public byte[] hash() throws Exception {
+    String name = "MessageDigest.getInstance(\\"MD5\\")";
+    return MessageDigest.getInstance("MD5").digest(new byte[]{ 'a', 'b' });
+}
+'''
+        for mode in (True, False):
+            cleaned = strip_java_lexical_noise(src, strip_string_literals=mode)
+            self.assertEqual(len(cleaned), len(src), f"mode={mode}: byte length drifted")
+            self.assertEqual(cleaned.count("\n"), src.count("\n"), f"mode={mode}: line count drifted")
+
+
 if __name__ == "__main__":
     unittest.main()
