@@ -59,19 +59,20 @@ def strip_java_lexical_noise(source: str) -> str:
 
         if state == "code":
             if ch == "/" and nxt == "/":
-                out.extend(("  ",))
+                out.append("  ")
                 state = "line_comment"
                 i += 2
                 continue
             if ch == "/" and nxt == "*":
-                out.extend(("  ",))
+                out.append("  ")
                 state = "block_comment"
                 i += 2
                 continue
             # Text block start must come before string-literal check.
             if ch == '"' and nxt == '"' and nxt2 == '"':
-                out.extend(("   ",))
+                out.append("   ")
                 state = "text_block"
+                escaped = False
                 i += 3
                 continue
             if ch == '"':
@@ -91,8 +92,11 @@ def strip_java_lexical_noise(source: str) -> str:
             continue
 
         if state == "line_comment":
-            if ch == "\n":
-                out.append("\n")
+            # JLS §3.4: LF, CR, or CRLF terminate a line. Treat both LF
+            # and CR as comment terminators; preserve them verbatim so
+            # downstream line-counting stays correct for either style.
+            if ch == "\n" or ch == "\r":
+                out.append(ch)
                 state = "code"
                 i += 1
                 continue
@@ -102,7 +106,7 @@ def strip_java_lexical_noise(source: str) -> str:
 
         if state == "block_comment":
             if ch == "*" and nxt == "/":
-                out.extend(("  ",))
+                out.append("  ")
                 state = "code"
                 i += 2
                 continue

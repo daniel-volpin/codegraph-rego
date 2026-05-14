@@ -176,6 +176,36 @@ int x = 1;
         self.assertIn("int x = 1;", out)
 
 
+class LineTerminatorSpecComplianceTests(unittest.TestCase):
+    """JLS §3.4: a line terminator is LF, CR, or CRLF. A line comment
+    is terminated by any of these. The cleaner must preserve every
+    terminator verbatim so line-counting consumers (citation grounding,
+    progress markers) see the same line boundaries as the input.
+    """
+
+    def test_crlf_line_endings_preserve_length(self) -> None:
+        src = "// foo\r\nint x = 1;\r\n"
+        out = strip_java_lexical_noise(src)
+        self.assertEqual(len(out), len(src))
+        # Both \r and \n are preserved verbatim.
+        self.assertEqual(out[6], "\r")
+        self.assertEqual(out[7], "\n")
+
+    def test_cr_only_terminates_line_comment(self) -> None:
+        """Mac-classic line endings (CR only) are vanishingly rare in
+        modern Java but the JLS §3.4 spec mandates CR as a line
+        terminator. A token mentioned on a code line that follows a
+        \\r-terminated comment must still survive cleaning.
+        """
+        src = "// MD5 here\rint x = MessageDigest.getInstance(\"MD5\");"
+        out = strip_java_lexical_noise(src)
+        # The first 'MD5' lives in the comment and must be blanked.
+        # The second 'MD5' lives in a string literal and is also blanked.
+        # But the active code 'int x = MessageDigest.getInstance(' must
+        # survive — proving the CR did terminate the comment.
+        self.assertIn("int x = MessageDigest.getInstance(", out)
+
+
 class FpEliminationSmokeTests(unittest.TestCase):
     """End-to-end: the kind of source that motivated F10."""
 
