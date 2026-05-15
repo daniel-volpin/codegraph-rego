@@ -1,0 +1,20 @@
+rules:
+  - id: iso-a10-weak-hash
+    message: >-
+      Weak hash algorithm (MD5 or SHA-1) requested from MessageDigest.
+      Use SHA-256 or stronger.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      category: security
+      iso27001: A.10
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      codegraph_violation_id: ISO-A.10-WEAK-HASH
+    patterns:
+      - pattern-either:
+          - pattern: java.security.MessageDigest.getInstance("MD5")
+          - pattern: MessageDigest.getInstance("MD5")
+          - pattern: java.security.MessageDigest.getInstance("SHA1")
+          - pattern: MessageDigest.getInstance("SHA1")
+          - pattern: java.security.MessageDigest.getInstance("SHA-1")
+          - pattern: MessageDigest.getInstance("SHA-1")

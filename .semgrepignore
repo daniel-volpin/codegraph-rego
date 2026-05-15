@@ -1,0 +1,21 @@
+# Project-local semgrepignore.
+#
+# Semgrep's built-in default template (--semgrepignore-defaults) excludes
+# `tests/`, which would suppress our LexicalNoiseJava fixtures. The presence
+# of this file makes Semgrep use *this* list instead of the default,
+# allowing tests/fixtures/lexical_noise_v1/ to be scanned by the SemGrep
+# comparative baseline.
+#
+# We still want to keep large/irrelevant trees out of Semgrep scans.
+
+.git/
+.venv/
+node_modules/
+outputs/
+__pycache__/
+frontend/build/
+frontend/.next/
+frontend/dist/
+playwright-screenshots/
+*.min.js
+*.min.css

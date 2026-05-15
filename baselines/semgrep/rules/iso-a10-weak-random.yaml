@@ -1,0 +1,22 @@
+rules:
+  - id: iso-a10-weak-random
+    message: >-
+      Insecure randomness source used. Prefer java.security.SecureRandom for
+      any security-sensitive value (tokens, salts, IDs).
+    languages: [java]
+    severity: WARNING
+    metadata:
+      category: security
+      iso27001: A.10
+      cwe: "CWE-330: Use of Insufficiently Random Values"
+      codegraph_violation_id: ISO-A.10-WEAK-RANDOM
+    patterns:
+      - pattern-either:
+          - pattern: new java.util.Random()
+          - pattern: new Random()
+          - pattern: new java.util.Random($SEED)
+          - pattern: new Random($SEED)
+          - pattern: java.lang.Math.random()
+          - pattern: Math.random()
+          - pattern: java.util.concurrent.ThreadLocalRandom.current()
+          - pattern: ThreadLocalRandom.current()

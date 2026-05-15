@@ -1,0 +1,19 @@
+rules:
+  - id: iso-a8-cmd-injection
+    message: >-
+      OS command built via string concatenation. Pass argv as a constant array
+      and avoid invoking a shell.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      category: security
+      iso27001: A.8
+      cwe: "CWE-78: OS Command Injection"
+      codegraph_violation_id: ISO-A.8-CMD-INJECTION
+    patterns:
+      - pattern-either:
+          - pattern: Runtime.getRuntime().exec($X + $Y)
+          - pattern: java.lang.Runtime.getRuntime().exec($X + $Y)
+          - pattern: new ProcessBuilder($X + $Y)
+          - pattern: new java.lang.ProcessBuilder($X + $Y)
+          - pattern: $PB.command($X + $Y)

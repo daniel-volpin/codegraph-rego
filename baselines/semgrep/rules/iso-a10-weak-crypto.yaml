@@ -1,0 +1,17 @@
+rules:
+  - id: iso-a10-weak-crypto
+    message: >-
+      Weak cipher (DES, RC4, or ECB mode) requested from Cipher.getInstance.
+      Use AES with an authenticated mode (e.g. AES/GCM/NoPadding).
+    languages: [java]
+    severity: ERROR
+    metadata:
+      category: security
+      iso27001: A.10
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      codegraph_violation_id: ISO-A.10-WEAK-CRYPTO
+    patterns:
+      - pattern: Cipher.getInstance($ALGO)
+      - metavariable-regex:
+          metavariable: $ALGO
+          regex: '^"(DES|3DES|DESede|RC2|RC4|Blowfish)(/[^"]*)?"$|^"[^"]*?/ECB(/[^"]*)?"$'

@@ -1,0 +1,18 @@
+rules:
+  - id: iso-a8-ldap-injection
+    message: >-
+      LDAP search filter built via string concatenation. Escape input with
+      javax.naming filter escaping or use parameterised filters.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      category: security
+      iso27001: A.8
+      cwe: "CWE-90: LDAP Injection"
+      codegraph_violation_id: ISO-A.8-LDAP-INJECTION
+    patterns:
+      - pattern-either:
+          - pattern: $CTX.search($BASE, $FILTER + $X, $CTRL)
+          - pattern: $CTX.search($BASE, $X + $FILTER, $CTRL)
+          - pattern: $CTX.search($FILTER + $X, $CTRL)
+          - pattern: $CTX.search($X + $FILTER, $CTRL)
