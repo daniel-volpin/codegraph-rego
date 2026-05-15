@@ -40,7 +40,7 @@ def strip_java_lexical_noise(source: str, *, strip_string_literals: bool = True)
     Design note — F10 unification.
     Before F10, comment and literal stripping was applied *ad hoc*: a
     handful of Python analyzers (notably the INSECURE_RANDOM checks in
-    ``codegraph.policy.runtime.crypto``) called ``SourceSanitizer`` to
+    ``codegraph.policy.analysis.crypto``) called ``SourceSanitizer`` to
     strip comments and string literals before pattern matching, while
     the OPA/Rego rules and most other Python rules operated on raw
     source and were therefore vulnerable to lexical-noise false
