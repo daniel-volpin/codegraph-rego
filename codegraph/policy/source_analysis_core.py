@@ -37,6 +37,19 @@ def strip_java_lexical_noise(source: str, *, strip_string_literals: bool = True)
     * string literals (``"..."`` with ``\\"`` escape)
     * text blocks (``\"\"\" ... \"\"\"`` — Java 13+)
 
+    Design note — F10 unification.
+    Before F10, comment and literal stripping was applied *ad hoc*: a
+    handful of Python analyzers (notably the INSECURE_RANDOM checks in
+    ``codegraph.policy.runtime.crypto``) called ``SourceSanitizer`` to
+    strip comments and string literals before pattern matching, while
+    the OPA/Rego rules and most other Python rules operated on raw
+    source and were therefore vulnerable to lexical-noise false
+    positives. F10 unifies this pattern across *every* rule path:
+    Rego rules receive the substring-safe view, the Python regex
+    layer receives the active-code view, and the LLM/UI receive the
+    raw view. This means the contract is the same for all rules; there
+    are no longer selective callers of an opt-in sanitizer.
+
     Known limitations (acceptable for the OWASP Benchmark + JHipster /
     PetClinic real-world corpora):
 
