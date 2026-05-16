@@ -3,17 +3,12 @@
 from __future__ import annotations
 
 import csv
-import os
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
-from baselines.semgrep.runner import (
-    SemgrepFinding,
-    SemgrepRunResult,
-    run_semgrep_baseline,
-)
+from baselines.semgrep.runner import run_semgrep_baseline
 from codegraph.evaluation.owasp_lexical_eval import (
     CWE_TO_ISO,
     SUPPORTED_CWES,
@@ -22,6 +17,8 @@ from codegraph.evaluation.owasp_lexical_eval import (
     evaluate_owasp,
     format_markdown_summary,
     load_owasp_cases,
+    owasp_paths,
+    resolve_owasp_root,
 )
 
 
@@ -36,21 +33,6 @@ def _semgrep_available() -> bool:
     if shutil.which("semgrep"):
         return True
     return (PROJECT_ROOT / ".venv" / "bin" / "semgrep").is_file()
-
-
-def _resolve_owasp_root() -> Path | None:
-    env = os.environ.get("OWASP_BENCHMARK_ROOT")
-    candidates = []
-    if env:
-        candidates.append(Path(env))
-    candidates += [
-        PROJECT_ROOT / ".benchmark_cache" / "owasp-benchmark",
-        Path("/tmp/owasp-benchmark"),
-    ]
-    for c in candidates:
-        if c.is_dir() and (c / "expectedresults-1.2.csv").is_file():
-            return c
-    return None
 
 
 class CWEMappingTests(unittest.TestCase):
@@ -161,7 +143,7 @@ class SemgrepIndexingTests(unittest.TestCase):
 
 @unittest.skipUnless(_opa_available(), "opa CLI not installed")
 @unittest.skipUnless(_semgrep_available(), "semgrep CLI not installed")
-@unittest.skipUnless(_resolve_owasp_root() is not None, "OWASP Benchmark not on disk")
+@unittest.skipUnless(resolve_owasp_root() is not None, "OWASP Benchmark not on disk")
 class OwaspIntegrationTests(unittest.TestCase):
     """End-to-end on a stratified subset of the OWASP Benchmark.
 
@@ -175,13 +157,9 @@ class OwaspIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        owasp_root = _resolve_owasp_root()
+        owasp_root = resolve_owasp_root()
         assert owasp_root is not None  # guarded by skip
-        csv_path = owasp_root / "expectedresults-1.2.csv"
-        java_root = (
-            owasp_root / "src" / "main" / "java" / "org" / "owasp"
-            / "benchmark" / "testcode"
-        )
+        csv_path, java_root = owasp_paths(owasp_root)
         cls.cases = load_owasp_cases(
             csv_path, java_root, limit_per_cwe=cls.LIMIT_PER_CWE, seed=0
         )
@@ -281,8 +259,3 @@ class FormatMarkdownTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-# Silence ruff F401 for SemgrepFinding/SemgrepRunResult which the integration
-# test class instantiates via run_semgrep_baseline (not direct construction).
-_ = (SemgrepFinding, SemgrepRunResult)

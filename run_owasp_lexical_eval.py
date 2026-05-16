@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -35,28 +34,10 @@ from codegraph.evaluation.owasp_lexical_eval import (
     evaluate_owasp,
     format_markdown_summary,
     load_owasp_cases,
+    owasp_paths,
+    resolve_owasp_root,
 )
 from codegraph.evaluation.provenance import collect_provenance, write_provenance
-
-
-_PROJECT_ROOT = Path(__file__).resolve().parent
-_DEFAULT_CACHE = _PROJECT_ROOT / ".benchmark_cache" / "owasp-benchmark"
-_FALLBACK_TMP = Path("/tmp/owasp-benchmark")
-
-
-def _resolve_owasp_root(explicit: Path | None) -> Path | None:
-    candidates: list[Path] = []
-    if explicit is not None:
-        candidates.append(explicit)
-    env = os.environ.get("OWASP_BENCHMARK_ROOT")
-    if env:
-        candidates.append(Path(env))
-    candidates.append(_DEFAULT_CACHE)
-    candidates.append(_FALLBACK_TMP)
-    for c in candidates:
-        if c.is_dir() and (c / "expectedresults-1.2.csv").is_file():
-            return c
-    return None
 
 
 def _build_argparser() -> argparse.ArgumentParser:
@@ -80,7 +61,11 @@ def _build_argparser() -> argparse.ArgumentParser:
         "--limit-per-cwe",
         type=int,
         default=50,
-        help="Cap cases per CWE (default 50). Pass 0 for no cap (~2,092 cases, ~10 min serial).",
+        help=(
+            "Cap cases sampled per CWE (default: 50, total ~400 cases). "
+            "Pass 0 to disable the cap and evaluate the full ~2,092-case corpus "
+            "(~10 min serial; ~2 min on 8 cores with multiprocessing)."
+        ),
     )
     parser.add_argument(
         "--cwes",
@@ -113,21 +98,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_argparser()
     args = parser.parse_args(argv)
 
-    owasp_root = _resolve_owasp_root(args.owasp_root)
+    owasp_root = resolve_owasp_root(args.owasp_root)
     if owasp_root is None:
         print(
             "error: OWASP Benchmark not found.\n"
             "  Tried: --owasp-root, $OWASP_BENCHMARK_ROOT, "
-            f"{_DEFAULT_CACHE}, {_FALLBACK_TMP}.\n"
+            ".benchmark_cache/owasp-benchmark/, /tmp/owasp-benchmark/.\n"
             "  Clone with:\n"
             "    git clone --depth=1 https://github.com/OWASP-Benchmark/BenchmarkJava.git \\\n"
-            f"      {_DEFAULT_CACHE}",
+            "      .benchmark_cache/owasp-benchmark",
             file=sys.stderr,
         )
         return 2
 
-    csv_path = owasp_root / "expectedresults-1.2.csv"
-    java_root = owasp_root / "src" / "main" / "java" / "org" / "owasp" / "benchmark" / "testcode"
+    csv_path, java_root = owasp_paths(owasp_root)
     if not java_root.is_dir():
         print(f"error: OWASP Java testcode dir not found: {java_root}", file=sys.stderr)
         return 2

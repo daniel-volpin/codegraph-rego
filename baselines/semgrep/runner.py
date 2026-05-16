@@ -81,15 +81,23 @@ class SemgrepNotInstalledError(RuntimeError):
     """Raised when the ``semgrep`` CLI is not on PATH or in the venv."""
 
 
+_REPO_ROOT = PACKAGE_DIR.parent.parent
+_VENV_SEMGREP = _REPO_ROOT / ".venv" / "bin" / "semgrep"
+
+
 def _resolve_semgrep_binary(explicit: str | None = None) -> str:
+    """Return an executable semgrep path: explicit > PATH > project .venv."""
+
     if explicit:
         return explicit
-    for candidate in ("semgrep", str(PACKAGE_DIR.parent.parent / ".venv" / "bin" / "semgrep")):
-        resolved = shutil.which(candidate) or (candidate if Path(candidate).is_file() else None)
-        if resolved:
-            return resolved
+    on_path = shutil.which("semgrep")
+    if on_path:
+        return on_path
+    if _VENV_SEMGREP.is_file():
+        return str(_VENV_SEMGREP)
     raise SemgrepNotInstalledError(
-        "semgrep CLI not found. Install via `uv pip install --python .venv/bin/python semgrep`."
+        "semgrep CLI not found. Install via "
+        "`uv pip install --python .venv/bin/python semgrep`."
     )
 
 

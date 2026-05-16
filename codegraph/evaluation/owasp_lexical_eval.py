@@ -51,6 +51,46 @@ CWE_TO_ISO: Dict[str, str] = {
 SUPPORTED_CWES: frozenset[str] = frozenset(CWE_TO_ISO.keys())
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_OWASP_CACHE = _PROJECT_ROOT / ".benchmark_cache" / "owasp-benchmark"
+_FALLBACK_OWASP_TMP = Path("/tmp/owasp-benchmark")
+_OWASP_GROUND_TRUTH_BASENAME = "expectedresults-1.2.csv"
+
+
+def resolve_owasp_root(explicit: Path | None = None) -> Path | None:
+    """Locate an OWASP Benchmark v1.2 checkout.
+
+    Resolution order: ``explicit`` arg → ``$OWASP_BENCHMARK_ROOT`` →
+    ``.benchmark_cache/owasp-benchmark/`` → ``/tmp/owasp-benchmark/``.
+    Returns the first candidate whose ``expectedresults-1.2.csv`` exists,
+    or ``None`` if no candidate is usable.
+    """
+
+    candidates: list[Path] = []
+    if explicit is not None:
+        candidates.append(explicit)
+    env = os.environ.get("OWASP_BENCHMARK_ROOT")
+    if env:
+        candidates.append(Path(env))
+    candidates.append(_DEFAULT_OWASP_CACHE)
+    candidates.append(_FALLBACK_OWASP_TMP)
+    for c in candidates:
+        if c.is_dir() and (c / _OWASP_GROUND_TRUTH_BASENAME).is_file():
+            return c
+    return None
+
+
+def owasp_paths(owasp_root: Path) -> tuple[Path, Path]:
+    """Return ``(ground_truth_csv, java_testcode_root)`` under ``owasp_root``."""
+
+    csv_path = owasp_root / _OWASP_GROUND_TRUTH_BASENAME
+    java_root = (
+        owasp_root / "src" / "main" / "java"
+        / "org" / "owasp" / "benchmark" / "testcode"
+    )
+    return csv_path, java_root
+
+
 @dataclass(frozen=True)
 class OwaspCase:
     test_name: str  # e.g. BenchmarkTest00001
@@ -192,31 +232,6 @@ def load_owasp_cases(
 # ---------------------------------------------------------------------------
 
 
-def _detect_via_opa_for_owasp(
-    case: OwaspCase,
-    source: str,
-    *,
-    file_path: str,
-    f10_active: bool,
-) -> DetectionResult:
-    target_method = _extract_target_method(case.test_name, source)
-    bundle = _build_minimal_bundle(
-        source,
-        file_path=file_path,
-        target_method=target_method,
-        f10_active=f10_active,
-    )
-    violations = evaluate_bundle(bundle)
-    fired = _fired_ids(violations)
-    target_fired = case.target_violation_id in set(fired)
-    return DetectionResult(
-        case_id=case.test_name,
-        method="post_f10" if f10_active else "pre_f10",
-        fired_violation_ids=fired,
-        target_fired=target_fired,
-    )
-
-
 def _detect_via_semgrep_for_owasp(
     case: OwaspCase, semgrep_findings_by_file: Mapping[str, Sequence[str]]
 ) -> DetectionResult:
@@ -232,8 +247,16 @@ def _detect_via_semgrep_for_owasp(
     )
 
 
-def _worker_run(payload: Tuple[str, str, str, str]) -> Tuple[str, bool, tuple[str, ...], bool, tuple[str, ...]]:
-    """Module-level worker for multiprocessing: returns (test_name, target_fired_pre, fired_pre, target_fired_post, fired_post)."""
+def _worker_run(
+    payload: Tuple[str, str, str, str],
+) -> Tuple[str, bool, tuple[str, ...], bool, tuple[str, ...]]:
+    """Module-level worker for ``multiprocessing.Pool``.
+
+    Input  : ``(test_name, java_path, target_violation_id, rel_path)``.
+    Output : ``(test_name, pre_target_fired, pre_fired, post_target_fired, post_fired)``.
+
+    Defined at module scope so it pickles cleanly across worker processes.
+    """
 
     test_name, java_path_str, target_violation_id, rel_path = payload
     source = Path(java_path_str).read_text(encoding="utf-8")
@@ -368,16 +391,17 @@ def evaluate_owasp(
 # ---------------------------------------------------------------------------
 
 
-def _metrics_row(name_col: str, m: MethodMetrics) -> str:
+def _metrics_cells(m: MethodMetrics) -> str:
+    """Render the numeric / CI cells (no leading or trailing pipe)."""
+
     b = m.bootstrap
     p_ci = b.get("precision", {})
     r_ci = b.get("recall", {})
     f_ci = b.get("f1", {})
     return (
-        "| {col} | {tp} | {fp} | {tn} | {fn} | {p:.3f} | {r:.3f} | {f:.3f} "
-        "| [{p_lo:.3f}, {p_hi:.3f}] | [{r_lo:.3f}, {r_hi:.3f}] | [{f_lo:.3f}, {f_hi:.3f}] |"
+        " {tp} | {fp} | {tn} | {fn} | {p:.3f} | {r:.3f} | {f:.3f} "
+        "| [{p_lo:.3f}, {p_hi:.3f}] | [{r_lo:.3f}, {r_hi:.3f}] | [{f_lo:.3f}, {f_hi:.3f}] "
     ).format(
-        col=name_col,
         tp=m.tp,
         fp=m.fp,
         tn=m.tn,
@@ -406,7 +430,7 @@ def format_markdown_summary(report: OwaspEvalReport) -> str:
         "|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|\n"
     )
     overall_rows = "\n".join(
-        _metrics_row(name, report.overall[name]) for name in METHODS
+        f"| {name} |{_metrics_cells(report.overall[name])}|" for name in METHODS
     )
 
     per_cwe_header = (
@@ -418,16 +442,9 @@ def format_markdown_summary(report: OwaspEvalReport) -> str:
     per_cwe_rows = []
     for cwe in sorted(report.per_cwe.keys(), key=lambda c: int(c)):
         iso = CWE_TO_ISO.get(cwe, "?")
-        inner = report.per_cwe[cwe]
         for method in METHODS:
-            m = inner[method]
-            per_cwe_rows.append(
-                "| CWE-{cwe} | {iso} {trail}".format(
-                    cwe=cwe,
-                    iso=iso,
-                    trail=_metrics_row(method, m)[1:],  # strip the leading "|"
-                )
-            )
+            cells = _metrics_cells(report.per_cwe[cwe][method])
+            per_cwe_rows.append(f"| CWE-{cwe} | {iso} | {method} |{cells}|")
 
     return (
         header
