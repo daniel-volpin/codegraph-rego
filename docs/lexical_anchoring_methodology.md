@@ -121,19 +121,67 @@ The OWASP eval has two structural roles in the thesis:
 
 ## 4. Metrics and uncertainty
 
+### 4.1 Per-case outcomes
+
 * Per-case label: `real_vulnerability` (OWASP) or `expected ∈ {positive,
   negative}` (LexicalNoiseJava).
 * Per-case prediction: target ISO violation_id fired by the method
-  (pre_f10 / post_f10 / semgrep).
+  (pre_f10 / post_f10 / semgrep / [optional] semgrep_registry).
 * Aggregates: TP / FP / TN / FN → Precision, Recall, F1.
-* Confidence intervals: percentile bootstrap (2,000 resamples by
-  default, seeded) over per-case outcomes (`bootstrap_prf_ci` in
-  `codegraph/evaluation/uncertainty.py`). The same resample
-  partition feeds all three metrics so the intervals are jointly
-  comparable.
-* Provenance: every run writes `provenance.json` with the Git SHA,
-  OPA version, Python interpreter, manifest sha256, seed, and the
-  metrics summary (`codegraph/evaluation/provenance.py`).
+
+### 4.2 Within-run uncertainty
+
+Percentile bootstrap (2,000 resamples by default, seeded) over per-case
+outcomes (`bootstrap_prf_ci` in `codegraph/evaluation/uncertainty.py`).
+The same resample partition feeds Precision, Recall, and F1 so the
+intervals are jointly comparable.
+
+### 4.3 Paired classifier comparison
+
+For the headline F10 contract (post_f10 vs pre_f10) we report two
+paired statistics directly tied to research-level convention for
+classifier comparison on a shared corpus:
+
+* **Exact-binomial McNemar's test** (`paired_classifier_mcnemar`):
+  counts discordant pairs `b` (pre fires, post doesn't) and `c`
+  (post fires, pre doesn't). Under H₀ that both classifiers are
+  equally likely to err, `b ~ Binomial(b+c, 0.5)`; the two-sided
+  exact p-value is `2 · min(P(X≤b), P(X≥b))`. The exact form
+  (rather than the χ² approximation) is robust at small n and
+  handles `b+c=0` cleanly via `test_defined=False` — the expected
+  outcome on the OWASP synthetic corpus (see §6).
+* **Paired-bootstrap effect sizes**
+  (`bootstrap_paired_delta_ci`) for ΔFPR and ΔFNR. Resamples each
+  pair with replacement (same indices for both classifiers, so the
+  paired structure is preserved), then computes
+  `metric(B) − metric(A)` on the resampled set and reports the
+  percentile CI. ΔFPR's CI excluding zero implies F10's FP
+  reduction is not a sampling artefact.
+
+Three scopes are reported in every run: `overall` (every case),
+`fp_class` (NEG cases only — the design target of F10), and one
+per stratum (`stratum:line_comment`, `cwe:22`, etc.). Per-stratum
+p-values at n=5-6 are often above α=0.05 even when the effect is
+real; we read these as *descriptive*, not *confirmatory*, and rely
+on the overall test for significance.
+
+### 4.4 Across-seed stability (multi-seed)
+
+`run_owasp_multiseed_eval.py` runs the OWASP evaluator N times with
+different sampling seeds and reports across-seed mean ± standard
+deviation on every method's Precision / Recall / F1. This is
+orthogonal to the within-run bootstrap: bootstrap measures resample
+noise inside one stratified sample; multi-seed measures sensitivity
+to *which* stratified sample was drawn. Both being tight is what
+"stable result" means in SAST eval practice.
+
+### 4.5 Provenance
+
+Every run writes `provenance.json` with the Git SHA of CodeGraph,
+the OPA version, the Python interpreter, the manifest sha256, the
+seed, the metrics summary, and — for OWASP runs — the
+`owasp_benchmark_sha` (the BenchmarkJava commit on disk, since the
+v1.2 tag does not fully pin the corpus).
 
 ## 5. Reproducibility
 
@@ -147,6 +195,12 @@ the integration tests skip cleanly when either is absent.
     --output-dir outputs/lexical_noise_eval_v1 \
     --seed 42
 
+# LexicalNoiseJava with optional SemGrep registry 4th column (needs network)
+.venv/bin/python run_lexical_noise_eval.py \
+    --output-dir outputs/lexical_noise_eval_v1 \
+    --seed 42 \
+    --semgrep-registry-config p/java
+
 # OWASP Benchmark — default 50 cases per CWE (~400 cases), ~1 min on
 # 8 cores with multiprocessing
 git clone --depth=1 https://github.com/OWASP-Benchmark/BenchmarkJava.git \
@@ -155,11 +209,19 @@ git clone --depth=1 https://github.com/OWASP-Benchmark/BenchmarkJava.git \
     --owasp-root .benchmark_cache/owasp-benchmark \
     --output-dir outputs/owasp_lexical_eval_v1 \
     --limit-per-cwe 50 --seed 7
+
+# OWASP Benchmark multi-seed stability — ~2 min on 8 cores
+.venv/bin/python run_owasp_multiseed_eval.py \
+    --owasp-root .benchmark_cache/owasp-benchmark \
+    --output-dir outputs/owasp_multiseed_v1 \
+    --seeds 7,13,23,42,101 --limit-per-cwe 50
 ```
 
 ## 6. Headline results
 
-### LexicalNoiseJava v1 (n=30)
+### LexicalNoiseJava v1 (n=30, seed=42)
+
+#### Detection metrics
 
 | Method    |  TP |  FP |  TN |  FN |   P   |   R   |   F1  |
 |-----------|----:|----:|----:|----:|------:|------:|------:|
@@ -175,6 +237,23 @@ candidate F11 follow-up. 2 POSITIVE cases (L12 SQL, L24 PATH) involve
 variable indirection the regex layer cannot follow; SemGrep catches
 both via AST matching.
 
+#### Paired statistical test (post_f10 vs pre_f10)
+
+| Scope | b (improvements) | c (regressions) | McNemar p (exact) | ΔFPR (post − pre) | ΔFPR 95 % CI |
+|---|---:|---:|---:|---:|---|
+| overall          | 8 | 0 | **0.0078** | −0.320 | [−0.478, −0.154] |
+| fp_class         | 8 | 0 | **0.0078** | −0.320 | [−0.478, −0.154] |
+| stratum:line_comment  | 4 | 0 | 0.1250 | −0.800 | [−1.000, −0.400] |
+| stratum:block_comment | 4 | 0 | 0.1250 | −0.800 | [−1.000, −0.400] |
+
+The overall and FP-class tests are significant at α=0.05 (exact
+p ≈ 0.0078); the ΔFPR 95 % CI does not cross zero. Per-stratum
+McNemar at n=5 is underpowered (p ≈ 0.125 with b=4, c=0 — the largest
+possible discordant-pair count gives p = 2·0.5⁴ = 0.125, the minimum
+achievable at this n); the per-stratum effect-size CIs of ΔFPR =
+−0.800 [−1.000, −0.400] communicate the same finding through magnitude
+rather than significance.
+
 ### OWASP Benchmark v1.2 file-level (n=385, 50 per CWE × 8 CWEs, seed=7)
 
 | Method    |  TP |  FP |  TN |  FN |   P   |   R   |   F1  |
@@ -186,13 +265,19 @@ both via AST matching.
 **F10 produces zero deltas on every OWASP case** in the published run
 (385 cases) — and the regression-safety property is independently
 pinned in CI by `test_f10_does_not_change_owasp_outcomes` on a
-stratified 80-case sample (`limit_per_cwe=10`). An empirical scan over
-the full 2,740-case corpus confirms the underlying reason: zero
-comment occurrences of any of `MD5`, `MessageDigest`, `executeQuery`,
-`ProcessBuilder`, `new Random`, `XPathFactory` — i.e. the
-lexical-noise FP class F10 targets is absent from OWASP Benchmark.
-This is the data-grounded confirmation of the synthetic-vs-real
-gap [4].
+stratified 80-case sample (`limit_per_cwe=10`). The McNemar test
+returns `test_defined=False` (b=c=0) and the ΔFPR / ΔFNR bootstrap
+CIs are exactly `[0.000, 0.000]` on every scope (overall, fp_class,
+and each CWE individually) — the regression-safety claim is
+substantiated as both a hypothesis-test result *and* an effect-size
+result.
+
+An empirical scan over the full 2,740-case corpus confirms the
+underlying reason: zero comment occurrences of any of `MD5`,
+`MessageDigest`, `executeQuery`, `ProcessBuilder`, `new Random`,
+`XPathFactory` — i.e. the lexical-noise FP class F10 targets is
+absent from OWASP Benchmark. This is the data-grounded confirmation
+of the synthetic-vs-real gap [4].
 
 The CodeGraph file-level F1 = 0.892 is the *lower bound* for the
 production full-pipeline number (F1 = 0.953); graph context and
@@ -232,8 +317,21 @@ not *recall on synthetic-benchmark wrappers*.
    intervention: anchor the regex layer on call-site context.
 6. **Bootstrap CIs assume per-case independence.** OWASP test cases
    are programmatically generated and share boilerplate; the true
-   effective sample size is smaller than n. Future runs should
-   block-bootstrap by `category` for additional robustness.
+   effective sample size is smaller than n. The multi-seed evaluator
+   (`run_owasp_multiseed_eval.py`) partially addresses this by
+   resampling at the *stratified-sample* level rather than the
+   per-case level — across-seed stdev complements the within-run
+   bootstrap CI. A formal block-bootstrap by CWE category remains
+   future work; at n=8 categories the block-bootstrap CI would be
+   too wide to be useful as a primary statistic.
+7. **SemGrep registry comparison is opt-in and LexicalNoiseJava-only.**
+   The 4th-method column (`--semgrep-registry-config p/java` or
+   similar) requires network access and uses a "did any registry
+   rule fire on this file?" semantic — registry rule IDs do not
+   deterministically map to CodeGraph violation IDs, so per-CWE
+   semantic alignment for OWASP would require parsing each
+   finding's `metadata.cwe` field. That extension is deferred to a
+   follow-up.
 
 ## 8. Positioning vs adjacent work
 
