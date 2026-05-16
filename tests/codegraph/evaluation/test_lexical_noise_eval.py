@@ -307,6 +307,63 @@ class EvaluateBenchmarkIntegrationTests(unittest.TestCase):
                     msg=f"No pre-F10 FP fired in stratum {stratum}; benchmark non-diagnostic",
                 )
 
+    def test_mcnemar_overall_is_significant_for_f10(self) -> None:
+        """Headline statistical claim: post_f10 produces strictly fewer
+        firings than pre_f10 on LexicalNoiseJava, with significant
+        McNemar p-value (≤ 0.05 at the overall scope).
+        """
+
+        overall = next(p for p in self.report.paired if p.scope == "overall")
+        self.assertTrue(overall.mcnemar["test_defined"])
+        self.assertLessEqual(
+            overall.mcnemar["p_value"],
+            0.05,
+            msg=f"McNemar p = {overall.mcnemar['p_value']:.4f} not significant",
+        )
+        # Direction: b (pre fired, post didn't) must exceed c (regressions).
+        self.assertGreater(overall.mcnemar["b"], overall.mcnemar["c"])
+
+    def test_delta_fpr_ci_does_not_cross_zero(self) -> None:
+        """ΔFPR for post − pre must be strictly negative — its 95% CI must
+        sit entirely below zero, confirming F10's FP reduction is not a
+        sampling artefact.
+        """
+
+        overall = next(p for p in self.report.paired if p.scope == "overall")
+        delta = overall.delta_fpr
+        self.assertLess(delta["point"], 0.0)
+        self.assertLess(delta["ci_high"], 0.0)
+
+    def test_per_stratum_decomposition_partitions_all_cases(self) -> None:
+        """Sum of n_cases across strata must equal the total. The five
+        canonical fp_source strata must all be present.
+        """
+
+        self.assertEqual(
+            set(self.report.per_stratum.keys()),
+            {"line_comment", "block_comment", "string_literal", "char_literal", "text_block"},
+        )
+        total = sum(s.n_cases for s in self.report.per_stratum.values())
+        self.assertEqual(total, self.report.n_cases)
+
+    def test_comment_strata_show_clean_f10_improvement_in_per_stratum(self) -> None:
+        """For each comment stratum, post_f10 must have strictly fewer FPs
+        than pre_f10 (the substantive claim of F10's design).
+        """
+
+        for stratum_name in ("line_comment", "block_comment"):
+            with self.subTest(stratum=stratum_name):
+                strat = self.report.per_stratum[stratum_name]
+                self.assertLess(
+                    strat.methods["post_f10"].fp,
+                    strat.methods["pre_f10"].fp,
+                    msg=(
+                        f"{stratum_name}: pre_f10 FP = "
+                        f"{strat.methods['pre_f10'].fp}, "
+                        f"post_f10 FP = {strat.methods['post_f10'].fp}"
+                    ),
+                )
+
 
 class FormatMarkdownTests(unittest.TestCase):
     def test_renders_table_header_and_methods(self) -> None:

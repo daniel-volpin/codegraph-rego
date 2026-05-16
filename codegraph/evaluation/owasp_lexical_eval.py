@@ -31,9 +31,14 @@ from codegraph.evaluation.lexical_noise_eval import (
     METHODS,
     DetectionResult,
     MethodMetrics,
+    PairedComparison,
     _build_minimal_bundle,
     _extract_target_method,
     _fired_ids,
+)
+from codegraph.evaluation.uncertainty import (
+    bootstrap_paired_delta_ci,
+    paired_classifier_mcnemar,
 )
 from codegraph.policy.runtime.opa import evaluate_bundle
 
@@ -118,6 +123,7 @@ class OwaspEvalReport:
     rows: tuple[OwaspCaseRow, ...]
     overall: Mapping[str, MethodMetrics]
     per_cwe: Mapping[str, Mapping[str, MethodMetrics]]
+    paired: tuple[PairedComparison, ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -129,6 +135,17 @@ class OwaspEvalReport:
                 cwe: {name: _metrics_to_dict(m) for name, m in inner.items()}
                 for cwe, inner in self.per_cwe.items()
             },
+            "paired": [
+                {
+                    "method_a": p.method_a,
+                    "method_b": p.method_b,
+                    "scope": p.scope,
+                    "mcnemar": dict(p.mcnemar),
+                    "delta_fpr": dict(p.delta_fpr),
+                    "delta_fnr": dict(p.delta_fnr),
+                }
+                for p in self.paired
+            ],
             "rows": [
                 {
                     "test_name": row.case.test_name,
@@ -381,14 +398,77 @@ def evaluate_owasp(
         cwe_rows = [r for r in rows if r.case.cwe == cwe]
         per_cwe[cwe] = _aggregate_metrics(cwe_rows, n_resamples=n_resamples, seed=seed)
 
+    paired = _compute_owasp_paired(rows, n_resamples=n_resamples, seed=seed)
+
     return OwaspEvalReport(
         benchmark_id=benchmark_id,
         n_cases=len(rows),
         cwes_evaluated=tuple(sorted({c.cwe for c in cases})),
+        paired=paired,
         rows=tuple(rows),
         overall=overall,
         per_cwe=per_cwe,
     )
+
+
+def _compute_owasp_paired(
+    rows: Sequence[OwaspCaseRow],
+    *,
+    n_resamples: int,
+    seed: int,
+) -> tuple[PairedComparison, ...]:
+    """Paired tests for the OWASP F10 contract: pre_f10 vs post_f10.
+
+    Three scopes: overall, fp_class (NEG cases only), and one per CWE
+    family. The expected b = c = 0 across the whole corpus is the
+    regression-safety claim — McNemar will report ``test_defined=False``
+    on cases with no disagreements, which is the right outcome.
+    """
+
+    def triples(rs: Sequence[OwaspCaseRow]) -> list[tuple[bool, bool, bool]]:
+        return [
+            (
+                r.by_method["pre_f10"].target_fired,
+                r.by_method["post_f10"].target_fired,
+                r.case.real_vulnerability,
+            )
+            for r in rs
+        ]
+
+    all_paired = triples(rows)
+    out: list[PairedComparison] = []
+    for scope, restrict in (("overall", "all"), ("fp_class", "fp_class")):
+        out.append(
+            PairedComparison(
+                method_a="pre_f10",
+                method_b="post_f10",
+                scope=scope,
+                mcnemar=paired_classifier_mcnemar(all_paired, restrict_to=restrict),
+                delta_fpr=bootstrap_paired_delta_ci(
+                    all_paired, metric="fpr", n_resamples=n_resamples, seed=seed
+                ),
+                delta_fnr=bootstrap_paired_delta_ci(
+                    all_paired, metric="fnr", n_resamples=n_resamples, seed=seed
+                ),
+            )
+        )
+    for cwe in sorted({r.case.cwe for r in rows}, key=lambda c: int(c)):
+        cwe_paired = triples([r for r in rows if r.case.cwe == cwe])
+        out.append(
+            PairedComparison(
+                method_a="pre_f10",
+                method_b="post_f10",
+                scope=f"cwe:{cwe}",
+                mcnemar=paired_classifier_mcnemar(cwe_paired),
+                delta_fpr=bootstrap_paired_delta_ci(
+                    cwe_paired, metric="fpr", n_resamples=n_resamples, seed=seed
+                ),
+                delta_fnr=bootstrap_paired_delta_ci(
+                    cwe_paired, metric="fnr", n_resamples=n_resamples, seed=seed
+                ),
+            )
+        )
+    return tuple(out)
 
 
 # ---------------------------------------------------------------------------
@@ -451,10 +531,48 @@ def format_markdown_summary(report: OwaspEvalReport) -> str:
             cells = _metrics_cells(report.per_cwe[cwe][method])
             per_cwe_rows.append(f"| CWE-{cwe} | {iso} | {method} |{cells}|")
 
+    paired_section = _format_owasp_paired_section(report)
+
     return (
         header
         + overall_rows
         + per_cwe_header
         + "\n".join(per_cwe_rows)
         + "\n"
+        + paired_section
     )
+
+
+def _format_owasp_paired_section(report: OwaspEvalReport) -> str:
+    if not report.paired:
+        return ""
+    lines = [
+        "\n\n## Effect of F10 (post_f10 vs pre_f10)\n",
+        "Per-case paired analysis. `n/a (b=c=0)` is the expected cell "
+        "value for the OWASP synthetic corpus — F10 produces zero deltas "
+        "because OWASP lacks the lexical-noise FP class F10 targets.\n",
+        "| Scope | b (improvements) | c (regressions) | McNemar p (exact) "
+        "| ΔFPR (post − pre) | ΔFPR 95% CI | ΔFNR (post − pre) | ΔFNR 95% CI |",
+        "|---|---:|---:|---|---:|---|---:|---|",
+    ]
+    for pc in report.paired:
+        mc = pc.mcnemar
+        fpr = pc.delta_fpr
+        fnr = pc.delta_fnr
+        p_cell = f"{mc['p_value']:.4f}" if mc.get("test_defined") else "n/a (b=c=0)"
+        lines.append(
+            "| {scope} | {b} | {c} | {p} | {dfpr:+.3f} | [{flo:+.3f}, {fhi:+.3f}] "
+            "| {dfnr:+.3f} | [{nlo:+.3f}, {nhi:+.3f}] |".format(
+                scope=pc.scope,
+                b=mc.get("b", 0),
+                c=mc.get("c", 0),
+                p=p_cell,
+                dfpr=fpr.get("point", 0.0),
+                flo=fpr.get("ci_low", 0.0),
+                fhi=fpr.get("ci_high", 0.0),
+                dfnr=fnr.get("point", 0.0),
+                nlo=fnr.get("ci_low", 0.0),
+                nhi=fnr.get("ci_high", 0.0),
+            )
+        )
+    return "\n".join(lines) + "\n"

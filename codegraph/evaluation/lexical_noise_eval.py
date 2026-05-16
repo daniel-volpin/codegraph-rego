@@ -28,7 +28,11 @@ from codegraph.evaluation.lexical_noise import (
     LexicalNoiseBenchmark,
     LexicalNoiseCase,
 )
-from codegraph.evaluation.uncertainty import bootstrap_prf_ci
+from codegraph.evaluation.uncertainty import (
+    bootstrap_paired_delta_ci,
+    bootstrap_prf_ci,
+    paired_classifier_mcnemar,
+)
 from codegraph.policy.runtime.opa import evaluate_bundle
 from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.policy.source_analysis_core import strip_java_lexical_noise
@@ -111,11 +115,36 @@ class MethodMetrics:
 
 
 @dataclass(frozen=True)
+class StratumMetrics:
+    """Metrics for one ``fp_source`` stratum (e.g. ``line_comment``)."""
+
+    stratum: str
+    n_cases: int
+    n_positive: int
+    n_negative: int
+    methods: Mapping[str, MethodMetrics]
+
+
+@dataclass(frozen=True)
+class PairedComparison:
+    """Paired classifier comparison: McNemar's exact + ΔFPR / ΔFNR CIs."""
+
+    method_a: str
+    method_b: str
+    scope: str  # "overall" | "fp_class" | per-stratum name
+    mcnemar: Mapping[str, Any]
+    delta_fpr: Mapping[str, Any]
+    delta_fnr: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
 class EvalReport:
     benchmark_id: str
     n_cases: int
     rows: tuple[CaseRow, ...]
     metrics: Mapping[str, MethodMetrics]
+    per_stratum: Mapping[str, StratumMetrics] = field(default_factory=dict)
+    paired: tuple[PairedComparison, ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -128,6 +157,37 @@ class EvalReport:
                 }
                 for name, m in self.metrics.items()
             },
+            "per_stratum": {
+                stratum: {
+                    "stratum": s.stratum,
+                    "n_cases": s.n_cases,
+                    "n_positive": s.n_positive,
+                    "n_negative": s.n_negative,
+                    "methods": {
+                        name: {
+                            **{
+                                k: v
+                                for k, v in asdict(m).items()
+                                if k != "bootstrap"
+                            },
+                            "bootstrap": dict(m.bootstrap),
+                        }
+                        for name, m in s.methods.items()
+                    },
+                }
+                for stratum, s in self.per_stratum.items()
+            },
+            "paired": [
+                {
+                    "method_a": p.method_a,
+                    "method_b": p.method_b,
+                    "scope": p.scope,
+                    "mcnemar": dict(p.mcnemar),
+                    "delta_fpr": dict(p.delta_fpr),
+                    "delta_fnr": dict(p.delta_fnr),
+                }
+                for p in self.paired
+            ],
             "rows": [
                 {
                     "case_id": row.case_id,
@@ -343,12 +403,152 @@ def evaluate_benchmark(
         )
         for method in METHODS
     }
+
+    per_stratum = _compute_per_stratum(rows, n_resamples=n_resamples, seed=seed)
+    paired = _compute_paired_comparisons(
+        rows, n_resamples=n_resamples, seed=seed, per_stratum=per_stratum
+    )
+
     return EvalReport(
         benchmark_id=benchmark.benchmark_id,
         n_cases=len(rows),
         rows=tuple(rows),
         metrics=metrics,
+        per_stratum=per_stratum,
+        paired=paired,
     )
+
+
+def _compute_per_stratum(
+    rows: Sequence[CaseRow],
+    *,
+    n_resamples: int,
+    seed: int,
+) -> Dict[str, StratumMetrics]:
+    """Group rows by ``fp_source`` and compute per-stratum metrics.
+
+    Per-stratum bootstrap CIs are intentionally retained (rather than
+    suppressed): they will be wide at n≈5-6 per stratum, which honestly
+    communicates that single-stratum point estimates are imprecise. The
+    diagnostic value is the *pattern* — F10 should eliminate FPs in
+    comment strata while leaving literal / text-block strata untouched.
+    """
+
+    grouped: Dict[str, list[CaseRow]] = {}
+    for row in rows:
+        grouped.setdefault(row.fp_source, []).append(row)
+
+    out: Dict[str, StratumMetrics] = {}
+    for stratum in sorted(grouped.keys()):
+        s_rows = grouped[stratum]
+        s_methods: Dict[str, MethodMetrics] = {}
+        for method in METHODS:
+            outcomes = [
+                (r.by_method[method].target_fired, r.expected == "positive")
+                for r in s_rows
+            ]
+            s_methods[method] = MethodMetrics.from_outcomes(
+                method, outcomes, n_resamples=n_resamples, seed=seed
+            )
+        out[stratum] = StratumMetrics(
+            stratum=stratum,
+            n_cases=len(s_rows),
+            n_positive=sum(1 for r in s_rows if r.expected == "positive"),
+            n_negative=sum(1 for r in s_rows if r.expected == "negative"),
+            methods=s_methods,
+        )
+    return out
+
+
+def _paired_triples(
+    rows: Sequence[CaseRow], method_a: str, method_b: str
+) -> list[tuple[bool, bool, bool]]:
+    return [
+        (
+            row.by_method[method_a].target_fired,
+            row.by_method[method_b].target_fired,
+            row.expected == "positive",
+        )
+        for row in rows
+    ]
+
+
+def _compute_paired_comparisons(
+    rows: Sequence[CaseRow],
+    *,
+    n_resamples: int,
+    seed: int,
+    per_stratum: Mapping[str, StratumMetrics],
+) -> tuple[PairedComparison, ...]:
+    """Paired tests for the headline F10 contract: post_f10 vs pre_f10.
+
+    Three scopes:
+      * ``overall`` — every case, two-sided McNemar's, ΔFPR / ΔFNR.
+      * ``fp_class`` — only NEG cases, FP-class restricted McNemar
+        (asks "did F10 reduce FPs significantly?"), ΔFPR / ΔFNR.
+      * ``stratum:<fp_source>`` — one per lexical stratum, scoped to that
+        stratum's cases. Diagnostic decomposition; n≈5-6 per stratum, so
+        per-stratum p-values may not reach α=0.05 even when the effect is
+        real — read these as descriptive, not as confirmatory tests.
+    """
+
+    method_a, method_b = "pre_f10", "post_f10"
+    out: list[PairedComparison] = []
+
+    all_paired = _paired_triples(rows, method_a, method_b)
+    out.append(
+        PairedComparison(
+            method_a=method_a,
+            method_b=method_b,
+            scope="overall",
+            mcnemar=paired_classifier_mcnemar(all_paired),
+            delta_fpr=bootstrap_paired_delta_ci(
+                all_paired, metric="fpr", n_resamples=n_resamples, seed=seed
+            ),
+            delta_fnr=bootstrap_paired_delta_ci(
+                all_paired, metric="fnr", n_resamples=n_resamples, seed=seed
+            ),
+        )
+    )
+    out.append(
+        PairedComparison(
+            method_a=method_a,
+            method_b=method_b,
+            scope="fp_class",
+            mcnemar=paired_classifier_mcnemar(all_paired, restrict_to="fp_class"),
+            delta_fpr=bootstrap_paired_delta_ci(
+                all_paired, metric="fpr", n_resamples=n_resamples, seed=seed
+            ),
+            delta_fnr=bootstrap_paired_delta_ci(
+                all_paired, metric="fnr", n_resamples=n_resamples, seed=seed
+            ),
+        )
+    )
+
+    for stratum in sorted(per_stratum.keys()):
+        s_rows = [r for r in rows if r.fp_source == stratum]
+        s_paired = _paired_triples(s_rows, method_a, method_b)
+        out.append(
+            PairedComparison(
+                method_a=method_a,
+                method_b=method_b,
+                scope=f"stratum:{stratum}",
+                mcnemar=paired_classifier_mcnemar(s_paired),
+                delta_fpr=bootstrap_paired_delta_ci(
+                    s_paired,
+                    metric="fpr",
+                    n_resamples=n_resamples,
+                    seed=seed,
+                ),
+                delta_fnr=bootstrap_paired_delta_ci(
+                    s_paired,
+                    metric="fnr",
+                    n_resamples=n_resamples,
+                    seed=seed,
+                ),
+            )
+        )
+    return tuple(out)
 
 
 def format_markdown_summary(report: EvalReport) -> str:
@@ -387,14 +587,99 @@ def format_markdown_summary(report: EvalReport) -> str:
         )
     table = header + "\n".join(rows) + "\n"
 
-    per_case = (
-        "\n## Per-case verdicts\n\n"
-        "| Case | fp_source | expected | target | pre_f10 | post_f10 | semgrep |\n"
-        "|---|---|---|---|---|---|---|\n"
+    return (
+        table
+        + _format_paired_section(report)
+        + _format_per_stratum_section(report)
+        + _format_per_case_section(report)
     )
+
+
+def _format_paired_section(report: EvalReport) -> str:
+    if not report.paired:
+        return ""
+    lines = [
+        "\n## Effect of F10 (post_f10 vs pre_f10)\n",
+        "Per-case paired analysis. McNemar's exact binomial test "
+        "is reported for ΔFP and Δ(any) — for n_disagreements = 0 "
+        "the test is undefined and the cell reads `n/a (b=c=0)`. "
+        "Δ rates are bootstrapped on the *paired* sample.\n",
+        "| Scope | b (improvements) | c (regressions) | McNemar p (exact) "
+        "| ΔFPR (post − pre) | ΔFPR 95% CI | ΔFNR (post − pre) | ΔFNR 95% CI |",
+        "|---|---:|---:|---|---:|---|---:|---|",
+    ]
+    for pc in report.paired:
+        mc = pc.mcnemar
+        fpr = pc.delta_fpr
+        fnr = pc.delta_fnr
+        if mc.get("test_defined"):
+            p_cell = f"{mc['p_value']:.4f}"
+        else:
+            p_cell = "n/a (b=c=0)"
+        lines.append(
+            "| {scope} | {b} | {c} | {p} | {dfpr:+.3f} | [{flo:+.3f}, {fhi:+.3f}] "
+            "| {dfnr:+.3f} | [{nlo:+.3f}, {nhi:+.3f}] |".format(
+                scope=pc.scope,
+                b=mc.get("b", 0),
+                c=mc.get("c", 0),
+                p=p_cell,
+                dfpr=fpr.get("point", 0.0),
+                flo=fpr.get("ci_low", 0.0),
+                fhi=fpr.get("ci_high", 0.0),
+                dfnr=fnr.get("point", 0.0),
+                nlo=fnr.get("ci_low", 0.0),
+                nhi=fnr.get("ci_high", 0.0),
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _format_per_stratum_section(report: EvalReport) -> str:
+    if not report.per_stratum:
+        return ""
+    lines = [
+        "\n## Per-stratum decomposition (by fp_source)\n",
+        "Diagnostic breakdown of F10's effect by lexical-noise source type. "
+        "Single-stratum CIs are wide at n≈5-6 — read the *pattern* (comment "
+        "strata cleaned, literal / text-block strata unchanged), not the "
+        "point estimates.\n",
+        "| Stratum | n | n_pos | n_neg | Method | TP | FP | TN | FN "
+        "| Precision | Recall | F1 |",
+        "|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for stratum in sorted(report.per_stratum.keys()):
+        s = report.per_stratum[stratum]
+        for method in METHODS:
+            m = s.methods[method]
+            lines.append(
+                "| {st} | {n} | {npos} | {nneg} | {meth} | {tp} | {fp} | {tn} | {fn} "
+                "| {p:.3f} | {r:.3f} | {f:.3f} |".format(
+                    st=s.stratum,
+                    n=s.n_cases,
+                    npos=s.n_positive,
+                    nneg=s.n_negative,
+                    meth=method,
+                    tp=m.tp,
+                    fp=m.fp,
+                    tn=m.tn,
+                    fn=m.fn,
+                    p=m.precision,
+                    r=m.recall,
+                    f=m.f1,
+                )
+            )
+    return "\n".join(lines) + "\n"
+
+
+def _format_per_case_section(report: EvalReport) -> str:
+    out = [
+        "\n## Per-case verdicts\n",
+        "| Case | fp_source | expected | target | pre_f10 | post_f10 | semgrep |",
+        "|---|---|---|---|---|---|---|",
+    ]
     for row in report.rows:
-        per_case += (
-            "| {cid} | {src} | {exp} | {target} | {pre} | {post} | {sem} |\n".format(
+        out.append(
+            "| {cid} | {src} | {exp} | {target} | {pre} | {post} | {sem} |".format(
                 cid=row.case_id,
                 src=row.fp_source,
                 exp=row.expected,
@@ -404,4 +689,4 @@ def format_markdown_summary(report: EvalReport) -> str:
                 sem="fire" if row.by_method["semgrep"].target_fired else "—",
             )
         )
-    return table + per_case
+    return "\n".join(out) + "\n"

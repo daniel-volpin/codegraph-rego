@@ -211,6 +211,37 @@ class OwaspIntegrationTests(unittest.TestCase):
                 msg=f"SemGrep precision degraded to {sm.precision} on OWASP subset",
             )
 
+    def test_owasp_mcnemar_undefined_across_every_scope(self) -> None:
+        """OWASP regression-safety: F10 must produce zero disagreements
+        on every scope (overall, fp_class, and each CWE). McNemar's
+        test is therefore undefined — that is the *expected* statistical
+        outcome for the synthetic-vs-real-gap claim.
+        """
+
+        for pc in self.report.paired:
+            with self.subTest(scope=pc.scope):
+                self.assertFalse(
+                    pc.mcnemar["test_defined"],
+                    msg=(
+                        f"OWASP scope={pc.scope}: McNemar should be undefined "
+                        f"(b=c=0) but got b={pc.mcnemar['b']} c={pc.mcnemar['c']}"
+                    ),
+                )
+                self.assertEqual(pc.mcnemar["b"], 0)
+                self.assertEqual(pc.mcnemar["c"], 0)
+
+    def test_owasp_delta_rates_are_zero_with_zero_width_ci(self) -> None:
+        """ΔFPR and ΔFNR must both be exactly 0.0 with zero-width CIs on
+        OWASP — same regression-safety guarantee, restated as effect size.
+        """
+
+        for pc in self.report.paired:
+            with self.subTest(scope=pc.scope):
+                self.assertEqual(pc.delta_fpr["point"], 0.0)
+                self.assertEqual(pc.delta_fpr["ci_low"], 0.0)
+                self.assertEqual(pc.delta_fpr["ci_high"], 0.0)
+                self.assertEqual(pc.delta_fnr["point"], 0.0)
+
 
 class FormatMarkdownTests(unittest.TestCase):
     def test_markdown_contains_overall_and_per_cwe_sections(self) -> None:
