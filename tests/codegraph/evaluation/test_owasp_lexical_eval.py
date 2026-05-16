@@ -17,6 +17,7 @@ from codegraph.evaluation.owasp_lexical_eval import (
     evaluate_owasp,
     format_markdown_summary,
     load_owasp_cases,
+    owasp_corpus_sha,
     owasp_paths,
     resolve_owasp_root,
 )
@@ -33,6 +34,28 @@ def _semgrep_available() -> bool:
     if shutil.which("semgrep"):
         return True
     return (PROJECT_ROOT / ".venv" / "bin" / "semgrep").is_file()
+
+
+class OwaspCorpusSHATests(unittest.TestCase):
+    """Provenance: pin the OWASP checkout commit SHA when available."""
+
+    def test_returns_none_when_not_a_git_repo(self) -> None:
+        tmp = tempfile.mkdtemp()
+        try:
+            self.assertIsNone(owasp_corpus_sha(Path(tmp)))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_returns_hex_sha_when_present(self) -> None:
+        # /tmp/owasp-benchmark is git-cloned in the dev shell; if it
+        # exists, the SHA must be a 40-char hex string. Skip otherwise.
+        candidate = Path("/tmp/owasp-benchmark")
+        if not (candidate / ".git").is_dir():
+            self.skipTest("/tmp/owasp-benchmark is not a git repo")
+        sha = owasp_corpus_sha(candidate)
+        self.assertIsNotNone(sha)
+        self.assertEqual(len(sha), 40)
+        self.assertTrue(all(c in "0123456789abcdef" for c in sha))
 
 
 class CWEMappingTests(unittest.TestCase):

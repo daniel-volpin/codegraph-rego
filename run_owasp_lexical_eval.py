@@ -34,6 +34,7 @@ from codegraph.evaluation.owasp_lexical_eval import (
     evaluate_owasp,
     format_markdown_summary,
     load_owasp_cases,
+    owasp_corpus_sha,
     owasp_paths,
     resolve_owasp_root,
 )
@@ -197,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
             "n_resamples": args.n_resamples,
             "semgrep_findings": len(semgrep_result.findings),
             "owasp_benchmark_root": str(owasp_root),
+            "owasp_benchmark_sha": owasp_corpus_sha(owasp_root),
             "metrics_overall": {
                 method: {
                     "tp": m.tp,

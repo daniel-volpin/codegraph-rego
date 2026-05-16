@@ -96,6 +96,36 @@ def owasp_paths(owasp_root: Path) -> tuple[Path, Path]:
     return csv_path, java_root
 
 
+def owasp_corpus_sha(owasp_root: Path) -> str | None:
+    """Return the OWASP checkout's git HEAD SHA, or ``None`` if not a git repo.
+
+    Pinning the SHA in provenance lets a reviewer reproduce results
+    against the exact commit of the OWASP Benchmark used — important
+    because BenchmarkJava's `master` branch is updated over time and the
+    "v1.2" tag is not always what users have on disk.
+    """
+
+    import subprocess
+
+    git_dir = owasp_root / ".git"
+    if not git_dir.exists():
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(owasp_root), "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    sha = result.stdout.strip()
+    return sha if sha else None
+
+
 @dataclass(frozen=True)
 class OwaspCase:
     test_name: str  # e.g. BenchmarkTest00001
