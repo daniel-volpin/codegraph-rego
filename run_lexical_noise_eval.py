@@ -67,6 +67,16 @@ def _build_argparser() -> argparse.ArgumentParser:
         default=2000,
         help="Bootstrap resample count for PRF CIs (default: 2000).",
     )
+    parser.add_argument(
+        "--semgrep-registry-config",
+        type=str,
+        default=None,
+        help=(
+            "Optional SemGrep registry pack (e.g. 'p/java', 'p/owasp-top-ten') "
+            "to run as a 4th comparison column. Requires network access; "
+            "skipped silently if SemGrep cannot fetch the pack."
+        ),
+    )
     return parser
 
 
@@ -84,12 +94,34 @@ def main(argv: list[str] | None = None) -> int:
     fixture_root = benchmark.resolve_fixture_root(project_root)
 
     semgrep_result = run_semgrep_baseline(target=fixture_root)
+
+    semgrep_registry_result = None
+    if args.semgrep_registry_config:
+        try:
+            semgrep_registry_result = run_semgrep_baseline(
+                target=fixture_root,
+                rules_dir=None,
+                registry_config=args.semgrep_registry_config,
+            )
+            print(
+                f"semgrep registry ({args.semgrep_registry_config}): "
+                f"{len(semgrep_registry_result.findings)} findings"
+            )
+        except RuntimeError as exc:
+            print(
+                f"warning: SemGrep registry config {args.semgrep_registry_config!r} "
+                f"failed; continuing without it ({exc})",
+                file=sys.stderr,
+            )
+            semgrep_registry_result = None
+
     report = evaluate_benchmark(
         benchmark,
         project_root,
         semgrep_result,
         n_resamples=args.n_resamples,
         seed=args.seed,
+        semgrep_registry_result=semgrep_registry_result,
     )
 
     output_dir = args.output_dir

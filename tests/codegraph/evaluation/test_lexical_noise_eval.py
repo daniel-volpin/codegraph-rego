@@ -365,6 +365,82 @@ class EvaluateBenchmarkIntegrationTests(unittest.TestCase):
                 )
 
 
+@unittest.skipUnless(_opa_available(), "opa CLI not installed")
+@unittest.skipUnless(_semgrep_available(), "semgrep CLI not installed")
+class SemgrepRegistryAsFourthMethodTests(unittest.TestCase):
+    """Pin the optional 4th method (semgrep_registry) wiring without
+    actually hitting the SemGrep registry over the network. We feed
+    evaluate_benchmark a hand-constructed SemgrepRunResult that mimics
+    a registry-style result on the 5 POS fixtures, and assert the
+    4-method report is shaped correctly.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from baselines.semgrep.runner import (
+            SemgrepFinding,
+            SemgrepRunResult,
+            run_semgrep_baseline,
+        )
+
+        cls.benchmark = load_lexical_noise_manifest(MANIFEST_PATH)
+        cls.semgrep = run_semgrep_baseline(
+            target=cls.benchmark.resolve_fixture_root(PROJECT_ROOT)
+        )
+
+        # Synthetic registry result: fires on the 5 POS fixtures
+        # plus one NEG (L01) to give the 4th method a non-trivial FP
+        # and verify it surfaces correctly in per-stratum / paired output.
+        pos_fixtures = ("L06.java", "L12.java", "L18.java", "L24.java", "L30.java")
+        registry_findings = tuple(
+            SemgrepFinding(
+                rule_id=f"java.lang.security.audit.registry-rule-{i}",
+                file_path=f"x/{name}",
+                start_line=1,
+                end_line=1,
+                message="(synthetic)",
+            )
+            for i, name in enumerate(pos_fixtures + ("L01.java",))
+        )
+        cls.registry_result = SemgrepRunResult(
+            findings=registry_findings,
+            rules_path=Path("/synthetic/p/java"),
+            target=cls.benchmark.resolve_fixture_root(PROJECT_ROOT),
+            raw={},
+        )
+
+        cls.report = evaluate_benchmark(
+            cls.benchmark,
+            PROJECT_ROOT,
+            cls.semgrep,
+            n_resamples=100,
+            seed=0,
+            semgrep_registry_result=cls.registry_result,
+        )
+
+    def test_report_contains_four_method_columns(self) -> None:
+        self.assertEqual(
+            set(self.report.metrics.keys()),
+            {"pre_f10", "post_f10", "semgrep", "semgrep_registry"},
+        )
+
+    def test_registry_metrics_reflect_synthetic_findings(self) -> None:
+        registry = self.report.metrics["semgrep_registry"]
+        self.assertEqual(registry.tp, 5)
+        self.assertEqual(registry.fp, 1)
+        self.assertEqual(registry.tn, 24)
+        self.assertEqual(registry.fn, 0)
+
+    def test_per_stratum_includes_semgrep_registry(self) -> None:
+        for stratum in self.report.per_stratum.values():
+            self.assertIn("semgrep_registry", stratum.methods)
+
+    def test_markdown_renders_four_columns_in_per_case_table(self) -> None:
+        md = format_markdown_summary(self.report)
+        for header in ("pre_f10", "post_f10", "semgrep", "semgrep_registry"):
+            self.assertIn(header, md, msg=f"{header!r} not present in markdown")
+
+
 class FormatMarkdownTests(unittest.TestCase):
     def test_renders_table_header_and_methods(self) -> None:
         m = MethodMetrics(

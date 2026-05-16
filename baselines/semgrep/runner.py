@@ -103,28 +103,52 @@ def _resolve_semgrep_binary(explicit: str | None = None) -> str:
 
 def run_semgrep_baseline(
     target: Path,
-    rules_dir: Path = DEFAULT_RULES_DIR,
+    rules_dir: Path | None = DEFAULT_RULES_DIR,
     *,
     semgrep_binary: str | None = None,
     include_patterns: Iterable[str] = ("*.java",),
     extra_args: Iterable[str] = (),
+    registry_config: str | None = None,
 ) -> SemgrepRunResult:
-    """Run SemGrep on ``target`` using the rules under ``rules_dir``."""
+    """Run SemGrep on ``target``.
+
+    Pass ``rules_dir`` to use a local rule directory (the default 8
+    hand-written CodeGraph-mirror rules). Pass ``registry_config`` to
+    use a SemGrep registry pack (e.g. ``"p/java"``, ``"p/owasp-top-ten"``)
+    instead. Exactly one source must be provided; passing both is an
+    error to keep the apples-to-apples comparison contract explicit.
+
+    Registry mode requires network access; failures bubble up as a
+    ``RuntimeError`` so callers can decide whether to skip the
+    comparison.
+    """
 
     binary = _resolve_semgrep_binary(semgrep_binary)
     target = target.resolve()
-    rules_dir = rules_dir.resolve()
+
+    if (rules_dir is None) == (registry_config is None):
+        raise ValueError(
+            "run_semgrep_baseline: pass exactly one of rules_dir or registry_config"
+        )
 
     if not target.exists():
         raise FileNotFoundError(f"SemGrep target does not exist: {target}")
-    if not rules_dir.exists():
-        raise FileNotFoundError(f"SemGrep rules directory does not exist: {rules_dir}")
+
+    if rules_dir is not None:
+        rules_dir = rules_dir.resolve()
+        if not rules_dir.exists():
+            raise FileNotFoundError(
+                f"SemGrep rules directory does not exist: {rules_dir}"
+            )
+        config_value = str(rules_dir)
+    else:
+        config_value = registry_config
 
     cmd: list[str] = [
         binary,
         "scan",
         "--config",
-        str(rules_dir),
+        config_value,
         "--json",
         "--quiet",
         "--metrics=off",
@@ -157,7 +181,7 @@ def run_semgrep_baseline(
     findings = tuple(_parse_finding(item) for item in payload.get("results", []))
     return SemgrepRunResult(
         findings=findings,
-        rules_path=rules_dir,
+        rules_path=rules_dir if rules_dir is not None else Path(config_value),
         target=target,
         raw=payload,
     )

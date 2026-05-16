@@ -47,6 +47,15 @@ _PUBLIC_METHOD_RE = re.compile(
 
 
 METHODS = ("pre_f10", "post_f10", "semgrep")
+SEMGREP_REGISTRY_METHOD = "semgrep_registry"
+
+
+def report_methods(report: "EvalReport") -> tuple[str, ...]:
+    """Canonical method order for ``report`` — known METHODS first, extras after."""
+
+    known = [m for m in METHODS if m in report.metrics]
+    extras = [m for m in report.metrics if m not in METHODS]
+    return tuple(known + extras)
 
 
 @dataclass(frozen=True)
@@ -357,6 +366,35 @@ def detect_via_semgrep(
     )
 
 
+def detect_via_semgrep_registry(
+    case: LexicalNoiseCase,
+    semgrep_result: SemgrepRunResult,
+) -> DetectionResult:
+    """Per-case verdict for a SemGrep registry baseline.
+
+    Registry rule ids (e.g.
+    ``java.lang.security.audit.crypto.unsafe-md5.unsafe-md5``) do not
+    map deterministically to CodeGraph violation IDs, so the verdict
+    is *any* finding on the case's file. For LexicalNoiseJava this is
+    the right binary semantic: a NEG case should produce zero findings
+    (the registry resists lexical noise via its AST matcher) and a POS
+    case should produce at least one (the registry should catch real
+    sinks).
+    """
+
+    matched = [
+        f for f in semgrep_result.findings
+        if Path(f.file_path).name == case.file_name
+    ]
+    fired = tuple(sorted({f.rule_id for f in matched}))
+    return DetectionResult(
+        case_id=case.case_id,
+        method=SEMGREP_REGISTRY_METHOD,
+        fired_violation_ids=fired,
+        target_fired=bool(matched),
+    )
+
+
 def evaluate_benchmark(
     benchmark: LexicalNoiseBenchmark,
     project_root: Path,
@@ -364,12 +402,19 @@ def evaluate_benchmark(
     *,
     n_resamples: int = 2000,
     seed: int = 0,
+    semgrep_registry_result: SemgrepRunResult | None = None,
 ) -> EvalReport:
     java_root = benchmark.resolve_java_root(project_root)
     fixture_root_relative = benchmark.fixture_root_relative
 
+    active_methods: list[str] = list(METHODS)
+    if semgrep_registry_result is not None:
+        active_methods.append(SEMGREP_REGISTRY_METHOD)
+
     rows: list[CaseRow] = []
-    outcomes_by_method: Dict[str, list[tuple[bool, bool]]] = {m: [] for m in METHODS}
+    outcomes_by_method: Dict[str, list[tuple[bool, bool]]] = {
+        m: [] for m in active_methods
+    }
 
     package_path = benchmark.package.replace(".", "/")
     for case in benchmark.cases:
@@ -381,7 +426,16 @@ def evaluate_benchmark(
         post = detect_via_opa(case, source, file_path=rel_path, f10_active=True)
         smg = detect_via_semgrep(case, semgrep_result)
 
-        by_method = {"pre_f10": pre, "post_f10": post, "semgrep": smg}
+        by_method: Dict[str, DetectionResult] = {
+            "pre_f10": pre,
+            "post_f10": post,
+            "semgrep": smg,
+        }
+        if semgrep_registry_result is not None:
+            by_method[SEMGREP_REGISTRY_METHOD] = detect_via_semgrep_registry(
+                case, semgrep_registry_result
+            )
+
         rows.append(
             CaseRow(
                 case_id=case.case_id,
@@ -394,14 +448,14 @@ def evaluate_benchmark(
         )
 
         label = case.expected == "positive"
-        for method in METHODS:
+        for method in active_methods:
             outcomes_by_method[method].append((by_method[method].target_fired, label))
 
     metrics = {
         method: MethodMetrics.from_outcomes(
             method, outcomes_by_method[method], n_resamples=n_resamples, seed=seed
         )
-        for method in METHODS
+        for method in active_methods
     }
 
     per_stratum = _compute_per_stratum(rows, n_resamples=n_resamples, seed=seed)
@@ -432,17 +486,32 @@ def _compute_per_stratum(
     communicates that single-stratum point estimates are imprecise. The
     diagnostic value is the *pattern* — F10 should eliminate FPs in
     comment strata while leaving literal / text-block strata untouched.
+
+    Methods are sourced from the rows themselves (rather than the
+    module-level METHODS constant) so optional baselines like
+    ``semgrep_registry`` show up in the per-stratum tables when active.
     """
 
     grouped: Dict[str, list[CaseRow]] = {}
     for row in rows:
         grouped.setdefault(row.fp_source, []).append(row)
 
+    active_methods: list[str] = []
+    if rows:
+        seen: set[str] = set()
+        for method in METHODS:
+            if method in rows[0].by_method:
+                active_methods.append(method)
+                seen.add(method)
+        for method in rows[0].by_method:
+            if method not in seen:
+                active_methods.append(method)
+
     out: Dict[str, StratumMetrics] = {}
     for stratum in sorted(grouped.keys()):
         s_rows = grouped[stratum]
         s_methods: Dict[str, MethodMetrics] = {}
-        for method in METHODS:
+        for method in active_methods:
             outcomes = [
                 (r.by_method[method].target_fired, r.expected == "positive")
                 for r in s_rows
@@ -560,7 +629,7 @@ def format_markdown_summary(report: EvalReport) -> str:
         "|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|\n"
     )
     rows = []
-    for method in METHODS:
+    for method in report_methods(report):
         m = report.metrics[method]
         b = m.bootstrap
         p_ci = b.get("precision", {})
@@ -647,9 +716,12 @@ def _format_per_stratum_section(report: EvalReport) -> str:
         "| Precision | Recall | F1 |",
         "|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
+    methods = report_methods(report)
     for stratum in sorted(report.per_stratum.keys()):
         s = report.per_stratum[stratum]
-        for method in METHODS:
+        for method in methods:
+            if method not in s.methods:
+                continue
             m = s.methods[method]
             lines.append(
                 "| {st} | {n} | {npos} | {nneg} | {meth} | {tp} | {fp} | {tn} | {fn} "
@@ -672,21 +744,24 @@ def _format_per_stratum_section(report: EvalReport) -> str:
 
 
 def _format_per_case_section(report: EvalReport) -> str:
+    methods = report_methods(report)
+    header_cells = ["Case", "fp_source", "expected", "target"] + list(methods)
     out = [
         "\n## Per-case verdicts\n",
-        "| Case | fp_source | expected | target | pre_f10 | post_f10 | semgrep |",
-        "|---|---|---|---|---|---|---|",
+        "| " + " | ".join(header_cells) + " |",
+        "|" + "|".join("---" for _ in header_cells) + "|",
     ]
     for row in report.rows:
-        out.append(
-            "| {cid} | {src} | {exp} | {target} | {pre} | {post} | {sem} |".format(
-                cid=row.case_id,
-                src=row.fp_source,
-                exp=row.expected,
-                target=", ".join(row.target_violation_ids),
-                pre="fire" if row.by_method["pre_f10"].target_fired else "—",
-                post="fire" if row.by_method["post_f10"].target_fired else "—",
-                sem="fire" if row.by_method["semgrep"].target_fired else "—",
-            )
-        )
+        cells = [
+            row.case_id,
+            row.fp_source,
+            row.expected,
+            ", ".join(row.target_violation_ids),
+        ]
+        for method in methods:
+            if method in row.by_method:
+                cells.append("fire" if row.by_method[method].target_fired else "—")
+            else:
+                cells.append(".")
+        out.append("| " + " | ".join(cells) + " |")
     return "\n".join(out) + "\n"
