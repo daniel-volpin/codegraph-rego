@@ -11,8 +11,10 @@ import unittest
 
 from codegraph.evaluation.uncertainty import (
     bootstrap_metric_ci,
+    bootstrap_paired_delta_ci,
     bootstrap_prf_ci,
     f1_from_outcomes,
+    paired_classifier_mcnemar,
     precision_from_outcomes,
     recall_from_outcomes,
     wilson_score_ci,
@@ -127,6 +129,98 @@ class TestBootstrapPRF(unittest.TestCase):
         a = bootstrap_prf_ci(outcomes, n_resamples=150, seed=7)
         b = bootstrap_prf_ci(outcomes, n_resamples=150, seed=7)
         self.assertEqual(a, b)
+
+
+class PairedClassifierMcnemarTests(unittest.TestCase):
+    """Exact-binomial McNemar's test for paired classifier comparison."""
+
+    def test_eight_clean_improvements_zero_regressions_is_significant(self) -> None:
+        """The canonical LexicalNoiseJava signature: classifier A fires on 8
+        comment-stratum NEG cases, classifier B does not — and no regressions.
+        Two-sided exact p = 2 * 0.5^8 ≈ 0.0078, well below α=0.05.
+        """
+        paired = [(True, False, False)] * 8  # 8 FP-class improvements, 0 regressions
+        result = paired_classifier_mcnemar(paired, restrict_to="fp_class")
+        self.assertEqual(result["b"], 8)
+        self.assertEqual(result["c"], 0)
+        self.assertEqual(result["n_disagreements"], 8)
+        self.assertTrue(result["test_defined"])
+        self.assertAlmostEqual(result["p_value"], 2 * 0.5**8, places=6)
+        self.assertLess(result["p_value"], 0.05)
+
+    def test_zero_disagreements_returns_undefined_test(self) -> None:
+        """OWASP case: pre_f10 and post_f10 agree on every case. b = c = 0;
+        McNemar test is undefined."""
+        paired = [(True, True, True)] * 200 + [(False, False, False)] * 185
+        result = paired_classifier_mcnemar(paired)
+        self.assertFalse(result["test_defined"])
+        self.assertIsNone(result["p_value"])
+        self.assertEqual(result["n_disagreements"], 0)
+
+    def test_symmetric_disagreement_yields_p_value_one(self) -> None:
+        """Equal b and c means no directional evidence — p-value is 1.0."""
+        paired = [(True, False, False)] * 5 + [(False, True, False)] * 5
+        result = paired_classifier_mcnemar(paired)
+        self.assertEqual(result["b"], 5)
+        self.assertEqual(result["c"], 5)
+        self.assertAlmostEqual(result["p_value"], 1.0)
+
+    def test_restrict_to_fp_class_ignores_positives(self) -> None:
+        """Only label=False cases count toward the FP-class test."""
+        paired = [(True, False, False)] * 4 + [(True, False, True)] * 100
+        result = paired_classifier_mcnemar(paired, restrict_to="fp_class")
+        self.assertEqual(result["n_disagreements"], 4)
+
+    def test_restrict_to_fn_class_ignores_negatives(self) -> None:
+        paired = [(True, False, True)] * 4 + [(True, False, False)] * 100
+        result = paired_classifier_mcnemar(paired, restrict_to="fn_class")
+        self.assertEqual(result["n_disagreements"], 4)
+
+    def test_invalid_restrict_to_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            paired_classifier_mcnemar([], restrict_to="not_a_label_class")
+
+
+class PairedDeltaCITests(unittest.TestCase):
+    """Paired bootstrap CI for ΔFPR / ΔFNR (post − pre)."""
+
+    def test_fpr_delta_is_negative_when_b_eliminates_fps(self) -> None:
+        """Pre fires on every NEG, post fires on none. ΔFPR should be ≈ -1.0
+        and the CI should NOT cross zero."""
+        paired = [(True, False, False)] * 25  # 25 NEGs, all cleaned
+        result = bootstrap_paired_delta_ci(
+            paired, metric="fpr", n_resamples=500, seed=0
+        )
+        self.assertAlmostEqual(result["point"], -1.0, places=2)
+        self.assertLess(result["ci_high"], 0.0, msg="CI must not cross zero")
+        self.assertEqual(result["metric"], "delta_fpr")
+
+    def test_fnr_delta_is_zero_when_recall_unchanged(self) -> None:
+        """Pre and post both catch every POS. ΔFNR ≈ 0."""
+        paired = [(True, True, True)] * 5
+        result = bootstrap_paired_delta_ci(
+            paired, metric="fnr", n_resamples=200, seed=0
+        )
+        self.assertEqual(result["point"], 0.0)
+
+    def test_deterministic_under_seed(self) -> None:
+        paired = (
+            [(True, False, False)] * 4
+            + [(False, True, False)] * 2
+            + [(True, True, True)] * 3
+        )
+        a = bootstrap_paired_delta_ci(paired, metric="fpr", n_resamples=200, seed=42)
+        b = bootstrap_paired_delta_ci(paired, metric="fpr", n_resamples=200, seed=42)
+        self.assertEqual(a, b)
+
+    def test_invalid_metric_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            bootstrap_paired_delta_ci([], metric="precision_delta")
+
+    def test_empty_returns_zero_metric(self) -> None:
+        result = bootstrap_paired_delta_ci([], metric="fpr", n_resamples=10, seed=0)
+        self.assertEqual(result["point"], 0.0)
+        self.assertEqual(result["n"], 0)
 
 
 if __name__ == "__main__":
