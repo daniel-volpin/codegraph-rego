@@ -146,11 +146,12 @@ def strip_java_lexical_noise(source: str, *, strip_string_literals: bool = True)
                 state = "code"
                 i += 1
                 continue
-            # An unescaped newline is a syntax error in standard string
-            # literals; close the literal defensively so a malformed
-            # source can't silently consume the rest of the file.
-            if ch == "\n":
-                out.append("\n")
+            # An unescaped JLS §3.4 line terminator (LF / CR / CRLF) is a
+            # syntax error in standard string literals; close the literal
+            # defensively so a malformed source can't silently consume
+            # the rest of the file.
+            if ch == "\n" or ch == "\r":
+                out.append(ch)
                 state = "code"
                 i += 1
                 continue
@@ -174,8 +175,9 @@ def strip_java_lexical_noise(source: str, *, strip_string_literals: bool = True)
                 state = "code"
                 i += 1
                 continue
-            if ch == "\n":
-                out.append("\n")
+            # JLS §3.4: char literals also cannot span line terminators.
+            if ch == "\n" or ch == "\r":
+                out.append(ch)
                 state = "code"
                 i += 1
                 continue
@@ -213,8 +215,6 @@ def strip_java_lexical_noise(source: str, *, strip_string_literals: bool = True)
         i += 1
 
     return "".join(out)
-
-
 
 
 UNTRUSTED_INPUT_PATTERNS = (

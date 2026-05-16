@@ -151,19 +151,36 @@ class EvalReport:
         }
 
 
-def _extract_target_method(case_id: str, source: str) -> str:
-    """Derive a deterministic ``target_method`` from the active source.
+_DEFAULT_FQN_PACKAGE = "com.codegraph.lexicalnoise"
+
+
+def _extract_target_method(
+    case_id: str,
+    source: str,
+    *,
+    package: str = _DEFAULT_FQN_PACKAGE,
+) -> str:
+    """Derive a deterministic ``target_method`` from the *active* source.
 
     The substring "HttpServletRequest" inside ``target_method`` is what
     drives the Rego ``servlet_context`` predicate on the active-code
-    path (independent of ``source_code``). We surface the active method
+    path (independent of ``source_code``). We extract the active method
     signature here so pre-F10 and post-F10 differ only in
     ``source_code`` — exactly the variable F10 controls.
+
+    The regex is run on the comment-stripped active view so a
+    ``// public Foo bar(...)`` line cannot fake a method signature from
+    comment text.
+
+    ``package`` should match the actual JVM package of ``source`` so
+    operators reading ``detection_per_case.json`` get a meaningful FQN
+    rather than the synthetic LexicalNoiseJava prefix.
     """
 
-    match = _PUBLIC_METHOD_RE.search(source)
+    active = strip_java_lexical_noise(source, strip_string_literals=False)
+    match = _PUBLIC_METHOD_RE.search(active)
     if not match:
-        return f"com.codegraph.lexicalnoise.{case_id}.unknown()"
+        return f"{package}.{case_id}.unknown()"
     method_name = match.group("name")
     params_raw = match.group("params").strip()
     param_types: list[str] = []
@@ -174,7 +191,7 @@ def _extract_target_method(case_id: str, source: str) -> str:
                 param_types.append(tokens[-2])
             elif tokens:
                 param_types.append(tokens[0])
-    return f"com.codegraph.lexicalnoise.{case_id}.{method_name}({','.join(param_types)})"
+    return f"{package}.{case_id}.{method_name}({','.join(param_types)})"
 
 
 def _build_minimal_bundle(

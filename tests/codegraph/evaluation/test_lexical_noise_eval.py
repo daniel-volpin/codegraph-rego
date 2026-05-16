@@ -71,6 +71,38 @@ class ExtractTargetMethodTests(unittest.TestCase):
         sig = _extract_target_method("Lxx", "package x;\nclass X {}\n")
         self.assertEqual(sig, "com.codegraph.lexicalnoise.Lxx.unknown()")
 
+    def test_ignores_method_signature_inside_comment(self) -> None:
+        """A commented-out signature must not produce a synthetic target_method.
+
+        Without comment-stripping the regex would happily extract the
+        signature from inside a ``//`` line, fabricating a method that
+        doesn't exist in the active code. F10's active-view lexer is
+        applied before the regex so this can't happen.
+        """
+
+        source = (
+            "public class L99 {\n"
+            "    // public void fake(HttpServletRequest req) { ... }\n"
+            "    public int real() { return 0; }\n"
+            "}\n"
+        )
+        sig = _extract_target_method("L99", source)
+        self.assertEqual(sig, "com.codegraph.lexicalnoise.L99.real()")
+
+    def test_package_parameter_overrides_default(self) -> None:
+        source = (
+            "public class BenchmarkTest00001 {\n"
+            "    public void doGet(HttpServletRequest req) {}\n"
+            "}\n"
+        )
+        sig = _extract_target_method(
+            "BenchmarkTest00001", source, package="org.owasp.benchmark.testcode"
+        )
+        self.assertEqual(
+            sig,
+            "org.owasp.benchmark.testcode.BenchmarkTest00001.doGet(HttpServletRequest)",
+        )
+
 
 class BuildBundleTests(unittest.TestCase):
     def test_pre_f10_uses_raw_source_code(self) -> None:

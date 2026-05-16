@@ -247,6 +247,9 @@ def _detect_via_semgrep_for_owasp(
     )
 
 
+_OWASP_FQN_PACKAGE = "org.owasp.benchmark.testcode"
+
+
 def _worker_run(
     payload: Tuple[str, str, str, str],
 ) -> Tuple[str, bool, tuple[str, ...], bool, tuple[str, ...]]:
@@ -260,7 +263,9 @@ def _worker_run(
 
     test_name, java_path_str, target_violation_id, rel_path = payload
     source = Path(java_path_str).read_text(encoding="utf-8")
-    target_method = _extract_target_method(test_name, source)
+    target_method = _extract_target_method(
+        test_name, source, package=_OWASP_FQN_PACKAGE
+    )
 
     pre_bundle = _build_minimal_bundle(
         source, file_path=rel_path, target_method=target_method, f10_active=False

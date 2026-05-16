@@ -205,6 +205,23 @@ class LineTerminatorSpecComplianceTests(unittest.TestCase):
         # survive — proving the CR did terminate the comment.
         self.assertIn("int x = MessageDigest.getInstance(", out)
 
+    def test_cr_in_string_literal_closes_defensively(self) -> None:
+        """A CR (or LF) inside an unterminated string literal is a Java
+        syntax error; the lexer must close the literal defensively so
+        the rest of the file is parsed as code, not as a runaway string.
+        """
+        src = 'String x = "broken\rMessageDigest.getInstance("MD5");'
+        out = strip_java_lexical_noise(src)
+        # After the defensive close the post-CR text is back in code state;
+        # the MessageDigest call must survive (its substring 'MessageDigest'
+        # is visible in the active view).
+        self.assertIn("MessageDigest.getInstance(", out)
+
+    def test_cr_in_char_literal_closes_defensively(self) -> None:
+        src = "char c = 'a\rint y = 0;"
+        out = strip_java_lexical_noise(src)
+        self.assertIn("int y = 0", out)
+
 
 class FpEliminationSmokeTests(unittest.TestCase):
     """End-to-end: the kind of source that motivated F10."""

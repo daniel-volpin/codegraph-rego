@@ -136,11 +136,17 @@ def run_semgrep_baseline(
     cmd.extend(extra_args)
     cmd.append(str(target))
 
+    # cwd is anchored to the repo root so SemGrep discovers the
+    # project-local .semgrepignore regardless of who invoked the runner.
+    # Without this, a caller running from /tmp or any non-repo directory
+    # would silently fall back to SemGrep's default semgrepignore template
+    # (which excludes tests/) and skip the LexicalNoiseJava fixtures.
     completed = subprocess.run(
         cmd,
         check=False,
         capture_output=True,
         text=True,
+        cwd=str(_REPO_ROOT),
     )
     if completed.returncode not in (0, 1):
         raise RuntimeError(

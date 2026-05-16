@@ -183,13 +183,16 @@ both via AST matching.
 | post_f10  | 185 |  24 | 155 |  21 | 0.885 | 0.898 | 0.892 |
 | semgrep   |  23 |   0 | 179 | 183 | 1.000 | 0.112 | 0.201 |
 
-**F10 produces zero deltas on every OWASP case** (verified per-case
-across 385 / 385). An empirical scan over the full 2,740-case corpus
-confirms the reason: zero comment occurrences of any of `MD5`,
-`MessageDigest`, `executeQuery`, `ProcessBuilder`, `new Random`,
-`XPathFactory` — i.e. the lexical-noise FP class F10 targets is
-absent from OWASP Benchmark. This is the data-grounded confirmation
-of the synthetic-vs-real gap [4].
+**F10 produces zero deltas on every OWASP case** in the published run
+(385 cases) — and the regression-safety property is independently
+pinned in CI by `test_f10_does_not_change_owasp_outcomes` on a
+stratified 80-case sample (`limit_per_cwe=10`). An empirical scan over
+the full 2,740-case corpus confirms the underlying reason: zero
+comment occurrences of any of `MD5`, `MessageDigest`, `executeQuery`,
+`ProcessBuilder`, `new Random`, `XPathFactory` — i.e. the
+lexical-noise FP class F10 targets is absent from OWASP Benchmark.
+This is the data-grounded confirmation of the synthetic-vs-real
+gap [4].
 
 The CodeGraph file-level F1 = 0.892 is the *lower bound* for the
 production full-pipeline number (F1 = 0.953); graph context and
@@ -241,7 +244,7 @@ not *recall on synthetic-benchmark wrappers*.
   lexical OPA-style matchers on the same workload [7])
   motivates keeping the lexical pipeline viable.
 * **LLM-assisted SAST (IRIS [5], LLMxCPG
-  [6], MoCQ [8])**
+  [6], MoCQ [9])**
   — F10 is *complementary*. A deterministic pre-filter that strips
   textual noise reduces the token budget the LLM must reason over
   and removes a major FP class before any LLM call is made,
@@ -263,10 +266,19 @@ not *recall on synthetic-benchmark wrappers*.
    technical report.)
 4. (Chen et al., FSE 2023, on the synthetic-vs-real benchmark gap in
    SAST evaluation.)
-5. (IRIS — LLM-assisted SAST, ICLR 2025.)
-6. (LLMxCPG — LLM + CPG taint, USENIX Security 2025.)
-7. (SemGrep — Bessey et al., "A few billion lines of code later",
-   CACM 2010 — combine with the SemGrep technical paper for
-   AST-matching performance numbers; also cite the ScaleSec
-   benchmark for the "~10× slower than lexical" claim.)
-8. (MoCQ — model-checking + LLM for code quality, April 2025.)
+5. (IRIS — LLM-assisted SAST, ICLR 2025. Verify venue / year at
+   submission time.)
+6. (LLMxCPG — LLM + CPG taint, USENIX Security 2025. Verify venue /
+   year at submission time.)
+7. (SemGrep — the r2c / Returntocorp technical write-ups; consult the
+   project paper or the EMSE 2024 evaluation for AST-matching
+   performance numbers. For the "~10× slower than the lexical baseline"
+   claim, cite a primary benchmark — placeholder until a defensible
+   source is selected.)
+8. (Industrial SAST experience — Bessey et al., "A Few Billion Lines
+   of Code Later", CACM 2010 — the Coverity retrospective on what
+   industrial SAST can and cannot do in production. Cited here for the
+   FP-budget-as-deployment-blocker argument, not as a SemGrep
+   reference.)
+9. (MoCQ — model-checking + LLM for code quality, April 2025. Verify
+   venue / year at submission time.)
