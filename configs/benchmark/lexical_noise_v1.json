@@ -1,0 +1,282 @@
+{
+  "benchmark_id": "lexical_noise_v1",
+  "version": 1,
+  "description": "Hand-curated Java methods stratified by lexical false-positive source type. Designed to surface and measure the FP class addressed by strip_java_lexical_noise (F10).",
+  "fixture_root_relative": "tests/fixtures/lexical_noise_v1",
+  "java_relative_root": "src/main/java",
+  "package": "com.codegraph.lexicalnoise",
+  "fp_source_types": ["line_comment", "block_comment", "string_literal", "char_literal", "text_block"],
+  "stratification": "30 cases = 5 fp_source_types x 6 cases (5 negatives + 1 positive per type). Negatives verify F10 eliminates the FP. Positives verify F10 does not over-strip active code that legitimately contains the same token.",
+  "cases": [
+    {
+      "case_id": "L01",
+      "file_name": "L01.java",
+      "fp_source": "line_comment",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.10-WEAK-HASH"],
+      "tokens_in_noise": ["MD5"],
+      "rationale": "MD5 appears only inside a // comment; the active code uses SHA-256. (MessageDigest the class is imported and called with SHA-256 in active code, so it isn't a noise-exclusive token.)"
+    },
+    {
+      "case_id": "L02",
+      "file_name": "L02.java",
+      "fp_source": "line_comment",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-SQL-INJECTION"],
+      "tokens_in_noise": ["stmt.executeQuery("],
+      "rationale": "The // comment contains the full SQL-injection FP-triggering pattern: stmt.executeQuery(\"SELECT ... \" + req.getParameter(\"id\")). Pre-F10 the comment would induce the SQL rule to fire; post-F10 the comment is stripped and the active code uses parameter-bound prepareStatement."
+    },
+    {
+      "case_id": "L03",
+      "file_name": "L03.java",
+      "fp_source": "line_comment",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.10-WEAK-RANDOM"],
+      "tokens_in_noise": ["new Random("],
+      "rationale": "new Random( appears only inside a // TODO comment; the active code uses SecureRandom."
+    },
+    {
+      "case_id": "L04",
+      "file_name": "L04.java",
+      "fp_source": "line_comment",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-CMD-INJECTION"],
+      "tokens_in_noise": ["ProcessBuilder", "Runtime.getRuntime().exec(", ".command("],
+      "rationale": "The // comments contain the full CMD-injection FP-triggering pattern: ProcessBuilder + .command + Runtime.getRuntime().exec + concat + req.getParameter. Pre-F10 the comment would induce the CMD rule to fire; post-F10 the comments are stripped and the active code returns a constant."
+    },
+    {
+      "case_id": "L05",
+      "file_name": "L05.java",
+      "fp_source": "line_comment",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-XPATH-INJECTION"],
+      "tokens_in_noise": ["XPathFactory.newInstance(", ".evaluate("],
+      "rationale": "The // comment contains the full XPath-injection FP-triggering pattern: XPathFactory.newInstance().newXPath().compile + concat + req.getParameter + .evaluate. Pre-F10 the comment would induce the XPath rule to fire; post-F10 the comment is stripped and the active code returns a static label."
+    },
+    {
+      "case_id": "L06",
+      "file_name": "L06.java",
+      "fp_source": "line_comment",
+      "expected": "positive",
+      "target_violation_ids": ["ISO-A.10-WEAK-HASH"],
+      "tokens_in_noise": ["MD5"],
+      "rationale": "MD5 appears in a // comment AND the active code uses MessageDigest.getInstance(\"MD5\"). F10 must not strip the active call."
+    },
+    {
+      "case_id": "L07",
+      "file_name": "L07.java",
+      "fp_source": "block_comment",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.10-WEAK-HASH"],
+      "tokens_in_noise": ["MD5"],
+      "rationale": "MD5 appears only inside javadoc; the active code imports and uses MessageDigest with SHA-256, so MessageDigest alone is shared between noise and active code."
+    },
+    {
+      "case_id": "L08",
+      "file_name": "L08.java",
+      "fp_source": "block_comment",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-SQL-INJECTION"],
+      "tokens_in_noise": ["st.executeQuery(", "createStatement()"],
+      "rationale": "The javadoc anti-pattern block contains the full SQL-injection FP-triggering pattern: createStatement + st.executeQuery(\"SELECT ... \" + req.getParameter). Pre-F10 the javadoc would induce the SQL rule to fire; post-F10 the javadoc is stripped and the active code binds parameters."
+    },
+    {
+      "case_id": "L09",
+      "file_name": "L09.java",
+      "fp_source": "block_comment",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-PATH-TRAVERSAL"],
+      "tokens_in_noise": ["new java.io.File(", "new java.io.FileInputStream(", "getParameter("],
+      "rationale": "The javadoc anti-pattern block contains the full PATH-traversal FP-triggering pattern: new java.io.FileInputStream(new java.io.File(\"/var/templates/\" + req.getParameter(\"file\"))). Pre-F10 the javadoc would induce the path rule to fire; post-F10 the javadoc is stripped and the active code uses getResourceAsStream."
+    },
+    {
+      "case_id": "L10",
+      "file_name": "L10.java",
+      "fp_source": "block_comment",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-LDAP-INJECTION"],
+      "tokens_in_noise": ["InitialDirContext", ".search("],
+      "rationale": "The javadoc anti-pattern block contains the full LDAP-injection FP-triggering pattern: new InitialDirContext().search(base, \"(uid=\" + req.getParameter(\"user\") + \")\", controls). Pre-F10 the javadoc would induce the LDAP rule to fire; post-F10 the javadoc is stripped and the active code returns a constant."
+    },
+    {
+      "case_id": "L11",
+      "file_name": "L11.java",
+      "fp_source": "block_comment",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.10-WEAK-CRYPTO"],
+      "tokens_in_noise": ["DES/ECB", "Cipher.getInstance(\"DES"],
+      "rationale": "DES Cipher example appears only inside javadoc; the active code uses Cipher.getInstance with AES/GCM/NoPadding, so the bare Cipher.getInstance prefix is shared."
+    },
+    {
+      "case_id": "L12",
+      "file_name": "L12.java",
+      "fp_source": "block_comment",
+      "expected": "positive",
+      "target_violation_ids": ["ISO-A.8-SQL-INJECTION"],
+      "tokens_in_noise": ["executeQuery"],
+      "rationale": "executeQuery appears in javadoc AND the active code builds a query via string concatenation from getParameter and calls executeQuery on it. F10 must preserve the active SQL injection."
+    },
+    {
+      "case_id": "L13",
+      "file_name": "L13.java",
+      "fp_source": "string_literal",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.10-WEAK-HASH"],
+      "tokens_in_noise": ["MD5"],
+      "rationale": "MD5 token appears only inside a log-message string literal; the active code imports and calls MessageDigest with SHA-256."
+    },
+    {
+      "case_id": "L14",
+      "file_name": "L14.java",
+      "fp_source": "string_literal",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-SQL-INJECTION"],
+      "tokens_in_noise": ["Statement.executeQuery(", "getParameter("],
+      "rationale": "The explanatory string literal contains the full SQL-injection FP-triggering pattern: Statement.executeQuery(\"SELECT * FROM t WHERE id = \" + req.getParameter(\"id\")). Pre-F10 the literal would induce the SQL rule to fire; post-F10 the literal is stripped and the active code performs no SQL."
+    },
+    {
+      "case_id": "L15",
+      "file_name": "L15.java",
+      "fp_source": "string_literal",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.10-WEAK-RANDOM"],
+      "tokens_in_noise": ["Math.random()"],
+      "rationale": "Math.random() phrase appears only in an exception message; the active code uses SecureRandom."
+    },
+    {
+      "case_id": "L16",
+      "file_name": "L16.java",
+      "fp_source": "string_literal",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-CMD-INJECTION"],
+      "tokens_in_noise": ["ProcessBuilder", ".command(", "Runtime.getRuntime().exec"],
+      "rationale": "The user-facing suggestion string literal contains the full CMD-injection FP-triggering pattern: new ProcessBuilder().command(\"sh\", \"-c\", \"ls \" + req.getParameter(\"dir\")).start() and Runtime.getRuntime().exec mention. Pre-F10 the literal would induce the CMD rule to fire; post-F10 the literal is stripped and the active code returns a status enum."
+    },
+    {
+      "case_id": "L17",
+      "file_name": "L17.java",
+      "fp_source": "string_literal",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-PATH-TRAVERSAL"],
+      "tokens_in_noise": ["new java.io.File(", "../", "getParameter("],
+      "rationale": "The validation message string literal contains the full PATH-traversal FP-triggering pattern: new java.io.File(\"../\" + req.getParameter(\"file\")). Pre-F10 the literal would induce the path rule to fire; post-F10 the literal is stripped and the active code is a pure string check."
+    },
+    {
+      "case_id": "L18",
+      "file_name": "L18.java",
+      "fp_source": "string_literal",
+      "expected": "positive",
+      "target_violation_ids": ["ISO-A.10-WEAK-RANDOM"],
+      "tokens_in_noise": ["Math.random"],
+      "rationale": "Math.random( appears in a string literal AND the active code uses new java.util.Random() to draw a token. F10 must preserve the active Random call."
+    },
+    {
+      "case_id": "L19",
+      "file_name": "L19.java",
+      "fp_source": "char_literal",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.10-WEAK-HASH"],
+      "tokens_in_noise": ["'M'", "'D'", "'5'"],
+      "rationale": "char literals 'M', 'D', '5' used as labels in a char-array; multi-char substring MD5 is never present in active source."
+    },
+    {
+      "case_id": "L20",
+      "file_name": "L20.java",
+      "fp_source": "char_literal",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-PATH-TRAVERSAL"],
+      "tokens_in_noise": ["'/'", "'\\\\'"],
+      "rationale": "char literals '/' and '\\' used as path-separator constants; no java.io.File call exists."
+    },
+    {
+      "case_id": "L21",
+      "file_name": "L21.java",
+      "fp_source": "char_literal",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.10-WEAK-CRYPTO"],
+      "tokens_in_noise": ["'D'", "'E'", "'S'"],
+      "rationale": "char literals 'D' 'E' 'S' enumerated in an algorithm-name parser; no Cipher.getInstance call."
+    },
+    {
+      "case_id": "L22",
+      "file_name": "L22.java",
+      "fp_source": "char_literal",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-SQL-INJECTION"],
+      "tokens_in_noise": ["','", "';'"],
+      "rationale": "char literals ',', ';' used as CSV delimiters; no SQL execution."
+    },
+    {
+      "case_id": "L23",
+      "file_name": "L23.java",
+      "fp_source": "char_literal",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-SQL-INJECTION"],
+      "tokens_in_noise": ["'?'", "'%'"],
+      "rationale": "char literals '?', '%' used as format-spec markers; no SQL execution."
+    },
+    {
+      "case_id": "L24",
+      "file_name": "L24.java",
+      "fp_source": "char_literal",
+      "expected": "positive",
+      "target_violation_ids": ["ISO-A.8-PATH-TRAVERSAL"],
+      "tokens_in_noise": ["'/'", "'\\\\'"],
+      "rationale": "char literals '/' '\\\\' used nearby AND active code calls new java.io.File(getParameter(...) + slash). F10 must preserve the active path traversal."
+    },
+    {
+      "case_id": "L25",
+      "file_name": "L25.java",
+      "fp_source": "text_block",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-SQL-INJECTION"],
+      "tokens_in_noise": ["st.executeQuery(", "createStatement()"],
+      "rationale": "The Java 13+ text block contains the full SQL-injection FP-triggering pattern: createStatement + st.executeQuery(\"SELECT name FROM accounts WHERE id = '\" + req.getParameter(\"id\") + \"'\"). Pre-F10 the text block would induce the SQL rule to fire; post-F10 the text block is stripped and the active code binds parameters via PreparedStatement."
+    },
+    {
+      "case_id": "L26",
+      "file_name": "L26.java",
+      "fp_source": "text_block",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.10-WEAK-HASH"],
+      "tokens_in_noise": ["MD5"],
+      "rationale": "MD5 example appears only inside a text block treated as a JSON template; the active code imports and calls MessageDigest with SHA-256."
+    },
+    {
+      "case_id": "L27",
+      "file_name": "L27.java",
+      "fp_source": "text_block",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-XPATH-INJECTION"],
+      "tokens_in_noise": ["XPathFactory.newInstance(", ".evaluate("],
+      "rationale": "The Java 13+ text block contains the full XPath-injection FP-triggering pattern: XPathFactory.newInstance().newXPath().compile(\"//user[name='\" + req.getParameter(\"name\") + \"']\").evaluate(doc). Pre-F10 the text block would induce the XPath rule to fire; post-F10 the text block is stripped and the active code returns a static label."
+    },
+    {
+      "case_id": "L28",
+      "file_name": "L28.java",
+      "fp_source": "text_block",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-LDAP-INJECTION"],
+      "tokens_in_noise": ["InitialDirContext", ".search("],
+      "rationale": "The Java 13+ text block contains the full LDAP-injection FP-triggering pattern: new InitialDirContext().search(base, \"(uid=\" + req.getParameter(\"user\") + \")\", controls). Pre-F10 the text block would induce the LDAP rule to fire; post-F10 the text block is stripped and the active code returns a constant boolean."
+    },
+    {
+      "case_id": "L29",
+      "file_name": "L29.java",
+      "fp_source": "text_block",
+      "expected": "negative",
+      "target_violation_ids": ["ISO-A.8-CMD-INJECTION"],
+      "tokens_in_noise": ["Runtime.getRuntime().exec(", "new ProcessBuilder("],
+      "rationale": "The Java 13+ text block contains the full CMD-injection FP-triggering pattern: Runtime.getRuntime().exec(\"/bin/sh -c \" + req.getParameter(\"cmd\")) and new ProcessBuilder(\"/bin/sh\", \"-c\", \"ls \" + req.getParameter(\"dir\")).start(). Pre-F10 the text block would induce the CMD rule to fire; post-F10 the text block is stripped and the active code returns a constant string."
+    },
+    {
+      "case_id": "L30",
+      "file_name": "L30.java",
+      "fp_source": "text_block",
+      "expected": "positive",
+      "target_violation_ids": ["ISO-A.8-XPATH-INJECTION"],
+      "tokens_in_noise": ["XPathFactory"],
+      "rationale": "XPathFactory.newInstance( appears in a text block AND the active code builds an XPath expression from getParameter and calls evaluate. F10 must preserve the active XPath injection."
+    }
+  ]
+}

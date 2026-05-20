@@ -1,0 +1,20 @@
+rules:
+  - id: iso-a8-sql-injection
+    message: >-
+      SQL statement built via string concatenation. Use a PreparedStatement
+      with bound parameters instead.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      category: security
+      iso27001: A.8
+      cwe: "CWE-89: SQL Injection"
+      codegraph_violation_id: ISO-A.8-SQL-INJECTION
+    patterns:
+      - pattern-either:
+          - pattern: $STMT.executeQuery($X + $Y)
+          - pattern: $STMT.execute($X + $Y)
+          - pattern: $STMT.executeUpdate($X + $Y)
+          - pattern: $STMT.executeLargeUpdate($X + $Y)
+          - pattern: $CONN.prepareStatement($X + $Y)
+          - pattern: $CONN.prepareCall($X + $Y)

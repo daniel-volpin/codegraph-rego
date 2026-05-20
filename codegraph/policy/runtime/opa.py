@@ -56,11 +56,18 @@ def build_violation_response(
     evaluated_at: Optional[str] = None,
 ) -> Dict[str, Any]:
     violation_id = normalized.get("violation_id") or normalized.get("id")
+    # Prefer the raw source for human-facing fields (citation grounding,
+    # evidence-card rendering, audit excerpts). ``source_code`` carries
+    # the lexically-active view used by Rego matching; ``source_code_raw``
+    # carries the original including comments and string-literal text.
+    # Bundles built before lexical anchoring landed only set
+    # ``source_code``, so fall back to it transparently.
     source_code = bundle.get("source_code", "") or ""
+    source_code_raw = bundle.get("source_code_raw") or source_code
     start_line = bundle.get("start_line")
     end_line = bundle.get("end_line")
     evidence = {
-        "source_code": source_code,
+        "source_code": source_code_raw,
         "graph_context": bundle.get("graph_context", {}),
         "vector_context": bundle.get("vector_context", []),
         "file_path": bundle.get("file_path"),
@@ -80,8 +87,8 @@ def build_violation_response(
         "severity": normalized.get("severity") or "high",
         "control_metadata": control_meta,
         "remediation": remediation_capability_dict(str(violation_id) if violation_id else None),
-        "code_snippet": source_code,
-        "snippet_available": bool(source_code),
+        "code_snippet": source_code_raw,
+        "snippet_available": bool(source_code_raw),
         "snippet_start_line": start_line,
         "snippet_end_line": end_line,
         "evidence": evidence,

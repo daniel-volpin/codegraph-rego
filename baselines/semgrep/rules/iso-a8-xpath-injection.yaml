@@ -1,0 +1,17 @@
+rules:
+  - id: iso-a8-xpath-injection
+    message: >-
+      XPath expression built via string concatenation. Use XPath variables
+      bound via setXPathVariableResolver instead.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      category: security
+      iso27001: A.8
+      cwe: "CWE-643: XPath Injection"
+      codegraph_violation_id: ISO-A.8-XPATH-INJECTION
+    patterns:
+      - pattern-either:
+          - pattern: $XP.compile($X + $Y)
+          - pattern: $XP.evaluate($X + $Y, $DOC)
+          - pattern: $XP.evaluate($X + $Y, $DOC, $T)

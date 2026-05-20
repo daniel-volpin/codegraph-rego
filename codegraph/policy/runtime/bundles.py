@@ -10,6 +10,7 @@ from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet
 from codegraph.db import get_neo4j_driver
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.source_analysis import analyze_policy_indicators
+from codegraph.policy.source_analysis_core import strip_java_lexical_noise
 from codegraph.search.service import HybridSearchService
 from codegraph.policy.taint_graph import TaintPathFinder
 from codegraph.telemetry import get_tracer
@@ -209,16 +210,40 @@ def build_evidence_bundle(
             )
             if not source_code and method_snapshot.get("name"):
                 source_code = extract_code_snippet(source_path.as_posix(), method_snapshot.get("name", ""))
+
+        # Two lexically-cleaned views of the source, plus the raw
+        # original:
+        #   * source_code_active: comments stripped, string and char
+        #     literal contents PRESERVED. The Python regex layer in
+        #     codegraph.policy.analysis matches structurally-anchored
+        #     patterns that intentionally inspect literal contents
+        #     (for example, MessageDigest.getInstance("MD5")), so it
+        #     needs literals retained.
+        #   * source_code_substring_safe: comments AND literal contents
+        #     stripped. The OPA/Rego rules perform naive contains(...)
+        #     matching on input.source_code; this view eliminates the
+        #     entire lexical-FP class for substring rules.
+        #   * source_code (raw) is preserved on the bundle as
+        #     source_code_raw for downstream consumers that need
+        #     human-readable text (LLM citation grounding,
+        #     evidence-card rendering, audit excerpts).
+        if source_code:
+            source_code_active = strip_java_lexical_noise(source_code, strip_string_literals=False)
+            source_code_substring_safe = strip_java_lexical_noise(source_code, strip_string_literals=True)
+        else:
+            source_code_active = source_code
+            source_code_substring_safe = source_code
+
         graph_context = {
             "annotations": method_snapshot.get("annotations") or [],
             "uses_fields": method_snapshot.get("uses_fields") or [],
             "calls": method_snapshot.get("calls") or [],
             "callers": method_snapshot.get("callers") or [],
         }
-        analysis_flags = analyze_policy_indicators(source_code)
+        analysis_flags = analyze_policy_indicators(source_code_active)
         helper_summaries = (
             _HELPER_SUMMARY_BUILDER.build(
-                current_source=source_code,
+                current_source=source_code_active,
                 method_snapshot=method_snapshot,
                 method_index=method_index or {},
             )
@@ -239,13 +264,20 @@ def build_evidence_bundle(
             start_line=method_snapshot.get("start_line"),
             end_line=method_snapshot.get("end_line"),
             modifiers=method_snapshot.get("modifiers") or [],
-            source_code=source_code,
+            source_code=source_code_substring_safe,
             graph_context=graph_context,
             vector_context=vector_context,
             analysis_flags=analysis_flags,
             helper_summaries=helper_summaries,
         )
         result = serialize_policy_bundle(bundle)
+        # Preserve the original source for downstream consumers that
+        # need human-readable text (LLM citation grounding,
+        # evidence-card rendering, audit excerpts). Rego policies see
+        # ``source_code`` (the substring-safe view) and never read this
+        # field; the Python regex layer ran on source_code_active above
+        # to set the analysis flags.
+        result["source_code_raw"] = source_code
 
         taint_paths = (
             taint_path_finder.find_reachable_sinks(method_snapshot["signature"])

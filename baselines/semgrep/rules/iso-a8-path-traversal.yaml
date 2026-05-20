@@ -1,0 +1,22 @@
+rules:
+  - id: iso-a8-path-traversal
+    message: >-
+      File-system path built via string concatenation. Validate or canonicalise
+      against an allow-list before any file IO.
+    languages: [java]
+    severity: ERROR
+    metadata:
+      category: security
+      iso27001: A.8
+      cwe: "CWE-22: Path Traversal"
+      codegraph_violation_id: ISO-A.8-PATH-TRAVERSAL
+    patterns:
+      - pattern-either:
+          - pattern: new java.io.File($X + $Y)
+          - pattern: new File($X + $Y)
+          - pattern: new java.io.FileInputStream($X + $Y)
+          - pattern: new FileInputStream($X + $Y)
+          - pattern: new java.io.FileReader($X + $Y)
+          - pattern: new FileReader($X + $Y)
+          - pattern: java.nio.file.Paths.get($X + $Y)
+          - pattern: Paths.get($X + $Y)
