@@ -141,6 +141,18 @@ class TestHelperMethodAnalyzer(unittest.TestCase):
         self.assertFalse(summary.returns_constant_string)
         self.assertTrue(summary.propagates_tainted_input)
 
+    def test_unsupported_shift_expression_does_not_resolve_branch(self) -> None:
+        source = (
+            "private String doSomething(String param) {"
+            "String bar;"
+            'if ((1 << 5) > 0) bar = "safe"; else bar = param;'
+            "return bar;"
+            "}"
+        )
+        summary = HelperMethodAnalyzer().summarize(source)
+        self.assertFalse(summary.returns_constant_string)
+        self.assertTrue(summary.propagates_tainted_input)
+
 
 if __name__ == "__main__":
     unittest.main()

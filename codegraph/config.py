@@ -1,8 +1,9 @@
+import ipaddress
 from functools import lru_cache
 import os
 from pathlib import Path
 from typing import Any, Literal, Optional
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,11 @@ ENV_FILE_OVERRIDE_VAR = "CODEGRAPH_ENV_FILE"
 
 
 class Settings(BaseSettings):
+    backend_host: str = Field(
+        "127.0.0.1",
+        validation_alias=AliasChoices("CODEGRAPH_HOST", "backend_host"),
+        description="Bind host for the local backend service. Defaults to loopback for safe local-only operation.",
+    )
     cors_allowed_origins: list[str] = Field(
         default_factory=lambda: [
             "http://127.0.0.1:5173",
@@ -210,6 +216,14 @@ class Settings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(extra="ignore")
+
+    @field_validator("backend_host")
+    @classmethod
+    def _validate_backend_host(cls, value: str) -> str:
+        if value == "localhost":
+            return value
+        ipaddress.ip_address(value)
+        return value
 
 
 def resolve_explicit_env_file() -> str | None:

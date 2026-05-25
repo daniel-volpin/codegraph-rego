@@ -273,5 +273,52 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["details"]["opa"], "opa version probe failed: bad binary")
 
 
+class OpaProbeTests(unittest.TestCase):
+    @patch("api.routers.health.shutil.which", return_value="/usr/local/bin/opa")
+    @patch("api.routers.health.subprocess.run")
+    def test_opa_probe_accepts_json_version_output(self, mock_run, _mock_which) -> None:
+        from api.routers.health import _opa_probe
+
+        mock_run.return_value = MagicMock(returncode=0, stdout='{"version":"1.15.1"}', stderr="")
+
+        result = _opa_probe()
+
+        self.assertEqual(result, (True, None))
+        mock_run.assert_called_once_with(
+            ["/usr/local/bin/opa", "version", "--format=json"],
+            capture_output=True,
+            text=True,
+        )
+
+    @patch("api.routers.health.shutil.which", return_value="/usr/local/bin/opa")
+    @patch("api.routers.health.subprocess.run")
+    def test_opa_probe_falls_back_to_plain_text_version_output(self, mock_run, _mock_which) -> None:
+        from api.routers.health import _opa_probe
+
+        mock_run.side_effect = [
+            MagicMock(returncode=1, stdout="", stderr="unknown flag: --format"),
+            MagicMock(returncode=0, stdout="Version: 1.15.1\nGo Version: go1.26.1\n", stderr=""),
+        ]
+
+        result = _opa_probe()
+
+        self.assertEqual(result, (True, None))
+        self.assertEqual(mock_run.call_count, 2)
+
+    @patch("api.routers.health.shutil.which", return_value="/usr/local/bin/opa")
+    @patch("api.routers.health.subprocess.run")
+    def test_opa_probe_reports_failure_when_plain_text_fallback_has_no_version(self, mock_run, _mock_which) -> None:
+        from api.routers.health import _opa_probe
+
+        mock_run.side_effect = [
+            MagicMock(returncode=1, stdout="", stderr="unknown flag: --format"),
+            MagicMock(returncode=0, stdout="Go Version: go1.26.1\n", stderr=""),
+        ]
+
+        result = _opa_probe()
+
+        self.assertEqual(result, (False, "opa version probe returned missing version metadata"))
+
+
 if __name__ == "__main__":
     unittest.main()

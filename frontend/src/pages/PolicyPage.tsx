@@ -37,6 +37,7 @@ import {
   severityVariant,
   uniqueRuleIds,
 } from "../components/features/policy/policyUtils";
+import { Card } from "../components/ui/card";
 
 const evalQueryKey = (preset: PolicyViewPreset) =>
   ["policyEvaluation:last", preset] as const;
@@ -304,6 +305,13 @@ const PolicyPage = () => {
 
   return (
     <div className="space-y-4">
+      <Card className="p-6">
+        <h1 className="text-2xl font-semibold text-slate-900">Policy Evaluation</h1>
+        <p className="mt-2 max-w-3xl text-sm text-slate-600">
+          Run the benchmark-aligned policy surface, review grouped violations, and inspect remediation support in one workspace.
+        </p>
+      </Card>
+
       <ControlsPanel
         viewPreset={viewPreset}
         onViewPresetChange={setViewPreset}

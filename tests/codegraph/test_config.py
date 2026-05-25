@@ -75,6 +75,29 @@ class TestConfigSettings(unittest.TestCase):
                 clear_settings_cache()
                 self.assertEqual(get_settings().neo4j_pass, "from-explicit-env")
 
+    def test_backend_host_defaults_to_loopback(self) -> None:
+        from codegraph.config import Settings
+
+        settings = Settings(_env_file=None)
+
+        self.assertEqual(settings.backend_host, "127.0.0.1")
+
+    def test_backend_host_can_be_overridden_from_env(self) -> None:
+        from codegraph.config import Settings
+
+        with patch.dict(os.environ, {"CODEGRAPH_HOST": "0.0.0.0"}, clear=True):
+            settings = Settings(_env_file=None)
+
+        self.assertEqual(settings.backend_host, "0.0.0.0")
+
+    def test_backend_host_allows_localhost_override(self) -> None:
+        from codegraph.config import Settings
+
+        with patch.dict(os.environ, {"CODEGRAPH_HOST": "localhost"}, clear=True):
+            settings = Settings(_env_file=None)
+
+        self.assertEqual(settings.backend_host, "localhost")
+
 
 if __name__ == "__main__":
     unittest.main()

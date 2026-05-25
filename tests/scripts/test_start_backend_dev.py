@@ -17,6 +17,136 @@ def _write_executable(path: Path, content: str) -> None:
 
 
 class StartBackendDevScriptTests(unittest.TestCase):
+    def test_script_binds_to_loopback_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            docker_cmd = tmp_path / "docker"
+            podman_cmd = tmp_path / "podman"
+            uv_cmd = tmp_path / "uv"
+            output_file = tmp_path / "uv-args.txt"
+
+            _write_executable(
+                docker_cmd,
+                """#!/bin/sh
+exit 1
+""",
+            )
+            _write_executable(
+                podman_cmd,
+                """#!/bin/sh
+case "$1" in
+  info)
+    exit 0
+    ;;
+  compose)
+    if [ "$2" = "up" ]; then
+      exit 0
+    fi
+    if [ "$2" = "ps" ] && [ "$3" = "-q" ]; then
+      printf '%s\\n' 'neo4j-container'
+      exit 0
+    fi
+    exit 1
+    ;;
+  inspect)
+    printf '%s\\n' 'healthy'
+    exit 0
+    ;;
+esac
+exit 1
+""",
+            )
+            _write_executable(
+                uv_cmd,
+                f"""#!/bin/sh
+printf '%s\\n' "$@" > "{output_file.as_posix()}"
+exit 0
+""",
+            )
+
+            result = subprocess.run(
+                [SCRIPT_PATH.as_posix()],
+                cwd=PROJECT_ROOT,
+                env={
+                    **os.environ,
+                    "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+                    "NEO4J_WAIT_RETRIES": "1",
+                    "NEO4J_WAIT_SECONDS": "0",
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("--host\n127.0.0.1\n", output_file.read_text(encoding="utf-8"))
+            self.assertIn("--reload\n", output_file.read_text(encoding="utf-8"))
+
+    def test_script_allows_explicit_host_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            docker_cmd = tmp_path / "docker"
+            podman_cmd = tmp_path / "podman"
+            uv_cmd = tmp_path / "uv"
+            output_file = tmp_path / "uv-args.txt"
+
+            _write_executable(
+                docker_cmd,
+                """#!/bin/sh
+exit 1
+""",
+            )
+            _write_executable(
+                podman_cmd,
+                """#!/bin/sh
+case "$1" in
+  info)
+    exit 0
+    ;;
+  compose)
+    if [ "$2" = "up" ]; then
+      exit 0
+    fi
+    if [ "$2" = "ps" ] && [ "$3" = "-q" ]; then
+      printf '%s\\n' 'neo4j-container'
+      exit 0
+    fi
+    exit 1
+    ;;
+  inspect)
+    printf '%s\\n' 'healthy'
+    exit 0
+    ;;
+esac
+exit 1
+""",
+            )
+            _write_executable(
+                uv_cmd,
+                f"""#!/bin/sh
+printf '%s\\n' "$@" > "{output_file.as_posix()}"
+exit 0
+""",
+            )
+
+            result = subprocess.run(
+                [SCRIPT_PATH.as_posix()],
+                cwd=PROJECT_ROOT,
+                env={
+                    **os.environ,
+                    "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+                    "CODEGRAPH_HOST": "0.0.0.0",
+                    "NEO4J_WAIT_RETRIES": "1",
+                    "NEO4J_WAIT_SECONDS": "0",
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("--host\n0.0.0.0\n", output_file.read_text(encoding="utf-8"))
+
     def test_script_fails_when_neo4j_container_exits_during_startup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)

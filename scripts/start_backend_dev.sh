@@ -8,6 +8,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 DEV_CONTAINER_SCRIPT="$SCRIPT_DIR/dev_container.sh"
 export CODEGRAPH_ENV_FILE="${CODEGRAPH_ENV_FILE:-$PROJECT_ROOT/.env}"
+BACKEND_HOST="${CODEGRAPH_HOST:-127.0.0.1}"
 
 echo "Starting ${NEO4J_SERVICE} via Docker Compose..."
 "$DEV_CONTAINER_SCRIPT" compose up -d "$NEO4J_SERVICE"
@@ -29,7 +30,7 @@ while [ "$attempt" -le "$NEO4J_WAIT_RETRIES" ]; do
   case "$status" in
     healthy)
       echo "${NEO4J_SERVICE} is healthy."
-      exec uv run uvicorn app:app --host 0.0.0.0 --port 8000
+      exec uv run uvicorn app:app --host "$BACKEND_HOST" --port 8000 --reload
       ;;
     exited|dead)
       echo "${NEO4J_SERVICE} stopped unexpectedly while starting." >&2

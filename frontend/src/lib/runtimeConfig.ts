@@ -1,4 +1,4 @@
-const ENV_DEFAULT_API_BASE = "http://127.0.0.1:8000";
+const ENV_DEFAULT_API_BASE = "/api";
 
 declare global {
   interface Window {
@@ -12,7 +12,11 @@ const normalizeBase = (value: string | undefined | null): string | null => {
   if (!value) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  return trimmed.replace(/\/+$/, "");
+  const withoutTrailingSlash = trimmed.replace(/\/+$/, "");
+  if (withoutTrailingSlash.startsWith("/") && typeof window !== "undefined") {
+    return new URL(withoutTrailingSlash, window.location.origin).toString().replace(/\/+$/, "");
+  }
+  return withoutTrailingSlash;
 };
 
 export function getRuntimeApiBase(): string {
@@ -32,4 +36,13 @@ export function getRuntimeApiBase(): string {
   if (envConfig) return envConfig;
 
   return ENV_DEFAULT_API_BASE;
+}
+
+export function buildRuntimeApiUrl(path: string): URL {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const base = getRuntimeApiBase();
+  if (base.startsWith("/")) {
+    return new URL(`${base}${normalizedPath}`, window.location.origin);
+  }
+  return new URL(`${base}${normalizedPath}`);
 }

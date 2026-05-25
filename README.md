@@ -1,5 +1,11 @@
 # CodeGraph
 
+[![CI](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/github/v/tag/daniel-volpin/codegraph-rego?label=version)](https://github.com/daniel-volpin/codegraph-rego/tags)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](./pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+[![Citation](https://img.shields.io/badge/citation-CITATION.cff-orange)](./CITATION.cff)
+
 CodeGraph is a benchmark-backed JVM security and compliance framework for ingesting Java code into a graph, evaluating ISO-aligned OPA/Rego policies, generating grounded explanations, and attempting bounded remediation with re-verification.
 
 ## Highlights
