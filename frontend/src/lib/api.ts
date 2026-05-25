@@ -85,19 +85,33 @@ async function handleStatusPayloadResponse<T>(response: Response): Promise<T> {
   throw new Error(detail || "Request failed");
 }
 
-export async function uploadZip(file: File): Promise<UploadResponse> {
+// Merges an externally-provided AbortSignal with an internal timeout signal so
+// callers can cancel a request from React Query while we still cap LLM-bound
+// requests at 5 minutes.
+function withTimeoutSignal(external: AbortSignal | undefined, ms: number): AbortSignal {
+  if (!external) return AbortSignal.timeout(ms);
+  // AbortSignal.any is supported in all modern browsers (Chrome 116+, Firefox 124+, Safari 17.4+).
+  const anyFn = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  if (typeof anyFn === "function") {
+    return anyFn([external, AbortSignal.timeout(ms)]);
+  }
+  return external;
+}
+
+export async function uploadZip(file: File, signal?: AbortSignal): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append("file", file);
 
   const response = await fetch(`${API_BASE_URL}/upload`, {
     method: "POST",
     body: formData,
+    signal,
   });
 
   return handleResponse<UploadResponse>(response);
 }
 
-export async function searchCode(query: string): Promise<SearchResponse> {
+export async function searchCode(query: string, signal?: AbortSignal): Promise<SearchResponse> {
   const response = await fetch(`${API_BASE_URL}/search`, {
     method: "POST",
     headers: {
@@ -105,12 +119,16 @@ export async function searchCode(query: string): Promise<SearchResponse> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ query }),
+    signal,
   });
 
   return handleResponse<SearchResponse>(response);
 }
 
-export async function evaluatePolicies(args?: PolicyEvaluateOptions): Promise<PolicyEvaluateResponse> {
+export async function evaluatePolicies(
+  args?: PolicyEvaluateOptions,
+  signal?: AbortSignal,
+): Promise<PolicyEvaluateResponse> {
   const params = new URLSearchParams();
   if (typeof args?.maxBundles === "number") {
     params.set("max_bundles", String(args.maxBundles));
@@ -132,6 +150,7 @@ export async function evaluatePolicies(args?: PolicyEvaluateOptions): Promise<Po
     {
       method: "GET",
       headers: defaultHeaders,
+      signal,
     },
   );
 
@@ -176,6 +195,7 @@ export async function fetchPolicyCatalog(): Promise<PolicyCatalogResponse> {
 
 export async function explainPolicyViolationOne(
   payload: PolicyExplainOneRequest,
+  signal?: AbortSignal,
 ): Promise<PolicyExplainOneResponse> {
   const response = await fetch(`${API_BASE_URL}/policy/explain_one`, {
     method: "POST",
@@ -184,6 +204,7 @@ export async function explainPolicyViolationOne(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
+    signal: withTimeoutSignal(signal, 300_000),
   });
 
   return handleStatusPayloadResponse<PolicyExplainOneResponse>(response);
@@ -252,6 +273,7 @@ export async function previewRemediation(
   violationId: string,
   targetMethod?: string,
   filePath?: string,
+  signal?: AbortSignal,
 ): Promise<RemediationPreviewResponse> {
   const response = await fetch(`${API_BASE_URL}/remediation/preview`, {
     method: "POST",
@@ -264,7 +286,7 @@ export async function previewRemediation(
       target_method: targetMethod,
       file_path: filePath,
     }),
-    signal: AbortSignal.timeout(300_000),
+    signal: withTimeoutSignal(signal, 300_000),
   });
   return handleRemediationResponse<RemediationPreviewResponse>(response);
 }
@@ -278,6 +300,7 @@ export interface ApplyRemediationPayload {
 
 export async function applyRemediation(
   payload: ApplyRemediationPayload,
+  signal?: AbortSignal,
 ): Promise<RemediationApplyResponse> {
   const response = await fetch(`${API_BASE_URL}/remediation/apply`, {
     method: "POST",
@@ -289,7 +312,7 @@ export async function applyRemediation(
       ...payload,
       mode: "dry_run",
     }),
-    signal: AbortSignal.timeout(300_000),
+    signal: withTimeoutSignal(signal, 300_000),
   });
 
   return handleRemediationResponse<RemediationApplyResponse>(response);
