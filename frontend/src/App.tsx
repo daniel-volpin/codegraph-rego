@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useQueryErrorResetBoundary } from "@tanstack/react-query";
 import Layout from "./components/common/Layout";
 import ErrorBoundary from "./components/common/ErrorBoundary";
+import { reportError } from "./lib/observability";
 
 const HomePage = lazy(() => import("./pages/HomePage"));
 const UploadPage = lazy(() => import("./pages/UploadPage"));
@@ -25,6 +26,9 @@ const App = () => {
   return (
     <Layout>
       <ErrorBoundary
+        onError={(error, info) => {
+          reportError(error, { source: "render", componentStack: info.componentStack });
+        }}
         // Reset React Query error state when the user retries; ensures stale
         // failed queries are refetched rather than re-throwing immediately.
         fallback={(error, retry) => (

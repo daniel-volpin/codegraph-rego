@@ -56,7 +56,7 @@ const HomePage = () => {
 
       <Card className="border-dashed p-4">
         <p className="text-sm text-slate-600">
-          <span className="font-semibold text-slate-800">Tip:</span> set <code className="rounded bg-slate-100 px-1 py-0.5">VITE_API_BASE_URL</code> for environment-specific API routing.
+          <span className="font-semibold text-slate-800">Tip:</span> set API base at runtime with <code className="rounded bg-slate-100 px-1 py-0.5">/config.json</code> (fallbacks: meta tag, then <code className="rounded bg-slate-100 px-1 py-0.5">VITE_API_BASE_URL</code>).
         </p>
       </Card>
     </div>

@@ -1,5 +1,6 @@
-import { Fragment } from "react";
+import { Fragment, useMemo, useRef } from "react";
 import { type Table, flexRender } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Scale } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { Card } from "../../ui/card";
@@ -32,110 +33,153 @@ const ViolationGroupTable = ({
   expandedFindingByGroup,
   onToggleFinding,
   hasEvaluationResult,
-}: ViolationGroupTableProps) => (
-  <Card className="overflow-hidden">
-    {viewPreset === "framework_demo" && (
-      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Showing the benchmark-aligned categories used in the thesis framework demo. Switch to All findings to inspect
-        the full policy surface.
-      </div>
-    )}
-    <div className="overflow-auto 2xl:max-h-[calc(100vh-11rem)]">
-      <table className="w-full table-fixed border-collapse text-sm">
-        <thead className="bg-slate-100 text-left text-slate-700">
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
-                const sortDir = header.column.getIsSorted();
-                const ariaSort =
-                  sortDir === "asc" ? "ascending" : sortDir === "desc" ? "descending" : "none";
-                const canSort = header.column.getCanSort();
-                return (
-                  <th
-                    key={header.id}
-                    scope="col"
-                    aria-sort={canSort ? ariaSort : undefined}
-                    className={`px-3 py-2 font-semibold overflow-hidden ${colWidthClass(header.column.id)}`}
-                  >
-                    {header.isPlaceholder ? null : (
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1"
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                      </button>
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <Fragment key={row.id}>
-              <tr className="border-t border-slate-200">
-                {row.getVisibleCells().map((cell) => (
-                  <td
-                    key={cell.id}
-                    className={`px-3 py-2 align-top overflow-hidden ${colWidthClass(cell.column.id)}`}
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-              {row.getIsExpanded() && (
-                <tr className="border-t border-slate-100 bg-slate-50">
-                  <td className="px-4 py-4" colSpan={columnCount}>
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{row.original.ruleId}</p>
-                          <p className="text-sm text-slate-600">
-                            {row.original.findingCount} findings across {row.original.fileCount} files
-                          </p>
-                        </div>
-                        <Badge variant={ruleGroupStatusVariant(row.original)}>
-                          {ruleGroupStatusLabel(row.original)}
-                        </Badge>
-                      </div>
+}: ViolationGroupTableProps) => {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const rows = table.getRowModel().rows;
 
-                      <div className="space-y-3">
-                        {row.original.findings.map((finding) => (
-                          <ViolationFinding
-                            key={finding.id}
-                            finding={finding}
-                            groupId={row.original.id}
-                            isSelected={selectedFindingId === finding.id}
-                            isExpanded={expandedFindingByGroup[row.original.id] === finding.id}
-                            onSelect={onSelectFinding}
-                            onToggle={onToggleFinding}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </Fragment>
-          ))}
-          {table.getRowModel().rows.length === 0 && (
-            <tr>
-              <td colSpan={columnCount} className="py-12 text-center">
-                <Scale aria-hidden="true" className="mx-auto h-10 w-10 text-slate-300" />
-                <p className="mt-3 text-sm text-slate-500">
-                  {hasEvaluationResult
-                    ? "No rule groups matched the current policy scan."
-                    : "No rule groups loaded yet. Run a policy evaluation to see results."}
-                </p>
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  </Card>
-);
+  // Virtualize top-level rule-group rows. Expanded rows are estimated taller
+  // so the scroll model remains stable while details are open.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (index) => (rows[index]?.getIsExpanded() ? 420 : 48),
+    overscan: 10,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const paddingTop = virtualRows.length > 0 ? virtualRows[0]!.start : 0;
+  const paddingBottom =
+    virtualRows.length > 0
+      ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1]!.end
+      : 0;
+
+  const emptyState = useMemo(
+    () => (
+      <tr>
+        <td colSpan={columnCount} className="py-12 text-center">
+          <Scale aria-hidden="true" className="mx-auto h-10 w-10 text-slate-300" />
+          <p className="mt-3 text-sm text-slate-500">
+            {hasEvaluationResult
+              ? "No rule groups matched the current policy scan."
+              : "No rule groups loaded yet. Run a policy evaluation to see results."}
+          </p>
+        </td>
+      </tr>
+    ),
+    [columnCount, hasEvaluationResult],
+  );
+
+  return (
+    <Card className="overflow-hidden">
+      {viewPreset === "framework_demo" && (
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Showing the benchmark-aligned categories used in the thesis framework demo. Switch to All findings to inspect
+          the full policy surface.
+        </div>
+      )}
+      <div ref={scrollRef} className="overflow-auto 2xl:max-h-[calc(100vh-11rem)]">
+        <table className="w-full table-fixed border-collapse text-sm">
+          <thead className="bg-slate-100 text-left text-slate-700">
+            {table.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map((header) => {
+                  const sortDir = header.column.getIsSorted();
+                  const ariaSort =
+                    sortDir === "asc" ? "ascending" : sortDir === "desc" ? "descending" : "none";
+                  const canSort = header.column.getCanSort();
+                  return (
+                    <th
+                      key={header.id}
+                      scope="col"
+                      aria-sort={canSort ? ariaSort : undefined}
+                      className={`px-3 py-2 font-semibold overflow-hidden ${colWidthClass(header.column.id)}`}
+                    >
+                      {header.isPlaceholder ? null : (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1"
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </button>
+                      )}
+                    </th>
+                  );
+                })}
+              </tr>
+            ))}
+          </thead>
+          <tbody>
+            {rows.length === 0 && emptyState}
+
+            {rows.length > 0 && paddingTop > 0 && (
+              <tr>
+                <td colSpan={columnCount} style={{ height: `${paddingTop}px` }} />
+              </tr>
+            )}
+
+            {virtualRows.map((virtualRow) => {
+              const row = rows[virtualRow.index];
+              if (!row) return null;
+              return (
+                <Fragment key={row.id}>
+                  <tr className="border-t border-slate-200">
+                    {row.getVisibleCells().map((cell) => (
+                      <td
+                        key={cell.id}
+                        className={`px-3 py-2 align-top overflow-hidden ${colWidthClass(cell.column.id)}`}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                  {row.getIsExpanded() && (
+                    <tr className="border-t border-slate-100 bg-slate-50">
+                      <td className="px-4 py-4" colSpan={columnCount}>
+                        <div className="space-y-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">{row.original.ruleId}</p>
+                              <p className="text-sm text-slate-600">
+                                {row.original.findingCount} findings across {row.original.fileCount} files
+                              </p>
+                            </div>
+                            <Badge variant={ruleGroupStatusVariant(row.original)}>
+                              {ruleGroupStatusLabel(row.original)}
+                            </Badge>
+                          </div>
+
+                          <div className="space-y-3">
+                            {row.original.findings.map((finding) => (
+                              <ViolationFinding
+                                key={finding.id}
+                                finding={finding}
+                                groupId={row.original.id}
+                                isSelected={selectedFindingId === finding.id}
+                                isExpanded={expandedFindingByGroup[row.original.id] === finding.id}
+                                onSelect={onSelectFinding}
+                                onToggle={onToggleFinding}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+
+            {rows.length > 0 && paddingBottom > 0 && (
+              <tr>
+                <td colSpan={columnCount} style={{ height: `${paddingBottom}px` }} />
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+};
 
 export default ViolationGroupTable;

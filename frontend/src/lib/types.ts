@@ -14,6 +14,7 @@ export type {
   RemediationApplyResponse,
   RemediationCapability,
   RemediationCompilationResult,
+  RemediationConfidence,
   RemediationGenerationResult,
   RemediationPreviewResponse,
   RemediationVerificationSummary,

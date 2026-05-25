@@ -1,8 +1,9 @@
 import { Settings as SettingsIcon, ExternalLink } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
+import { getRuntimeApiBase } from "../lib/runtimeConfig";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+const API_BASE = getRuntimeApiBase();
 
 const SettingsPage = () => {
   return (
@@ -23,12 +24,13 @@ const SettingsPage = () => {
 
         <div className="space-y-3">
           <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600">VITE_API_BASE_URL</span>
+            <span className="text-xs font-medium text-slate-600">Runtime API base</span>
             <Input type="text" value={API_BASE} readOnly className="font-mono text-sm bg-slate-50" />
           </label>
           <p className="text-xs text-muted-foreground">
-            This value is inlined at <strong>build time</strong> from <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">VITE_API_BASE_URL</code>.
-            In production builds, restarting the dev server is not enough — rebuild the bundle to change it.
+            Resolved in order from <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">/config.json</code>,
+            then <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">&lt;meta name="api-base" /&gt;</code>,
+            then <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">VITE_API_BASE_URL</code>.
           </p>
         </div>
       </Card>

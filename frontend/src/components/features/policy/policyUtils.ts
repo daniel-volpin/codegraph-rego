@@ -4,11 +4,11 @@ import {
   type PolicyExplainOneResponse,
   type RemediationApplyResponse,
   type RemediationCapability,
+  type RemediationConfidence,
   type RemediationPreviewResponse,
-  type UploadResponse,
   type Violation,
 } from "../../../lib/schemas";
-import { deriveModuleLabel, relativeToUploadedWorkspace, uniqueSortedModuleLabels } from "../../../lib/workspace";
+import { deriveModuleLabel, relativeToUploadedWorkspace } from "../../../lib/workspace";
 
 // ---- Types ----
 
@@ -43,13 +43,13 @@ export interface ViolationGroupRow {
 
 export type PolicyViewPreset = "all" | "framework_demo";
 export type PendingAction = "explain" | "preview" | "apply";
+export type ConfidenceBandLabel = "abstain" | "review" | "apply" | "pending";
 
 // Re-export response types so consumers can import everything from one place
 export type { PolicyExplainOneResponse, RemediationPreviewResponse, RemediationApplyResponse };
 
 // ---- Constants ----
 
-export const LAST_UPLOAD_STORAGE_KEY = "codegraph:lastUpload";
 export const POLICY_VIEW_PRESET_STORAGE_KEY = "codegraph:policy:viewPreset";
 
 export const LEGACY_FRAMEWORK_DEMO_RULE_IDS = [
@@ -179,6 +179,59 @@ export const remediationBadgeLabel = (capability: RemediationCapability) => {
 export const remediationBadgeVariant = (capability: RemediationCapability): "success" | "secondary" =>
   capability.support_tier === "manual" ? "secondary" : "success";
 
+export const confidenceBandVariant = (
+  band: ConfidenceBandLabel,
+): "destructive" | "warning" | "success" | "secondary" => {
+  if (band === "apply") return "success";
+  if (band === "review") return "warning";
+  if (band === "abstain") return "destructive";
+  return "secondary";
+};
+
+export const confidenceBandLabel = (band: ConfidenceBandLabel) => {
+  if (band === "apply") return "Apply";
+  if (band === "review") return "Review";
+  if (band === "abstain") return "Abstain";
+  return "Pending";
+};
+
+export interface ConfidenceSurface {
+  score: number | null;
+  band: ConfidenceBandLabel;
+  thresholdApply: number;
+  thresholdReview: number;
+  rationale: string | null;
+}
+
+export const deriveConfidenceSurface = (
+  confidence: RemediationConfidence | null | undefined,
+): ConfidenceSurface => {
+  const score = typeof confidence?.score === "number" ? confidence.score : null;
+  const thresholdApply =
+    typeof confidence?.threshold_apply === "number" ? confidence.threshold_apply : 0.75;
+  const thresholdReview =
+    typeof confidence?.threshold_review === "number" ? confidence.threshold_review : 0.5;
+
+  const bandFromScore: ConfidenceBandLabel =
+    score == null ? "pending"
+    : score >= thresholdApply ? "apply"
+    : score >= thresholdReview ? "review"
+    : "abstain";
+
+  const band =
+    confidence?.band === "apply" || confidence?.band === "review" || confidence?.band === "abstain"
+      ? confidence.band
+      : bandFromScore;
+
+  return {
+    score,
+    band,
+    thresholdApply,
+    thresholdReview,
+    rationale: confidence?.rationale ?? null,
+  };
+};
+
 export const ruleGroupStatusLabel = (group: ViolationGroupRow) => {
   if (group.fullSupportCount > 0 && group.guardedSupportCount > 0) {
     return `${group.fullSupportCount} auto-fixable, ${group.guardedSupportCount} guarded`;
@@ -235,20 +288,6 @@ export const formatCitationDisplay = (citation: string) => {
     if (parts.length > 4) displayPath = parts.slice(-4).join("/");
   }
   return { display: `${displayPath}${suffix}`, full: trimmed };
-};
-
-// ---- Storage helpers ----
-
-export const readUploadedModules = (): string[] => {
-  try {
-    const raw = localStorage.getItem(LAST_UPLOAD_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as UploadResponse;
-    const roots = parsed.java_roots?.length ? parsed.java_roots : parsed.java_root ? [parsed.java_root] : [];
-    return uniqueSortedModuleLabels(roots.filter(Boolean));
-  } catch {
-    return [];
-  }
 };
 
 export const readPolicyViewPreset = (): PolicyViewPreset => {

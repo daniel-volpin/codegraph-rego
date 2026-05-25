@@ -214,6 +214,19 @@ export type RemediationGenerationResult = z.infer<
   typeof RemediationGenerationResultSchema
 >;
 
+export const RemediationConfidenceSchema = z
+  .object({
+    score: z.number().min(0).max(1).nullable().optional(),
+    band: z.enum(["abstain", "review", "apply"]).nullable().optional(),
+    threshold_apply: z.number().min(0).max(1).nullable().optional(),
+    threshold_review: z.number().min(0).max(1).nullable().optional(),
+    rationale: z.string().nullable().optional(),
+  })
+  .loose();
+export type RemediationConfidence = z.infer<
+  typeof RemediationConfidenceSchema
+>;
+
 export const RemediationVerificationSummarySchema = z
   .object({
     target_rule_status: z.string().nullable().optional(),
@@ -261,6 +274,7 @@ export const RemediationPreviewResponseSchema = z
     diff: z.string().nullable().optional(),
     verification: RemediationVerificationSummarySchema.nullable().optional(),
     generation: RemediationGenerationResultSchema.nullable().optional(),
+    confidence: RemediationConfidenceSchema.nullable().optional(),
     error: z.string().nullable().optional(),
   })
   .loose();
@@ -281,6 +295,7 @@ export const RemediationApplyResponseSchema = z
     compilation: RemediationCompilationResultSchema.nullable().optional(),
     metadata: z.record(z.string(), z.unknown()).nullable().optional(),
     generation: RemediationGenerationResultSchema.nullable().optional(),
+    confidence: RemediationConfidenceSchema.nullable().optional(),
     error: z.string().nullable().optional(),
   })
   .loose();
