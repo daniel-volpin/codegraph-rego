@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   type ColumnDef,
   type ExpandedState,
@@ -13,6 +13,10 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { evaluatePolicies, fetchPolicyCatalog } from "../lib/api";
 import type { PolicyCatalogResponse, PolicyEvaluateResponse } from "../lib/types";
+import {
+  persistPolicyEvaluation,
+  readPersistedPolicyEvaluation,
+} from "../lib/persistence";
 import { uniqueSortedModuleLabels } from "../lib/workspace";
 import { Badge } from "../components/ui/badge";
 import ControlsPanel from "../components/features/policy/ControlsPanel";
@@ -26,8 +30,6 @@ import {
   POLICY_VIEW_PRESET_STORAGE_KEY,
   groupViolationsByRule,
   normalizeViolation,
-  persistPolicyEvaluation,
-  readPersistedPolicyEvaluation,
   readPolicyViewPreset,
   readUploadedModules,
   ruleGroupStatusLabel,
@@ -36,12 +38,12 @@ import {
   uniqueRuleIds,
 } from "../components/features/policy/policyUtils";
 
+const evalQueryKey = (preset: PolicyViewPreset) =>
+  ["policyEvaluation:last", preset] as const;
+
 const PolicyPage = () => {
+  const queryClient = useQueryClient();
   const initialViewPreset = readPolicyViewPreset();
-  const initialEvalSnapshotRef = useRef<Record<PolicyViewPreset, ReturnType<typeof readPersistedPolicyEvaluation>>>({
-    all: readPersistedPolicyEvaluation("all"),
-    framework_demo: readPersistedPolicyEvaluation("framework_demo"),
-  });
 
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
@@ -62,7 +64,7 @@ const PolicyPage = () => {
 
   const policyCatalogQuery = useQuery<PolicyCatalogResponse, Error>({
     queryKey: ["policyCatalog"],
-    queryFn: fetchPolicyCatalog,
+    queryFn: ({ signal }) => fetchPolicyCatalog(signal),
   });
 
   const frameworkDemoRuleIds = useMemo(() => {
@@ -77,19 +79,44 @@ const PolicyPage = () => {
     return LEGACY_FRAMEWORK_DEMO_RULE_IDS;
   }, [policyCatalogQuery.data?.benchmark_categories, policyCatalogQuery.data?.framework_demo_rule_ids]);
 
-  const lastEvalToastAtRef = useRef(initialEvalSnapshotRef.current[viewPreset]?.savedAt ?? 0);
+  // Track the most recent toast-emit timestamps so we don't double-fire on
+  // IDB hydration vs. fresh fetches. Initialized after hydration completes.
+  const lastEvalToastAtRef = useRef(0);
   const lastEvalErrorToastAtRef = useRef(0);
 
   const evalQuery = useQuery<PolicyEvaluateResponse, Error>({
-    queryKey: ["policyEvaluation:last", viewPreset],
-    queryFn: () => evaluatePolicies({ ruleIds: viewPreset === "framework_demo" ? frameworkDemoRuleIds : undefined }),
+    queryKey: evalQueryKey(viewPreset),
+    queryFn: ({ signal }) =>
+      evaluatePolicies(
+        { ruleIds: viewPreset === "framework_demo" ? frameworkDemoRuleIds : undefined },
+        signal,
+      ),
     enabled: false,
-    initialData: initialEvalSnapshotRef.current[viewPreset]?.data,
-    initialDataUpdatedAt: initialEvalSnapshotRef.current[viewPreset]?.savedAt,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 6,
     retry: false,
   });
+
+  // Async hydrate the eval cache from IndexedDB. Avoids the previous
+  // localStorage main-thread JSON.parse on multi-MB OPA payloads.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const persisted = await readPersistedPolicyEvaluation(viewPreset);
+      if (cancelled || !persisted) return;
+      // Only hydrate if we don't already have fresher data (e.g. a fetch
+      // raced the hydration).
+      const existing = queryClient.getQueryState(evalQueryKey(viewPreset));
+      if (existing?.data && (existing.dataUpdatedAt ?? 0) >= persisted.savedAt) return;
+      queryClient.setQueryData(evalQueryKey(viewPreset), persisted.data, {
+        updatedAt: persisted.savedAt,
+      });
+      lastEvalToastAtRef.current = persisted.savedAt;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient, viewPreset]);
 
   const frameworkDemoReady = viewPreset !== "framework_demo" || frameworkDemoRuleIds.length > 0;
   const frameworkDemoScopeSource =
@@ -103,7 +130,8 @@ const PolicyPage = () => {
 
   useEffect(() => {
     if (!evalQuery.data) return;
-    persistPolicyEvaluation(evalQuery.data, viewPreset);
+    // fire-and-forget; ignore IDB errors (handled inside persistence module)
+    void persistPolicyEvaluation(evalQuery.data, viewPreset);
   }, [evalQuery.data, viewPreset]);
 
   useEffect(() => {

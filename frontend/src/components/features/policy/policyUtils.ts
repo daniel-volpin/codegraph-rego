@@ -1,16 +1,20 @@
-import type {
-  PolicyEvaluateResponse,
-  PolicyExplainOneResponse,
-  RemediationApplyResponse,
-  RemediationCapability,
-  RemediationPreviewResponse,
-  UploadResponse,
-} from "../../../lib/types";
+import {
+  RemediationCapabilitySchema,
+  ViolationSchema,
+  type PolicyExplainOneResponse,
+  type RemediationApplyResponse,
+  type RemediationCapability,
+  type RemediationPreviewResponse,
+  type UploadResponse,
+  type Violation,
+} from "../../../lib/schemas";
 import { deriveModuleLabel, relativeToUploadedWorkspace, uniqueSortedModuleLabels } from "../../../lib/workspace";
 
 // ---- Types ----
 
-export type RawViolation = Record<string, unknown>;
+// A wire-shape violation kept loose so the explain endpoint still receives
+// the full original payload when we send `violationRow.raw` back.
+export type RawViolation = Violation;
 
 export interface ViolationRow {
   id: string;
@@ -37,22 +41,15 @@ export interface ViolationGroupRow {
   findings: ViolationRow[];
 }
 
-export interface PersistedPolicyEvaluation {
-  data: PolicyEvaluateResponse;
-  savedAt: number;
-  preset: PolicyViewPreset;
-}
-
 export type PolicyViewPreset = "all" | "framework_demo";
 export type PendingAction = "explain" | "preview" | "apply";
 
-// Re-export cache types so consumers can import everything from one place
+// Re-export response types so consumers can import everything from one place
 export type { PolicyExplainOneResponse, RemediationPreviewResponse, RemediationApplyResponse };
 
 // ---- Constants ----
 
 export const LAST_UPLOAD_STORAGE_KEY = "codegraph:lastUpload";
-export const POLICY_EVALUATION_STORAGE_KEY = "codegraph:policy:lastEvaluation";
 export const POLICY_VIEW_PRESET_STORAGE_KEY = "codegraph:policy:viewPreset";
 
 export const LEGACY_FRAMEWORK_DEMO_RULE_IDS = [
@@ -66,16 +63,7 @@ export const LEGACY_FRAMEWORK_DEMO_RULE_IDS = [
   "ISO-A.8-XPATH-INJECTION",
 ];
 
-// ---- Low-level helpers ----
-
-export const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-
-export const asString = (value: unknown, fallback = "—") =>
-  typeof value === "string" && value.trim() ? value : fallback;
-
-export const asBoolean = (value: unknown, fallback = false) =>
-  typeof value === "boolean" ? value : fallback;
+// ---- Display helpers ----
 
 export const compactTargetMethod = (value: string) => {
   if (!value || value === "—") return value;
@@ -87,27 +75,6 @@ export const compactTargetMethod = (value: string) => {
   const methodName = parts[parts.length - 1];
   const className = parts[parts.length - 2];
   return `${className}.${methodName}${suffix}`;
-};
-
-export const normalizeRemediationCapability = (value: unknown): RemediationCapability => {
-  const record = asRecord(value);
-  return {
-    supported: asBoolean(record?.supported, false),
-    support_tier:
-      record?.support_tier === "full" || record?.support_tier === "guarded" || record?.support_tier === "manual"
-        ? record.support_tier
-        : "manual",
-    reason_code: asString(record?.reason_code ?? "unsupported_rule_for_auto_fix", "unsupported_rule_for_auto_fix"),
-    strategy: typeof record?.strategy === "string" ? record.strategy : null,
-    preview_available: asBoolean(record?.preview_available, false),
-    verify_available: asBoolean(record?.verify_available, false),
-    ui_apply_mode: record?.ui_apply_mode === "dry_run" ? "dry_run" : "dry_run",
-    rationale: asString(
-      record?.rationale ?? "Automatic remediation is not available for this rule.",
-      "Automatic remediation is not available for this rule.",
-    ),
-    safe_refusal_possible: asBoolean(record?.safe_refusal_possible, false),
-  };
 };
 
 const extractMethodNameFromSignature = (targetMethod: string) => {
@@ -152,15 +119,21 @@ export const trimSnippetToMethod = (snippet: string, targetMethod: string) => {
   return lines.slice(start, end + 1).join("\n").trimEnd();
 };
 
+// `item` arrives already validated by the wire schema, so wire-level
+// normalization (fallback strings, capability defaults) is handled by Zod's
+// `.default()` / `.catch()` and not repeated here. This function only
+// derives UI-specific shape (composite id, module label, trimmed snippet).
 export const normalizeViolation = (item: RawViolation): ViolationRow => {
-  const evidence = asRecord(item.evidence);
-  const evidenceSnippet = evidence ? asString(evidence.source_code ?? "", "") : "";
-  const remediation = normalizeRemediationCapability(item.remediation);
-  const ruleId = asString(item.violation_id ?? item.rule_id);
-  const targetMethod = asString(item.target_method);
-  const filePath = asString(item.file_path);
-  const severity = asString(item.severity, "MEDIUM").toUpperCase();
-  const rawSnippet = asString(item.code_snippet ?? evidenceSnippet ?? item.updated_source_code ?? "", "");
+  // Defensive parse: callers that handed us untyped data still get schema
+  // semantics applied (this is a no-op for data fresh from the API client).
+  const validated = ViolationSchema.parse(item);
+  const ruleId = validated.violation_id ?? validated.rule_id ?? "—";
+  const targetMethod = validated.target_method ?? "—";
+  const filePath = validated.file_path ?? "—";
+  const severity = (validated.severity ?? "MEDIUM").toUpperCase();
+  const remediation = RemediationCapabilitySchema.parse(validated.remediation ?? {});
+  const rawSnippet =
+    validated.code_snippet ?? validated.evidence?.source_code ?? validated.updated_source_code ?? "";
   return {
     id: `${ruleId}:${targetMethod}:${filePath}`,
     ruleId,
@@ -168,14 +141,14 @@ export const normalizeViolation = (item: RawViolation): ViolationRow => {
     module: deriveModuleLabel(filePath),
     targetMethod,
     filePath,
-    reason: asString(item.reason ?? item.description),
+    reason: validated.reason ?? validated.description ?? "—",
     snippet: trimSnippetToMethod(rawSnippet, targetMethod),
     remediation,
-    raw: item,
+    raw: validated,
   };
 };
 
-// ---- Display helpers ----
+// ---- Display helpers (severity / remediation / status) ----
 
 export const severityVariant = (severity: string): "destructive" | "warning" | "secondary" => {
   if (severity === "HIGH") return "destructive";
@@ -284,38 +257,6 @@ export const readPolicyViewPreset = (): PolicyViewPreset => {
     return saved === "framework_demo" ? "framework_demo" : "all";
   } catch {
     return "all";
-  }
-};
-
-export const readPersistedPolicyEvaluation = (preset: PolicyViewPreset): PersistedPolicyEvaluation | null => {
-  try {
-    const saved = localStorage.getItem(POLICY_EVALUATION_STORAGE_KEY);
-    if (!saved) return null;
-    const parsed = JSON.parse(saved) as Partial<PersistedPolicyEvaluation>;
-    if (
-      !parsed ||
-      typeof parsed !== "object" ||
-      !parsed.data ||
-      typeof parsed.savedAt !== "number" ||
-      (parsed.preset !== "all" && parsed.preset !== "framework_demo")
-    ) {
-      return null;
-    }
-    if (parsed.preset !== preset) return null;
-    return { data: parsed.data as PolicyEvaluateResponse, savedAt: parsed.savedAt, preset: parsed.preset };
-  } catch {
-    return null;
-  }
-};
-
-export const persistPolicyEvaluation = (data: PolicyEvaluateResponse, preset: PolicyViewPreset) => {
-  try {
-    localStorage.setItem(
-      POLICY_EVALUATION_STORAGE_KEY,
-      JSON.stringify({ data, savedAt: Date.now(), preset } satisfies PersistedPolicyEvaluation),
-    );
-  } catch {
-    /* ignore storage errors */
   }
 };
 
