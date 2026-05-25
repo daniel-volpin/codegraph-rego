@@ -1,4 +1,4 @@
-import { useActivityContext } from "../../context/ActivityContext";
+import { useActivities } from "../../store/activity";
 
 const statusClassMap: Record<string, string> = {
   running: "text-amber-700 bg-amber-50",
@@ -8,7 +8,7 @@ const statusClassMap: Record<string, string> = {
 };
 
 const ActivityTray = () => {
-  const { activities } = useActivityContext();
+  const activities = useActivities();
   if (!activities.length) return null;
 
   return (

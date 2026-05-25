@@ -1,19 +1,28 @@
+import { z } from "zod";
 import {
-  HealthCheckResponse,
-  PolicyExplainOneRequest,
-  PolicyExplainOneResponse,
-  PolicyCatalogResponse,
-  PolicyEvaluateOptions,
-  PolicyEvaluateResponse,
-  PolicyReviewCreateRequest,
-  PolicyReviewCreateResponse,
-  PolicyReviewListResponse,
-  RemediationApplyResponse,
-  RemediationPreviewResponse,
-  SearchResponse,
-  UploadResponse,
-  UploadStatus,
-} from "./types";
+  HealthCheckResponseSchema,
+  PolicyCatalogResponseSchema,
+  PolicyEvaluateResponseSchema,
+  PolicyExplainOneResponseSchema,
+  PolicyReviewCreateResponseSchema,
+  PolicyReviewListResponseSchema,
+  RemediationApplyResponseSchema,
+  RemediationPreviewResponseSchema,
+  SearchResponseSchema,
+  UploadResponseSchema,
+  UploadStatusSchema,
+  type HealthCheckResponse,
+  type PolicyCatalogResponse,
+  type PolicyEvaluateResponse,
+  type PolicyExplainOneResponse,
+  type PolicyReviewCreateResponse,
+  type PolicyReviewListResponse,
+  type RemediationApplyResponse,
+  type RemediationPreviewResponse,
+  type SearchResponse,
+  type UploadResponse,
+  type UploadStatus,
+} from "./schemas";
 
 const API_BASE_URL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
@@ -23,66 +32,67 @@ const defaultHeaders = {
   Accept: "application/json",
 };
 
-async function handleResponse<T>(response: Response): Promise<T> {
+// ---- Error classes ----
+
+export class ApiError extends Error {
+  status: number;
+  payload: unknown;
+  constructor(message: string, status: number, payload: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+export class SchemaValidationError extends Error {
+  zodError: z.ZodError;
+  payload: unknown;
+  constructor(zodError: z.ZodError, payload: unknown) {
+    const issues = zodError.issues
+      .slice(0, 3)
+      .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+      .join("; ");
+    super(`Response failed schema validation: ${issues}`);
+    this.name = "SchemaValidationError";
+    this.zodError = zodError;
+    this.payload = payload;
+  }
+}
+
+// ---- Unified response parser ----
+//
+// Strategy:
+// 1. Parse JSON if Content-Type advertises it.
+// 2. If the payload validates against the schema, accept it regardless of
+//    HTTP status. This subsumes the previous three handle*Response variants:
+//    endpoints that return structured envelopes on 4xx (remediation,
+//    explain, reviews, health) succeed if their schema matches.
+// 3. Otherwise, if !ok, throw ApiError carrying the server's `error` field
+//    when present, else statusText.
+// 4. If ok but the schema doesn't match, throw SchemaValidationError. This
+//    is a real backend/frontend drift and must surface, not be swallowed.
+
+async function parseApiResponse<S extends z.ZodType>(
+  response: Response,
+  schema: S,
+): Promise<z.infer<S>> {
   const contentType = response.headers.get("content-type");
-  const isJson = contentType && contentType.includes("application/json");
-  const payload = isJson ? await response.json() : null;
+  const isJson = contentType?.includes("application/json") ?? false;
+  const payload: unknown = isJson ? await response.json() : null;
+
+  const result = schema.safeParse(payload);
+  if (result.success) return result.data;
 
   if (!response.ok) {
-    const detail =
-      payload && typeof payload === "object" && "error" in payload
-        ? (payload.error as string)
-        : response.statusText;
-    throw new Error(detail || "Request failed");
+    const message =
+      payload && typeof payload === "object" && payload !== null && "error" in payload
+        ? String((payload as { error: unknown }).error ?? response.statusText)
+        : response.statusText || "Request failed";
+    throw new ApiError(message, response.status, payload);
   }
 
-  return payload as T;
-}
-
-async function handleRemediationResponse<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get("content-type");
-  const isJson = contentType && contentType.includes("application/json");
-  const payload = isJson ? await response.json() : null;
-
-  if (response.ok) {
-    return payload as T;
-  }
-
-  // Remediation endpoints return structured JSON even on 4xx/5xx (e.g. status=INVALID).
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "status" in payload &&
-    "violation_id" in payload
-  ) {
-    return payload as T;
-  }
-
-  const detail =
-    payload && typeof payload === "object" && "error" in payload
-      ? (payload.error as string)
-      : response.statusText;
-  throw new Error(detail || "Request failed");
-}
-
-async function handleStatusPayloadResponse<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get("content-type");
-  const isJson = contentType && contentType.includes("application/json");
-  const payload = isJson ? await response.json() : null;
-
-  if (response.ok) {
-    return payload as T;
-  }
-
-  if (payload && typeof payload === "object" && "status" in payload) {
-    return payload as T;
-  }
-
-  const detail =
-    payload && typeof payload === "object" && "error" in payload
-      ? (payload.error as string)
-      : response.statusText;
-  throw new Error(detail || "Request failed");
+  throw new SchemaValidationError(result.error, payload);
 }
 
 // Merges an externally-provided AbortSignal with an internal timeout signal so
@@ -98,6 +108,8 @@ function withTimeoutSignal(external: AbortSignal | undefined, ms: number): Abort
   return external;
 }
 
+// ---- Endpoints ----
+
 export async function uploadZip(file: File, signal?: AbortSignal): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append("file", file);
@@ -108,7 +120,7 @@ export async function uploadZip(file: File, signal?: AbortSignal): Promise<Uploa
     signal,
   });
 
-  return handleResponse<UploadResponse>(response);
+  return parseApiResponse(response, UploadResponseSchema);
 }
 
 export async function searchCode(query: string, signal?: AbortSignal): Promise<SearchResponse> {
@@ -122,7 +134,14 @@ export async function searchCode(query: string, signal?: AbortSignal): Promise<S
     signal,
   });
 
-  return handleResponse<SearchResponse>(response);
+  return parseApiResponse(response, SearchResponseSchema);
+}
+
+export interface PolicyEvaluateOptions {
+  maxBundles?: number;
+  maxTotalViolations?: number;
+  maxPerViolationId?: number;
+  ruleIds?: string[];
 }
 
 export async function evaluatePolicies(
@@ -154,17 +173,20 @@ export async function evaluatePolicies(
     },
   );
 
-  return handleResponse<PolicyEvaluateResponse>(response);
+  return parseApiResponse(response, PolicyEvaluateResponseSchema);
 }
 
-export async function evaluatePoliciesWithLLM(payload: {
-  limit: number;
-  model?: string;
-  maxBundles?: number;
-  maxTotalViolations?: number;
-  maxPerViolationId?: number;
-  ruleIds?: string[];
-}): Promise<PolicyEvaluateResponse> {
+export async function evaluatePoliciesWithLLM(
+  payload: {
+    limit: number;
+    model?: string;
+    maxBundles?: number;
+    maxTotalViolations?: number;
+    maxPerViolationId?: number;
+    ruleIds?: string[];
+  },
+  signal?: AbortSignal,
+): Promise<PolicyEvaluateResponse> {
   const response = await fetch(`${API_BASE_URL}/policy/evaluate_with_llm`, {
     method: "POST",
     headers: {
@@ -179,18 +201,28 @@ export async function evaluatePoliciesWithLLM(payload: {
       max_per_violation_id: payload.maxPerViolationId,
       rule_ids: payload.ruleIds,
     }),
+    signal,
   });
 
-  return handleResponse<PolicyEvaluateResponse>(response);
+  return parseApiResponse(response, PolicyEvaluateResponseSchema);
 }
 
-export async function fetchPolicyCatalog(): Promise<PolicyCatalogResponse> {
+export async function fetchPolicyCatalog(
+  signal?: AbortSignal,
+): Promise<PolicyCatalogResponse> {
   const response = await fetch(`${API_BASE_URL}/policy/catalog`, {
     method: "GET",
     headers: defaultHeaders,
+    signal,
   });
 
-  return handleResponse<PolicyCatalogResponse>(response);
+  return parseApiResponse(response, PolicyCatalogResponseSchema);
+}
+
+export interface PolicyExplainOneRequest {
+  violation: Record<string, unknown>;
+  include_graph_context?: boolean;
+  model?: string | null;
 }
 
 export async function explainPolicyViolationOne(
@@ -207,11 +239,25 @@ export async function explainPolicyViolationOne(
     signal: withTimeoutSignal(signal, 300_000),
   });
 
-  return handleStatusPayloadResponse<PolicyExplainOneResponse>(response);
+  return parseApiResponse(response, PolicyExplainOneResponseSchema);
+}
+
+export type PolicyReviewLabel = "TP" | "FP" | "UNCLEAR";
+
+export interface PolicyReviewCreateRequest {
+  label: PolicyReviewLabel;
+  notes?: string | null;
+  violation: Record<string, unknown>;
+  explanation?: string | null;
+  llm_model?: string | null;
+  include_graph_context?: boolean;
+  remediation_preview?: Record<string, unknown> | null;
+  remediation_apply?: Record<string, unknown> | null;
 }
 
 export async function saveViolationReview(
   payload: PolicyReviewCreateRequest,
+  signal?: AbortSignal,
 ): Promise<PolicyReviewCreateResponse> {
   const response = await fetch(`${API_BASE_URL}/policy/reviews`, {
     method: "POST",
@@ -220,13 +266,15 @@ export async function saveViolationReview(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
+    signal,
   });
 
-  return handleStatusPayloadResponse<PolicyReviewCreateResponse>(response);
+  return parseApiResponse(response, PolicyReviewCreateResponseSchema);
 }
 
 export async function fetchViolationReviews(
   args: { violationKey?: string; limit?: number } = {},
+  signal?: AbortSignal,
 ): Promise<PolicyReviewListResponse> {
   const params = new URLSearchParams();
   if (args.violationKey) {
@@ -241,22 +289,27 @@ export async function fetchViolationReviews(
     {
       method: "GET",
       headers: defaultHeaders,
+      signal,
     },
   );
 
-  return handleStatusPayloadResponse<PolicyReviewListResponse>(response);
+  return parseApiResponse(response, PolicyReviewListResponseSchema);
 }
 
-export async function fetchHealth(): Promise<HealthCheckResponse> {
+export async function fetchHealth(signal?: AbortSignal): Promise<HealthCheckResponse> {
   const response = await fetch(`${API_BASE_URL}/health`, {
     method: "GET",
     headers: defaultHeaders,
+    signal,
   });
 
-  return handleStatusPayloadResponse<HealthCheckResponse>(response);
+  return parseApiResponse(response, HealthCheckResponseSchema);
 }
 
-export async function fetchUploadStatus(requestId?: string | null): Promise<UploadStatus> {
+export async function fetchUploadStatus(
+  requestId?: string | null,
+  signal?: AbortSignal,
+): Promise<UploadStatus> {
   const url = new URL(`${API_BASE_URL}/upload/status`);
   if (requestId) {
     url.searchParams.set("request_id", requestId);
@@ -264,9 +317,10 @@ export async function fetchUploadStatus(requestId?: string | null): Promise<Uplo
   const response = await fetch(url.toString(), {
     method: "GET",
     headers: defaultHeaders,
+    signal,
   });
 
-  return handleResponse<UploadStatus>(response);
+  return parseApiResponse(response, UploadStatusSchema);
 }
 
 export async function previewRemediation(
@@ -288,7 +342,7 @@ export async function previewRemediation(
     }),
     signal: withTimeoutSignal(signal, 300_000),
   });
-  return handleRemediationResponse<RemediationPreviewResponse>(response);
+  return parseApiResponse(response, RemediationPreviewResponseSchema);
 }
 
 export interface ApplyRemediationPayload {
@@ -315,5 +369,5 @@ export async function applyRemediation(
     signal: withTimeoutSignal(signal, 300_000),
   });
 
-  return handleRemediationResponse<RemediationApplyResponse>(response);
+  return parseApiResponse(response, RemediationApplyResponseSchema);
 }

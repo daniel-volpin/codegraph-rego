@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileArchive, UploadCloud } from "lucide-react";
 import { fetchUploadStatus, uploadZip } from "../lib/api";
 import type { UploadResponse, UploadStatus } from "../lib/types";
-import { useActivityContext } from "../context/ActivityContext";
+import { useClearActivity, useUpsertActivity } from "../store/activity";
 import { useResetAllPolicyArtifacts } from "../hooks/usePolicyArtifacts";
+import { clearPersistedPolicyEvaluations } from "../lib/persistence";
 import { toast } from "sonner";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -31,7 +32,8 @@ const UploadPage = () => {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResponse | null>(() => readLastUpload());
   const [localStatus, setLocalStatus] = useState<UploadStatus | null>(null);
-  const { upsert: upsertActivity, clear: clearActivity } = useActivityContext();
+  const upsertActivity = useUpsertActivity();
+  const clearActivity = useClearActivity();
   const resetPolicyArtifacts = useResetAllPolicyArtifacts();
 
   const uploadMutation = useMutation({
@@ -46,11 +48,7 @@ const UploadPage = () => {
       }
       queryClient.removeQueries({ queryKey: ["policyEvaluation:last"] });
       resetPolicyArtifacts();
-      try {
-        localStorage.removeItem("codegraph:policy:lastEvaluation");
-      } catch {
-        /* ignore storage errors */
-      }
+      void clearPersistedPolicyEvaluations();
     },
     onError: (error: Error) => {
       const payload: UploadResponse = { status: "error", error: error.message };
@@ -70,7 +68,7 @@ const UploadPage = () => {
   const trackedRequestId = result?.request_id ?? null;
   const { data: statusData, refetch: refetchStatus } = useQuery({
     queryKey: ["uploadStatus", trackedRequestId],
-    queryFn: () => fetchUploadStatus(trackedRequestId),
+    queryFn: ({ signal }) => fetchUploadStatus(trackedRequestId, signal),
     staleTime: 0,
     refetchInterval: (query) => {
       const nextStatus = query.state.data as UploadStatus | undefined;

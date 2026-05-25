@@ -9,7 +9,7 @@ interface HealthStatusProps {
 const HealthStatus = ({ variant = "panel" }: HealthStatusProps) => {
   const { data, isLoading, isError, refetch } = useQuery<HealthCheckResponse, Error>({
     queryKey: ["health"],
-    queryFn: fetchHealth,
+    queryFn: ({ signal }) => fetchHealth(signal),
     refetchInterval: 15000,
     staleTime: 10000,
   });
