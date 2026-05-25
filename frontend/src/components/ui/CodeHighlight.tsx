@@ -1,6 +1,13 @@
 import { cn } from "../../lib/utils";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
+import java from "react-syntax-highlighter/dist/esm/languages/prism/java";
+import json from "react-syntax-highlighter/dist/esm/languages/prism/json";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+
+// Only register the grammars we actually render. The default `Prism` entry
+// pulls every language Prism supports (~hundreds of kB pre-gzip).
+SyntaxHighlighter.registerLanguage("java", java);
+SyntaxHighlighter.registerLanguage("json", json);
 
 interface CodeHighlightProps {
   code: string;

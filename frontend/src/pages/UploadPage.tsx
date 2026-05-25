@@ -33,7 +33,7 @@ const UploadPage = () => {
   const { upsert: upsertActivity, clear: clearActivity } = useActivityContext();
 
   const uploadMutation = useMutation({
-    mutationFn: uploadZip,
+    mutationFn: (file: File) => uploadZip(file),
     onSuccess: (data) => {
       setResult(data);
       toast.success("Upload complete! Embeddings rebuilt.");
@@ -198,7 +198,14 @@ const UploadPage = () => {
             <p className="text-sm font-medium text-slate-800">{status.message || "Processing upload"}</p>
             <Badge variant={statusTone}>{status.complete ? "Complete" : "Running"}</Badge>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+          <div
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressValue}
+            aria-label="Upload and ingestion progress"
+            className="h-2 overflow-hidden rounded-full bg-slate-100"
+          >
             <div
               className="h-full bg-indigo-600 transition-all"
               style={{ width: `${progressValue}%` }}

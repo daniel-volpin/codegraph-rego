@@ -1,4 +1,4 @@
-import { PropsWithChildren, useEffect, useState } from "react";
+import { PropsWithChildren, useEffect, useRef, useState } from "react";
 import { Menu, ShieldCheck } from "lucide-react";
 import SidebarNav from "./SidebarNav";
 import Breadcrumbs from "./Breadcrumbs";
@@ -8,9 +8,15 @@ import HealthStatus from "./HealthStatus";
 
 const Layout = ({ children }: PropsWithChildren) => {
   const [isDrawerOpen, setDrawerOpen] = useState(false);
+  // Track the element that had focus before the drawer opened so we can
+  // restore it on close (WCAG 2.4.3 Focus Order).
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const drawerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isDrawerOpen) return;
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -22,26 +28,44 @@ const Layout = ({ children }: PropsWithChildren) => {
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
 
+    // Move focus into the drawer once it mounts.
+    const drawer = drawerRef.current;
+    const firstFocusable = drawer?.querySelector<HTMLElement>(
+      'a[href], button, [tabindex]:not([tabindex="-1"])',
+    );
+    firstFocusable?.focus();
+
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
+      previousFocusRef.current?.focus?.();
     };
   }, [isDrawerOpen]);
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Skip-to-content link (WCAG 2.4.1) — visually hidden until focused. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-slate-900 focus:shadow"
+      >
+        Skip to main content
+      </a>
+
       <div className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
         <button
           type="button"
           aria-label="Open navigation"
+          aria-expanded={isDrawerOpen}
+          aria-controls="primary-navigation-drawer"
           onClick={() => setDrawerOpen(true)}
           className="rounded-md p-2 text-slate-700 transition hover:bg-slate-100"
         >
-          <Menu className="h-5 w-5" />
+          <Menu aria-hidden="true" className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-2">
           <div className="rounded-md bg-indigo-600 p-1.5 text-white">
-            <ShieldCheck className="h-4 w-4" />
+            <ShieldCheck aria-hidden="true" className="h-4 w-4" />
           </div>
           <span className="text-sm font-semibold text-slate-900">CodeGraph</span>
         </div>
@@ -49,8 +73,19 @@ const Layout = ({ children }: PropsWithChildren) => {
       </div>
 
       {isDrawerOpen && (
-        <div className="fixed inset-0 z-40 bg-slate-900/50 lg:hidden" onClick={() => setDrawerOpen(false)}>
-          <div className="h-full" onClick={(event) => event.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/50 lg:hidden"
+          onClick={() => setDrawerOpen(false)}
+        >
+          <div
+            id="primary-navigation-drawer"
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Primary navigation"
+            className="h-full"
+            onClick={(event) => event.stopPropagation()}
+          >
             <SidebarNav
               mode="drawer"
               onClose={() => setDrawerOpen(false)}
@@ -75,7 +110,9 @@ const Layout = ({ children }: PropsWithChildren) => {
             </div>
           </header>
           <div className="flex flex-col gap-6 lg:flex-row">
-            <main className="min-w-0 flex-1">{children}</main>
+            <main id="main-content" className="min-w-0 flex-1">
+              {children}
+            </main>
             <ActivityTray />
           </div>
         </div>

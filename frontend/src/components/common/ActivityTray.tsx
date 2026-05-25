@@ -12,7 +12,11 @@ const ActivityTray = () => {
   if (!activities.length) return null;
 
   return (
-    <aside className="w-full shrink-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-80">
+    <aside
+      aria-label="Background activity"
+      aria-live="polite"
+      className="w-full shrink-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 lg:w-80"
+    >
       <h3 className="text-sm font-semibold text-slate-900">Activity</h3>
       {activities.map((activity) => (
         <div key={activity.key} className="rounded-lg border border-slate-200 p-3">
@@ -22,7 +26,14 @@ const ActivityTray = () => {
           </div>
           {activity.message && <p className="text-xs text-slate-600">{activity.message}</p>}
           {typeof activity.progress === "number" && (
-            <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.min(Math.max(activity.progress, 0), 100)}
+              aria-label={`${activity.label} progress`}
+              className="mt-2 h-1.5 rounded-full bg-slate-100"
+            >
               <div className="h-1.5 rounded-full bg-indigo-600" style={{ width: `${Math.min(Math.max(activity.progress, 0), 100)}%` }} />
             </div>
           )}

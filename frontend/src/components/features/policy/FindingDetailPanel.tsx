@@ -5,6 +5,7 @@ import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import { Card } from "../../ui/card";
 import CodeHighlight from "../../ui/CodeHighlight";
+import { copyTextToClipboard } from "../../../lib/utils";
 import type { PolicyExplanationStructured } from "../../../lib/types";
 import {
   type ViolationRow,
@@ -282,12 +283,14 @@ const FindingDetailPanel = ({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(selectedFinding.snippet || "");
-                  toast.success("Code copied.");
+                aria-label={`Copy snippet for ${selectedFinding.targetMethod}`}
+                onClick={async () => {
+                  const ok = await copyTextToClipboard(selectedFinding.snippet || "");
+                  if (ok) toast.success("Code copied.");
+                  else toast.error("Clipboard unavailable. Select and copy manually.");
                 }}
               >
-                <Copy className="mr-1 h-4 w-4" /> Copy
+                <Copy aria-hidden="true" className="mr-1 h-4 w-4" /> Copy
               </Button>
             </div>
             <CodeHighlight

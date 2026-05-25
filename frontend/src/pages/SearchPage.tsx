@@ -22,7 +22,7 @@ const SearchPage = () => {
   const [result, setResult] = useState<SearchResponse | null>(null);
 
   const searchMutation = useMutation({
-    mutationFn: searchCode,
+    mutationFn: (q: string) => searchCode(q),
     onSuccess: (data) => {
       setResult(data);
       const matchCount = data.matches.length;

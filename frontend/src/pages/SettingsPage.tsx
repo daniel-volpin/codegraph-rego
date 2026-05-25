@@ -27,8 +27,8 @@ const SettingsPage = () => {
             <Input type="text" value={API_BASE} readOnly className="font-mono text-sm bg-slate-50" />
           </label>
           <p className="text-xs text-muted-foreground">
-            Set this environment variable before starting the dev server to route API calls to a different backend.
-            Restart the dev server after changing <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">VITE_API_BASE_URL</code>.
+            This value is inlined at <strong>build time</strong> from <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">VITE_API_BASE_URL</code>.
+            In production builds, restarting the dev server is not enough — rebuild the bundle to change it.
           </p>
         </div>
       </Card>

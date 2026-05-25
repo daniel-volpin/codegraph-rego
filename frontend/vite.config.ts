@@ -18,12 +18,26 @@ export default defineConfig({
             return undefined;
           }
 
+          // Syntax highlighting drags in Prism + refractor; isolate so the
+          // React vendor chunk stays cacheable across releases.
+          if (
+            id.includes("react-syntax-highlighter") ||
+            id.includes("refractor") ||
+            id.includes("prismjs")
+          ) {
+            return "syntax-vendor";
+          }
+
           if (id.includes("react-markdown")) {
             return "markdown-vendor";
           }
 
           if (id.includes("@tanstack/react-table")) {
             return "table-vendor";
+          }
+
+          if (id.includes("lucide-react")) {
+            return "icons-vendor";
           }
 
           if (id.includes("react-router-dom") || id.includes("@tanstack/react-query")) {

@@ -347,9 +347,20 @@ const PolicyPage = () => {
       {
         id: "expander",
         header: "",
+        enableSorting: false,
         cell: ({ row }) => (
-          <button type="button" className="p-1" onClick={row.getToggleExpandedHandler()}>
-            {row.getIsExpanded() ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <button
+            type="button"
+            className="p-1"
+            aria-label={row.getIsExpanded() ? "Collapse rule group" : "Expand rule group"}
+            aria-expanded={row.getIsExpanded()}
+            onClick={row.getToggleExpandedHandler()}
+          >
+            {row.getIsExpanded() ? (
+              <ChevronDown aria-hidden="true" className="h-4 w-4" />
+            ) : (
+              <ChevronRight aria-hidden="true" className="h-4 w-4" />
+            )}
           </button>
         ),
       },
