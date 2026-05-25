@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   type ColumnDef,
   type ExpandedState,
@@ -11,13 +11,7 @@ import {
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import {
-  applyRemediation,
-  evaluatePolicies,
-  explainPolicyViolationOne,
-  fetchPolicyCatalog,
-  previewRemediation,
-} from "../lib/api";
+import { evaluatePolicies, fetchPolicyCatalog } from "../lib/api";
 import type { PolicyCatalogResponse, PolicyEvaluateResponse } from "../lib/types";
 import { uniqueSortedModuleLabels } from "../lib/workspace";
 import { Badge } from "../components/ui/badge";
@@ -26,14 +20,8 @@ import FindingDetailPanel from "../components/features/policy/FindingDetailPanel
 import SummaryCards from "../components/features/policy/SummaryCards";
 import ViolationGroupTable from "../components/features/policy/ViolationGroupTable";
 import {
-  type PendingAction,
-  type PolicyExplainOneResponse,
   type PolicyViewPreset,
-  type RawViolation,
-  type RemediationApplyResponse,
-  type RemediationPreviewResponse,
   type ViolationGroupRow,
-  type ViolationRow,
   LEGACY_FRAMEWORK_DEMO_RULE_IDS,
   POLICY_VIEW_PRESET_STORAGE_KEY,
   groupViolationsByRule,
@@ -49,7 +37,6 @@ import {
 } from "../components/features/policy/policyUtils";
 
 const PolicyPage = () => {
-  const queryClient = useQueryClient();
   const initialViewPreset = readPolicyViewPreset();
   const initialEvalSnapshotRef = useRef<Record<PolicyViewPreset, ReturnType<typeof readPersistedPolicyEvaluation>>>({
     all: readPersistedPolicyEvaluation("all"),
@@ -63,55 +50,13 @@ const PolicyPage = () => {
   const [uploadedModules, setUploadedModules] = useState<string[]>(() => readUploadedModules());
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<Record<string, PendingAction>>({});
 
-  const markPending = useCallback((id: string, action: PendingAction) => {
-    setPendingAction((prev) => ({ ...prev, [id]: action }));
-  }, []);
-  const clearPending = useCallback((id: string) => {
-    setPendingAction((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  }, []);
-  const toggleFindingExpanded = useCallback((groupId: string, findingId: string) => {
+  const toggleFindingExpanded = (groupId: string, findingId: string) => {
     setExpandedFindingByGroup((prev) => ({
       ...prev,
       [groupId]: prev[groupId] === findingId ? null : findingId,
     }));
-  }, []);
-
-  // ---- Cache-as-state queries (manual updates only) ----
-
-  const previewByIdQuery = useQuery<Record<string, RemediationPreviewResponse>>({
-    queryKey: ["policy:previewById"],
-    queryFn: async () => ({}),
-    enabled: false,
-    initialData: {},
-    staleTime: Infinity,
-    gcTime: 1000 * 60 * 60 * 6,
-  });
-  const explainByIdQuery = useQuery<Record<string, PolicyExplainOneResponse>>({
-    queryKey: ["policy:explainById"],
-    queryFn: async () => ({}),
-    enabled: false,
-    initialData: {},
-    staleTime: Infinity,
-    gcTime: 1000 * 60 * 60 * 6,
-  });
-  const applyByIdQuery = useQuery<Record<string, RemediationApplyResponse>>({
-    queryKey: ["policy:applyById"],
-    queryFn: async () => ({}),
-    enabled: false,
-    initialData: {},
-    staleTime: Infinity,
-    gcTime: 1000 * 60 * 60 * 6,
-  });
-
-  const previewById = previewByIdQuery.data;
-  const explainById = explainByIdQuery.data;
-  const applyById = applyByIdQuery.data;
+  };
 
   // ---- Policy catalog + eval queries ----
 
@@ -187,78 +132,6 @@ const PolicyPage = () => {
     toast.error(`Evaluation failed: ${evalQuery.error.message}`);
   }, [evalQuery.error, evalQuery.errorUpdatedAt, evalQuery.isError]);
 
-  // ---- Mutations ----
-
-  const explainMutation = useMutation({
-    mutationFn: (violation: RawViolation) =>
-      explainPolicyViolationOne({ violation, include_graph_context: true }),
-    onMutate: (violation) => {
-      const row = normalizeViolation(violation);
-      markPending(row.id, "explain");
-    },
-    onSuccess: (data, violation) => {
-      const row = normalizeViolation(violation);
-      queryClient.setQueryData<Record<string, PolicyExplainOneResponse>>(
-        ["policy:explainById"],
-        (prev) => ({ ...(prev ?? {}), [row.id]: data }),
-      );
-      if ((data.status || "").toUpperCase() === "OK" && data.explanation) {
-        toast.success("LLM explanation ready.");
-        return;
-      }
-      const msg =
-        data.error ||
-        (typeof data.explanation === "string" && data.explanation.startsWith("[LLM unavailable:")
-          ? "LLM is unavailable. Start your local server (e.g. LM Studio) or configure the LLM provider."
-          : "LLM explanation unavailable.");
-      toast.error(msg);
-    },
-    onSettled: (_d, _e, violation) => {
-      const row = normalizeViolation(violation);
-      clearPending(row.id);
-    },
-    onError: (error: Error) => toast.error(`Explain failed: ${error.message}`),
-  });
-
-  const previewMutation = useMutation({
-    mutationFn: (row: ViolationRow) => previewRemediation(row.ruleId, row.targetMethod, row.filePath),
-    onMutate: (row) => markPending(row.id, "preview"),
-    onSuccess: (data, row) => {
-      queryClient.setQueryData<Record<string, RemediationPreviewResponse>>(
-        ["policy:previewById"],
-        (prev) => ({ ...(prev ?? {}), [row.id]: data }),
-      );
-      const status = (data.status || "").toUpperCase();
-      if (status === "OK") {
-        toast.success(`Preview complete for ${row.ruleId}.`);
-      } else {
-        toast.error(data.error || `Preview failed (${status}) for ${row.ruleId}.`);
-      }
-    },
-    onSettled: (_d, _e, row) => clearPending(row.id),
-    onError: (error: Error) => toast.error(`Preview failed: ${error.message}`),
-  });
-
-  const applyMutation = useMutation({
-    mutationFn: (row: ViolationRow) =>
-      applyRemediation({ violation_id: row.ruleId, target_method: row.targetMethod, file_path: row.filePath }),
-    onMutate: (row) => markPending(row.id, "apply"),
-    onSuccess: (data, row) => {
-      queryClient.setQueryData<Record<string, RemediationApplyResponse>>(
-        ["policy:applyById"],
-        (prev) => ({ ...(prev ?? {}), [row.id]: data }),
-      );
-      const status = (data.status || "").toUpperCase();
-      if (status === "OK") {
-        toast.success(`Remediation applied for ${row.ruleId}.`);
-      } else {
-        toast.error(data.error || `Apply failed (${status}) for ${row.ruleId}.`);
-      }
-    },
-    onSettled: (_d, _e, row) => clearPending(row.id),
-    onError: (error: Error) => toast.error(`Apply failed: ${error.message}`),
-  });
-
   // ---- Derived data ----
 
   const findings = useMemo(
@@ -296,28 +169,6 @@ const PolicyPage = () => {
     () => filteredFindings.find((f) => f.id === selectedFindingId) ?? null,
     [filteredFindings, selectedFindingId],
   );
-
-  const selectedPendingAction = selectedFinding ? pendingAction[selectedFinding.id] : undefined;
-  const selectedExplain = selectedFinding ? explainById[selectedFinding.id] : undefined;
-  const selectedPreview = selectedFinding ? previewById[selectedFinding.id] : undefined;
-
-  const explainStatus: "idle" | "running" | "ready" | "error" =
-    selectedPendingAction === "explain" ? "running"
-    : selectedExplain?.status === "OK" ? "ready"
-    : selectedExplain?.status === "ERROR" ? "error"
-    : "idle";
-
-  const previewStatus: "idle" | "running" | "ready" | "error" =
-    selectedPendingAction === "preview" ? "running"
-    : selectedPreview?.status === "OK" ? "ready"
-    : selectedPreview?.status === "ERROR" ? "error"
-    : "idle";
-
-  const verifyStatus: "idle" | "running" | "ready" | "error" =
-    selectedPendingAction === "apply" ? "running"
-    : (selectedFinding ? applyById[selectedFinding.id] : undefined)?.status === "OK" ? "ready"
-    : (selectedFinding ? applyById[selectedFinding.id] : undefined)?.status === "ERROR" ? "error"
-    : "idle";
 
   const visibleModules = useMemo(
     () => (moduleFilter === "all" ? availableModules : availableModules.includes(moduleFilter) ? [moduleFilter] : []),
@@ -441,28 +292,10 @@ const PolicyPage = () => {
           onSelectFinding={setSelectedFindingId}
           expandedFindingByGroup={expandedFindingByGroup}
           onToggleFinding={toggleFindingExpanded}
-          pendingAction={pendingAction}
-          explainById={explainById}
-          previewById={previewById}
           hasEvaluationResult={hasEvaluationResult}
-          onExplain={(raw) => explainMutation.mutate(raw)}
-          onPreview={(finding) => previewMutation.mutate(finding)}
-          onApply={(finding) => applyMutation.mutate(finding)}
         />
 
-        <FindingDetailPanel
-          selectedFinding={selectedFinding}
-          explainById={explainById}
-          previewById={previewById}
-          applyById={applyById}
-          pendingAction={pendingAction}
-          explainStatus={explainStatus}
-          previewStatus={previewStatus}
-          verifyStatus={verifyStatus}
-          onExplain={(raw) => explainMutation.mutate(raw)}
-          onPreview={(finding) => previewMutation.mutate(finding)}
-          onApply={(finding) => applyMutation.mutate(finding)}
-        />
+        <FindingDetailPanel selectedFinding={selectedFinding} />
       </div>
     </div>
   );

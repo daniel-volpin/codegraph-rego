@@ -4,6 +4,7 @@ import { FileArchive, UploadCloud } from "lucide-react";
 import { fetchUploadStatus, uploadZip } from "../lib/api";
 import type { UploadResponse, UploadStatus } from "../lib/types";
 import { useActivityContext } from "../context/ActivityContext";
+import { useResetAllPolicyArtifacts } from "../hooks/usePolicyArtifacts";
 import { toast } from "sonner";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -31,6 +32,7 @@ const UploadPage = () => {
   const [result, setResult] = useState<UploadResponse | null>(() => readLastUpload());
   const [localStatus, setLocalStatus] = useState<UploadStatus | null>(null);
   const { upsert: upsertActivity, clear: clearActivity } = useActivityContext();
+  const resetPolicyArtifacts = useResetAllPolicyArtifacts();
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadZip(file),
@@ -43,9 +45,7 @@ const UploadPage = () => {
         /* ignore storage errors */
       }
       queryClient.removeQueries({ queryKey: ["policyEvaluation:last"] });
-      queryClient.removeQueries({ queryKey: ["policy:previewById"] });
-      queryClient.removeQueries({ queryKey: ["policy:applyById"] });
-      queryClient.removeQueries({ queryKey: ["policy:explainById"] });
+      resetPolicyArtifacts();
       try {
         localStorage.removeItem("codegraph:policy:lastEvaluation");
       } catch {
