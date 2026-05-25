@@ -1,9 +1,12 @@
 import { del, get, set } from "idb-keyval";
 import {
   PolicyEvaluateResponseSchema,
+  UploadResponseSchema,
   type PolicyEvaluateResponse,
+  type UploadResponse,
 } from "./schemas";
 import type { PolicyViewPreset } from "../components/features/policy/policyUtils";
+import { uniqueSortedModuleLabels } from "./workspace";
 
 // IndexedDB-backed persistence for large response payloads. Replaces the
 // previous main-thread `JSON.stringify(localStorage.setItem(...))` path,
@@ -17,6 +20,7 @@ const SCHEMA_VERSION = 2;
 
 const evaluationKey = (preset: PolicyViewPreset) =>
   `codegraph:policy:eval:v${SCHEMA_VERSION}:${preset}`;
+const lastUploadKey = `codegraph:upload:last:v${SCHEMA_VERSION}`;
 
 interface PersistedEnvelope<T> {
   v: number;
@@ -70,4 +74,33 @@ export async function clearPersistedPolicyEvaluations(): Promise<void> {
   } catch {
     /* ignore storage errors */
   }
+}
+
+export async function readPersistedLastUpload(): Promise<UploadResponse | null> {
+  try {
+    const saved = await get<unknown>(lastUploadKey);
+    const parsed = UploadResponseSchema.safeParse(saved);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function persistLastUpload(data: UploadResponse): Promise<void> {
+  try {
+    await set(lastUploadKey, data);
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
+export async function readPersistedUploadedModules(): Promise<string[]> {
+  const upload = await readPersistedLastUpload();
+  if (!upload) return [];
+  const roots = upload.java_roots?.length
+    ? upload.java_roots
+    : upload.java_root
+      ? [upload.java_root]
+      : [];
+  return uniqueSortedModuleLabels(roots.filter(Boolean));
 }

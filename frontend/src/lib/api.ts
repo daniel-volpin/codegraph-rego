@@ -15,6 +15,7 @@ import {
   type PolicyCatalogResponse,
   type PolicyEvaluateResponse,
   type PolicyExplainOneResponse,
+  type Violation,
   type PolicyReviewCreateResponse,
   type PolicyReviewListResponse,
   type RemediationApplyResponse,
@@ -23,10 +24,7 @@ import {
   type UploadResponse,
   type UploadStatus,
 } from "./schemas";
-
-const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  "http://127.0.0.1:8000";
+import { getRuntimeApiBase } from "./runtimeConfig";
 
 const defaultHeaders = {
   Accept: "application/json",
@@ -114,7 +112,7 @@ export async function uploadZip(file: File, signal?: AbortSignal): Promise<Uploa
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${API_BASE_URL}/upload`, {
+  const response = await fetch(`${getRuntimeApiBase()}/upload`, {
     method: "POST",
     body: formData,
     signal,
@@ -124,7 +122,7 @@ export async function uploadZip(file: File, signal?: AbortSignal): Promise<Uploa
 }
 
 export async function searchCode(query: string, signal?: AbortSignal): Promise<SearchResponse> {
-  const response = await fetch(`${API_BASE_URL}/search`, {
+  const response = await fetch(`${getRuntimeApiBase()}/search`, {
     method: "POST",
     headers: {
       ...defaultHeaders,
@@ -165,7 +163,7 @@ export async function evaluatePolicies(
   }
   const qs = params.toString();
   const response = await fetch(
-    `${API_BASE_URL}/policy/evaluate${qs ? `?${qs}` : ""}`,
+    `${getRuntimeApiBase()}/policy/evaluate${qs ? `?${qs}` : ""}`,
     {
       method: "GET",
       headers: defaultHeaders,
@@ -187,7 +185,7 @@ export async function evaluatePoliciesWithLLM(
   },
   signal?: AbortSignal,
 ): Promise<PolicyEvaluateResponse> {
-  const response = await fetch(`${API_BASE_URL}/policy/evaluate_with_llm`, {
+  const response = await fetch(`${getRuntimeApiBase()}/policy/evaluate_with_llm`, {
     method: "POST",
     headers: {
       ...defaultHeaders,
@@ -210,7 +208,7 @@ export async function evaluatePoliciesWithLLM(
 export async function fetchPolicyCatalog(
   signal?: AbortSignal,
 ): Promise<PolicyCatalogResponse> {
-  const response = await fetch(`${API_BASE_URL}/policy/catalog`, {
+  const response = await fetch(`${getRuntimeApiBase()}/policy/catalog`, {
     method: "GET",
     headers: defaultHeaders,
     signal,
@@ -220,7 +218,7 @@ export async function fetchPolicyCatalog(
 }
 
 export interface PolicyExplainOneRequest {
-  violation: Record<string, unknown>;
+  violation: Violation;
   include_graph_context?: boolean;
   model?: string | null;
 }
@@ -229,7 +227,7 @@ export async function explainPolicyViolationOne(
   payload: PolicyExplainOneRequest,
   signal?: AbortSignal,
 ): Promise<PolicyExplainOneResponse> {
-  const response = await fetch(`${API_BASE_URL}/policy/explain_one`, {
+  const response = await fetch(`${getRuntimeApiBase()}/policy/explain_one`, {
     method: "POST",
     headers: {
       ...defaultHeaders,
@@ -247,7 +245,7 @@ export type PolicyReviewLabel = "TP" | "FP" | "UNCLEAR";
 export interface PolicyReviewCreateRequest {
   label: PolicyReviewLabel;
   notes?: string | null;
-  violation: Record<string, unknown>;
+  violation: Violation;
   explanation?: string | null;
   llm_model?: string | null;
   include_graph_context?: boolean;
@@ -259,7 +257,7 @@ export async function saveViolationReview(
   payload: PolicyReviewCreateRequest,
   signal?: AbortSignal,
 ): Promise<PolicyReviewCreateResponse> {
-  const response = await fetch(`${API_BASE_URL}/policy/reviews`, {
+  const response = await fetch(`${getRuntimeApiBase()}/policy/reviews`, {
     method: "POST",
     headers: {
       ...defaultHeaders,
@@ -285,7 +283,7 @@ export async function fetchViolationReviews(
   }
   const qs = params.toString();
   const response = await fetch(
-    `${API_BASE_URL}/policy/reviews${qs ? `?${qs}` : ""}`,
+    `${getRuntimeApiBase()}/policy/reviews${qs ? `?${qs}` : ""}`,
     {
       method: "GET",
       headers: defaultHeaders,
@@ -297,7 +295,7 @@ export async function fetchViolationReviews(
 }
 
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthCheckResponse> {
-  const response = await fetch(`${API_BASE_URL}/health`, {
+  const response = await fetch(`${getRuntimeApiBase()}/health`, {
     method: "GET",
     headers: defaultHeaders,
     signal,
@@ -310,7 +308,7 @@ export async function fetchUploadStatus(
   requestId?: string | null,
   signal?: AbortSignal,
 ): Promise<UploadStatus> {
-  const url = new URL(`${API_BASE_URL}/upload/status`);
+  const url = new URL(`${getRuntimeApiBase()}/upload/status`);
   if (requestId) {
     url.searchParams.set("request_id", requestId);
   }
@@ -329,7 +327,7 @@ export async function previewRemediation(
   filePath?: string,
   signal?: AbortSignal,
 ): Promise<RemediationPreviewResponse> {
-  const response = await fetch(`${API_BASE_URL}/remediation/preview`, {
+  const response = await fetch(`${getRuntimeApiBase()}/remediation/preview`, {
     method: "POST",
     headers: {
       ...defaultHeaders,
@@ -356,7 +354,7 @@ export async function applyRemediation(
   payload: ApplyRemediationPayload,
   signal?: AbortSignal,
 ): Promise<RemediationApplyResponse> {
-  const response = await fetch(`${API_BASE_URL}/remediation/apply`, {
+  const response = await fetch(`${getRuntimeApiBase()}/remediation/apply`, {
     method: "POST",
     headers: {
       ...defaultHeaders,

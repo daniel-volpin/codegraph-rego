@@ -5,11 +5,13 @@ import { toast } from "sonner";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import CodeHighlight from "../../ui/CodeHighlight";
+import ConfidenceBand from "./ConfidenceBand";
 import { copyTextToClipboard } from "../../../lib/utils";
 import type { PolicyExplanationStructured } from "../../../lib/types";
 import {
   type ViolationRow,
   compactTargetMethod,
+  deriveConfidenceSurface,
   formatCitationDisplay,
   remediationBadgeLabel,
   remediationBadgeVariant,
@@ -17,6 +19,7 @@ import {
   severityVariant,
 } from "./policyUtils";
 import {
+  useApplyResult,
   useApplyMutation,
   useExplainMutation,
   useExplainResult,
@@ -68,6 +71,7 @@ const ViolationFinding = memo(function ViolationFinding({
   // sibling rows' explain/preview/apply landings no longer fan out.
   const explainResult = useExplainResult(finding.id);
   const previewResult = usePreviewResult(finding.id);
+  const applyResult = useApplyResult(finding.id);
   const pendingAction = usePendingAction(finding.id);
 
   const explainMutation = useExplainMutation();
@@ -78,9 +82,13 @@ const ViolationFinding = memo(function ViolationFinding({
   const remediation = finding.remediation;
   const previewDisabled = isBusy || !remediation.preview_available;
   const verifyDisabled = isBusy || !remediation.verify_available;
+  const confidenceSurface = deriveConfidenceSurface(
+    applyResult?.confidence ?? previewResult?.confidence ?? null,
+  );
 
   return (
     <div
+      data-testid={`finding-row-${finding.id}`}
       className={`rounded-lg border bg-white ${
         isSelected ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200"
       }`}
@@ -192,6 +200,8 @@ const ViolationFinding = memo(function ViolationFinding({
                 )}
               </Button>
             </div>
+
+            <ConfidenceBand confidence={confidenceSurface} title="Remediation confidence" />
 
             <p className="text-xs text-slate-500">{remediationSummaryText(remediation)}</p>
             <p className="text-xs text-slate-500">{remediation.rationale}</p>

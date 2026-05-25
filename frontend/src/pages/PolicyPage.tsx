@@ -15,6 +15,7 @@ import { evaluatePolicies, fetchPolicyCatalog } from "../lib/api";
 import type { PolicyCatalogResponse, PolicyEvaluateResponse } from "../lib/types";
 import {
   persistPolicyEvaluation,
+  readPersistedUploadedModules,
   readPersistedPolicyEvaluation,
 } from "../lib/persistence";
 import { uniqueSortedModuleLabels } from "../lib/workspace";
@@ -31,7 +32,6 @@ import {
   groupViolationsByRule,
   normalizeViolation,
   readPolicyViewPreset,
-  readUploadedModules,
   ruleGroupStatusLabel,
   ruleGroupStatusVariant,
   severityVariant,
@@ -49,7 +49,7 @@ const PolicyPage = () => {
   const [expanded, setExpanded] = useState<ExpandedState>({});
   const [expandedFindingByGroup, setExpandedFindingByGroup] = useState<Record<string, string | null>>({});
   const [viewPreset, setViewPreset] = useState<PolicyViewPreset>(initialViewPreset);
-  const [uploadedModules, setUploadedModules] = useState<string[]>(() => readUploadedModules());
+  const [uploadedModules, setUploadedModules] = useState<string[]>([]);
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
 
@@ -143,7 +143,16 @@ const PolicyPage = () => {
   }, [viewPreset]);
 
   useEffect(() => {
-    setUploadedModules(readUploadedModules());
+    let cancelled = false;
+    void (async () => {
+      const modules = await readPersistedUploadedModules();
+      if (!cancelled) {
+        setUploadedModules(modules);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -323,7 +332,7 @@ const PolicyPage = () => {
           hasEvaluationResult={hasEvaluationResult}
         />
 
-        <FindingDetailPanel selectedFinding={selectedFinding} />
+        <FindingDetailPanel key={selectedFinding?.id ?? "empty"} selectedFinding={selectedFinding} />
       </div>
     </div>
   );

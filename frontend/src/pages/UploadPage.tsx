@@ -5,7 +5,12 @@ import { fetchUploadStatus, uploadZip } from "../lib/api";
 import type { UploadResponse, UploadStatus } from "../lib/types";
 import { useClearActivity, useUpsertActivity } from "../store/activity";
 import { useResetAllPolicyArtifacts } from "../hooks/usePolicyArtifacts";
-import { clearPersistedPolicyEvaluations } from "../lib/persistence";
+import { useUploadStatusStream } from "../hooks/useUploadStatusStream";
+import {
+  clearPersistedPolicyEvaluations,
+  persistLastUpload,
+  readPersistedLastUpload,
+} from "../lib/persistence";
 import { toast } from "sonner";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -16,21 +21,12 @@ import {
   uniqueSortedModuleLabels,
 } from "../lib/workspace";
 
-const readLastUpload = (): UploadResponse | null => {
-  try {
-    const saved = localStorage.getItem("codegraph:lastUpload");
-    return saved ? (JSON.parse(saved) as UploadResponse) : null;
-  } catch {
-    return null;
-  }
-};
-
 const UploadPage = () => {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const refetchStatusRef = useRef<(() => void) | null>(null);
   const [selectedName, setSelectedName] = useState<string | null>(null);
-  const [result, setResult] = useState<UploadResponse | null>(() => readLastUpload());
+  const [result, setResult] = useState<UploadResponse | null>(null);
   const [localStatus, setLocalStatus] = useState<UploadStatus | null>(null);
   const upsertActivity = useUpsertActivity();
   const clearActivity = useClearActivity();
@@ -41,11 +37,7 @@ const UploadPage = () => {
     onSuccess: (data) => {
       setResult(data);
       toast.success("Upload complete! Embeddings rebuilt.");
-      try {
-        localStorage.setItem("codegraph:lastUpload", JSON.stringify(data));
-      } catch {
-        /* ignore storage errors */
-      }
+      void persistLastUpload(data);
       queryClient.removeQueries({ queryKey: ["policyEvaluation:last"] });
       resetPolicyArtifacts();
       void clearPersistedPolicyEvaluations();
@@ -66,6 +58,7 @@ const UploadPage = () => {
   // response stored before the field existed) we fall back to the
   // back-compat path that returns the latest job.
   const trackedRequestId = result?.request_id ?? null;
+  const { streamConnected } = useUploadStatusStream(trackedRequestId);
   const { data: statusData, refetch: refetchStatus } = useQuery({
     queryKey: ["uploadStatus", trackedRequestId],
     queryFn: ({ signal }) => fetchUploadStatus(trackedRequestId, signal),
@@ -73,11 +66,28 @@ const UploadPage = () => {
     refetchInterval: (query) => {
       const nextStatus = query.state.data as UploadStatus | undefined;
       const activeStatus = nextStatus ?? localStatus;
-      return uploadMutation.isPending || Boolean(activeStatus && !activeStatus.complete) ? 1000 : false;
+      const shouldTrack = uploadMutation.isPending || Boolean(activeStatus && !activeStatus.complete);
+      if (!shouldTrack) return false;
+      // Prefer SSE push updates. Fallback to bounded polling only when stream
+      // is unavailable/disconnected.
+      return streamConnected ? false : 5000;
     },
   });
 
   const status = statusData ?? localStatus;
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const persisted = await readPersistedLastUpload();
+      if (!cancelled && persisted) {
+        setResult((current) => current ?? persisted);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     refetchStatusRef.current = refetchStatus;

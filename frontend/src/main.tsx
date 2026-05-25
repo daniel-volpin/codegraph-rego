@@ -1,8 +1,14 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import App from "./App";
+import { reportError } from "./lib/observability";
 import "./index.css";
 
 // Default options are tuned for this app's workload:
@@ -27,14 +33,45 @@ const queryClient = new QueryClient({
       retry: false,
     },
   },
+  queryCache: new QueryCache({
+    onError: (error) => {
+      reportError(error, { source: "query" });
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      reportError(error, { source: "mutation" });
+    },
+  }),
 });
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </QueryClientProvider>
-  </React.StrictMode>,
-);
+async function bootstrapRuntimeConfig() {
+  try {
+    const response = await fetch("/config.json", { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = (await response.json()) as { apiBaseUrl?: string };
+    if (payload && typeof payload.apiBaseUrl === "string") {
+      window.__CODEGRAPH_CONFIG__ = { apiBaseUrl: payload.apiBaseUrl };
+    }
+  } catch {
+    // Ignore missing config.json; meta/env fallbacks in runtimeConfig.ts apply.
+  }
+}
+
+async function enableDevAxe() {
+  if (!import.meta.env.DEV) return;
+  const { default: axe } = await import("@axe-core/react");
+  await axe(React, ReactDOM, 1000);
+}
+
+void Promise.all([bootstrapRuntimeConfig(), enableDevAxe()]).finally(() => {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </React.StrictMode>,
+  );
+});

@@ -104,6 +104,7 @@ const ControlsPanel = ({
 
       <div className="flex lg:justify-end lg:self-center">
         <Button
+          data-testid="policy-eval-run"
           onClick={onEvalRefetch}
           disabled={evalIsFetching || !frameworkDemoReady || policyCatalogIsLoading}
           title={

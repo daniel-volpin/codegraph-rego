@@ -1,13 +1,16 @@
-import { CheckCircle2, Copy, Loader2, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, ChevronDown, Copy, Loader2, Sparkles } from "lucide-react";
 import Markdown from "react-markdown";
 import { toast } from "sonner";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import { Card } from "../../ui/card";
 import CodeHighlight from "../../ui/CodeHighlight";
+import ConfidenceBand from "./ConfidenceBand";
 import { copyTextToClipboard } from "../../../lib/utils";
 import type { PolicyExplanationStructured } from "../../../lib/types";
 import {
+  deriveConfidenceSurface,
   type ViolationRow,
   artifactStatusLabel,
   artifactStatusVariant,
@@ -28,6 +31,12 @@ import {
 
 interface FindingDetailPanelProps {
   selectedFinding: ViolationRow | null;
+}
+
+interface ImmediateEvidence {
+  citation: string;
+  callers: string[];
+  neighbors: string[];
 }
 
 const renderStructuredExplanation = (payload: PolicyExplanationStructured) => {
@@ -52,6 +61,50 @@ const renderStructuredExplanation = (payload: PolicyExplanationStructured) => {
   );
 };
 
+const buildImmediateEvidence = (finding: ViolationRow): ImmediateEvidence => {
+  const raw = finding.raw as Record<string, unknown>;
+  const startLine = typeof raw.snippet_start_line === "number" ? raw.snippet_start_line : null;
+  const endLine = typeof raw.snippet_end_line === "number" ? raw.snippet_end_line : null;
+  const citation = startLine != null && endLine != null
+    ? `${finding.filePath}:${startLine}-${endLine}`
+    : startLine != null
+      ? `${finding.filePath}:${startLine}`
+      : finding.filePath;
+
+  const evidence =
+    raw.evidence && typeof raw.evidence === "object" && raw.evidence !== null
+      ? (raw.evidence as Record<string, unknown>)
+      : null;
+  const graphContext =
+    evidence?.graph_context &&
+    typeof evidence.graph_context === "object" &&
+    evidence.graph_context !== null
+      ? (evidence.graph_context as Record<string, unknown>)
+      : null;
+
+  const callers = Array.isArray(graphContext?.callers)
+    ? graphContext.callers.filter((item): item is string => typeof item === "string")
+    : [];
+  const neighbors = Array.isArray(evidence?.vector_context)
+    ? evidence.vector_context.filter((item): item is string => typeof item === "string")
+    : [];
+
+  return { citation, callers, neighbors };
+};
+
+const ArtifactSkeleton = ({ lines = 3 }: { lines?: number }) => (
+  <div className="space-y-2" aria-hidden="true">
+    {Array.from({ length: lines }).map((_, index) => (
+      <div
+        key={index}
+        className={`h-3 animate-pulse rounded bg-slate-100 ${
+          index === lines - 1 ? "w-2/3" : "w-full"
+        }`}
+      />
+    ))}
+  </div>
+);
+
 const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
   const findingId = selectedFinding?.id ?? null;
   const explainResult = useExplainResult(findingId);
@@ -62,6 +115,7 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
   const explainMutation = useExplainMutation();
   const previewMutation = usePreviewMutation();
   const applyMutation = useApplyMutation();
+  const [showVerificationDetails, setShowVerificationDetails] = useState(false);
 
   const explainStatus: "idle" | "running" | "ready" | "error" =
     pendingAction === "explain" ? "running"
@@ -81,8 +135,40 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
     : applyResult?.status === "ERROR" ? "error"
     : "idle";
 
+  const confidenceSurface = deriveConfidenceSurface(
+    applyResult?.confidence ?? previewResult?.confidence ?? null,
+  );
+  const immediateEvidence = selectedFinding ? buildImmediateEvidence(selectedFinding) : null;
+  const verificationOutcome = applyResult?.verification?.overall_status ?? null;
+  const verificationPrefix =
+    verificationOutcome === "PASS"
+      ? "Verification passed."
+      : verificationOutcome
+        ? `Verification completed with status ${verificationOutcome}.`
+        : "Verification completed.";
+  const statusMessage =
+    applyResult?.status === "OK"
+      ? `${verificationPrefix} ${applyResult.verification?.new_violations?.length ?? 0} new violations.`
+      : applyResult?.status === "ERROR" && applyResult.error
+        ? `Verification failed. ${applyResult.error}`
+        : previewResult?.status === "OK"
+          ? "Preview ready."
+          : previewResult?.status === "ERROR" && previewResult.error
+            ? `Preview failed. ${previewResult.error}`
+            : explainResult?.status === "OK"
+              ? "Explanation ready."
+              : explainResult?.status === "ERROR" && explainResult.error
+                ? `Explanation failed. ${explainResult.error}`
+                : "";
+
   return (
-    <Card className="p-5 2xl:sticky 2xl:top-24 2xl:max-h-[calc(100vh-11rem)] 2xl:overflow-auto">
+    <Card
+      className="p-5 2xl:sticky 2xl:top-24 2xl:max-h-[calc(100vh-11rem)] 2xl:overflow-auto"
+      data-testid="finding-dossier"
+    >
+      <div role="status" aria-live="polite" className="sr-only">
+        {statusMessage}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <div>
           <p className="text-sm font-semibold text-slate-900">Case dossier</p>
@@ -184,9 +270,55 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
             </Button>
           </div>
 
+          <ConfidenceBand confidence={confidenceSurface} />
+
           <div className="space-y-4">
-            <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+            <div
+              className="min-h-[18rem] space-y-3 rounded-lg border border-slate-200 p-4"
+              data-testid="explanation-artifact"
+            >
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Explanation artifact</p>
+              {(pendingAction === "explain" || !explainResult) && immediateEvidence && (
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Immediate evidence
+                  </p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Citation</p>
+                      <p className="mt-1 break-words font-mono text-xs text-slate-800">
+                        {formatCitationDisplay(immediateEvidence.citation).display}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Target method</p>
+                      <p className="mt-1 break-words font-mono text-xs text-slate-800">
+                        {selectedFinding.targetMethod}
+                      </p>
+                    </div>
+                  </div>
+                  {(immediateEvidence.callers.length > 0 || immediateEvidence.neighbors.length > 0) && (
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Callers</p>
+                        <p className="mt-1 text-sm text-slate-700">
+                          {immediateEvidence.callers.length > 0
+                            ? immediateEvidence.callers.slice(0, 3).join(", ")
+                            : "No caller summary available."}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Neighbors</p>
+                        <p className="mt-1 text-sm text-slate-700">
+                          {immediateEvidence.neighbors.length > 0
+                            ? immediateEvidence.neighbors.slice(0, 3).join(", ")
+                            : "No semantic neighbors available."}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               {explainResult?.status === "ERROR" && explainResult.error && (
                 <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
                   {explainResult.error}
@@ -201,10 +333,16 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
                     <Markdown>{explainResult.explanation}</Markdown>
                   </div>
                 )}
-              {!explainResult && <p className="text-sm text-slate-500">No explanation generated yet.</p>}
+              {pendingAction === "explain" && <ArtifactSkeleton lines={4} />}
+              {!explainResult && pendingAction !== "explain" && (
+                <p className="text-sm text-slate-500">No explanation generated yet.</p>
+              )}
             </div>
 
-            <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+            <div
+              className="min-h-[20rem] space-y-3 rounded-lg border border-slate-200 p-4"
+              data-testid={`verify-summary-${findingId ?? "none"}`}
+            >
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Remediation artifacts</p>
               {previewResult?.error && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -227,7 +365,10 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
                   <Markdown>{previewResult.explanation}</Markdown>
                 </div>
               )}
-              {!previewResult && <p className="text-sm text-slate-500">No preview generated yet.</p>}
+              {pendingAction === "preview" && <ArtifactSkeleton lines={5} />}
+              {!previewResult && pendingAction !== "preview" && (
+                <p className="text-sm text-slate-500">No preview generated yet.</p>
+              )}
 
               {applyResult && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
@@ -235,50 +376,76 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
                     <CheckCircle2 aria-hidden="true" className="h-4 w-4" />
                     <p className="font-medium">Verification summary</p>
                   </div>
-                  <div className="mt-2 grid gap-2 md:grid-cols-2 2xl:grid-cols-1">
-                    <p>
-                      Overall:{" "}
-                      <span className="font-medium">{applyResult.verification?.overall_status ?? "—"}</span>
-                    </p>
-                    <p>
-                      Rule status:{" "}
-                      <span className="font-medium">{applyResult.verification?.target_rule_status ?? "—"}</span>
-                    </p>
-                    <p>
-                      Remaining violations:{" "}
-                      <span className="font-medium">
-                        {applyResult.verification?.remaining_violations?.length ?? 0}
-                      </span>
-                    </p>
-                    <p>
-                      New violations:{" "}
-                      <span className="font-medium">
-                        {applyResult.verification?.new_violations?.length ?? 0}
-                      </span>
-                    </p>
-                    <p>
-                      Compilation:{" "}
-                      <span className="font-medium">
-                        {applyResult.compilation?.success
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge variant="secondary">
+                      Overall {applyResult.verification?.overall_status ?? "—"}
+                    </Badge>
+                    <Badge variant="secondary">
+                      Rule {applyResult.verification?.target_rule_status ?? "—"}
+                    </Badge>
+                    <Badge
+                      variant={
+                        applyResult.compilation?.success
                           ? "success"
                           : applyResult.compilation?.attempted
-                            ? "failed"
-                            : "not attempted"}
-                      </span>
-                    </p>
-                    <p>
-                      Decision:{" "}
-                      <span className="font-medium">{applyResult.generation?.decision ?? "—"}</span>
-                    </p>
+                            ? "destructive"
+                            : "secondary"
+                      }
+                    >
+                      Compilation {applyResult.compilation?.success
+                        ? "success"
+                        : applyResult.compilation?.attempted
+                          ? "failed"
+                          : "not attempted"}
+                    </Badge>
                   </div>
-                  {applyResult.generation?.reason && (
-                    <p className="mt-2 text-xs text-slate-600">Reason: {applyResult.generation.reason}</p>
-                  )}
-                  {applyResult.error && (
-                    <p className="mt-2 text-xs text-rose-700">Error: {applyResult.error}</p>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="mt-3 px-0"
+                    onClick={() => setShowVerificationDetails((current) => !current)}
+                  >
+                    <ChevronDown
+                      aria-hidden="true"
+                      className={`mr-1 h-4 w-4 transition-transform ${
+                        showVerificationDetails ? "rotate-180" : ""
+                      }`}
+                    />
+                    {showVerificationDetails ? "Hide details" : "View details"}
+                  </Button>
+
+                  {showVerificationDetails && (
+                    <div className="mt-2 grid gap-2 md:grid-cols-2 2xl:grid-cols-1">
+                      <p>
+                        Remaining violations:{" "}
+                        <span className="font-medium">
+                          {applyResult.verification?.remaining_violations?.length ?? 0}
+                        </span>
+                      </p>
+                      <p>
+                        New violations:{" "}
+                        <span className="font-medium">
+                          {applyResult.verification?.new_violations?.length ?? 0}
+                        </span>
+                      </p>
+                      <p>
+                        Decision:{" "}
+                        <span className="font-medium">{applyResult.generation?.decision ?? "—"}</span>
+                      </p>
+                      {applyResult.generation?.reason && (
+                        <p>Reason: <span className="font-medium">{applyResult.generation.reason}</span></p>
+                      )}
+                      {applyResult.error && (
+                        <p className="text-rose-700">Error: {applyResult.error}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
+
+              {pendingAction === "apply" && <ArtifactSkeleton lines={5} />}
             </div>
           </div>
 
