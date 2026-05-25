@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict
 
-from codegraph.policy.analysis.state import AssignmentState, AssignmentStateAnalyzer
-from codegraph.policy.source_analysis_core import (
+from codegraph.policy.analysis.patterns import (
     BUILDER_TOSTRING_RE,
     COMMAND_APPEND_RE,
     COMMAND_ARRAY_ASSIGNMENT_RE,
@@ -15,6 +14,7 @@ from codegraph.policy.source_analysis_core import (
     COMMAND_LIST_USAGE_RE,
     COMMAND_UNTRUSTED_INPUT_PATTERNS,
 )
+from codegraph.policy.analysis.state import AssignmentState, AssignmentStateAnalyzer
 
 
 @dataclass(frozen=True)

@@ -421,7 +421,7 @@ def extract_entities_from_file(file_path: str):
             content = f.read()
         tree = javalang.parse.parse(content)
     except Exception as exc:
-        print(f"[WARN] Could not parse {file_path}: {exc}")
+        LOGGER.warning("Could not parse %s: %s", file_path, exc)
         return [], [], [], [], [], [], [], [], []
 
     package = getattr(tree, "package", None)
@@ -438,7 +438,7 @@ def extract_entities_from_content(file_path: str, content: str):
     try:
         tree = javalang.parse.parse(content)
     except Exception as exc:
-        print(f"[WARN] Could not parse in-memory content for {file_path}: {exc}")
+        LOGGER.warning("Could not parse in-memory content for %s: %s", file_path, exc)
         return [], [], [], [], [], [], [], [], []
 
     package = getattr(tree, "package", None)
@@ -499,16 +499,16 @@ def collect_code_structure(root_dir: str, progress_callback: Optional[Callable[[
         all_fields.extend(fields)
         all_method_field_relations.extend(method_field_uses)
 
-    print(f"📄 Parsed {file_count} Java files.")
-    print(f"🔍 Found {len(all_methods)} methods/constructors.")
-    print(f"🏗️ Found {len(all_nested)} nested class relations.")
-    print(f"🧬 Found {len(all_extends)} extends relations.")
-    print(f"🧬 Found {len(all_implements)} implements relations.")
-    print(f"🔗 Found {len(all_uses)} uses relations.")
-    print(f"🔗 Found {len(all_depends)} depends_on relations.")
-    print(f"🔗 Found {len(all_calls)} calls relations.")
-    print(f"🌱 Found {len(all_fields)} fields.")
-    print(f"📦 Found {len(all_method_field_relations)} method-field uses relations.")
+    LOGGER.info("Parsed %d Java files", file_count)
+    LOGGER.info("Found %d methods/constructors", len(all_methods))
+    LOGGER.info("Found %d nested class relations", len(all_nested))
+    LOGGER.info("Found %d extends relations", len(all_extends))
+    LOGGER.info("Found %d implements relations", len(all_implements))
+    LOGGER.info("Found %d uses relations", len(all_uses))
+    LOGGER.info("Found %d depends_on relations", len(all_depends))
+    LOGGER.info("Found %d calls relations", len(all_calls))
+    LOGGER.info("Found %d fields", len(all_fields))
+    LOGGER.info("Found %d method-field use relations", len(all_method_field_relations))
     if progress_callback:
         progress_callback("parsing", f"Parsed {file_count} Java files.", 60.0)
     return (
@@ -536,11 +536,12 @@ def ingest_to_neo4j(
     method_field_relations: List[tuple],
     progress_callback: Optional[Callable[[str, str, float], None]] = None,
 ) -> None:
-    def safe_write(session, func, *args):
+    def execute_write_or_raise(session, label: str, func, *args) -> None:
         try:
             session.execute_write(func, *args)
         except Exception as exc:
-            print(f"[WARN] Failed to create relationship: {args} - {exc}")
+            LOGGER.exception("Neo4j write failed during ingestion", extra={"ingestion_step": label})
+            raise IngestionError(f"Neo4j write failed during {label}: {exc}") from exc
 
     def chunked_iterable(iterable, size):
         for i in range(0, len(iterable), size):
@@ -584,65 +585,65 @@ def ingest_to_neo4j(
         if progress_callback:
             progress_callback("ingesting", "Persisting entities to Neo4j…", 60.0)
 
-        print(f"🚀 Ingesting {len(methods)} methods/constructors...")
+        LOGGER.info("Ingesting %d methods/constructors into Neo4j", len(methods))
         for idx, method in enumerate(methods, start=1):
-            safe_write(session, create_class_and_method, method)
+            execute_write_or_raise(session, "method persistence", create_class_and_method, method)
             notify("Methods", idx, len(methods) or 1)
 
-        print(f"🌱 Ingesting {len(field_entities)} fields...")
+        LOGGER.info("Ingesting %d fields into Neo4j", len(field_entities))
         for idx, field in enumerate(field_entities, start=1):
-            safe_write(session, create_field, field)
+            execute_write_or_raise(session, "field persistence", create_field, field)
             notify("Fields", idx, len(field_entities) or 1)
 
-        print(f"🏷️ Linking {annotation_count} method annotations...")
+        LOGGER.info("Linking %d method annotations", annotation_count)
         relations_ma = [{"method_sig": m.signature, "annotation": ann} for m in methods for ann in m.annotations]
         for idx, chunk in enumerate(chunked_iterable(relations_ma, 5000), start=1):
-            safe_write(session, link_method_annotation_batch, chunk)
+            execute_write_or_raise(session, f"method annotation batch {idx}", link_method_annotation_batch, chunk)
             notify("Method annotations chunks", idx, (len(relations_ma) // 5000) + 1)
 
-        print(f"🔗 Ingesting {len(nested_relations)} nested class relations...")
+        LOGGER.info("Ingesting %d nested class relations", len(nested_relations))
         relations_nested = [{"child_fqn": c, "parent_fqn": p} for c, p in nested_relations]
         for idx, chunk in enumerate(chunked_iterable(relations_nested, 5000), start=1):
-            safe_write(session, link_nested_classes_batch, chunk)
+            execute_write_or_raise(session, f"nested class relation batch {idx}", link_nested_classes_batch, chunk)
             notify("Nested relations chunks", idx, (len(relations_nested) // 5000) + 1)
 
-        print(f"🧬 Ingesting {len(extends_relations)} extends relations...")
+        LOGGER.info("Ingesting %d extends relations", len(extends_relations))
         relations_extends = [{"child_fqn": c, "parent_fqn": p} for c, p in extends_relations]
         for idx, chunk in enumerate(chunked_iterable(relations_extends, 5000), start=1):
-            safe_write(session, link_extends_classes_batch, chunk)
+            execute_write_or_raise(session, f"extends relation batch {idx}", link_extends_classes_batch, chunk)
             notify("Extends relations chunks", idx, (len(relations_extends) // 5000) + 1)
 
-        print(f"🧬 Ingesting {len(implements_relations)} implements relations...")
+        LOGGER.info("Ingesting %d implements relations", len(implements_relations))
         relations_impl = [{"class_fqn": c, "interface_fqn": p} for c, p in implements_relations]
         for idx, chunk in enumerate(chunked_iterable(relations_impl, 5000), start=1):
-            safe_write(session, link_implements_classes_batch, chunk)
+            execute_write_or_raise(session, f"implements relation batch {idx}", link_implements_classes_batch, chunk)
             notify("Implements relations chunks", idx, (len(relations_impl) // 5000) + 1)
 
-        print(f"🔗 Ingesting {len(uses_relations)} uses relations...")
+        LOGGER.info("Ingesting %d uses relations", len(uses_relations))
         relations_uses = [{"method_sig": m, "class_fqn": c} for m, c in uses_relations]
         for idx, chunk in enumerate(chunked_iterable(relations_uses, 5000), start=1):
-            safe_write(session, link_uses_batch, chunk)
+            execute_write_or_raise(session, f"uses relation batch {idx}", link_uses_batch, chunk)
             notify("Uses relations chunks", idx, (len(relations_uses) // 5000) + 1)
 
-        print(f"🔗 Ingesting {len(depends_on_relations)} depends_on relations...")
+        LOGGER.info("Ingesting %d depends_on relations", len(depends_on_relations))
         relations_deps = [{"class_fqn": c1, "dep_class_fqn": c2} for c1, c2 in depends_on_relations]
         for idx, chunk in enumerate(chunked_iterable(relations_deps, 5000), start=1):
-            safe_write(session, link_depends_on_batch, chunk)
+            execute_write_or_raise(session, f"depends_on relation batch {idx}", link_depends_on_batch, chunk)
             notify("Depends_on relations chunks", idx, (len(relations_deps) // 5000) + 1)
 
-        print(f"🔗 Ingesting {len(calls_relations)} calls relations...")
+        LOGGER.info("Ingesting %d calls relations", len(calls_relations))
         relations_calls = [{"caller_sig": c1, "callee_sig": c2} for c1, c2 in calls_relations]
         for idx, chunk in enumerate(chunked_iterable(relations_calls, 5000), start=1):
-            safe_write(session, link_calls_batch, chunk)
+            execute_write_or_raise(session, f"calls relation batch {idx}", link_calls_batch, chunk)
             notify("Calls relations chunks", idx, (len(relations_calls) // 5000) + 1)
 
-        print(f"📦 Ingesting {len(unique_method_field_relations)} method-field uses relations...")
+        LOGGER.info("Ingesting %d method-field use relations", len(unique_method_field_relations))
         relations_mf = [
             {"method_sig": sig, "class_fqn": cls, "field_name": name}
             for sig, cls, name in unique_method_field_relations
         ]
         for idx, chunk in enumerate(chunked_iterable(relations_mf, 5000), start=1):
-            safe_write(session, link_method_field_use_batch, chunk)
+            execute_write_or_raise(session, f"method-field use batch {idx}", link_method_field_use_batch, chunk)
             notify("Method-field uses chunks", idx, (len(relations_mf) // 5000) + 1)
 
         if progress_callback:
@@ -656,9 +657,9 @@ def ingest(
     sync: bool = False,
 ) -> None:
     java_root_dir = os.path.abspath(java_root_dir)
-    print(f"📦 Parsing Java project at: {java_root_dir}")
+    LOGGER.info("Parsing Java project at %s", java_root_dir)
     if not os.path.isdir(java_root_dir):
-        print(f"[ERROR] JAVA_ROOT_DIR does not exist: {java_root_dir}")
+        LOGGER.error("JAVA_ROOT_DIR does not exist: %s", java_root_dir)
         if progress_callback:
             progress_callback("error", f"JAVA_ROOT_DIR does not exist: {java_root_dir}", 100.0)
         raise IngestionError(f"JAVA_ROOT_DIR does not exist: {java_root_dir}")
@@ -670,14 +671,7 @@ def ingest(
             session.run("RETURN 1 AS ok").consume()
         _driver.close()
     except Exception as exc:
-        print("[ERROR] Could not connect to Neo4j.")
-        print(f"        URI   : {settings.neo4j_uri}")
-        print(f"        USER  : {settings.neo4j_user}")
-        print("        HINTS :")
-        print("          - Ensure Neo4j is running and listening on the Bolt port.")
-        print("          - If using Docker, map '-p 7687:7687' and use 'bolt://127.0.0.1:7687'.")
-        print("          - You can override settings via env vars: NEO4J_URI/USER/PASS.")
-        print(f"          - Original error: {exc}")
+        LOGGER.error("Could not connect to Neo4j: %s", exc)
         if progress_callback:
             progress_callback("error", f"Neo4j connection failed: {exc}", 100.0)
         raise IngestionError(f"Neo4j connection failed: {exc}") from exc
@@ -685,17 +679,17 @@ def ingest(
     try:
         ensure_constraints()
     except Exception as exc:
-        print(f"[WARN] Could not ensure Neo4j constraints: {exc}")
+        LOGGER.warning("Could not ensure Neo4j constraints: %s", exc)
 
     if progress_callback:
         progress_callback("parsing", "Scanning Java sources…", 15.0)
 
     all_data = collect_code_structure(java_root_dir, progress_callback=progress_callback)
-    print("✅ Ingesting into Neo4j...")
+    LOGGER.info("Ingesting parsed entities into Neo4j")
     ingest_to_neo4j(*all_data, progress_callback=progress_callback)
 
     if sync:
-        print("🔄 Syncing graph: checking for stale files...")
+        LOGGER.info("Syncing graph by checking for stale files")
         if progress_callback:
             progress_callback("sync", "Pruning stale files...", 80.0)
 
@@ -722,17 +716,17 @@ def ingest(
                 # Determine which are stale (in DB, not in scan, AND inside the root dir)
                 for path in db_paths:
                     if path and path.startswith(java_root_dir) and path not in seen_paths:
-                        print(f"🗑️ Pruning stale file: {path}")
+                        LOGGER.info("Pruning stale file from graph: %s", path)
                         _purge_file_entities(path)
                         stale_count += 1
             driver.close()
-            print(f"🧹 Pruned {stale_count} stale files.")
+            LOGGER.info("Pruned %d stale files", stale_count)
         except Exception as exc:
-            print(f"[WARN] Sync failed: {exc}")
+            LOGGER.warning("Graph sync failed: %s", exc)
 
     if progress_callback:
         progress_callback("ingesting", "Ingestion complete.", 90.0 if sync else 80.0)
-    print("🎉 Ingestion complete.")
+    LOGGER.info("Ingestion complete")
 
 
 def _purge_file_entities(file_path: str) -> None:

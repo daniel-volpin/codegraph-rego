@@ -145,10 +145,10 @@ class EmbeddingService:
                 progress_callback("embedding", "All embeddings reused from cache.", 86.0)
         vectors_list = [vectors_by_sig[sig] for sig in signatures if sig in vectors_by_sig]
         vectors_np = np.asarray(vectors_list, dtype="float32")
-        print(f"Embedding {len(signatures)} methods...")
+        LOGGER.info("Embedding %d methods", len(signatures))
         if progress_callback:
             progress_callback("embedding", f"Cache hits: {cached_hits}; encoded: {len(to_encode)}", 88.0)
-        print(f"vectors_np shape: {vectors_np.shape}, dtype: {vectors_np.dtype}")
+        LOGGER.info("Embedding tensor prepared with shape=%s dtype=%s", vectors_np.shape, vectors_np.dtype)
         os.makedirs(settings.index_dir, exist_ok=True)
         index_path = os.path.join(settings.index_dir, "code_embeddings.index")
         sigmap_legacy_path = os.path.join(settings.index_dir, "embedding_signature_map.json")
@@ -196,6 +196,6 @@ class EmbeddingService:
             _persist_embedding_cache(settings.embedding_cache_path, settings.embedding_model_name, dim, cache_entries)
         except Exception as exc:
             LOGGER.warning("Failed to persist embedding cache: %s", exc)
-        print(f"Done. Saved FAISS index to {index_path} and signature map to {sigmap_full_path}.")
+        LOGGER.info("Saved FAISS index to %s and signature map to %s", index_path, sigmap_full_path)
         if progress_callback:
             progress_callback("embedding", "Embedding build complete.", 98.0)

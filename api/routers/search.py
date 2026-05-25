@@ -28,6 +28,3 @@ async def search(request: SearchRequest):
     except FileNotFoundError as e:
         logger.warning("Search file not found: %s", e)
         return JSONResponse({"error": str(e)}, status_code=400)
-    except Exception as e:
-        logger.exception("Search failed")
-        return JSONResponse({"error": f"search_failed: {e}"}, status_code=500)

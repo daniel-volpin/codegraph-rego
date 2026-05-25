@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 from typing import Any, Literal, Optional
 from pydantic import AliasChoices, Field
@@ -7,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LOCAL_ENV_FILE = PROJECT_ROOT / ".env"
+ENV_FILE_OVERRIDE_VAR = "CODEGRAPH_ENV_FILE"
 
 
 class Settings(BaseSettings):
@@ -207,11 +209,21 @@ class Settings(BaseSettings):
         description="Append-only JSONL store for UI triage/review records.",
     )
 
-    model_config = SettingsConfigDict(env_file=str(LOCAL_ENV_FILE), env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore")
+
+
+def resolve_explicit_env_file() -> str | None:
+    configured = os.environ.get(ENV_FILE_OVERRIDE_VAR)
+    if not configured:
+        return None
+    return configured
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    env_file = resolve_explicit_env_file()
+    if env_file:
+        return Settings(_env_file=env_file)
     return Settings()
 
 

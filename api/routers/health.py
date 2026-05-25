@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
+import subprocess
 import time
 from threading import Lock
 from typing import Any
@@ -35,6 +37,27 @@ def _load_search_health_dependencies() -> dict[str, Any]:
         "load_signature_map": load_signature_map,
         "load_embedding_model": load_embedding_model,
     }
+
+
+def _opa_probe() -> tuple[bool, str | None]:
+    executable = shutil.which("opa")
+    if not executable:
+        return False, "opa executable not found on PATH"
+    proc = subprocess.run(
+        [executable, "version", "--format=json"],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "unknown error").strip()
+        return False, f"opa version probe failed: {detail}"
+    try:
+        payload = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError:
+        return False, "opa version probe returned invalid JSON"
+    if not isinstance(payload, dict) or not payload.get("version"):
+        return False, "opa version probe returned missing version metadata"
+    return True, None
 
 
 def _compute_readiness(request: Request) -> tuple[dict[str, Any], int]:
@@ -87,11 +110,10 @@ def _compute_readiness(request: Request) -> tuple[dict[str, Any], int]:
         checks["embedding_model"] = True
     except Exception as e:
         checks["details"]["search"] = str(e)
-    try:
-        if shutil.which("opa"):
-            checks["opa"] = True
-    except Exception:
-        pass
+    opa_ok, opa_error = _opa_probe()
+    checks["opa"] = opa_ok
+    if opa_error:
+        checks["details"]["opa"] = opa_error
     if checks["startup"]["errors"]:
         checks["details"]["startup"] = checks["startup"]["errors"]
     core_healthy = all(

@@ -39,20 +39,16 @@ async def policy_evaluate(
     max_per_violation_id: int | None = Query(default=None),
     rule_ids: list[str] | None = Query(default=None),
 ):
-    try:
-        # OPA subprocess + Neo4j: blocking; run on a worker thread.
-        result = await asyncio.to_thread(
-            evaluate_policies,
-            max_bundles=max_bundles,
-            max_total_violations=max_total_violations,
-            max_per_violation_id=max_per_violation_id,
-            rule_ids=rule_ids,
-        )
-        status = 200 if "violations" in result or "opa_output" in result else 500
-        return JSONResponse(result, status_code=status)
-    except Exception as e:
-        logger.exception("Policy evaluation failed")
-        return JSONResponse({"error": str(e)}, status_code=500)
+    # OPA subprocess + Neo4j: blocking; run on a worker thread.
+    result = await asyncio.to_thread(
+        evaluate_policies,
+        max_bundles=max_bundles,
+        max_total_violations=max_total_violations,
+        max_per_violation_id=max_per_violation_id,
+        rule_ids=rule_ids,
+    )
+    status = 200 if "violations" in result or "opa_output" in result else 500
+    return JSONResponse(result, status_code=status)
 
 
 @router.post("/policy/evaluate_with_llm", response_model=PolicyEvaluateResponse)
@@ -126,15 +122,7 @@ async def policy_explain_one(payload: PolicyExplainOneRequest):
         )
     except Exception as exc:
         logger.exception("Explain-one failed", extra={"err": str(exc), "err_type": type(exc).__name__})
-        return JSONResponse(
-            {
-                "status": "ERROR",
-                "error": str(exc),
-                "model": model,
-                "include_graph_context": bool(payload.include_graph_context),
-            },
-            status_code=500,
-        )
+        raise
 
 
 @router.post("/policy/reviews", response_model=PolicyReviewCreateResponse)
@@ -208,20 +196,16 @@ async def policy_list_reviews(
         buffer = await asyncio.to_thread(_scan_jsonl)
     except Exception as exc:
         logger.exception("List reviews failed", extra={"err": str(exc), "err_type": type(exc).__name__})
-        return JSONResponse({"status": "ERROR", "error": str(exc), "reviews": []}, status_code=500)
+        raise
 
     return JSONResponse({"status": "OK", "error": None, "reviews": list(buffer)}, status_code=200)
 
 
 @router.get("/policy/catalog", response_model=PolicyCatalogResponse)
 async def policy_catalog():
-    try:
-        payload = await asyncio.to_thread(get_policy_catalog_payload)
-        controls = payload.get("controls", [])
-        controls_sorted = sorted(controls, key=lambda item: item.get("control") or item.get("id") or "")
-        response = dict(payload)
-        response["controls"] = controls_sorted
-        return JSONResponse(response)
-    except Exception as exc:
-        logger.exception("Policy catalog error")
-        return JSONResponse({"error": str(exc)}, status_code=500)
+    payload = await asyncio.to_thread(get_policy_catalog_payload)
+    controls = payload.get("controls", [])
+    controls_sorted = sorted(controls, key=lambda item: item.get("control") or item.get("id") or "")
+    response = dict(payload)
+    response["controls"] = controls_sorted
+    return JSONResponse(response)

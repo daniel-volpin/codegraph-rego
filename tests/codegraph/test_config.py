@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import unittest
 import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from pydantic import ValidationError
@@ -57,6 +59,21 @@ class TestConfigSettings(unittest.TestCase):
         clear_settings_cache()
         settings_c = get_settings()
         self.assertIsNot(settings_a, settings_c)
+
+    def test_get_settings_only_loads_env_file_when_explicitly_configured(self) -> None:
+        from codegraph.config import ENV_FILE_OVERRIDE_VAR, clear_settings_cache, get_settings
+
+        with TemporaryDirectory() as tmp_dir:
+            env_file = Path(tmp_dir) / "dev.env"
+            env_file.write_text("NEO4J_PASS=from-explicit-env\n", encoding="utf-8")
+
+            with patch.dict(os.environ, {}, clear=True):
+                clear_settings_cache()
+                self.assertIsNone(get_settings().neo4j_pass)
+
+            with patch.dict(os.environ, {ENV_FILE_OVERRIDE_VAR: env_file.as_posix()}, clear=True):
+                clear_settings_cache()
+                self.assertEqual(get_settings().neo4j_pass, "from-explicit-env")
 
 
 if __name__ == "__main__":

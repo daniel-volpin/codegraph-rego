@@ -3,13 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from codegraph.policy.analysis.state import (
-    AssignmentState,
-    AssignmentStateAnalyzer,
-    SIMPLE_ASSIGNMENT_RE,
-)
-
-from codegraph.policy.source_analysis_core import (
+from codegraph.policy.analysis.patterns import (
     APPEND_CALL_RE,
     DIRECT_LDAP_UNTRUSTED_PATTERNS,
     DIRECT_PATH_UNTRUSTED_PATTERNS,
@@ -30,6 +24,11 @@ from codegraph.policy.source_analysis_core import (
     STRING_CONCAT_PATTERNS,
     XPATH_PATTERNS,
     XPATH_SINK_VARIABLE_PATTERNS,
+)
+from codegraph.policy.analysis.state import (
+    AssignmentState,
+    AssignmentStateAnalyzer,
+    SIMPLE_ASSIGNMENT_RE,
 )
 
 

@@ -85,14 +85,14 @@ class HealthRouterTests(unittest.IsolatedAsyncioTestCase):
 
         reset_readiness_cache()
 
-    @patch("api.routers.health.shutil.which", return_value="/usr/local/bin/opa")
+    @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
     @patch("api.routers.health.get_neo4j_driver", return_value=_FakeDriver())
     async def test_health_returns_ok_when_runtime_is_ready(
         self,
         _mock_driver,
         mock_search_deps,
-        _mock_which,
+        _mock_opa,
     ) -> None:
         from api.routers.health import health
 
@@ -106,14 +106,14 @@ class HealthRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(payload["startup_ready"])
         self.assertEqual(payload["startup"]["phase"], "ready")
 
-    @patch("api.routers.health.shutil.which", return_value="/usr/local/bin/opa")
+    @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
     @patch("api.routers.health.get_neo4j_driver", return_value=_FakeDriver())
     async def test_health_returns_degraded_when_startup_is_degraded(
         self,
         _mock_driver,
         mock_search_deps,
-        _mock_which,
+        _mock_opa,
     ) -> None:
         from api.routers.health import health
 
@@ -141,10 +141,10 @@ class HealthzLivenessTests(unittest.IsolatedAsyncioTestCase):
 
     @patch("api.routers.health.get_neo4j_driver")
     @patch("api.routers.health._load_search_health_dependencies")
-    @patch("api.routers.health.shutil.which")
+    @patch("api.routers.health._opa_probe")
     async def test_healthz_does_no_external_io(
         self,
-        mock_which,
+        mock_opa,
         mock_search_deps,
         mock_driver,
     ) -> None:
@@ -154,7 +154,7 @@ class HealthzLivenessTests(unittest.IsolatedAsyncioTestCase):
 
         mock_driver.assert_not_called()
         mock_search_deps.assert_not_called()
-        mock_which.assert_not_called()
+        mock_opa.assert_not_called()
 
 
 class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
@@ -165,14 +165,14 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
 
         reset_readiness_cache()
 
-    @patch("api.routers.health.shutil.which", return_value="/usr/local/bin/opa")
+    @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
     @patch("api.routers.health.get_neo4j_driver")
     async def test_readyz_reports_dependency_status(
         self,
         mock_driver,
         mock_search_deps,
-        _mock_which,
+        _mock_opa,
     ) -> None:
         from api.routers.health import readyz
 
@@ -185,14 +185,14 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(response.body)
         self.assertEqual(payload["status"], "ok")
 
-    @patch("api.routers.health.shutil.which", return_value="/usr/local/bin/opa")
+    @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
     @patch("api.routers.health.get_neo4j_driver")
     async def test_readyz_caches_second_call_within_ttl(
         self,
         mock_driver,
         mock_search_deps,
-        _mock_which,
+        _mock_opa,
     ) -> None:
         """Second /readyz within the TTL must not re-probe Neo4j or FAISS."""
         from api.routers.health import readyz
@@ -223,14 +223,14 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
         # Neo4j driver fetched exactly once for the same reason.
         self.assertEqual(mock_driver.call_count, 1)
 
-    @patch("api.routers.health.shutil.which", return_value="/usr/local/bin/opa")
+    @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
     @patch("api.routers.health.get_neo4j_driver", return_value=_FakeDriver())
     async def test_health_and_readyz_share_the_cache(
         self,
         _mock_driver,
         mock_search_deps,
-        _mock_which,
+        _mock_opa,
     ) -> None:
         """The legacy /health alias and /readyz must hit one shared cache."""
         from api.routers.health import health, readyz
@@ -251,6 +251,26 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
         await health(_build_request(app))
 
         self.assertEqual(load_faiss.call_count, 1)
+
+    @patch("api.routers.health._opa_probe", return_value=(False, "opa version probe failed: bad binary"))
+    @patch("api.routers.health._load_search_health_dependencies")
+    @patch("api.routers.health.get_neo4j_driver", return_value=_FakeDriver())
+    async def test_readyz_reports_opa_probe_failure(
+        self,
+        _mock_driver,
+        mock_search_deps,
+        _mock_opa,
+    ) -> None:
+        from api.routers.health import readyz
+
+        mock_search_deps.return_value = _ready_search_deps()
+
+        response = await readyz(_build_request(_ready_app()))
+
+        self.assertEqual(response.status_code, 503)
+        payload = json.loads(response.body)
+        self.assertFalse(payload["opa"])
+        self.assertEqual(payload["details"]["opa"], "opa version probe failed: bad binary")
 
 
 if __name__ == "__main__":
