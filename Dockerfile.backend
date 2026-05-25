@@ -6,14 +6,36 @@ WORKDIR /app
 # Install uv
 RUN pip install uv
 
-# Copy dependency definition
-COPY pyproject.toml .
+# Install OPA so readiness checks and policy evaluation work inside the container too.
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+      x86_64) opa_arch="amd64" ;; \
+      aarch64|arm64) opa_arch="arm64" ;; \
+      *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
+    esac; \
+    python -c "import pathlib, sys, urllib.request; url = f'https://openpolicyagent.org/downloads/latest/opa_linux_{sys.argv[1]}_static'; target = pathlib.Path('/usr/local/bin/opa'); target.write_bytes(urllib.request.urlopen(url).read()); target.chmod(0o755)" "$opa_arch"; \
+    opa version
 
-# Install dependencies
-RUN uv pip install --system -r pyproject.toml
+# Copy dependency metadata
+COPY pyproject.toml uv.lock ./
 
-# Copy application code
-COPY . .
+# Install locked runtime dependencies without re-resolving the project.
+RUN uv export \
+      --frozen \
+      --no-dev \
+      --no-editable \
+      --no-emit-project \
+      --format requirements.txt \
+      --output-file requirements.lock && \
+    uv pip install --system -r requirements.lock && \
+    rm requirements.lock
+
+# Copy only the backend application surface needed at runtime.
+COPY app.py ./
+COPY api ./api
+COPY codegraph ./codegraph
+COPY configs ./configs
 
 # Expose port
 EXPOSE 8000

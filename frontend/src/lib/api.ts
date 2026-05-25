@@ -24,7 +24,7 @@ import {
   type UploadResponse,
   type UploadStatus,
 } from "./schemas";
-import { getRuntimeApiBase } from "./runtimeConfig";
+import { buildRuntimeApiUrl, getRuntimeApiBase } from "./runtimeConfig";
 
 const defaultHeaders = {
   Accept: "application/json",
@@ -308,7 +308,7 @@ export async function fetchUploadStatus(
   requestId?: string | null,
   signal?: AbortSignal,
 ): Promise<UploadStatus> {
-  const url = new URL(`${getRuntimeApiBase()}/upload/status`);
+  const url = buildRuntimeApiUrl("/upload/status");
   if (requestId) {
     url.searchParams.set("request_id", requestId);
   }

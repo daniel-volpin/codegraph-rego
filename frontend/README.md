@@ -14,18 +14,19 @@ npm install
 npm run dev
 ```
 
-The development server starts at <http://127.0.0.1:5173> by default. The React app talks to the FastAPI backend via REST, so ensure the API is running (default: <http://127.0.0.1:8000>).
+The development server starts at <http://127.0.0.1:5173> by default and proxies API requests to the FastAPI backend over `/api`, so ensure the API is running locally on <http://127.0.0.1:8000> unless you override the dev proxy target.
 
 ### Environment
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | Base URL for FastAPI endpoints | `http://127.0.0.1:8000` |
+| `VITE_API_BASE_URL` | Browser-visible API base override | `/api` |
+| `CODEGRAPH_DEV_PROXY_TARGET` | Vite dev-server proxy target | `http://127.0.0.1:8000` |
 
 Create a `.env` file in `frontend/` to override the default:
 
 ```bash
-echo 'VITE_API_BASE_URL=http://localhost:9000' > .env
+echo 'CODEGRAPH_DEV_PROXY_TARGET=http://localhost:9000' > .env
 ```
 
 ### Available Scripts

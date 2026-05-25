@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UploadStatus } from "../lib/types";
-import { getRuntimeApiBase } from "../lib/runtimeConfig";
+import { buildRuntimeApiUrl } from "../lib/runtimeConfig";
 
 export function useUploadStatusStream(requestId: string | null) {
   const queryClient = useQueryClient();
@@ -12,7 +12,7 @@ export function useUploadStatusStream(requestId: string | null) {
       return;
     }
 
-    const streamUrl = new URL(`${getRuntimeApiBase()}/upload/status/stream`);
+    const streamUrl = buildRuntimeApiUrl("/upload/status/stream");
     streamUrl.searchParams.set("request_id", requestId);
     const source = new EventSource(streamUrl.toString());
 

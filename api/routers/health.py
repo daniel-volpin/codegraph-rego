@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import shutil
 import subprocess
 import time
@@ -22,6 +23,7 @@ router = APIRouter()
 _READINESS_TTL_SECONDS = 30.0
 _readiness_cache: dict[str, Any] = {"expires_at": 0.0, "payload": None, "status_code": 503}
 _readiness_lock = Lock()
+_OPA_VERSION_PATTERN = re.compile(r"^Version:\s*(?P<version>\S+)\s*$", re.MULTILINE)
 
 
 def _load_search_health_dependencies() -> dict[str, Any]:
@@ -43,21 +45,32 @@ def _opa_probe() -> tuple[bool, str | None]:
     executable = shutil.which("opa")
     if not executable:
         return False, "opa executable not found on PATH"
-    proc = subprocess.run(
+    json_proc = subprocess.run(
         [executable, "version", "--format=json"],
         capture_output=True,
         text=True,
     )
-    if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "unknown error").strip()
+    if json_proc.returncode == 0:
+        try:
+            payload = json.loads(json_proc.stdout or "{}")
+        except json.JSONDecodeError:
+            return False, "opa version probe returned invalid JSON"
+        if not isinstance(payload, dict) or not payload.get("version"):
+            return False, "opa version probe returned missing version metadata"
+        return True, None
+
+    text_proc = subprocess.run(
+        [executable, "version"],
+        capture_output=True,
+        text=True,
+    )
+    if text_proc.returncode != 0:
+        detail = (json_proc.stderr or json_proc.stdout or text_proc.stderr or text_proc.stdout or "unknown error").strip()
         return False, f"opa version probe failed: {detail}"
-    try:
-        payload = json.loads(proc.stdout or "{}")
-    except json.JSONDecodeError:
-        return False, "opa version probe returned invalid JSON"
-    if not isinstance(payload, dict) or not payload.get("version"):
-        return False, "opa version probe returned missing version metadata"
-    return True, None
+
+    if _OPA_VERSION_PATTERN.search(text_proc.stdout or ""):
+        return True, None
+    return False, "opa version probe returned missing version metadata"
 
 
 def _compute_readiness(request: Request) -> tuple[dict[str, Any], int]:

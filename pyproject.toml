@@ -9,7 +9,7 @@ authors = [
     { name = "Daniel Volpin" },
 ]
 dependencies = [
-    "fastapi>=0.115.0",
+    "fastapi==0.115.6",
     "uvicorn>=0.42.0",
     "aiofiles==25.1.0",
     "python-multipart==0.0.27",
