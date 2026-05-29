@@ -8,7 +8,7 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import App from "./App";
-import { reportError } from "./lib/observability";
+import { reportError, reportMetric } from "./lib/observability";
 import "./index.css";
 
 // Default options are tuned for this app's workload:
@@ -64,7 +64,32 @@ async function enableDevAxe() {
   await axe(React, ReactDOM, 1000);
 }
 
-void Promise.all([bootstrapRuntimeConfig(), enableDevAxe()]).finally(() => {
+// Core Web Vitals (LCP/INP/CLS/FCP/TTFB). Each metric fires at most a
+// few times per page life; we hand them to reportMetric so business code
+// stays neutral while telemetry sinks subscribe via window events.
+async function enableWebVitals() {
+  try {
+    const { onCLS, onFCP, onINP, onLCP, onTTFB } = await import("web-vitals");
+    const handler = (metric: { name: string; value: number; rating?: "good" | "needs-improvement" | "poor"; id?: string; delta?: number }) =>
+      reportMetric({
+        name: metric.name,
+        value: metric.value,
+        rating: metric.rating,
+        id: metric.id,
+        delta: metric.delta,
+      });
+    onCLS(handler);
+    onFCP(handler);
+    onINP(handler);
+    onLCP(handler);
+    onTTFB(handler);
+  } catch (error) {
+    // web-vitals failure is non-fatal; just surface for dev visibility.
+    reportError(error, { source: "web-vitals" });
+  }
+}
+
+void Promise.all([bootstrapRuntimeConfig(), enableDevAxe(), enableWebVitals()]).finally(() => {
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
