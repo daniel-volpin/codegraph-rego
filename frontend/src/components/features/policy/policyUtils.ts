@@ -1,6 +1,5 @@
 import {
   RemediationCapabilitySchema,
-  ViolationSchema,
   type PolicyExplainOneResponse,
   type RemediationApplyResponse,
   type RemediationCapability,
@@ -9,6 +8,12 @@ import {
   type Violation,
 } from "../../../lib/schemas";
 import { deriveModuleLabel, relativeToUploadedWorkspace } from "../../../lib/workspace";
+
+// Shared default for violations whose wire payload omits the optional
+// `remediation` block. Frozen so the shared reference can't be mutated.
+const DEFAULT_REMEDIATION: RemediationCapability = Object.freeze(
+  RemediationCapabilitySchema.parse({}),
+);
 
 // ---- Types ----
 
@@ -119,21 +124,20 @@ export const trimSnippetToMethod = (snippet: string, targetMethod: string) => {
   return lines.slice(start, end + 1).join("\n").trimEnd();
 };
 
-// `item` arrives already validated by the wire schema, so wire-level
-// normalization (fallback strings, capability defaults) is handled by Zod's
-// `.default()` / `.catch()` and not repeated here. This function only
-// derives UI-specific shape (composite id, module label, trimmed snippet).
+// `item` is already validated at the API boundary (PolicyEvaluateResponseSchema
+// parses each violation through ViolationSchema, applying defaults and
+// capability normalization). We read typed fields directly rather than
+// re-parsing — this runs once per violation on every evaluation, so the
+// avoided parse matters at OWASP-benchmark scale (hundreds of findings).
 export const normalizeViolation = (item: RawViolation): ViolationRow => {
-  // Defensive parse: callers that handed us untyped data still get schema
-  // semantics applied (this is a no-op for data fresh from the API client).
-  const validated = ViolationSchema.parse(item);
-  const ruleId = validated.violation_id ?? validated.rule_id ?? "—";
-  const targetMethod = validated.target_method ?? "—";
-  const filePath = validated.file_path ?? "—";
-  const severity = (validated.severity ?? "MEDIUM").toUpperCase();
-  const remediation = RemediationCapabilitySchema.parse(validated.remediation ?? {});
+  const ruleId = item.violation_id ?? item.rule_id ?? "—";
+  const targetMethod = item.target_method ?? "—";
+  const filePath = item.file_path ?? "—";
+  const severity = (item.severity ?? "MEDIUM").toUpperCase();
+  // `remediation` is optional on the wire; fall back to schema defaults.
+  const remediation = item.remediation ?? DEFAULT_REMEDIATION;
   const rawSnippet =
-    validated.code_snippet ?? validated.evidence?.source_code ?? validated.updated_source_code ?? "";
+    item.code_snippet ?? item.evidence?.source_code ?? item.updated_source_code ?? "";
   return {
     id: `${ruleId}:${targetMethod}:${filePath}`,
     ruleId,
@@ -141,10 +145,10 @@ export const normalizeViolation = (item: RawViolation): ViolationRow => {
     module: deriveModuleLabel(filePath),
     targetMethod,
     filePath,
-    reason: validated.reason ?? validated.description ?? "—",
+    reason: item.reason ?? item.description ?? "—",
     snippet: trimSnippetToMethod(rawSnippet, targetMethod),
     remediation,
-    raw: validated,
+    raw: item,
   };
 };
 
