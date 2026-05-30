@@ -1,10 +1,30 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 const devProxyTarget = process.env.CODEGRAPH_DEV_PROXY_TARGET || "http://127.0.0.1:8000";
 
+// Pin the runtime `service.version` to package.json so OTel reports a real
+// version instead of drifting from a hand-maintained constant. Read is
+// guarded so unit tests that import this config under jsdom (where
+// `import.meta.url` isn't a file URL) don't crash on a missing package.json.
+function readPackageVersion(): string {
+  try {
+    const raw = readFileSync(resolve(process.cwd(), "package.json"), "utf-8");
+    return (JSON.parse(raw) as { version?: string }).version ?? "0.0.0-dev";
+  } catch {
+    return "0.0.0-dev";
+  }
+}
+
+const APP_VERSION = readPackageVersion();
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   plugins: [tailwindcss(), react()],
   test: {
     environment: "jsdom",

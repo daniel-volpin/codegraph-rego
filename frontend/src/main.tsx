@@ -89,7 +89,24 @@ async function enableWebVitals() {
   }
 }
 
-void Promise.all([bootstrapRuntimeConfig(), enableDevAxe(), enableWebVitals()]).finally(() => {
+// Browser-side OpenTelemetry. Dynamically imported so the SDK (~80 kB gz)
+// stays out of the entry chunk. FetchInstrumentation auto-injects the
+// `traceparent` header into requests to the FastAPI API, where the
+// matching FastAPIInstrumentor continues the trace server-side.
+async function enableBrowserTracing() {
+  try {
+    const { configureBrowserTracing } = await import("./lib/tracing");
+    configureBrowserTracing();
+  } catch (error) {
+    reportError(error, { source: "tracing" });
+  }
+}
+
+// Runtime config must resolve first because tracing reads the API base when
+// it computes which origins receive the traceparent header.
+void Promise.all([bootstrapRuntimeConfig(), enableDevAxe(), enableWebVitals()])
+  .then(() => enableBrowserTracing())
+  .finally(() => {
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
