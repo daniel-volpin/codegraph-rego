@@ -34,15 +34,43 @@ echo 'CODEGRAPH_DEV_PROXY_TARGET=http://localhost:9000' > .env
 - `npm run dev` – start the Vite dev server.
 - `npm run build` – type-check and create a production build.
 - `npm run preview` – serve the build output locally.
+- `npm test` – run the Vitest unit suite.
+- `npm run test:e2e` – run the Playwright end-to-end suite.
 
 ## Project Structure
 
 ```init
 frontend/
   src/
-    pages/        # Upload/search/policy views
-    components/   # Layout, navigation
-    lib/          # Simple API client & shared types
+    pages/        # Upload, search, policy, settings, home
+    components/
+      common/       # Layout, sidebar, breadcrumbs, error boundary, activity tray
+      features/     # Page-specific feature modules (policy, search)
+      ui/           # Headless primitives (button, badge, card, dialog, switch, ...)
+    hooks/        # Per-resource React Query hooks (e.g. usePolicyArtifacts, useUploadStatusStream)
+    lib/
+      api.ts          # Typed fetch client; one unified parseApiResponse over Zod schemas
+      schemas.ts      # Zod schemas at the wire boundary; types inferred via z.infer
+      types.ts        # Re-export surface for inferred types
+      persistence.ts  # IndexedDB persistence (idb-keyval) for large eval payloads
+      runtimeConfig.ts# Runtime base-URL resolution (window/meta/env/default)
+      observability.ts# reportError + reportMetric event bus
+    store/        # Zustand stores (e.g. activity)
 ```
 
-React Query manages async state (uploads, searches, policy checks), while React Router handles navigation between the major workflows.
+### Data and state architecture
+- **Wire validation:** every API response is parsed through a Zod schema. The
+  unified `parseApiResponse` accepts structured-error envelopes on 4xx, rejects
+  schema drift on 2xx (caught by the route-level ErrorBoundary).
+- **Server state:** TanStack Query, with one cache key per resource id
+  (`["policy", "explain", id]`, etc.). Mutations carry per-call `AbortController`s.
+- **Client state:** Zustand stores with shallow-selector reads (see
+  `store/activity.ts`). Persistent UI state is in IndexedDB via `idb-keyval`.
+- **Routing:** React Router v7 with `lazy()` route splitting and a shared
+  Suspense/ErrorBoundary at the route root.
+- **A11y primitives:** Radix Dialog/Switch for WCAG-correct focus, scroll lock,
+  and keyboard handling. `@axe-core/react` runs in dev. Playwright + axe-core
+  cover e2e a11y.
+- **Observability:** `reportError` / `reportMetric` (with Web Vitals: LCP, INP,
+  CLS, FCP, TTFB) dispatch `codegraph:error` / `codegraph:metric` window events
+  for a future telemetry sink to subscribe.

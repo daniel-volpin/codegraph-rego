@@ -30,3 +30,24 @@ export function reportError(error: unknown, context: FrontendErrorContext = {}) 
     );
   }
 }
+
+export interface FrontendMetric {
+  name: string;
+  value: number;
+  rating?: "good" | "needs-improvement" | "poor";
+  id?: string;
+  delta?: number;
+}
+
+export function reportMetric(metric: FrontendMetric) {
+  // Dev console signal so Core Web Vitals are visible without a remote sink.
+  if (import.meta.env.DEV) {
+    console.info("[frontend-metric]", metric);
+  }
+
+  // Same dispatch pattern as reportError: business code stays neutral, a
+  // future telemetry bridge subscribes via window.addEventListener.
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("codegraph:metric", { detail: metric }));
+  }
+}

@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Search, Sparkles } from "lucide-react";
 import { searchCode } from "../lib/api";
@@ -20,9 +20,19 @@ const EXAMPLE_QUERIES = [
 const SearchPage = () => {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<SearchResponse | null>(null);
+  // Per-call AbortController. A second submit cancels any in-flight call so
+  // a stale late response can't overwrite the latest UI state, and unmount
+  // aborts whatever is in flight.
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const searchMutation = useMutation({
-    mutationFn: (q: string) => searchCode(q),
+    mutationFn: (q: string) => {
+      abortRef.current?.abort();
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      return searchCode(q, ctrl.signal);
+    },
     onSuccess: (data) => {
       setResult(data);
       const matchCount = data.matches.length;
@@ -33,6 +43,7 @@ const SearchPage = () => {
       );
     },
     onError: (error: Error) => {
+      if (error.name === "AbortError") return;
       setResult({ matches: [], contexts: [], error: error.message });
       toast.error(`Search failed: ${error.message}`);
     },
