@@ -13,7 +13,6 @@
 // This module is dynamically imported at boot from main.tsx so the OTel
 // SDK (~80 kB gz) lives in its own chunk and never blocks first paint.
 
-import { context, trace } from "@opentelemetry/api";
 import { ZoneContextManager } from "@opentelemetry/context-zone";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { registerInstrumentations } from "@opentelemetry/instrumentation";
@@ -33,9 +32,32 @@ import {
 import { getRuntimeApiBase } from "./runtimeConfig";
 
 const SERVICE_NAME = "codegraph-frontend";
-const SERVICE_VERSION = "0.5.0";
+// __APP_VERSION__ is injected at build time by vite.config.ts so the
+// service.version attribute stays in sync with package.json automatically.
+declare const __APP_VERSION__: string;
+const SERVICE_VERSION =
+  typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "0.0.0-dev";
 
 let initialized = false;
+
+// Escapes regex metacharacters for safe inclusion in a `new RegExp` pattern.
+// Mirrors the canonical MDN escapeRegExp implementation.
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Returns a regex/string matcher that recognises requests OpenTelemetry's
+// FetchInstrumentation sees (i.e. resolved absolute URLs) as belonging to our
+// own API origin. Handles both absolute (`https://api.example.com`) and
+// relative (`/api`) `VITE_API_BASE_URL` values.
+function buildApiOriginMatcher(apiBase: string): RegExp {
+  if (apiBase.startsWith("/")) {
+    // Relative API base — anchor to the resolved absolute URL on any origin.
+    // FetchInstrumentation evaluates URLs after the browser resolves them, so
+    // the request appears as `<scheme>://<host>{apiBase}/...` regardless of
+    // whether the call site wrote `/api/...` or `http://host/api/...`.
+    return new RegExp(`^https?://[^/]+${escapeRegExp(apiBase)}(?:/|$)`);
+  }
+  return new RegExp(`^${escapeRegExp(apiBase)}(?:/|$)`);
+}
 
 function selectExporter(): SpanExporter {
   const otlp = import.meta.env.VITE_OTEL_EXPORTER_OTLP_ENDPOINT as string | undefined;
@@ -68,10 +90,7 @@ export function configureBrowserTracing(): void {
   // Only propagate traceparent to our own API origin. Cross-origin third-party
   // calls (e.g. LM Studio talking to its own server) should not receive our
   // headers — that would either fail CORS or leak our trace context.
-  const apiBase = getRuntimeApiBase();
-  const propagateUrl = apiBase.startsWith("/")
-    ? new RegExp(`^${apiBase.replace(/[.+?^${}()|[\\]\\\\]/g, "\\$&")}`)
-    : new RegExp(`^${apiBase.replace(/[.+?^${}()|[\\]\\\\]/g, "\\$&")}`);
+  const propagateUrl = buildApiOriginMatcher(getRuntimeApiBase());
 
   registerInstrumentations({
     instrumentations: [
@@ -87,11 +106,3 @@ export function configureBrowserTracing(): void {
     ],
   });
 }
-
-// Convenience for callers that want to wrap a user action in a span
-// (e.g. "policy.explain" around a mutation). Returns the active tracer.
-export const getTracer = () => trace.getTracer(SERVICE_NAME, SERVICE_VERSION);
-
-// Re-export the context API so test/wrapping code doesn't need to import
-// from @opentelemetry/api directly.
-export { context as otelContext };
