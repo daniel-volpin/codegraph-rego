@@ -36,8 +36,9 @@ def _parse_sse_events(body: str) -> list[tuple[str, dict]]:
 
 
 def test_upload_status_stream_emits_initial_state_and_completion(monkeypatch) -> None:
-    # Tight cadence so the test loop finishes in milliseconds.
-    monkeypatch.setattr(upload_module, "_SSE_POLL_INTERVAL_S", 0.01)
+    # Shrink the heartbeat so the disconnect/heartbeat loop is fast under test;
+    # the stream now wakes on `complete_progress` immediately via the
+    # state-change listener regardless of this value.
     monkeypatch.setattr(upload_module, "_SSE_HEARTBEAT_INTERVAL_S", 1.0)
     monkeypatch.setattr(upload_module, "_SSE_TERMINAL_GRACE_S", 0.0)
     progress.reset_progress()
@@ -45,8 +46,10 @@ def test_upload_status_stream_emits_initial_state_and_completion(monkeypatch) ->
 
     client = TestClient(_build_app())
     try:
-        # In a separate thread, flip the slot to complete shortly after the
-        # stream connects so the generator sees a state change → terminal.
+        # Flip the slot to complete from a worker thread shortly after the
+        # stream connects. complete_progress() fires _notify() which fans
+        # out to the SSE listener via loop.call_soon_threadsafe → the
+        # stream wakes without waiting for a timeout.
         import threading
 
         def _flip() -> None:
@@ -75,7 +78,6 @@ def test_upload_status_stream_emits_initial_state_and_completion(monkeypatch) ->
 
 
 def test_upload_status_stream_closes_when_already_complete(monkeypatch) -> None:
-    monkeypatch.setattr(upload_module, "_SSE_POLL_INTERVAL_S", 0.01)
     monkeypatch.setattr(upload_module, "_SSE_HEARTBEAT_INTERVAL_S", 1.0)
     monkeypatch.setattr(upload_module, "_SSE_TERMINAL_GRACE_S", 0.0)
     progress.reset_progress()
@@ -91,5 +93,28 @@ def test_upload_status_stream_closes_when_already_complete(monkeypatch) -> None:
         # When the job is already complete we expect exactly one status event
         # and one complete event before the stream closes.
         assert [name for name, _ in events] == ["status", "complete"]
+    finally:
+        progress.reset_progress()
+
+
+def test_upload_status_stream_unregisters_listener_on_exit(monkeypatch) -> None:
+    """The SSE handler must remove its listener from the registry when the
+    stream closes — otherwise listeners would accumulate across many
+    consecutive uploads and notify-fan-out would scale with all-time
+    upload count rather than active streams.
+    """
+    monkeypatch.setattr(upload_module, "_SSE_HEARTBEAT_INTERVAL_S", 1.0)
+    monkeypatch.setattr(upload_module, "_SSE_TERMINAL_GRACE_S", 0.0)
+    progress.reset_progress()
+    request_id = progress.start_progress(phase="upload", message="Starting", progress=0.0)
+    progress.complete_progress("Done")
+    listeners_before = len(progress._listeners)  # noqa: SLF001 — test introspection
+
+    client = TestClient(_build_app())
+    try:
+        with client.stream("GET", f"/upload/status/stream?request_id={request_id}") as response:
+            assert response.status_code == 200
+            "".join(response.iter_text())  # drain
+        assert len(progress._listeners) == listeners_before  # noqa: SLF001
     finally:
         progress.reset_progress()
