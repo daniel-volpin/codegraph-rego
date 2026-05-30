@@ -1,7 +1,10 @@
 import { Loader2 } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
+import { Switch } from "../../ui/switch";
 import type { PolicyViewPreset } from "./policyUtils";
+
+const VIEW_MODE_DESCRIPTION_ID = "framework-demo-switch-description";
 
 interface ControlsPanelProps {
   viewPreset: PolicyViewPreset;
@@ -36,27 +39,15 @@ const ControlsPanel = ({
         <div className="space-y-1.5">
           <label className="block text-xs font-medium text-slate-600">View mode</label>
           <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={viewPreset === "framework_demo"}
-              aria-label="Toggle framework demo focus"
-              onClick={() => onViewPresetChange(viewPreset === "all" ? "framework_demo" : "all")}
-              className={`relative inline-flex h-7 w-14 items-center rounded-full border transition-colors ${
-                viewPreset === "framework_demo"
-                  ? "border-indigo-600 bg-indigo-600"
-                  : "border-slate-300 bg-slate-200"
-              }`}
-            >
-              <span
-                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                  viewPreset === "framework_demo" ? "translate-x-8" : "translate-x-1"
-                }`}
-              />
-            </button>
+            <Switch
+              checked={viewPreset === "framework_demo"}
+              onCheckedChange={(checked) => onViewPresetChange(checked ? "framework_demo" : "all")}
+              aria-label="Framework demo focus"
+              aria-describedby={VIEW_MODE_DESCRIPTION_ID}
+            />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">Framework demo focus</p>
-              <p className="text-xs text-slate-500">
+              <p id={VIEW_MODE_DESCRIPTION_ID} className="text-xs text-slate-500">
                 {viewPreset === "framework_demo"
                   ? "On. Show only the benchmark-aligned framework categories."
                   : "Off. Show the full policy surface for the current upload."}
