@@ -214,13 +214,17 @@ export type RemediationGenerationResult = z.infer<
   typeof RemediationGenerationResultSchema
 >;
 
+// Confidence is a display-only surface. Every field uses `.catch()` so an
+// out-of-range score (e.g. 1.0000001 from float rounding) or an unexpected
+// band value degrades that field to null rather than failing the parse of
+// the entire remediation response it is nested inside.
 export const RemediationConfidenceSchema = z
   .object({
-    score: z.number().min(0).max(1).nullable().optional(),
-    band: z.enum(["abstain", "review", "apply"]).nullable().optional(),
-    threshold_apply: z.number().min(0).max(1).nullable().optional(),
-    threshold_review: z.number().min(0).max(1).nullable().optional(),
-    rationale: z.string().nullable().optional(),
+    score: z.number().min(0).max(1).nullable().optional().catch(null),
+    band: z.enum(["abstain", "review", "apply"]).nullable().optional().catch(null),
+    threshold_apply: z.number().min(0).max(1).nullable().optional().catch(null),
+    threshold_review: z.number().min(0).max(1).nullable().optional().catch(null),
+    rationale: z.string().nullable().optional().catch(null),
   })
   .loose();
 export type RemediationConfidence = z.infer<

@@ -36,6 +36,13 @@ const UploadPage = () => {
     mutationFn: (file: File) => uploadZip(file),
     onSuccess: (data) => {
       setResult(data);
+      // The backend can return HTTP 200 with an error envelope. Don't treat
+      // that as a successful ingest: don't toast success, don't persist it as
+      // the last-good upload, and don't evict the existing workspace caches.
+      if (data.error || data.status === "error") {
+        toast.error(`Upload failed: ${data.error ?? "Unknown error."}`);
+        return;
+      }
       toast.success("Upload complete! Embeddings rebuilt.");
       void persistLastUpload(data);
       queryClient.removeQueries({ queryKey: ["policyEvaluation:last"] });
