@@ -21,7 +21,7 @@ from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 
 def _now() -> str:
@@ -50,6 +50,50 @@ _latest_request_id: Optional[str] = None
 _current_request_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "codegraph_progress_request_id", default=None
 )
+
+# State-change listeners are notified after every progress mutation so the
+# SSE stream can wake immediately instead of polling on a timer. Listeners
+# are called from whichever thread mutated state, so listener callbacks
+# must be thread-safe (typically they hand off via
+# `loop.call_soon_threadsafe`).
+_StateChangeListener = Callable[[Optional[str]], None]
+_listeners: "list[_StateChangeListener]" = []
+_listeners_lock = Lock()
+
+
+def register_state_change_listener(listener: _StateChangeListener) -> Callable[[], None]:
+    """Register a callback that fires after every progress mutation.
+
+    The callback receives the request_id whose slot changed (or None when
+    `_resolve_request_id` itself was unable to settle on a slot). Returns
+    an unregister function — call it from the listener's owning scope's
+    cleanup path so the listener list cannot grow unboundedly.
+    """
+    with _listeners_lock:
+        _listeners.append(listener)
+
+    def _unregister() -> None:
+        with _listeners_lock:
+            try:
+                _listeners.remove(listener)
+            except ValueError:
+                pass
+
+    return _unregister
+
+
+def _notify(changed_rid: Optional[str]) -> None:
+    """Fan out to all registered listeners. Exceptions are isolated so one
+    misbehaving listener cannot starve the others or leak through to the
+    progress writer.
+    """
+    with _listeners_lock:
+        snapshot = list(_listeners)
+    for cb in snapshot:
+        try:
+            cb(changed_rid)
+        except Exception:  # pragma: no cover - listener safety net
+            pass
 
 
 def _idle_state() -> ProgressState:
@@ -97,6 +141,7 @@ def start_progress(
         _trim_locked()
         _latest_request_id = rid
     _current_request_id.set(rid)
+    _notify(rid)
     return rid
 
 
@@ -113,6 +158,7 @@ def update_progress(phase: str, message: str, progress: float) -> None:
         state.message = message
         state.progress = normalized
         state.updated_at = _now()
+    _notify(rid)
 
 
 def complete_progress(message: str = "Completed") -> None:
@@ -129,6 +175,7 @@ def complete_progress(message: str = "Completed") -> None:
         state.complete = True
         state.error = None
         state.updated_at = _now()
+    _notify(rid)
 
 
 def error_progress(message: str) -> None:
@@ -145,6 +192,7 @@ def error_progress(message: str) -> None:
         state.error = message
         state.complete = True
         state.updated_at = _now()
+    _notify(rid)
 
 
 def get_progress(*, request_id: Optional[str] = None) -> Dict[str, Any]:

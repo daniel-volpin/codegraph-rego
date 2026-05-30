@@ -21,6 +21,7 @@ from codegraph.common.progress import (
     complete_progress,
     error_progress,
     get_progress,
+    register_state_change_listener,
 )
 
 router = APIRouter()
@@ -255,8 +256,7 @@ async def upload_status(
 
 # Tunables for the SSE stream. Held at module scope so tests can patch them
 # to keep test runs fast without changing prod cadence.
-_SSE_POLL_INTERVAL_S = 0.25  # how often to re-read the progress slot
-_SSE_HEARTBEAT_INTERVAL_S = 5.0  # max gap between events while idle
+_SSE_HEARTBEAT_INTERVAL_S = 5.0  # max gap between any bytes on the wire
 _SSE_TERMINAL_GRACE_S = 0.5  # let the last event flush before closing
 
 
@@ -266,34 +266,69 @@ async def _upload_status_event_stream(
 ) -> AsyncIterator[bytes]:
     """Yield SSE bytes until the underlying job completes or the client disconnects.
 
-    Emits one ``event: status`` per observed state change, plus a heartbeat
-    at least every ``_SSE_HEARTBEAT_INTERVAL_S`` seconds so proxies don't
-    drop the connection. When ``complete`` flips to True, sends a final
-    ``event: complete`` and returns. Client disconnects are detected via
-    Starlette's ``request.is_disconnected()`` to free the worker promptly.
+    Push-driven: the loop sleeps on an ``asyncio.Event`` that the progress
+    module sets whenever a state mutation matching our ``request_id``
+    occurs. The wake is scheduled across the thread boundary via
+    ``loop.call_soon_threadsafe`` because progress writers run on worker
+    threads (``asyncio.to_thread`` → sync ingestion callbacks).
 
-    The whole stream runs inside the auto-instrumented FastAPI span so the
-    upload's traceparent (if propagated by the client) chains the stream
-    request to the originating ``POST /upload`` span.
+    A heartbeat timeout (``_SSE_HEARTBEAT_INTERVAL_S``) doubles as the
+    interval at which we re-poll ``request.is_disconnected()`` so a worker
+    is never held more than that long after the client closes the tab.
+
+    When ``complete`` flips to True, sends a final ``event: complete`` and
+    returns. The whole stream runs inside the auto-instrumented FastAPI
+    span so the upload's traceparent (if propagated by the client) chains
+    the stream request to the originating ``POST /upload`` span.
     """
+    loop = asyncio.get_running_loop()
+    state_changed = asyncio.Event()
+
+    def _on_state_change(changed_rid: str | None) -> None:
+        # request_id=None means "tail the latest job"; accept every event.
+        # An explicit request_id only wakes on matching mutations.
+        if request_id is None or changed_rid == request_id:
+            try:
+                loop.call_soon_threadsafe(state_changed.set)
+            except RuntimeError:
+                # Loop is closing; the finally-block in the consumer will
+                # unregister us shortly. Drop the wake.
+                pass
+
+    unregister = register_state_change_listener(_on_state_change)
     last_payload: str | None = None
-    last_emit = asyncio.get_event_loop().time()
-    while True:
-        if await request.is_disconnected():
-            return
-        state = get_progress(request_id=request_id)
-        payload = json.dumps(state, separators=(",", ":"))
-        now = asyncio.get_event_loop().time()
-        if payload != last_payload or (now - last_emit) >= _SSE_HEARTBEAT_INTERVAL_S:
-            yield f"event: status\ndata: {payload}\n\n".encode("utf-8")
-            last_payload = payload
-            last_emit = now
-        if state.get("complete"):
-            yield f"event: complete\ndata: {payload}\n\n".encode("utf-8")
-            # Brief grace so client buffers flush before the stream closes.
-            await asyncio.sleep(_SSE_TERMINAL_GRACE_S)
-            return
-        await asyncio.sleep(_SSE_POLL_INTERVAL_S)
+    try:
+        while True:
+            if await request.is_disconnected():
+                return
+            # Clear the flag BEFORE reading state. If a writer fires
+            # set() between get_progress() and a later clear(), the signal
+            # would be lost and the next wait() would sleep until the
+            # heartbeat. Clearing first means any subsequent set() — from
+            # a writer that races our read — is preserved for the wait()
+            # below and we wake immediately on the next iteration.
+            state_changed.clear()
+            state = get_progress(request_id=request_id)
+            payload = json.dumps(state, separators=(",", ":"))
+            if payload != last_payload:
+                yield f"event: status\ndata: {payload}\n\n".encode("utf-8")
+                last_payload = payload
+            if state.get("complete"):
+                yield f"event: complete\ndata: {payload}\n\n".encode("utf-8")
+                # Brief grace so client buffers flush before the stream closes.
+                await asyncio.sleep(_SSE_TERMINAL_GRACE_S)
+                return
+            # Wait for either: a state change wake, or the heartbeat timeout
+            # (at which point we'll loop, re-check disconnect, and emit a
+            # keepalive comment if nothing changed).
+            try:
+                await asyncio.wait_for(state_changed.wait(), timeout=_SSE_HEARTBEAT_INTERVAL_S)
+            except asyncio.TimeoutError:
+                # SSE comment lines are ignored by EventSource but defeat
+                # proxy idle timeouts; cheaper than re-emitting status.
+                yield b": heartbeat\n\n"
+    finally:
+        unregister()
 
 
 @router.get("/upload/status/stream")
