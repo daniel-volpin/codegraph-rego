@@ -301,6 +301,13 @@ async def _upload_status_event_stream(
         while True:
             if await request.is_disconnected():
                 return
+            # Clear the flag BEFORE reading state. If a writer fires
+            # set() between get_progress() and a later clear(), the signal
+            # would be lost and the next wait() would sleep until the
+            # heartbeat. Clearing first means any subsequent set() — from
+            # a writer that races our read — is preserved for the wait()
+            # below and we wake immediately on the next iteration.
+            state_changed.clear()
             state = get_progress(request_id=request_id)
             payload = json.dumps(state, separators=(",", ":"))
             if payload != last_payload:
@@ -314,7 +321,6 @@ async def _upload_status_event_stream(
             # Wait for either: a state change wake, or the heartbeat timeout
             # (at which point we'll loop, re-check disconnect, and emit a
             # keepalive comment if nothing changed).
-            state_changed.clear()
             try:
                 await asyncio.wait_for(state_changed.wait(), timeout=_SSE_HEARTBEAT_INTERVAL_S)
             except asyncio.TimeoutError:
