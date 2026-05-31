@@ -1,0 +1,85 @@
+{
+  "generated_at": "2026-05-31T12:36:49+00:00",
+  "metrics": {
+    "count": 222,
+    "fp": {
+      "count": 9,
+      "rate_with_context": 1.0,
+      "rate_with_context_ci": {
+        "ci_high": 1.0,
+        "ci_low": 0.7008549515804559,
+        "confidence": 0.95,
+        "method": "wilson",
+        "n": 9,
+        "point": 1.0
+      },
+      "rate_without_context": 0.0,
+      "rate_without_context_ci": {
+        "ci_high": 0.2991450484195441,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "wilson",
+        "n": 9,
+        "point": 0.0
+      },
+      "with_context": 9,
+      "without_context": 0
+    },
+    "rate_with_context": 1.0,
+    "rate_with_context_ci": {
+      "ci_high": 1.0,
+      "ci_low": 0.9829904622439406,
+      "confidence": 0.95,
+      "method": "wilson",
+      "n": 222,
+      "point": 1.0
+    },
+    "rate_without_context": 0.0,
+    "rate_without_context_ci": {
+      "ci_high": 0.017009537756059373,
+      "ci_low": 0.0,
+      "confidence": 0.95,
+      "method": "wilson",
+      "n": 222,
+      "point": 0.0
+    },
+    "tp": {
+      "count": 222,
+      "rate_with_context": 1.0,
+      "rate_with_context_ci": {
+        "ci_high": 1.0,
+        "ci_low": 0.9829904622439406,
+        "confidence": 0.95,
+        "method": "wilson",
+        "n": 222,
+        "point": 1.0
+      },
+      "rate_without_context": 0.0,
+      "rate_without_context_ci": {
+        "ci_high": 0.017009537756059373,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "wilson",
+        "n": 222,
+        "point": 0.0
+      },
+      "with_context": 222,
+      "without_context": 0
+    },
+    "with_context": 222,
+    "without_context": 0
+  },
+  "provenance": {
+    "config": "configs/benchmark/multicat_full.json",
+    "exists": true,
+    "generated_at": "2026-05-11T11:22:50+00:00",
+    "git_sha": "95b8284a6c1c8376e398d72ee3bb24d5630c361b",
+    "model": "gpt-5.4-mini",
+    "path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/outputs/pr_full_verification_2026-05-11/explanation_full/provenance.json",
+    "seed": 7
+  },
+  "request_metrics_lines": 462,
+  "safe_wording": "Explanation evaluation measures citation-style attribution in structured explanations, not semantic correctness of the natural-language rationale. In the provenance-backed PR verification run, all 222 TP explanations and all 9 FP explanations cited the supplied evidence with context; no no-context TP/FP output cited the evidence.",
+  "sample_lines": 33,
+  "source_metrics": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/outputs/pr_full_verification_2026-05-11/explanation_full/citation_metrics.json"
+}

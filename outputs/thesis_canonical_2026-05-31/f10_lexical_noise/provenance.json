@@ -1,0 +1,73 @@
+{
+  "config": {
+    "path": "configs/benchmark/lexical_noise_v1.json",
+    "sha256": "751d22c1793fce274415de133b19fe1dde77fcad893609f97dc1bceabedeac0b"
+  },
+  "eval_kind": "lexical_noise_v1",
+  "extra": {
+    "metrics_summary": {
+      "post_f10": {
+        "f1": 0.4,
+        "fn": 2,
+        "fp": 7,
+        "precision": 0.3,
+        "recall": 0.6,
+        "tn": 18,
+        "tp": 3
+      },
+      "pre_f10": {
+        "f1": 0.2608695652173913,
+        "fn": 2,
+        "fp": 15,
+        "precision": 0.16666666666666666,
+        "recall": 0.6,
+        "tn": 10,
+        "tp": 3
+      },
+      "semgrep": {
+        "f1": 1.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "tn": 25,
+        "tp": 5
+      }
+    },
+    "n_cases": 30,
+    "n_resamples": 2000,
+    "semgrep_findings": 5
+  },
+  "generated_at": "2026-05-31T12:36:04+00:00",
+  "git": {
+    "branch": "thesis/reproducibility-hardening",
+    "dirty": false,
+    "dirty_files": [],
+    "last_commit_subject": "chore(thesis): add evidence artifact generators",
+    "sha": "292a14fbea9e07f58dc4ddc294376e2f06103b06"
+  },
+  "llm": null,
+  "neo4j": {
+    "uri": "bolt://localhost:7687",
+    "user": "neo4j"
+  },
+  "opa": {
+    "raw": "Version: 1.15.1\nBuild Commit: \nBuild Timestamp: \nBuild Hostname: \nGo Version: go1.26.1\nPlatform: darwin/arm64\nRego Version: v1\nWebAssembly: unavailable"
+  },
+  "output_dir": "outputs/lexical_noise_eval_v1",
+  "package_version": null,
+  "platform": {
+    "machine": "arm64",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "pyproject_sha256": "c2e7acb2a733a81a01de40e948e887b5bb958815f399710456a4709482cccf00",
+  "python": {
+    "executable": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/bin/python",
+    "implementation": "CPython",
+    "version": "3.14.3"
+  },
+  "schema_version": 1,
+  "seed": 42,
+  "uv_lock_sha256": "5ed4e74ad47ca23f20f06cce818c5419bb42c506c838a92f69b4869e409e9774"
+}

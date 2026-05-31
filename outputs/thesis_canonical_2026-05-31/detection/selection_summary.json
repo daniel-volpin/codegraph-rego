@@ -1,0 +1,39 @@
+{
+  "available_cases_per_category": {
+    "command-injection": 251,
+    "crypto-md5": 246,
+    "hash-md5": 236,
+    "ldap-injection": 59,
+    "path-traversal": 268,
+    "rng-insecure": 493,
+    "sql-injection": 504,
+    "xpath-injection": 35
+  },
+  "generated_at": "2026-05-31T12:36:49+00:00",
+  "max_cases_per_category": 60,
+  "sampled_per_category": {
+    "command-injection": true,
+    "crypto-md5": true,
+    "hash-md5": true,
+    "ldap-injection": false,
+    "path-traversal": true,
+    "rng-insecure": true,
+    "sql-injection": true,
+    "xpath-injection": false
+  },
+  "seed": 7,
+  "selected_cases_per_category": {
+    "command-injection": 60,
+    "crypto-md5": 60,
+    "hash-md5": 60,
+    "ldap-injection": 59,
+    "path-traversal": 60,
+    "rng-insecure": 60,
+    "sql-injection": 60,
+    "xpath-injection": 35
+  },
+  "selected_fraction": 0.2170172084130019,
+  "source_metrics": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/outputs/thesis_final_detection_full_v2/metrics.json",
+  "total_available": 2092,
+  "total_selected": 454
+}

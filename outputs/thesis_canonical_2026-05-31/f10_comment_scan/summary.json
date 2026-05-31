@@ -1,0 +1,28 @@
+{
+  "codegraph_git_sha": "292a14fbea9e07f58dc4ddc294376e2f06103b06",
+  "expected_total_java_cases": 2740,
+  "files_with_comment_hits": [],
+  "generated_at": "2026-05-31T12:36:48+00:00",
+  "owasp_git_sha": "36f30ff537a4b839103b10a44c06d86a247507f5",
+  "owasp_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+  "script_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/scripts/evaluation/scan_owasp_comment_tokens.py",
+  "token_counts_in_comments": {
+    "MD5": 0,
+    "MessageDigest": 0,
+    "ProcessBuilder": 0,
+    "XPathFactory": 0,
+    "executeQuery": 0,
+    "new Random": 0
+  },
+  "tokens": [
+    "MD5",
+    "MessageDigest",
+    "executeQuery",
+    "ProcessBuilder",
+    "new Random",
+    "XPathFactory"
+  ],
+  "total_comment_blocks_scanned": 19526,
+  "total_comment_occurrences": 0,
+  "total_java_cases_scanned": 2740
+}

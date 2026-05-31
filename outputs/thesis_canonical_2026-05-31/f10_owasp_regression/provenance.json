@@ -1,0 +1,86 @@
+{
+  "config": {
+    "path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+    "sha256": "1809f6a690c6cf7dd6685df6ebe2eef8fe3ca93d19a7ca0ce45987ca4f5d78e1"
+  },
+  "eval_kind": "owasp_benchmark_v1.2_file_level",
+  "extra": {
+    "cwes_evaluated": [
+      "22",
+      "327",
+      "328",
+      "330",
+      "643",
+      "78",
+      "89",
+      "90"
+    ],
+    "limit_per_cwe": 50,
+    "metrics_overall": {
+      "post_f10": {
+        "f1": 0.891566265060241,
+        "fn": 21,
+        "fp": 24,
+        "precision": 0.8851674641148325,
+        "recall": 0.8980582524271845,
+        "tn": 155,
+        "tp": 185
+      },
+      "pre_f10": {
+        "f1": 0.891566265060241,
+        "fn": 21,
+        "fp": 24,
+        "precision": 0.8851674641148325,
+        "recall": 0.8980582524271845,
+        "tn": 155,
+        "tp": 185
+      },
+      "semgrep": {
+        "f1": 0.20087336244541487,
+        "fn": 183,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.11165048543689321,
+        "tn": 179,
+        "tp": 23
+      }
+    },
+    "n_cases": 385,
+    "n_resamples": 2000,
+    "owasp_benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+    "owasp_benchmark_sha": "36f30ff537a4b839103b10a44c06d86a247507f5",
+    "semgrep_findings": 246
+  },
+  "generated_at": "2026-05-31T12:36:21+00:00",
+  "git": {
+    "branch": "thesis/reproducibility-hardening",
+    "dirty": false,
+    "dirty_files": [],
+    "last_commit_subject": "chore(thesis): add evidence artifact generators",
+    "sha": "292a14fbea9e07f58dc4ddc294376e2f06103b06"
+  },
+  "llm": null,
+  "neo4j": {
+    "uri": "bolt://localhost:7687",
+    "user": "neo4j"
+  },
+  "opa": {
+    "raw": "Version: 1.15.1\nBuild Commit: \nBuild Timestamp: \nBuild Hostname: \nGo Version: go1.26.1\nPlatform: darwin/arm64\nRego Version: v1\nWebAssembly: unavailable"
+  },
+  "output_dir": "outputs/owasp_lexical_eval_v1",
+  "package_version": null,
+  "platform": {
+    "machine": "arm64",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "pyproject_sha256": "c2e7acb2a733a81a01de40e948e887b5bb958815f399710456a4709482cccf00",
+  "python": {
+    "executable": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/bin/python",
+    "implementation": "CPython",
+    "version": "3.14.3"
+  },
+  "schema_version": 1,
+  "seed": 7,
+  "uv_lock_sha256": "5ed4e74ad47ca23f20f06cce818c5419bb42c506c838a92f69b4869e409e9774"
+}

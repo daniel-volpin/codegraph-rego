@@ -1,0 +1,45 @@
+{
+  "count": 25,
+  "brier_score": 0.005723,
+  "ece": 0.069612,
+  "reliability_bins": [
+    {
+      "bin_start": 0.8,
+      "bin_end": 0.9,
+      "count": 9,
+      "avg_confidence": 0.8909,
+      "empirical_success": 1.0,
+      "gap": 0.1091
+    },
+    {
+      "bin_start": 0.9,
+      "bin_end": 1.0,
+      "count": 16,
+      "avg_confidence": 0.9526,
+      "empirical_success": 1.0,
+      "gap": 0.0474
+    }
+  ],
+  "risk_coverage": [
+    {
+      "coverage": 0.24,
+      "success_rate": 1.0,
+      "risk": 0.0
+    },
+    {
+      "coverage": 0.48,
+      "success_rate": 1.0,
+      "risk": 0.0
+    },
+    {
+      "coverage": 0.76,
+      "success_rate": 1.0,
+      "risk": 0.0
+    },
+    {
+      "coverage": 1.0,
+      "success_rate": 1.0,
+      "risk": 0.0
+    }
+  ]
+}

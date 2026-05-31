@@ -1,0 +1,1744 @@
+{
+  "canonical_root": "outputs/thesis_canonical_2026-05-31",
+  "claims": [
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/detection/metrics.json",
+        "outputs/thesis_canonical_2026-05-31/detection/metrics.csv",
+        "outputs/thesis_canonical_2026-05-31/detection/provenance.json",
+        "outputs/thesis_canonical_2026-05-31/detection/selection_summary.json",
+        "outputs/thesis_canonical_2026-05-31/detection/table_with_semantics.md",
+        "outputs/thesis_canonical_2026-05-31/detection/table_with_semantics.tex"
+      ],
+      "claim_id": "detection_headline",
+      "claim_text_safe_for_thesis": "On the selected OWASP Benchmark eight-CWE evaluation set (n=454), union any-rule detection gives TP=222, FP=11, TN=210, FN=11, P/R/F1=0.9528.",
+      "metrics": {
+        "category_row_sums": {
+          "fn": 11,
+          "fp": 9,
+          "tn": 212,
+          "tp": 222
+        },
+        "f1": 0.9528,
+        "fn": 11,
+        "fp": 11,
+        "precision": 0.9528,
+        "recall": 0.9528,
+        "semantics": "union_any_rule_over_selected_testcase_union",
+        "support": 454,
+        "tn": 210,
+        "tp": 222,
+        "violation_count": 255
+      },
+      "provenance": {
+        "config": "configs/benchmark/multicat_full.json",
+        "exists": true,
+        "git_sha": "7ad90a25a3ed69c50d4e639014342bad0e8413fb",
+        "model": null,
+        "path": "outputs/thesis_canonical_2026-05-31/detection/provenance.json",
+        "seed": 7
+      },
+      "status": "fully_provenance_backed",
+      "thesis_wording_action": "narrow"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/detection/selection_summary.json"
+      ],
+      "claim_id": "detection_sample_basis",
+      "claim_text_safe_for_thesis": "The detection result is a seed-7 capped sample: 454 selected cases from 2092 available cases, with max_cases_per_category=60.",
+      "metrics": {
+        "available_cases_per_category": {
+          "command-injection": 251,
+          "crypto-md5": 246,
+          "hash-md5": 236,
+          "ldap-injection": 59,
+          "path-traversal": 268,
+          "rng-insecure": 493,
+          "sql-injection": 504,
+          "xpath-injection": 35
+        },
+        "generated_at": "2026-05-31T12:36:49+00:00",
+        "max_cases_per_category": 60,
+        "sampled_per_category": {
+          "command-injection": true,
+          "crypto-md5": true,
+          "hash-md5": true,
+          "ldap-injection": false,
+          "path-traversal": true,
+          "rng-insecure": true,
+          "sql-injection": true,
+          "xpath-injection": false
+        },
+        "seed": 7,
+        "selected_cases_per_category": {
+          "command-injection": 60,
+          "crypto-md5": 60,
+          "hash-md5": 60,
+          "ldap-injection": 59,
+          "path-traversal": 60,
+          "rng-insecure": 60,
+          "sql-injection": 60,
+          "xpath-injection": 35
+        },
+        "selected_fraction": 0.2170172084130019,
+        "source_metrics": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/outputs/thesis_final_detection_full_v2/metrics.json",
+        "total_available": 2092,
+        "total_selected": 454
+      },
+      "provenance": {
+        "config": "configs/benchmark/multicat_full.json",
+        "exists": true,
+        "git_sha": "7ad90a25a3ed69c50d4e639014342bad0e8413fb",
+        "model": null,
+        "path": "outputs/thesis_canonical_2026-05-31/detection/provenance.json",
+        "seed": 7
+      },
+      "status": "fully_provenance_backed",
+      "thesis_wording_action": "narrow"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/explanation/citation_metrics.json",
+        "outputs/thesis_canonical_2026-05-31/explanation/citation_metrics.csv",
+        "outputs/thesis_canonical_2026-05-31/explanation/provenance.json",
+        "outputs/thesis_canonical_2026-05-31/explanation/table.md",
+        "outputs/thesis_canonical_2026-05-31/explanation/table.tex",
+        "outputs/thesis_canonical_2026-05-31/explanation/explanation_summary_for_thesis.json"
+      ],
+      "claim_id": "explanation_citation_attribution",
+      "claim_text_safe_for_thesis": "Explanation evaluation measures citation-style attribution in structured explanations: TP context 222/222, TP no-context 0/222, FP context 9/9, FP no-context 0/9.",
+      "metrics": {
+        "fp": {
+          "count": 9,
+          "rate_with_context": 1.0,
+          "rate_with_context_ci": {
+            "ci_high": 1.0,
+            "ci_low": 0.7008549515804559,
+            "confidence": 0.95,
+            "method": "wilson",
+            "n": 9,
+            "point": 1.0
+          },
+          "rate_without_context": 0.0,
+          "rate_without_context_ci": {
+            "ci_high": 0.2991450484195441,
+            "ci_low": 0.0,
+            "confidence": 0.95,
+            "method": "wilson",
+            "n": 9,
+            "point": 0.0
+          },
+          "with_context": 9,
+          "without_context": 0
+        },
+        "tp": {
+          "count": 222,
+          "rate_with_context": 1.0,
+          "rate_with_context_ci": {
+            "ci_high": 1.0,
+            "ci_low": 0.9829904622439406,
+            "confidence": 0.95,
+            "method": "wilson",
+            "n": 222,
+            "point": 1.0
+          },
+          "rate_without_context": 0.0,
+          "rate_without_context_ci": {
+            "ci_high": 0.017009537756059373,
+            "ci_low": 0.0,
+            "confidence": 0.95,
+            "method": "wilson",
+            "n": 222,
+            "point": 0.0
+          },
+          "with_context": 222,
+          "without_context": 0
+        }
+      },
+      "provenance": {
+        "config": "configs/benchmark/multicat_full.json",
+        "exists": true,
+        "git_sha": "95b8284a6c1c8376e398d72ee3bb24d5630c361b",
+        "model": "gpt-5.4-mini",
+        "path": "outputs/thesis_canonical_2026-05-31/explanation/provenance.json",
+        "seed": 7
+      },
+      "status": "fully_provenance_backed",
+      "thesis_wording_action": "replace"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/remediation/v2_remediation_metrics.json",
+        "outputs/thesis_canonical_2026-05-31/remediation/v2_confidence_calibration.json",
+        "outputs/thesis_canonical_2026-05-31/remediation/FAILED_OR_NONREPRODUCIBLE.md"
+      ],
+      "claim_id": "remediation_v2_historical_25_of_25",
+      "claim_text_safe_for_thesis": "The v2 25/25 remediation result is historical metric evidence only; exact-run provenance/model attribution is absent.",
+      "metrics": {
+        "attempted": 25,
+        "build_attempted": 25,
+        "build_success": 25,
+        "confidence_calibration": {
+          "brier_score": 0.005723,
+          "count": 25,
+          "ece": 0.069612,
+          "reliability_bins": [
+            {
+              "avg_confidence": 0.8909,
+              "bin_end": 0.9,
+              "bin_start": 0.8,
+              "count": 9,
+              "empirical_success": 1.0,
+              "gap": 0.1091
+            },
+            {
+              "avg_confidence": 0.9526,
+              "bin_end": 1.0,
+              "bin_start": 0.9,
+              "count": 16,
+              "empirical_success": 1.0,
+              "gap": 0.0474
+            }
+          ],
+          "risk_coverage": [
+            {
+              "coverage": 0.24,
+              "risk": 0.0,
+              "success_rate": 1.0
+            },
+            {
+              "coverage": 0.48,
+              "risk": 0.0,
+              "success_rate": 1.0
+            },
+            {
+              "coverage": 0.76,
+              "risk": 0.0,
+              "success_rate": 1.0
+            },
+            {
+              "coverage": 1.0,
+              "risk": 0.0,
+              "success_rate": 1.0
+            }
+          ]
+        },
+        "fix_success": 25,
+        "fix_success_rate": 1.0,
+        "policy_pass_count": 25,
+        "replacement_applied": 25,
+        "structured_valid": 25
+      },
+      "provenance": {
+        "config": "configs/benchmark/remediation_supported_medium.json",
+        "exists": false,
+        "git_sha": null,
+        "model": null,
+        "path": null,
+        "seed": 42
+      },
+      "status": "metric_backed_no_provenance",
+      "thesis_wording_action": "narrow"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/remediation/pr_remediation_metrics.json",
+        "outputs/thesis_canonical_2026-05-31/remediation/pr_confidence_calibration.json",
+        "outputs/thesis_canonical_2026-05-31/remediation/provenance.json"
+      ],
+      "claim_id": "remediation_pr_reproducibility_19_of_25",
+      "claim_text_safe_for_thesis": "The provenance-backed supported-medium remediation reproducibility run fully verified 19/25 cases.",
+      "metrics": {
+        "attempted": 25,
+        "build_attempted": 21,
+        "build_success": 19,
+        "confidence_calibration": {
+          "brier_score": 0.092872,
+          "cases": [
+            {
+              "build_success": false,
+              "case_id": "BenchmarkTest00269_ISO-A.10-WEAK-HASH_3b303711a6",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": false,
+              "policy_fixed": false,
+              "status": "BUILD_ERROR",
+              "violation_id": "ISO-A.10-WEAK-HASH"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00266_ISO-A.10-WEAK-HASH_46770d06d4",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-HASH"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00071_ISO-A.10-WEAK-HASH_e8e4c0dcf8",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-HASH"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00070_ISO-A.10-WEAK-HASH_96ade94683",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-HASH"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest01911_ISO-A.10-WEAK-HASH_92998947b5",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-HASH"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest02671_ISO-A.10-WEAK-HASH_b65f85b501",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-HASH"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest01651_ISO-A.10-WEAK-HASH_9787867310",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-HASH"
+            },
+            {
+              "build_success": false,
+              "case_id": "BenchmarkTest00635_ISO-A.10-WEAK-HASH_abbb9d0e50",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": false,
+              "policy_fixed": false,
+              "status": "BUILD_ERROR",
+              "violation_id": "ISO-A.10-WEAK-HASH"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00372_ISO-A.10-WEAK-HASH_74301c3957",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-HASH"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00081_ISO-A.10-WEAK-RANDOM_348fabdf20",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-RANDOM"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest01930_ISO-A.10-WEAK-RANDOM_21bed0febd",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-RANDOM"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00369_ISO-A.10-WEAK-RANDOM_a19bef4cbb",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-RANDOM"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00160_ISO-A.10-WEAK-RANDOM_bb817d60af",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-RANDOM"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest01277_ISO-A.10-WEAK-RANDOM_0f321c1363",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-RANDOM"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00240_ISO-A.10-WEAK-RANDOM_44a328f834",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-RANDOM"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest01678_ISO-A.10-WEAK-RANDOM_840b6dd987",
+              "confidence_band": "apply",
+              "confidence_score": 0.9526,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-RANDOM"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00055_ISO-A.10-WEAK-CRYPTO_c466baaef2",
+              "confidence_band": "apply",
+              "confidence_score": 0.8909,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-CRYPTO"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00521_ISO-A.10-WEAK-CRYPTO_c2e67f36ca",
+              "confidence_band": "apply",
+              "confidence_score": 0.8909,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-CRYPTO"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest02017_ISO-A.10-WEAK-CRYPTO_b9df5d7383",
+              "confidence_band": "apply",
+              "confidence_score": 0.8909,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-CRYPTO"
+            },
+            {
+              "build_success": false,
+              "case_id": "BenchmarkTest01323_ISO-A.10-WEAK-CRYPTO_271fb047c1",
+              "confidence_band": "abstain",
+              "confidence_score": 0.3318,
+              "fully_verified": false,
+              "policy_fixed": false,
+              "status": "NO_FIX",
+              "violation_id": "ISO-A.10-WEAK-CRYPTO"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest01318_ISO-A.10-WEAK-CRYPTO_c200b94a58",
+              "confidence_band": "apply",
+              "confidence_score": 0.8909,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-CRYPTO"
+            },
+            {
+              "build_success": true,
+              "case_id": "BenchmarkTest00020_ISO-A.10-WEAK-CRYPTO_aa3e269e43",
+              "confidence_band": "apply",
+              "confidence_score": 0.8022,
+              "fully_verified": true,
+              "policy_fixed": true,
+              "status": "OK",
+              "violation_id": "ISO-A.10-WEAK-CRYPTO"
+            }
+          ],
+          "count": 22,
+          "ece": 0.100345,
+          "label": "fully_verified",
+          "label_definition": "fully_verified := policy_fixed is true and build_success is true",
+          "missing_confidence_count": 3,
+          "negative_count": 3,
+          "population": "full",
+          "populations": {
+            "attempted_only": {
+              "brier_score": 0.092052,
+              "cases": [
+                {
+                  "build_success": false,
+                  "case_id": "BenchmarkTest00269_ISO-A.10-WEAK-HASH_3b303711a6",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": false,
+                  "policy_fixed": false,
+                  "status": "BUILD_ERROR",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00266_ISO-A.10-WEAK-HASH_46770d06d4",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00071_ISO-A.10-WEAK-HASH_e8e4c0dcf8",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00070_ISO-A.10-WEAK-HASH_96ade94683",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01911_ISO-A.10-WEAK-HASH_92998947b5",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest02671_ISO-A.10-WEAK-HASH_b65f85b501",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01651_ISO-A.10-WEAK-HASH_9787867310",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": false,
+                  "case_id": "BenchmarkTest00635_ISO-A.10-WEAK-HASH_abbb9d0e50",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": false,
+                  "policy_fixed": false,
+                  "status": "BUILD_ERROR",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00372_ISO-A.10-WEAK-HASH_74301c3957",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00081_ISO-A.10-WEAK-RANDOM_348fabdf20",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01930_ISO-A.10-WEAK-RANDOM_21bed0febd",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00369_ISO-A.10-WEAK-RANDOM_a19bef4cbb",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00160_ISO-A.10-WEAK-RANDOM_bb817d60af",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01277_ISO-A.10-WEAK-RANDOM_0f321c1363",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00240_ISO-A.10-WEAK-RANDOM_44a328f834",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01678_ISO-A.10-WEAK-RANDOM_840b6dd987",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00055_ISO-A.10-WEAK-CRYPTO_c466baaef2",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.8909,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00521_ISO-A.10-WEAK-CRYPTO_c2e67f36ca",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.8909,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest02017_ISO-A.10-WEAK-CRYPTO_b9df5d7383",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.8909,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01318_ISO-A.10-WEAK-CRYPTO_c200b94a58",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.8909,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00020_ISO-A.10-WEAK-CRYPTO_aa3e269e43",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.8022,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                }
+              ],
+              "count": 21,
+              "ece": 0.089324,
+              "label": "fully_verified",
+              "label_definition": "fully_verified := policy_fixed is true and build_success is true",
+              "missing_confidence_count": 3,
+              "negative_count": 2,
+              "population": "attempted_only",
+              "positive_count": 19,
+              "reliability_bins": [
+                {
+                  "avg_confidence": 0.8732,
+                  "bin_end": 0.9,
+                  "bin_start": 0.8,
+                  "count": 5,
+                  "empirical_success": 1.0,
+                  "gap": 0.1268
+                },
+                {
+                  "avg_confidence": 0.9526,
+                  "bin_end": 1.0,
+                  "bin_start": 0.9,
+                  "count": 16,
+                  "empirical_success": 0.875,
+                  "gap": 0.0776
+                }
+              ],
+              "risk_coverage": [
+                {
+                  "coverage": 0.2381,
+                  "risk": 0.2,
+                  "success_rate": 0.8
+                },
+                {
+                  "coverage": 0.4762,
+                  "risk": 0.2,
+                  "success_rate": 0.8
+                },
+                {
+                  "coverage": 0.7619,
+                  "risk": 0.125,
+                  "success_rate": 0.875
+                },
+                {
+                  "coverage": 1.0,
+                  "risk": 0.0952,
+                  "success_rate": 0.9048
+                }
+              ]
+            },
+            "full": {
+              "brier_score": 0.092872,
+              "cases": [
+                {
+                  "build_success": false,
+                  "case_id": "BenchmarkTest00269_ISO-A.10-WEAK-HASH_3b303711a6",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": false,
+                  "policy_fixed": false,
+                  "status": "BUILD_ERROR",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00266_ISO-A.10-WEAK-HASH_46770d06d4",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00071_ISO-A.10-WEAK-HASH_e8e4c0dcf8",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00070_ISO-A.10-WEAK-HASH_96ade94683",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01911_ISO-A.10-WEAK-HASH_92998947b5",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest02671_ISO-A.10-WEAK-HASH_b65f85b501",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01651_ISO-A.10-WEAK-HASH_9787867310",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": false,
+                  "case_id": "BenchmarkTest00635_ISO-A.10-WEAK-HASH_abbb9d0e50",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": false,
+                  "policy_fixed": false,
+                  "status": "BUILD_ERROR",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00372_ISO-A.10-WEAK-HASH_74301c3957",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-HASH"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00081_ISO-A.10-WEAK-RANDOM_348fabdf20",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01930_ISO-A.10-WEAK-RANDOM_21bed0febd",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00369_ISO-A.10-WEAK-RANDOM_a19bef4cbb",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00160_ISO-A.10-WEAK-RANDOM_bb817d60af",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01277_ISO-A.10-WEAK-RANDOM_0f321c1363",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00240_ISO-A.10-WEAK-RANDOM_44a328f834",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01678_ISO-A.10-WEAK-RANDOM_840b6dd987",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.9526,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-RANDOM"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00055_ISO-A.10-WEAK-CRYPTO_c466baaef2",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.8909,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00521_ISO-A.10-WEAK-CRYPTO_c2e67f36ca",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.8909,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest02017_ISO-A.10-WEAK-CRYPTO_b9df5d7383",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.8909,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                },
+                {
+                  "build_success": false,
+                  "case_id": "BenchmarkTest01323_ISO-A.10-WEAK-CRYPTO_271fb047c1",
+                  "confidence_band": "abstain",
+                  "confidence_score": 0.3318,
+                  "fully_verified": false,
+                  "policy_fixed": false,
+                  "status": "NO_FIX",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest01318_ISO-A.10-WEAK-CRYPTO_c200b94a58",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.8909,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                },
+                {
+                  "build_success": true,
+                  "case_id": "BenchmarkTest00020_ISO-A.10-WEAK-CRYPTO_aa3e269e43",
+                  "confidence_band": "apply",
+                  "confidence_score": 0.8022,
+                  "fully_verified": true,
+                  "policy_fixed": true,
+                  "status": "OK",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                }
+              ],
+              "count": 22,
+              "ece": 0.100345,
+              "label": "fully_verified",
+              "label_definition": "fully_verified := policy_fixed is true and build_success is true",
+              "missing_confidence_count": 3,
+              "negative_count": 3,
+              "population": "full",
+              "positive_count": 19,
+              "reliability_bins": [
+                {
+                  "avg_confidence": 0.3318,
+                  "bin_end": 0.4,
+                  "bin_start": 0.3,
+                  "count": 1,
+                  "empirical_success": 0.0,
+                  "gap": 0.3318
+                },
+                {
+                  "avg_confidence": 0.8732,
+                  "bin_end": 0.9,
+                  "bin_start": 0.8,
+                  "count": 5,
+                  "empirical_success": 1.0,
+                  "gap": 0.1268
+                },
+                {
+                  "avg_confidence": 0.9526,
+                  "bin_end": 1.0,
+                  "bin_start": 0.9,
+                  "count": 16,
+                  "empirical_success": 0.875,
+                  "gap": 0.0776
+                }
+              ],
+              "risk_coverage": [
+                {
+                  "coverage": 0.2727,
+                  "risk": 0.1667,
+                  "success_rate": 0.8333
+                },
+                {
+                  "coverage": 0.5,
+                  "risk": 0.1818,
+                  "success_rate": 0.8182
+                },
+                {
+                  "coverage": 0.7273,
+                  "risk": 0.125,
+                  "success_rate": 0.875
+                },
+                {
+                  "coverage": 1.0,
+                  "risk": 0.1364,
+                  "success_rate": 0.8636
+                }
+              ]
+            },
+            "no_fix_only": {
+              "brier_score": 0.110091,
+              "cases": [
+                {
+                  "build_success": false,
+                  "case_id": "BenchmarkTest01323_ISO-A.10-WEAK-CRYPTO_271fb047c1",
+                  "confidence_band": "abstain",
+                  "confidence_score": 0.3318,
+                  "fully_verified": false,
+                  "policy_fixed": false,
+                  "status": "NO_FIX",
+                  "violation_id": "ISO-A.10-WEAK-CRYPTO"
+                }
+              ],
+              "count": 1,
+              "ece": 0.3318,
+              "label": "fully_verified",
+              "label_definition": "fully_verified := policy_fixed is true and build_success is true",
+              "missing_confidence_count": 0,
+              "negative_count": 1,
+              "population": "no_fix_only",
+              "positive_count": 0,
+              "reliability_bins": [
+                {
+                  "avg_confidence": 0.3318,
+                  "bin_end": 0.4,
+                  "bin_start": 0.3,
+                  "count": 1,
+                  "empirical_success": 0.0,
+                  "gap": 0.3318
+                }
+              ],
+              "risk_coverage": [
+                {
+                  "coverage": 1.0,
+                  "risk": 1.0,
+                  "success_rate": 0.0
+                },
+                {
+                  "coverage": 1.0,
+                  "risk": 1.0,
+                  "success_rate": 0.0
+                },
+                {
+                  "coverage": 1.0,
+                  "risk": 1.0,
+                  "success_rate": 0.0
+                },
+                {
+                  "coverage": 1.0,
+                  "risk": 1.0,
+                  "success_rate": 0.0
+                }
+              ]
+            }
+          },
+          "positive_count": 19,
+          "reliability_bins": [
+            {
+              "avg_confidence": 0.3318,
+              "bin_end": 0.4,
+              "bin_start": 0.3,
+              "count": 1,
+              "empirical_success": 0.0,
+              "gap": 0.3318
+            },
+            {
+              "avg_confidence": 0.8732,
+              "bin_end": 0.9,
+              "bin_start": 0.8,
+              "count": 5,
+              "empirical_success": 1.0,
+              "gap": 0.1268
+            },
+            {
+              "avg_confidence": 0.9526,
+              "bin_end": 1.0,
+              "bin_start": 0.9,
+              "count": 16,
+              "empirical_success": 0.875,
+              "gap": 0.0776
+            }
+          ],
+          "risk_coverage": [
+            {
+              "coverage": 0.2727,
+              "risk": 0.1667,
+              "success_rate": 0.8333
+            },
+            {
+              "coverage": 0.5,
+              "risk": 0.1818,
+              "success_rate": 0.8182
+            },
+            {
+              "coverage": 0.7273,
+              "risk": 0.125,
+              "success_rate": 0.875
+            },
+            {
+              "coverage": 1.0,
+              "risk": 0.1364,
+              "success_rate": 0.8636
+            }
+          ]
+        },
+        "fix_success": 19,
+        "fix_success_rate": 0.76,
+        "policy_pass_count": 19,
+        "replacement_applied": 21,
+        "structured_valid": 22
+      },
+      "provenance": {
+        "config": "configs/benchmark/remediation_supported_medium.json",
+        "exists": true,
+        "git_sha": "95b8284a6c1c8376e398d72ee3bb24d5630c361b",
+        "model": "gpt-5.4-mini",
+        "path": "outputs/thesis_canonical_2026-05-31/remediation/provenance.json",
+        "seed": 11
+      },
+      "status": "fully_provenance_backed",
+      "thesis_wording_action": "replace"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/f10_lexical_noise/metrics.json",
+        "outputs/thesis_canonical_2026-05-31/f10_lexical_noise/metrics.csv",
+        "outputs/thesis_canonical_2026-05-31/f10_lexical_noise/provenance.json",
+        "outputs/thesis_canonical_2026-05-31/f10_lexical_noise/detection_per_case.jsonl",
+        "outputs/thesis_canonical_2026-05-31/f10_lexical_noise/table.md",
+        "outputs/thesis_canonical_2026-05-31/f10_lexical_noise/table.tex",
+        "outputs/thesis_canonical_2026-05-31/f10_lexical_noise/f10_reproduction_comparison_2026-05-31.json",
+        "outputs/thesis_canonical_2026-05-31/f10_lexical_noise/f10_reproduction_comparison_2026-05-31.md"
+      ],
+      "claim_id": "f10_lexical_noise_java",
+      "claim_text_safe_for_thesis": "LexicalNoiseJava point metrics reproduce; regenerated Delta FPR 95% CI is [-0.500, -0.154].",
+      "metrics": {
+        "delta_fpr_ci": [
+          -0.5,
+          -0.15384615384615385
+        ],
+        "metrics": {
+          "post_f10": {
+            "bootstrap": {
+              "f1": {
+                "ci_high": 0.7000000000000001,
+                "ci_low": 0.0,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 30,
+                "n_resamples": 2000,
+                "point": 0.4,
+                "seed": 42
+              },
+              "precision": {
+                "ci_high": 0.625,
+                "ci_low": 0.0,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 30,
+                "n_resamples": 2000,
+                "point": 0.3,
+                "seed": 42
+              },
+              "recall": {
+                "ci_high": 1.0,
+                "ci_low": 0.0,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 30,
+                "n_resamples": 2000,
+                "point": 0.6,
+                "seed": 42
+              }
+            },
+            "f1": 0.4,
+            "fn": 2,
+            "fp": 7,
+            "name": "post_f10",
+            "precision": 0.3,
+            "recall": 0.6,
+            "tn": 18,
+            "tp": 3
+          },
+          "pre_f10": {
+            "bootstrap": {
+              "f1": {
+                "ci_high": 0.5,
+                "ci_low": 0.0,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 30,
+                "n_resamples": 2000,
+                "point": 0.2608695652173913,
+                "seed": 42
+              },
+              "precision": {
+                "ci_high": 0.35714285714285715,
+                "ci_low": 0.0,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 30,
+                "n_resamples": 2000,
+                "point": 0.16666666666666666,
+                "seed": 42
+              },
+              "recall": {
+                "ci_high": 1.0,
+                "ci_low": 0.0,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 30,
+                "n_resamples": 2000,
+                "point": 0.6,
+                "seed": 42
+              }
+            },
+            "f1": 0.2608695652173913,
+            "fn": 2,
+            "fp": 15,
+            "name": "pre_f10",
+            "precision": 0.16666666666666666,
+            "recall": 0.6,
+            "tn": 10,
+            "tp": 3
+          },
+          "semgrep": {
+            "bootstrap": {
+              "f1": {
+                "ci_high": 1.0,
+                "ci_low": 1.0,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 30,
+                "n_resamples": 2000,
+                "point": 1.0,
+                "seed": 42
+              },
+              "precision": {
+                "ci_high": 1.0,
+                "ci_low": 1.0,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 30,
+                "n_resamples": 2000,
+                "point": 1.0,
+                "seed": 42
+              },
+              "recall": {
+                "ci_high": 1.0,
+                "ci_low": 1.0,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 30,
+                "n_resamples": 2000,
+                "point": 1.0,
+                "seed": 42
+              }
+            },
+            "f1": 1.0,
+            "fn": 0,
+            "fp": 0,
+            "name": "semgrep",
+            "precision": 1.0,
+            "recall": 1.0,
+            "tn": 25,
+            "tp": 5
+          }
+        }
+      },
+      "provenance": {
+        "config": "configs/benchmark/lexical_noise_v1.json",
+        "exists": true,
+        "git_sha": "292a14fbea9e07f58dc4ddc294376e2f06103b06",
+        "model": null,
+        "path": "outputs/thesis_canonical_2026-05-31/f10_lexical_noise/provenance.json",
+        "seed": 42
+      },
+      "status": "fully_provenance_backed",
+      "thesis_wording_action": "replace"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/f10_owasp_regression/metrics.json",
+        "outputs/thesis_canonical_2026-05-31/f10_owasp_regression/metrics.csv",
+        "outputs/thesis_canonical_2026-05-31/f10_owasp_regression/provenance.json",
+        "outputs/thesis_canonical_2026-05-31/f10_owasp_regression/detection_per_case.jsonl",
+        "outputs/thesis_canonical_2026-05-31/f10_owasp_regression/table.md",
+        "outputs/thesis_canonical_2026-05-31/f10_owasp_regression/table.tex"
+      ],
+      "claim_id": "f10_owasp_regression",
+      "claim_text_safe_for_thesis": "OWASP file-level pre/post F10 metrics are unchanged and have zero per-case deltas.",
+      "metrics": {
+        "metrics": {
+          "post_f10": {
+            "bootstrap": {
+              "f1": {
+                "ci_high": 0.9215686274509804,
+                "ci_low": 0.8578313253012048,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 385,
+                "n_resamples": 2000,
+                "point": 0.891566265060241,
+                "seed": 7
+              },
+              "precision": {
+                "ci_high": 0.9282051282051282,
+                "ci_low": 0.8372093023255814,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 385,
+                "n_resamples": 2000,
+                "point": 0.8851674641148325,
+                "seed": 7
+              },
+              "recall": {
+                "ci_high": 0.9359605911330049,
+                "ci_low": 0.8551401869158879,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 385,
+                "n_resamples": 2000,
+                "point": 0.8980582524271845,
+                "seed": 7
+              }
+            },
+            "f1": 0.891566265060241,
+            "fn": 21,
+            "fp": 24,
+            "name": "post_f10",
+            "precision": 0.8851674641148325,
+            "recall": 0.8980582524271845,
+            "tn": 155,
+            "tp": 185
+          },
+          "pre_f10": {
+            "bootstrap": {
+              "f1": {
+                "ci_high": 0.9215686274509804,
+                "ci_low": 0.8578313253012048,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 385,
+                "n_resamples": 2000,
+                "point": 0.891566265060241,
+                "seed": 7
+              },
+              "precision": {
+                "ci_high": 0.9282051282051282,
+                "ci_low": 0.8372093023255814,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 385,
+                "n_resamples": 2000,
+                "point": 0.8851674641148325,
+                "seed": 7
+              },
+              "recall": {
+                "ci_high": 0.9359605911330049,
+                "ci_low": 0.8551401869158879,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 385,
+                "n_resamples": 2000,
+                "point": 0.8980582524271845,
+                "seed": 7
+              }
+            },
+            "f1": 0.891566265060241,
+            "fn": 21,
+            "fp": 24,
+            "name": "pre_f10",
+            "precision": 0.8851674641148325,
+            "recall": 0.8980582524271845,
+            "tn": 155,
+            "tp": 185
+          },
+          "semgrep": {
+            "bootstrap": {
+              "f1": {
+                "ci_high": 0.27149321266968324,
+                "ci_low": 0.1320754716981132,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 385,
+                "n_resamples": 2000,
+                "point": 0.20087336244541487,
+                "seed": 7
+              },
+              "precision": {
+                "ci_high": 1.0,
+                "ci_low": 1.0,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 385,
+                "n_resamples": 2000,
+                "point": 1.0,
+                "seed": 7
+              },
+              "recall": {
+                "ci_high": 0.15706806282722513,
+                "ci_low": 0.0707070707070707,
+                "confidence": 0.95,
+                "method": "bootstrap_percentile",
+                "n": 385,
+                "n_resamples": 2000,
+                "point": 0.11165048543689321,
+                "seed": 7
+              }
+            },
+            "f1": 0.20087336244541487,
+            "fn": 183,
+            "fp": 0,
+            "name": "semgrep",
+            "precision": 1.0,
+            "recall": 0.11165048543689321,
+            "tn": 179,
+            "tp": 23
+          }
+        },
+        "paired_zero_deltas": true
+      },
+      "provenance": {
+        "config": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+        "exists": true,
+        "git_sha": "292a14fbea9e07f58dc4ddc294376e2f06103b06",
+        "model": null,
+        "path": "outputs/thesis_canonical_2026-05-31/f10_owasp_regression/provenance.json",
+        "seed": 7
+      },
+      "status": "fully_provenance_backed",
+      "thesis_wording_action": "keep"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/f10_multiseed/metrics.json",
+        "outputs/thesis_canonical_2026-05-31/f10_multiseed/metrics.csv",
+        "outputs/thesis_canonical_2026-05-31/f10_multiseed/provenance.json",
+        "outputs/thesis_canonical_2026-05-31/f10_multiseed/multi_seed_summary.json",
+        "outputs/thesis_canonical_2026-05-31/f10_multiseed/multi_seed_summary.md",
+        "outputs/thesis_canonical_2026-05-31/f10_multiseed/table.md",
+        "outputs/thesis_canonical_2026-05-31/f10_multiseed/table.tex"
+      ],
+      "claim_id": "f10_multiseed",
+      "claim_text_safe_for_thesis": "OWASP multi-seed F10 stability is backed for seeds 7,13,23,42,101 at limit_per_cwe=50.",
+      "metrics": {
+        "across_seed": {
+          "post_f10": {
+            "f1": {
+              "max": 0.8967254408060452,
+              "mean": 0.8829285671916128,
+              "min": 0.85785536159601,
+              "stdev": 0.015331244469932037
+            },
+            "fn": {
+              "max": 28,
+              "mean": 19.4,
+              "min": 11,
+              "stdev": 6.107372593840988
+            },
+            "fp": {
+              "max": 31,
+              "mean": 28.2,
+              "min": 24,
+              "stdev": 2.7748873851023217
+            },
+            "precision": {
+              "max": 0.8851674641148325,
+              "mean": 0.864215390998357,
+              "min": 0.8523809523809524,
+              "stdev": 0.013997506976462947
+            },
+            "recall": {
+              "max": 0.9417989417989417,
+              "mean": 0.9029781153474381,
+              "min": 0.86,
+              "stdev": 0.029249161465174058
+            },
+            "tn": {
+              "max": 166,
+              "mean": 157.8,
+              "min": 155,
+              "stdev": 4.658325879540846
+            },
+            "tp": {
+              "max": 185,
+              "mean": 179.6,
+              "min": 172,
+              "stdev": 5.224940191045253
+            }
+          },
+          "pre_f10": {
+            "f1": {
+              "max": 0.8967254408060452,
+              "mean": 0.8829285671916128,
+              "min": 0.85785536159601,
+              "stdev": 0.015331244469932037
+            },
+            "fn": {
+              "max": 28,
+              "mean": 19.4,
+              "min": 11,
+              "stdev": 6.107372593840988
+            },
+            "fp": {
+              "max": 31,
+              "mean": 28.2,
+              "min": 24,
+              "stdev": 2.7748873851023217
+            },
+            "precision": {
+              "max": 0.8851674641148325,
+              "mean": 0.864215390998357,
+              "min": 0.8523809523809524,
+              "stdev": 0.013997506976462947
+            },
+            "recall": {
+              "max": 0.9417989417989417,
+              "mean": 0.9029781153474381,
+              "min": 0.86,
+              "stdev": 0.029249161465174058
+            },
+            "tn": {
+              "max": 166,
+              "mean": 157.8,
+              "min": 155,
+              "stdev": 4.658325879540846
+            },
+            "tp": {
+              "max": 185,
+              "mean": 179.6,
+              "min": 172,
+              "stdev": 5.224940191045253
+            }
+          },
+          "semgrep": {
+            "f1": {
+              "max": 0.3153526970954357,
+              "mean": 0.2580474432242251,
+              "min": 0.20087336244541487,
+              "stdev": 0.043400544148091226
+            },
+            "fn": {
+              "max": 183,
+              "mean": 169.4,
+              "min": 163,
+              "stdev": 7.92464510246358
+            },
+            "fp": {
+              "max": 0,
+              "mean": 0.0,
+              "min": 0,
+              "stdev": 0.0
+            },
+            "precision": {
+              "max": 1.0,
+              "mean": 1.0,
+              "min": 1.0,
+              "stdev": 0.0
+            },
+            "recall": {
+              "max": 0.18719211822660098,
+              "mean": 0.14870814418501266,
+              "min": 0.11165048543689321,
+              "stdev": 0.02866662321721526
+            },
+            "tn": {
+              "max": 196,
+              "mean": 186.0,
+              "min": 179,
+              "stdev": 6.519202405202649
+            },
+            "tp": {
+              "max": 38,
+              "mean": 29.6,
+              "min": 23,
+              "stdev": 5.9413803110051795
+            }
+          }
+        },
+        "seeds": [
+          7,
+          13,
+          23,
+          42,
+          101
+        ]
+      },
+      "provenance": {
+        "config": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+        "exists": true,
+        "git_sha": "292a14fbea9e07f58dc4ddc294376e2f06103b06",
+        "model": null,
+        "path": "outputs/thesis_canonical_2026-05-31/f10_multiseed/provenance.json",
+        "seed": 7
+      },
+      "status": "fully_provenance_backed",
+      "thesis_wording_action": "keep"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/f10_comment_scan/summary.json",
+        "outputs/thesis_canonical_2026-05-31/f10_comment_scan/provenance.json"
+      ],
+      "claim_id": "f10_comment_scan",
+      "claim_text_safe_for_thesis": "The full OWASP Java corpus scan found zero comment-only occurrences for the configured lexical trigger tokens.",
+      "metrics": {
+        "codegraph_git_sha": "292a14fbea9e07f58dc4ddc294376e2f06103b06",
+        "expected_total_java_cases": 2740,
+        "files_with_comment_hits": [],
+        "generated_at": "2026-05-31T12:36:48+00:00",
+        "owasp_git_sha": "36f30ff537a4b839103b10a44c06d86a247507f5",
+        "owasp_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+        "script_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/scripts/evaluation/scan_owasp_comment_tokens.py",
+        "token_counts_in_comments": {
+          "MD5": 0,
+          "MessageDigest": 0,
+          "ProcessBuilder": 0,
+          "XPathFactory": 0,
+          "executeQuery": 0,
+          "new Random": 0
+        },
+        "tokens": [
+          "MD5",
+          "MessageDigest",
+          "executeQuery",
+          "ProcessBuilder",
+          "new Random",
+          "XPathFactory"
+        ],
+        "total_comment_blocks_scanned": 19526,
+        "total_comment_occurrences": 0,
+        "total_java_cases_scanned": 2740
+      },
+      "provenance": {
+        "config": null,
+        "exists": true,
+        "git_sha": "292a14fbea9e07f58dc4ddc294376e2f06103b06",
+        "model": null,
+        "path": "outputs/thesis_canonical_2026-05-31/f10_comment_scan/provenance.json",
+        "seed": null
+      },
+      "status": "fully_provenance_backed",
+      "thesis_wording_action": "keep"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/policy_traceability/policy_traceability_table_2026-05-31.json",
+        "outputs/thesis_canonical_2026-05-31/policy_traceability/policy_traceability_table_2026-05-31.md",
+        "outputs/thesis_canonical_2026-05-31/policy_traceability/policy_traceability_table_2026-05-31.tex"
+      ],
+      "claim_id": "policy_traceability",
+      "claim_text_safe_for_thesis": "CodeGraph operationalises selected security/compliance concerns as Rego policies. The evaluated crypto/hash/randomness families use direct ISO A.10-style mappings, while the injection and path-query families are pragmatic OWASP Benchmark CWE mappings into the secure-development control area. The benchmark therefore validates pattern-level detection for those families rather than full standards-compliance fidelity.",
+      "metrics": {
+        "direct_iso_clause": 3,
+        "pragmatic_benchmark_mapping": 5
+      },
+      "provenance": {
+        "config": "policy/catalog.json + configs/benchmark/policy_registry.json",
+        "exists": false,
+        "git_sha": "b9e237a4861feac66cf5c312337402df98e15938",
+        "model": null,
+        "path": null,
+        "seed": null
+      },
+      "status": "source_audit_only",
+      "thesis_wording_action": "narrow"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_canonical_2026-05-31/faiss_role/faiss_role_audit_2026-05-31.md"
+      ],
+      "claim_id": "faiss_role",
+      "claim_text_safe_for_thesis": "FAISS/vector search is evidence enrichment for LLM-facing explanation/remediation prompts; it is not part of the Rego detection decision path.",
+      "metrics": {
+        "faiss_affects_detection": false,
+        "vector_context_used_by_rego": false
+      },
+      "provenance": {
+        "config": "source audit",
+        "exists": false,
+        "git_sha": "b9e237a4861feac66cf5c312337402df98e15938",
+        "model": null,
+        "path": null,
+        "seed": null
+      },
+      "status": "source_audit_only",
+      "thesis_wording_action": "narrow"
+    },
+    {
+      "canonical_artifacts": [
+        "outputs/thesis_full_population_detection_2026-05-31/FAILED_RUN.md",
+        "outputs/thesis_full_population_detection_2026-05-31/NO_RETRY_ENV_NOT_FIXED.md"
+      ],
+      "claim_id": "full_population_detection_attempt",
+      "claim_text_safe_for_thesis": "A true full-population eight-family detection run was attempted but did not produce metrics because local Neo4j authentication was not fixed.",
+      "metrics": {},
+      "provenance": {
+        "config": "configs/benchmark/multicat_all_available.json",
+        "exists": true,
+        "git_sha": "eadab28ea4527b4a4df35ce3f07a19f3d0a88dbd",
+        "model": null,
+        "path": "outputs/thesis_full_population_detection_2026-05-31/provenance.json",
+        "seed": 7
+      },
+      "status": "failed_run_recorded",
+      "thesis_wording_action": "narrow"
+    }
+  ],
+  "generated_at": "2026-05-31T12:55:53+00:00",
+  "source_git_sha": "b9e237a4861feac66cf5c312337402df98e15938"
+}
