@@ -2,7 +2,7 @@
 
 CodeGraph is a benchmark-backed JVM security/compliance framework. Its primary proof surface is **OWASP Benchmark**. Treat realistic apps as secondary workflow case studies.
 
-Keep this file short. Detailed project context lives under `.opencode/project/`. Project-local skills and agents live under `.opencode/`.
+Keep this file short. Detailed project context lives in `CLAUDE.md` and `copilot-context/benchmark.md`.
 
 ## Core Ground Truth
 

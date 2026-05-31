@@ -2,8 +2,7 @@
 
 Canonical configuration guidance now lives under:
 
-- `.opencode/project/current_state.md`
-- `.opencode/project/runbook.md`
+- `benchmark.md`
 - `REPRODUCIBILITY.md`
 
 Keep this file as a pointer only so configuration facts do not drift across multiple documents.

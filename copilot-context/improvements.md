@@ -2,7 +2,7 @@
 
 Canonical open issues now live in:
 
-- `.opencode/project/open_issues.md`
-- `.opencode/project/benchmark_latest.md`
+- `benchmark.md`
+- `docs/thesis_context.md`
 
 Keep this file as a pointer only. Do not maintain an overlapping issue list here.

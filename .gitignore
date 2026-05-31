@@ -47,18 +47,80 @@ index/*
 !index/embedding_signature_map.json
 !index/embedding_full_signature_map.json
 
-# Generated evaluation outputs — all ignored except thesis final baselines
-# Note: must use outputs/* (not outputs/) so negations can re-include subdirs
+# Generated evaluation outputs.
+# Note: must use outputs/* (not outputs/) so negations can re-include subdirs.
+# Policy: keep the full remediation v2 baseline in git; allow only compact
+# summary/provenance files for thesis-useful follow-up reruns.
 outputs/*
-!outputs/thesis_final_detection_full/
-!outputs/thesis_final_explanation_full/
+
+# Canonical thesis-final baselines (full evidence kept in git)
 !outputs/thesis_final_remediation_v2/
+
+# Thesis-useful follow-up reruns (top-level summary + provenance only)
+!outputs/thesis_final_detection_full_v2/
+outputs/thesis_final_detection_full_v2/*
+!outputs/thesis_final_detection_full_v2/metrics.csv
+!outputs/thesis_final_detection_full_v2/metrics.json
+!outputs/thesis_final_detection_full_v2/provenance.json
+!outputs/thesis_final_detection_full_v2/table.md
+
+!outputs/thesis_final_explanation_full_v2/
+outputs/thesis_final_explanation_full_v2/*
+!outputs/thesis_final_explanation_full_v2/citation_metrics.csv
+!outputs/thesis_final_explanation_full_v2/citation_metrics.json
+!outputs/thesis_final_explanation_full_v2/provenance.json
+!outputs/thesis_final_explanation_full_v2/table.md
+
+!outputs/thesis_final_remediation_v3/
+outputs/thesis_final_remediation_v3/*
+!outputs/thesis_final_remediation_v3/confidence_calibration.json
+!outputs/thesis_final_remediation_v3/provenance.json
+!outputs/thesis_final_remediation_v3/remediation_calibration.json
+!outputs/thesis_final_remediation_v3/remediation_calibration.md
+!outputs/thesis_final_remediation_v3/remediation_metrics.csv
+!outputs/thesis_final_remediation_v3/remediation_metrics.json
+!outputs/thesis_final_remediation_v3/summary.md
+!outputs/thesis_final_remediation_v3/table.md
+
+!outputs/pr_full_verification_2026-05-11/
+outputs/pr_full_verification_2026-05-11/*
+!outputs/pr_full_verification_2026-05-11/detection_full/
+!outputs/pr_full_verification_2026-05-11/explanation_full/
+!outputs/pr_full_verification_2026-05-11/remediation_supported_medium/
+
+outputs/pr_full_verification_2026-05-11/detection_full/*
+!outputs/pr_full_verification_2026-05-11/detection_full/metrics.csv
+!outputs/pr_full_verification_2026-05-11/detection_full/metrics.json
+!outputs/pr_full_verification_2026-05-11/detection_full/provenance.json
+!outputs/pr_full_verification_2026-05-11/detection_full/table.md
+
+outputs/pr_full_verification_2026-05-11/explanation_full/*
+!outputs/pr_full_verification_2026-05-11/explanation_full/citation_metrics.csv
+!outputs/pr_full_verification_2026-05-11/explanation_full/citation_metrics.json
+!outputs/pr_full_verification_2026-05-11/explanation_full/provenance.json
+
+outputs/pr_full_verification_2026-05-11/remediation_supported_medium/*
+!outputs/pr_full_verification_2026-05-11/remediation_supported_medium/confidence_calibration.json
+!outputs/pr_full_verification_2026-05-11/remediation_supported_medium/provenance.json
+!outputs/pr_full_verification_2026-05-11/remediation_supported_medium/remediation_calibration.json
+!outputs/pr_full_verification_2026-05-11/remediation_supported_medium/remediation_calibration.md
+!outputs/pr_full_verification_2026-05-11/remediation_supported_medium/remediation_metrics.csv
+!outputs/pr_full_verification_2026-05-11/remediation_supported_medium/remediation_metrics.json
+!outputs/pr_full_verification_2026-05-11/remediation_supported_medium/summary.md
+!outputs/pr_full_verification_2026-05-11/remediation_supported_medium/table.md
+
 # Ephemeral run artifacts within the thesis finals (not evidence)
-outputs/thesis_final_detection_full/progress.json
-outputs/thesis_final_explanation_full/progress.json
-outputs/thesis_final_explanation_full/partial_metrics.json
-outputs/thesis_final_explanation_full/request_metrics.jsonl
 outputs/thesis_final_remediation_v2/progress.json
+outputs/thesis_final_explanation_full_v2/partial_metrics.json
+outputs/thesis_final_explanation_full_v2/progress.json
+outputs/thesis_final_explanation_full_v2/request_metrics.jsonl
+outputs/thesis_final_remediation_v3/progress.json
+outputs/pr_full_verification_2026-05-11/remediation_trace.jsonl
+outputs/pr_full_verification_2026-05-11/explanation_full/explanation_samples.jsonl
+outputs/pr_full_verification_2026-05-11/explanation_full/partial_metrics.json
+outputs/pr_full_verification_2026-05-11/explanation_full/progress.json
+outputs/pr_full_verification_2026-05-11/explanation_full/request_metrics.jsonl
+outputs/pr_full_verification_2026-05-11/remediation_supported_medium/progress.json
 
 # Local UI triage artifacts (kept locally, never committed)
 policy_evaluate.json
@@ -67,8 +129,6 @@ tmp_bundle.json
 playwright-snapshots/
 
 # Tooling / editor noise
-copilot-context/
-.github/copilot-instructions.md
 .vscode/
 .idea/
 *.swp
