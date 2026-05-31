@@ -129,8 +129,6 @@ tmp_bundle.json
 playwright-snapshots/
 
 # Tooling / editor noise
-copilot-context/
-.github/copilot-instructions.md
 .vscode/
 .idea/
 *.swp

@@ -2,8 +2,8 @@
 
 Canonical project context now lives under:
 
-- `.opencode/project/current_state.md`
-- `.opencode/project/runbook.md`
+- `benchmark.md`
 - `docs/thesis_context.md`
+- `README.md`
 
 Use this file only as a pointer. Do not maintain a second architecture source of truth here.

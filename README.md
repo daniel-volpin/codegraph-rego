@@ -239,7 +239,7 @@ For broader hardening, treat that as a separate engineering effort beyond the th
 
 - Rerun guidance: [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md)
 - Release checklist: [`docs/release_checklist.md`](./docs/release_checklist.md)
-- Operational runbook: [`.opencode/project/runbook.md`](./.opencode/project/runbook.md)
+- Benchmark evidence context: [`copilot-context/benchmark.md`](./copilot-context/benchmark.md)
 
 ## Contributing
 
