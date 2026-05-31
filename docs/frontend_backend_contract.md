@@ -1,50 +1,78 @@
 # Frontend/Backend Contract (CodeGraph)
 
-This document describes the API surface and the frontend/backend integration for CodeGraph.
+This document describes the HTTP API surface and the frontend integration patterns CodeGraph relies on.
+
+## Boundary primer
+
+- Backend FastAPI entrypoint: `app.py` (calls `codegraph/app.py:create_app`).
+- Routers: `api/routers/`.
+- Request/response models: `api/models/`.
+- Frontend HTTP layer: `frontend/src/lib/api.ts`.
+- Wire-shape source of truth: **`frontend/src/lib/schemas.ts`** (Zod). Types in `frontend/src/lib/types.ts` are auto-derived re-exports — do not edit them by hand.
+- Every API call funnels through one `parseApiResponse<S>(response, schema)` helper:
+  - The schema's `.safeParse(payload)` is the only gate. If it succeeds the result is returned regardless of HTTP status (this is what lets structured-error envelopes on 4xx — e.g. `status: "INVALID"` from remediation — flow through as data instead of throwing).
+  - Otherwise, `!response.ok` → `ApiError(message, status, payload)`.
+  - Otherwise (200 with a non-matching shape) → `SchemaValidationError(zodError, payload)`. This catches real backend/frontend drift instead of silently rendering `"—"` everywhere.
+- Every API request now carries a W3C `traceparent` header (browser OpenTelemetry `FetchInstrumentation` → FastAPI `FastAPIInstrumentor`), and every response carries an `X-Request-Id` header echoed by the backend.
 
 ## Backend API Surface
 
-FastAPI entrypoint: `app.py`  
-Routers: `api/routers/`  
-Request/response models: `api/models/`
+### `GET /healthz`
+- Router: `api/routers/health.py`
+- Cheap liveness probe. No external I/O.
+
+### `GET /readyz`
+- Router: `api/routers/health.py`
+- Deeper readiness check. Returns `503` with structured details when degraded.
 
 ### `GET /health`
 - Router: `api/routers/health.py`
 - Response:
   - HTTP `200` when `neo4j`, `faiss_index`, `signature_map` are all true; else HTTP `503`.
-  - Body:
-    - `neo4j, faiss_index, signature_map, embedding_model, opa: boolean`
-    - `details: object` (subsystem error strings)
+  - Body fields: `status`, `startup_ready`, `neo4j`, `faiss_index`, `signature_map`, `embedding_model`, `opa: boolean`; `startup: HealthStartupStatus`; `details: object`.
+- Frontend schema: `HealthCheckResponseSchema`.
 
 ### `POST /upload`
 - Router: `api/routers/upload.py`
-- Request: `multipart/form-data` with `file` (must be a `.zip`)
+- Request: `multipart/form-data` with `file` (must be a `.zip`).
 - Behavior:
-  - streams the archive to disk instead of buffering the entire upload in memory
-  - rejects archives that exceed configured size, entry-count, extraction-size, or compression-ratio limits
+  - streams the archive to disk instead of buffering in memory
+  - rejects archives exceeding configured size, entry-count, extraction-size, or compression-ratio limits
   - discovers all `src/main/java` roots in the uploaded workspace and ingests them in deterministic sorted order
+  - allocates a per-request progress slot via `codegraph/common/progress.py:start_progress` and echoes its `request_id`
 - Response:
-  - HTTP `200`: `{ "status": string, "java_root": string|null, "java_roots": string[] }`
-  - HTTP `400`/`500`: `{ "error": string }`
+  - HTTP `200`: `{ "status": string, "java_root": string|null, "java_roots": string[], "request_id": string|null }`
+  - HTTP `4xx`/`5xx`: `{ "error": string }`
+- Frontend schema: `UploadResponseSchema`.
 
 ### `GET /upload/status`
 - Router: `api/routers/upload.py`
+- Polling endpoint backing the SSE-fallback path on the client.
+- Query params: `request_id?: string` (when omitted, the latest-started job is returned for back-compat).
 - Response HTTP `200`:
-  - `phase: string`
-  - `message: string`
-  - `progress: number` (0..100)
-  - `complete: boolean`
-  - `error?: string|null`
-  - `updated_at: string` (UTC ISO)
-  - `started_at?: string|null`
-- State source: `codegraph/common/progress.py`
+  - `phase`, `message`, `progress` (0..100), `complete`, `updated_at`, `started_at?`, `error?`, `request_id?`
+- State source: `codegraph/common/progress.py`.
+- Frontend schema: `UploadStatusSchema`.
+
+### `GET /upload/status/stream`
+- Router: `api/routers/upload.py`
+- Push-based Server-Sent Events stream of `UploadStatus` payloads.
+- Query params: `request_id?: string` (same semantics as `/upload/status`).
+- Response: `text/event-stream` with `Cache-Control: no-cache`, `X-Accel-Buffering: no`.
+- Event types:
+  - `event: status` — one per observed state change of the progress slot. Data is the same JSON shape as `/upload/status`.
+  - `event: complete` — terminal event when `complete=true`. Data is the final status. The connection closes after a short grace.
+  - Periodic `: heartbeat` SSE comment lines (ignored by `EventSource`) defeat proxy idle timeouts.
+- Implementation note: writers are woken by `register_state_change_listener` in `progress.py` and cross the thread boundary via `loop.call_soon_threadsafe` — no per-stream polling timer.
+- Frontend consumer: `frontend/src/hooks/useUploadStatusStream.ts` validates every payload through `UploadStatusSchema.safeParse` before writing to the React Query cache. Falls back to bounded polling on EventSource error.
 
 ### `POST /search`
 - Router: `api/routers/search.py`
 - Request JSON: `{ "query": string }`
 - Response:
   - HTTP `200`: `{ "matches": string[], "contexts": Array<Array<{ method: string, neighbors: object[] }>> }`
-  - HTTP `400`/`500`: `{ "error": string }`
+  - HTTP `4xx`/`5xx`: `{ "error": string }`
+- Frontend schema: `SearchResponseSchema`.
 
 ### `GET /policy/evaluate`
 - Router: `api/routers/policy.py`
@@ -54,16 +82,15 @@ Request/response models: `api/models/`
   - `max_per_violation_id?: number`
   - `rule_ids?: string[]` (repeat the parameter to filter server-side to an explicit rule subset)
 - Response:
-  - HTTP `200` on success — object including at least `violations: Violation[]`
-  - HTTP `500` on failure — `{ "error": string, ... }`
-- Violation schema (from `codegraph/policy/integration.py`):
-  - `violation_id: string`
-  - `reason: string`
-  - `severity: string`
-  - `target_method: string`
-  - `file_path: string`
-  - `control_metadata: object|null`
-  - `remediation?: object`
+  - HTTP `200` on success — at least `violations: Violation[]` plus `opa_output`, `enriched`.
+  - HTTP `5xx` on failure — `{ "error": string, ... }`.
+- Violation schema (from `codegraph/policy/integration.py`, mirrored as `ViolationSchema`):
+  - `violation_id: string` (also accepts `rule_id` for backward compatibility)
+  - `target_method: string`, `file_path: string`, `severity: string`
+  - `reason: string` (also accepts `description`)
+  - `code_snippet?: string`, `updated_source_code?: string`
+  - `evidence?: { source_code?: string, graph_context?: ..., vector_context?: ... }`
+  - `remediation?: RemediationCapability` (optional; frontend supplies defaults when absent):
     - `supported: boolean`
     - `support_tier: "full" | "guarded" | "manual"`
     - `reason_code: string`
@@ -73,7 +100,7 @@ Request/response models: `api/models/`
     - `ui_apply_mode: "dry_run"`
     - `rationale: string`
     - `safe_refusal_possible: boolean`
-  - `evidence: object`
+- Frontend schema: `PolicyEvaluateResponseSchema`. The Zod object is `.loose()` — unknown backend fields pass through, so the explain endpoint receives the full original violation when the client sends `violation.raw` back.
 
 ### `POST /policy/evaluate_with_llm`
 - Router: `api/routers/policy.py`
@@ -85,39 +112,42 @@ Request/response models: `api/models/`
 - Response HTTP `200`:
   - `controls: object[]`
   - `rules: object[]`
-  - `benchmark_categories: object[]`
+  - `benchmark_categories: PolicyBenchmarkCategory[]`
   - `framework_demo_rule_ids: string[]`
 - Runtime source: `configs/benchmark/policy_registry.json`
 - Compatibility snapshots: `policy/catalog.json`, `policy/iso_rules.json`
+- Frontend schema: `PolicyCatalogResponseSchema`.
 
 ### `POST /policy/explain_one`
 - Router: `api/routers/policy.py`
-- Request JSON: `{ "violation_id": string, ... }` (full violation object)
-- Response HTTP `200`:
+- Request JSON: `{ "violation": Violation, "include_graph_context"?: boolean, "model"?: string|null }` (the full violation object is sent back as `violation.raw` from the frontend; the loose Zod schema guarantees no fields are stripped on the round-trip)
+- Response HTTP `200` (or HTTP `4xx`/`5xx` with the same envelope — `parseApiResponse` accepts both because the schema matches):
   - `status: string`
-  - `explanation?: string`
-  - `explanation_structured?: { citation: string, why: string, fix: string }`
+  - `explanation?: string|null`
+  - `explanation_structured?: { evidence_id?: string|null, citation: string, why: string, fix: string }|null`
   - `model?: string|null`
-  - `include_graph_context?: boolean`
+  - `include_graph_context: boolean`
   - `error?: string|null`
+- Frontend schema: `PolicyExplainOneResponseSchema`.
 
 ### `POST /policy/reviews`
 - Router: `api/routers/policy.py`
-- Request JSON: triage review record
-- Response HTTP `200`: saved review confirmation
+- Request JSON: triage review record.
+- Response HTTP `200` (or HTTP `4xx`/`5xx` envelope): `PolicyReviewCreateResponseSchema`.
 
 ### `GET /policy/reviews`
 - Router: `api/routers/policy.py`
-- Query params: `violation_key`, `limit`
-- Response HTTP `200`: list of saved reviews
+- Query params: `violation_key?: string`, `limit?: number`.
+- Response HTTP `200`: `PolicyReviewListResponseSchema` (`{ status, reviews: object[], error? }`).
 
 ### `POST /remediation/preview`
 - Router: `api/routers/remediation.py`
 - Request JSON: `{ "violation_id": string, "target_method"?: string|null, "file_path"?: string|null }`
 - Response:
   - HTTP `200`: preview-only remediation result (no filesystem changes)
-  - HTTP `400` when `status=INVALID`, `404` when `status=NOT_FOUND`, `500` when `status=ERROR`
-- Implementation: `codegraph/remediation/service.py` → `preview_virtual_fix()`
+  - HTTP `400` when `status="INVALID"`, `404` when `status="NOT_FOUND"`, `500` when `status="ERROR"` — in all three cases the JSON payload validates against `RemediationPreviewResponseSchema` so `parseApiResponse` returns the structured envelope instead of throwing.
+- Implementation: `codegraph/remediation/service.py` → `preview_virtual_fix()`.
+- Includes optional `confidence: RemediationConfidence` (score, band, thresholds, rationale) — the score subfield uses `.catch(null)` so an out-of-range value can't reject the entire response.
 
 ### `POST /remediation/apply`
 - Router: `api/routers/remediation.py`
@@ -126,37 +156,52 @@ Request/response models: `api/models/`
   - HTTP `200` for `status="OK"` and `status="FAIL"`
   - HTTP `500` for `status="ERROR"`
   - HTTP `400`/`404` for `status="INVALID"` / `status="NOT_FOUND"`
-- Implementation: `codegraph/remediation/service.py` → `apply_fix()`
+  - All three HTTP failure shapes still parse through `RemediationApplyResponseSchema` so the frontend renders the structured outcome.
+- Implementation: `codegraph/remediation/service.py` → `apply_fix()`.
 - Note: `status="FAIL"` is an application-level outcome (verification failed), not a transport error.
+- The frontend hardcodes `mode="dry_run"` in `applyRemediation`.
 
 ---
 
 ## Frontend API Usage
 
-Base URL: read from `VITE_API_BASE_URL` env var; fallback `http://127.0.0.1:8000`.  
-All API calls are centralised in `frontend/src/lib/api.ts`.
+- Base URL is resolved at runtime by `lib/runtimeConfig.ts` in this order: `window.__CODEGRAPH_CONFIG__.apiBaseUrl` (set by `bootstrapRuntimeConfig` from `/config.json`) → `<meta name="api-base">` → `VITE_API_BASE_URL` → `/api`.
+- All calls are centralized in `frontend/src/lib/api.ts`. Every endpoint function accepts an optional `AbortSignal` parameter; React Query passes its own cancellation signal automatically for queries, and mutations construct per-call `AbortController`s that are aborted on unmount or on re-fire.
 
 ### Mapping Table
 
 | Frontend function | Backend endpoint | Notes |
 |---|---|---|
-| `uploadZip` | `POST /upload` | Polls `/upload/status` while processing |
-| `fetchUploadStatus` | `GET /upload/status` | 1s polling while `complete: false` |
-| `fetchHealth` | `GET /health` | 15s polling; renders per-subsystem booleans |
-| `searchCode` | `POST /search` | JSON body `{"query": string}` |
+| `uploadZip` | `POST /upload` | Returns `request_id` for SSE / polling subscription |
+| `fetchUploadStatus` | `GET /upload/status` | Polling fallback (5 s) when the SSE stream is unavailable |
+| `useUploadStatusStream` (hook) | `GET /upload/status/stream` | Push-based SSE; schema-validates every frame; falls back to polling on EventSource error |
+| `fetchHealth` | `GET /health` | 15 s polling; renders per-subsystem booleans |
+| `searchCode` | `POST /search` | Mutation; per-call AbortController cancels previous in-flight searches |
 | `evaluatePolicies` | `GET /policy/evaluate` | Supports repeated `rule_ids` query params for benchmark/demo-focused server-side filtering |
 | `evaluatePoliciesWithLLM` | `POST /policy/evaluate_with_llm` | JSON body `{"limit", "model", "rule_ids"}` |
 | `fetchPolicyCatalog` | `GET /policy/catalog` | Renders catalog entries |
-| `explainOne` | `POST /policy/explain_one` | Single-violation LLM explanation |
-| `saveReview` / `fetchReviews` | `POST`/`GET /policy/reviews` | Triage review persistence |
-| `previewRemediation` | `POST /remediation/preview` | Virtual fix; no disk writes |
-| `applyRemediation` | `POST /remediation/apply` | Frontend hardcodes `mode="dry_run"` |
+| `explainPolicyViolationOne` | `POST /policy/explain_one` | 5 min timeout; per-row AbortController in `useExplainMutation` |
+| `saveViolationReview` / `fetchViolationReviews` | `POST`/`GET /policy/reviews` | Triage review persistence |
+| `previewRemediation` | `POST /remediation/preview` | Virtual fix; no disk writes; 5 min timeout |
+| `applyRemediation` | `POST /remediation/apply` | Frontend hardcodes `mode="dry_run"`; 5 min timeout |
 
-Notes:
-- The frontend should use `violation.remediation` metadata to decide whether automatic remediation actions are available.
-- The Policy page persists a view preset in local storage. `Framework demo focus` sends the benchmark-aligned `rule_ids` set to the backend instead of filtering findings only on the client.
+### Cache topology
+
+- One React Query cache key per violation and per resource: `["policy", "explain", id]`, `["policy", "preview", id]`, `["policy", "apply", id]` (`frontend/src/hooks/usePolicyArtifacts.ts`). Mutations write only to the affected key; sibling rows do not re-render on each other's landings.
+- Cross-component pending state is derived from `useIsMutating` predicate-matching on `ViolationRow.id` (`usePendingAction`), so a button in the table row and a button in the detail panel agree on "is this finding's remediation in flight?" without sharing local state.
+- Persistent UI cache (the multi-MB OPA evaluation payload) lives in IndexedDB via `lib/persistence.ts` (`idb-keyval`), schema-versioned and re-validated through Zod on read.
+
+### UI contract notes
+
+- The frontend uses `violation.remediation` metadata to decide whether automatic remediation actions are available.
+- The Policy page persists a view preset in `localStorage`. `Framework demo focus` sends the benchmark-aligned `rule_ids` set to the backend instead of filtering findings only on the client.
 - Multi-module uploads remain a single active workspace. The Upload page surfaces all detected Java roots, and the Policy page can filter findings by module without introducing a separate project switcher.
 - Automatic remediation is intentionally tiered:
   - `full`: bounded auto-fix and verify paths are available
-  - `guarded`: the UI should explain that `NO_FIX` is a valid safe outcome
-  - `manual`: explanation-first/manual review only
+  - `guarded`: the UI explains that `NO_FIX` is a valid safe outcome
+  - `manual`: explanation-first / manual review only
+
+### Distributed tracing
+
+- The browser-side `WebTracerProvider` in `lib/tracing.ts` registers `FetchInstrumentation` scoped to the API origin (`buildApiOriginMatcher(getRuntimeApiBase())`). Every API request carries a W3C `traceparent` header; cross-origin third-party calls (e.g. LM Studio's own server) are intentionally not propagated.
+- Backend `codegraph/app.py:create_app` already instruments the FastAPI app via `FastAPIInstrumentor`, so the incoming `traceparent` continues the span server-side. The `OTEL_*` and `VITE_OTEL_*` env vars (see top-level README and `frontend/README.md`) control the exporter.

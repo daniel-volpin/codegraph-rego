@@ -166,6 +166,7 @@ Key endpoints:
 
 - `POST /upload`
 - `GET /upload/status?request_id=<id>`
+- `GET /upload/status/stream?request_id=<id>` (Server-Sent Events)
 - `POST /search`
 - `GET /policy/evaluate`
 - `POST /policy/evaluate_with_llm`
