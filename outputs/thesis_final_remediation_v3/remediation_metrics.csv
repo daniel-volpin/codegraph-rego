@@ -1,0 +1,26 @@
+violation_id,target_method,status,patch_applied,policy_pass,build_pass,fully_verified,confidence_score,confidence_band,category,error
+ISO-A.10-WEAK-HASH,"org.owasp.benchmark.testcode.BenchmarkTest00372.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Hash (CWE-328),
+ISO-A.10-WEAK-HASH,"org.owasp.benchmark.testcode.BenchmarkTest00071.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Hash (CWE-328),
+ISO-A.10-WEAK-HASH,"org.owasp.benchmark.testcode.BenchmarkTest00266.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Hash (CWE-328),
+ISO-A.10-WEAK-HASH,"org.owasp.benchmark.testcode.BenchmarkTest00635.doPost(HttpServletRequest,HttpServletResponse)",BUILD_ERROR,True,False,False,False,0.9526,apply,Hash (CWE-328),Apply verification failed
+ISO-A.10-WEAK-HASH,"org.owasp.benchmark.testcode.BenchmarkTest00070.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Hash (CWE-328),
+ISO-A.10-WEAK-HASH,"org.owasp.benchmark.testcode.BenchmarkTest00269.doPost(HttpServletRequest,HttpServletResponse)",BUILD_ERROR,True,False,False,False,0.9526,apply,Hash (CWE-328),Apply verification failed
+ISO-A.10-WEAK-HASH,"org.owasp.benchmark.testcode.BenchmarkTest02671.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Hash (CWE-328),
+ISO-A.10-WEAK-HASH,"org.owasp.benchmark.testcode.BenchmarkTest01911.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Hash (CWE-328),
+ISO-A.10-WEAK-HASH,"org.owasp.benchmark.testcode.BenchmarkTest01651.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Hash (CWE-328),
+ISO-A.10-WEAK-RANDOM,"org.owasp.benchmark.testcode.BenchmarkTest01277.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Randomness (CWE-330),
+ISO-A.10-WEAK-RANDOM,"org.owasp.benchmark.testcode.BenchmarkTest01930.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Randomness (CWE-330),
+ISO-A.10-WEAK-RANDOM,"org.owasp.benchmark.testcode.BenchmarkTest00160.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Randomness (CWE-330),
+ISO-A.10-WEAK-RANDOM,"org.owasp.benchmark.testcode.BenchmarkTest00081.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Randomness (CWE-330),
+ISO-A.10-WEAK-RANDOM,"org.owasp.benchmark.testcode.BenchmarkTest01678.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Randomness (CWE-330),
+ISO-A.10-WEAK-RANDOM,"org.owasp.benchmark.testcode.BenchmarkTest00240.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Randomness (CWE-330),
+ISO-A.10-WEAK-RANDOM,"org.owasp.benchmark.testcode.BenchmarkTest00369.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.9526,apply,Randomness (CWE-330),
+ISO-A.10-WEAK-CRYPTO,"org.owasp.benchmark.testcode.BenchmarkTest00020.doPost(HttpServletRequest,HttpServletResponse)",GENERATION_ERROR,False,False,,False,,,Crypto (CWE-327),invalid_java_syntax: JavaSyntaxError
+ISO-A.10-WEAK-CRYPTO,"org.owasp.benchmark.testcode.BenchmarkTest02294.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.8909,apply,Crypto (CWE-327),
+ISO-A.10-WEAK-CRYPTO,"org.owasp.benchmark.testcode.BenchmarkTest00055.doPost(HttpServletRequest,HttpServletResponse)",GENERATION_ERROR,False,False,,False,,,Crypto (CWE-327),invalid_java_syntax: JavaSyntaxError
+ISO-A.10-WEAK-CRYPTO,"org.owasp.benchmark.testcode.BenchmarkTest01480.doPost(HttpServletRequest,HttpServletResponse)",GENERATION_ERROR,False,False,,False,,,Crypto (CWE-327),invalid_java_syntax: JavaSyntaxError
+ISO-A.10-WEAK-CRYPTO,"org.owasp.benchmark.testcode.BenchmarkTest01323.doPost(HttpServletRequest,HttpServletResponse)",NO_FIX,False,False,,False,0.3318,abstain,Crypto (CWE-327),"NO_FIX: The method contains a DES cipher and key generation, but the provided remediation plan requires preserving terminal invocation contracts for doSomething(2) and generateKey(0) in a receiver/factory chain. There is no safe minimal edit supported by the snippet evidence that upgrades the cipher while preserving the required downstream invocation contract without inventing additional key/IV handling or refactoring beyond the target method."
+ISO-A.10-WEAK-CRYPTO,"org.owasp.benchmark.testcode.BenchmarkTest02017.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.8909,apply,Crypto (CWE-327),
+ISO-A.10-WEAK-CRYPTO,"org.owasp.benchmark.testcode.BenchmarkTest01318.doPost(HttpServletRequest,HttpServletResponse)",GENERATION_ERROR,False,False,,False,,,Crypto (CWE-327),invalid_java_syntax: JavaSyntaxError
+ISO-A.10-WEAK-CRYPTO,"org.owasp.benchmark.testcode.BenchmarkTest00521.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.8909,apply,Crypto (CWE-327),
+ISO-A.10-WEAK-CRYPTO,"org.owasp.benchmark.testcode.BenchmarkTest01017.doPost(HttpServletRequest,HttpServletResponse)",OK,True,True,True,True,0.8909,apply,Crypto (CWE-327),

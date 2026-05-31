@@ -119,15 +119,14 @@ Authoritative thesis-final artifact families:
 
 | Surface | Artifact directory | Headline |
 | --- | --- | --- |
-| Detection | [`outputs/thesis_final_detection_full/`](./outputs/thesis_final_detection_full/) | precision `0.953`, recall `0.953`, F1 `0.953` |
-| Explanation | [`outputs/thesis_final_explanation_full/`](./outputs/thesis_final_explanation_full/) | `Citation@Context=0.9955` on the TP cohort |
+| Detection | [`outputs/thesis_final_detection_full_v2/`](./outputs/thesis_final_detection_full_v2/) | precision `0.953`, recall `0.953`, F1 `0.953` with provenance + CIs |
+| Explanation | [`outputs/thesis_final_explanation_full_v2/`](./outputs/thesis_final_explanation_full_v2/) | `Citation@TP=1.000`, `Citation@FP=1.000`, with provenance |
 | Remediation | [`outputs/thesis_final_remediation_v2/`](./outputs/thesis_final_remediation_v2/) | `25/25` fully verified in the thesis-final v2 run |
 
-Defensibility follow-up artifact families:
+Follow-up artifact families:
 
-- detection v2: [`outputs/thesis_final_detection_full_v2/`](./outputs/thesis_final_detection_full_v2/) when present
-- explanation v2: [`outputs/thesis_final_explanation_full_v2/`](./outputs/thesis_final_explanation_full_v2/) when present
 - remediation v3: [`outputs/thesis_final_remediation_v3/`](./outputs/thesis_final_remediation_v3/) when present
+- stronger provenance-backed remediation anchor: [`outputs/pr_full_verification_2026-05-11/`](./outputs/pr_full_verification_2026-05-11/) when needed for threshold-based thesis framing
 
 Use artifact directories, tags, and recorded commit provenance when citing results. Do **not** cite README prose as the primary evidence source.
 

@@ -1,0 +1,699 @@
+{
+  "generated_at": "2026-05-11T11:37:49.588331+00:00",
+  "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+  "ground_truth_file": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+  "ground_truth_schema": {
+    "format": "csv",
+    "fieldnames": [
+      "# test name",
+      " category",
+      " real vulnerability",
+      " cwe",
+      " Benchmark version: 1.2",
+      " 2016-06-1"
+    ],
+    "normalized_fieldnames": [
+      "testname",
+      "category",
+      "realvulnerability",
+      "cwe",
+      "benchmarkversion:1.2",
+      "2016061"
+    ]
+  },
+  "selection": {
+    "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+    "java_relative_root": "src/main/java",
+    "ground_truth_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+    "categories": [
+      "crypto-md5",
+      "hash-md5",
+      "rng-insecure",
+      "sql-injection",
+      "path-traversal",
+      "command-injection",
+      "ldap-injection",
+      "xpath-injection"
+    ],
+    "testcase_ids": [],
+    "max_cases_per_category": 60,
+    "seed": 7,
+    "debug_fn_analysis": false,
+    "build_command": "mvn -q -DskipTests -Dspotless.apply.skip=true -Dspotless.check.skip=true compile"
+  },
+  "coverage_by_category": {
+    "crypto-md5": {
+      "available_cases": 246,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "hash-md5": {
+      "available_cases": 236,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "rng-insecure": {
+      "available_cases": 493,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "sql-injection": {
+      "available_cases": 504,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "path-traversal": {
+      "available_cases": 268,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "command-injection": {
+      "available_cases": 251,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "ldap-injection": {
+      "available_cases": 59,
+      "selected_cases": 59,
+      "sampled": false
+    },
+    "xpath-injection": {
+      "available_cases": 35,
+      "selected_cases": 35,
+      "sampled": false
+    }
+  },
+  "metrics": {
+    "crypto-md5": {
+      "count": 27,
+      "with_context": 27,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "rate_with_context_ci": {
+        "point": 1.0,
+        "ci_low": 0.8754449702581328,
+        "ci_high": 1.0,
+        "n": 27,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "rate_without_context_ci": {
+        "point": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.12455502974186705,
+        "n": 27,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "tp": {
+        "count": 27,
+        "with_context": 27,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.8754449702581328,
+          "ci_high": 1.0,
+          "n": 27,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.12455502974186705,
+          "n": 27,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "fp": {
+        "count": 0,
+        "with_context": 0,
+        "without_context": 0,
+        "rate_with_context": 0.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": null,
+        "rate_without_context_ci": null
+      },
+      "available_cases": 246,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "hash-md5": {
+      "count": 22,
+      "with_context": 22,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "rate_with_context_ci": {
+        "point": 1.0,
+        "ci_low": 0.8513451253913791,
+        "ci_high": 1.0,
+        "n": 22,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "rate_without_context_ci": {
+        "point": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.14865487460862087,
+        "n": 22,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "tp": {
+        "count": 22,
+        "with_context": 22,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.8513451253913791,
+          "ci_high": 1.0,
+          "n": 22,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.14865487460862087,
+          "n": 22,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "fp": {
+        "count": 0,
+        "with_context": 0,
+        "without_context": 0,
+        "rate_with_context": 0.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": null,
+        "rate_without_context_ci": null
+      },
+      "available_cases": 236,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "rng-insecure": {
+      "count": 32,
+      "with_context": 32,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "rate_with_context_ci": {
+        "point": 1.0,
+        "ci_low": 0.8928208017449293,
+        "ci_high": 1.0,
+        "n": 32,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "rate_without_context_ci": {
+        "point": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.1071791982550706,
+        "n": 32,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "tp": {
+        "count": 32,
+        "with_context": 32,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.8928208017449293,
+          "ci_high": 1.0,
+          "n": 32,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.1071791982550706,
+          "n": 32,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "fp": {
+        "count": 0,
+        "with_context": 0,
+        "without_context": 0,
+        "rate_with_context": 0.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": null,
+        "rate_without_context_ci": null
+      },
+      "available_cases": 493,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "sql-injection": {
+      "count": 35,
+      "with_context": 35,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "rate_with_context_ci": {
+        "point": 1.0,
+        "ci_low": 0.9010990076755959,
+        "ci_high": 1.0,
+        "n": 35,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "rate_without_context_ci": {
+        "point": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.09890099232440402,
+        "n": 35,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "tp": {
+        "count": 35,
+        "with_context": 35,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.9010990076755959,
+          "ci_high": 1.0,
+          "n": 35,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.09890099232440402,
+          "n": 35,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "fp": {
+        "count": 2,
+        "with_context": 2,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.34238022750665303,
+          "ci_high": 1.0,
+          "n": 2,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.6576197724933469,
+          "n": 2,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "available_cases": 504,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "path-traversal": {
+      "count": 29,
+      "with_context": 29,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "rate_with_context_ci": {
+        "point": 1.0,
+        "ci_low": 0.8830302015002593,
+        "ci_high": 1.0,
+        "n": 29,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "rate_without_context_ci": {
+        "point": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.11696979849974075,
+        "n": 29,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "tp": {
+        "count": 29,
+        "with_context": 29,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.8830302015002593,
+          "ci_high": 1.0,
+          "n": 29,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.11696979849974075,
+          "n": 29,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "fp": {
+        "count": 2,
+        "with_context": 2,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.34238022750665303,
+          "ci_high": 1.0,
+          "n": 2,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.6576197724933469,
+          "n": 2,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "available_cases": 268,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "command-injection": {
+      "count": 35,
+      "with_context": 35,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "rate_with_context_ci": {
+        "point": 1.0,
+        "ci_low": 0.9010990076755959,
+        "ci_high": 1.0,
+        "n": 35,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "rate_without_context_ci": {
+        "point": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.09890099232440402,
+        "n": 35,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "tp": {
+        "count": 35,
+        "with_context": 35,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.9010990076755959,
+          "ci_high": 1.0,
+          "n": 35,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.09890099232440402,
+          "n": 35,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "fp": {
+        "count": 3,
+        "with_context": 3,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.4385029682449546,
+          "ci_high": 1.0,
+          "n": 3,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.5614970317550454,
+          "n": 3,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "available_cases": 251,
+      "selected_cases": 60,
+      "sampled": true
+    },
+    "ldap-injection": {
+      "count": 27,
+      "with_context": 27,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "rate_with_context_ci": {
+        "point": 1.0,
+        "ci_low": 0.8754449702581328,
+        "ci_high": 1.0,
+        "n": 27,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "rate_without_context_ci": {
+        "point": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.12455502974186705,
+        "n": 27,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "tp": {
+        "count": 27,
+        "with_context": 27,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.8754449702581328,
+          "ci_high": 1.0,
+          "n": 27,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.12455502974186705,
+          "n": 27,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "fp": {
+        "count": 1,
+        "with_context": 1,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.20654931437723745,
+          "ci_high": 1.0,
+          "n": 1,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.7934506856227626,
+          "n": 1,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "available_cases": 59,
+      "selected_cases": 59,
+      "sampled": false
+    },
+    "xpath-injection": {
+      "count": 15,
+      "with_context": 15,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "rate_with_context_ci": {
+        "point": 1.0,
+        "ci_low": 0.7961166989641515,
+        "ci_high": 1.0,
+        "n": 15,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "rate_without_context_ci": {
+        "point": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.20388330103584862,
+        "n": 15,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "tp": {
+        "count": 15,
+        "with_context": 15,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.7961166989641515,
+          "ci_high": 1.0,
+          "n": 15,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.20388330103584862,
+          "n": 15,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "fp": {
+        "count": 1,
+        "with_context": 1,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.20654931437723745,
+          "ci_high": 1.0,
+          "n": 1,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.7934506856227626,
+          "n": 1,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "available_cases": 35,
+      "selected_cases": 35,
+      "sampled": false
+    },
+    "overall": {
+      "count": 222,
+      "with_context": 222,
+      "without_context": 0,
+      "rate_with_context": 1.0,
+      "rate_without_context": 0.0,
+      "rate_with_context_ci": {
+        "point": 1.0,
+        "ci_low": 0.9829904622439406,
+        "ci_high": 1.0,
+        "n": 222,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "rate_without_context_ci": {
+        "point": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.017009537756059373,
+        "n": 222,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "tp": {
+        "count": 222,
+        "with_context": 222,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.9829904622439406,
+          "ci_high": 1.0,
+          "n": 222,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.017009537756059373,
+          "n": 222,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "fp": {
+        "count": 9,
+        "with_context": 9,
+        "without_context": 0,
+        "rate_with_context": 1.0,
+        "rate_without_context": 0.0,
+        "rate_with_context_ci": {
+          "point": 1.0,
+          "ci_low": 0.7008549515804559,
+          "ci_high": 1.0,
+          "n": 9,
+          "method": "wilson",
+          "confidence": 0.95
+        },
+        "rate_without_context_ci": {
+          "point": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.2991450484195441,
+          "n": 9,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      }
+    }
+  },
+  "metric_definitions": {
+    "Citation@TP": "share of TP-cohort violations whose model citation matches the expected citation when graph context is provided",
+    "Citation@FP": "share of FP-cohort violations whose model citation matches the expected citation when graph context is provided",
+    "Citation@NoContext": "with the evidence cards and graph context zeroed (per cohort)",
+    "rate_with_context_ci": "Wilson 95% interval for the corresponding rate",
+    "legacy_top_level_fields_alias": "tp"
+  },
+  "sample_count": 33
+}

@@ -75,8 +75,8 @@ LLM_ENABLE_THINKING=false \
 - Branch detection smoke: `outputs/branch_baseline_recovery/detection_smoke/`
 - Branch bounded remediation smoke: `outputs/branch_baseline_recovery/remediation_bounded_smoke/`
 - Branch supported remediation medium: `outputs/branch_baseline_recovery/remediation_supported_medium/`
-- Detection: `outputs/thesis_final_detection_full/`
-- Explanation: `outputs/thesis_final_explanation_full/`
+- Detection: `outputs/thesis_final_detection_full_v2/`
+- Explanation: `outputs/thesis_final_explanation_full_v2/`
 - Remediation: `outputs/thesis_final_remediation_v2/`
   - historical reference: `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` (pre-confidence-gate, 17/17)
   - regression reference: `outputs/final_full_remediation_current_main/` (10-case run)
@@ -108,8 +108,8 @@ The default report compares:
 ## Which Results To Cite
 
 - For thesis-final benchmark claims, cite:
-  - `outputs/thesis_final_detection_full/`
-  - `outputs/thesis_final_explanation_full/`
+  - `outputs/thesis_final_detection_full_v2/`
+  - `outputs/thesis_final_explanation_full_v2/`
   - `outputs/thesis_final_remediation_v2/`
 - For branch validation work-in-progress, keep new reruns under `outputs/branch_baseline_recovery/` until they are explicitly promoted.
 - Treat `outputs/final_full_remediation_current_main/` and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` as historical reference runs, not the headline baseline.

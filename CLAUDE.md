@@ -17,12 +17,12 @@ Real-world apps (JHipster, PetClinic) are secondary case studies only — not th
 - Active development branch: `feat/remediation-redesign-step-7-rework`
 - Always run thesis-grade benchmark commands from the `main` worktree
 
-## Authoritative Thesis Evidence (2026-03-22)
+## Repo-Tracked Thesis Evidence
 
 | Component | Directory | Headline |
 |---|---|---|
-| Detection | `outputs/thesis_final_detection_full/` | P=R=F1=0.953 · 222 TP · 8 CWEs · 454 cases |
-| Explanation | `outputs/thesis_final_explanation_full/` | Citation@Context=0.9955 · 222 TPs |
+| Detection | `outputs/thesis_final_detection_full_v2/` | P=R=F1=0.953 · 222 TP · 8 CWEs · 454 cases |
+| Explanation | `outputs/thesis_final_explanation_full_v2/` | Citation@TP=1.000 · Citation@FP=1.000 |
 | Remediation | `outputs/thesis_final_remediation_v2/` | 25/25 OK · fix+build 1.000 · Brier=0.006 |
 
 Historical runs in `outputs/` are preserved but must not be cited as current results.

@@ -107,7 +107,7 @@ python run_remediation_eval.py \
   --reset-neo4j
 ```
 
-Thesis-final v1 authoritative outputs are under `outputs/thesis_final_detection_full/`, `outputs/thesis_final_explanation_full/`, and `outputs/thesis_final_remediation_v2/` (all produced on `main` on 2026-03-22). The PR #107 defensibility reruns are under `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v3/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier runs under `outputs/detection_calibration_path_precision_v4/` and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` are preserved as historical reference only.
+The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/pr_full_verification_2026-05-11/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier runs under `outputs/detection_calibration_path_precision_v4/` and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` are preserved as historical reference only.
 
 ## 4. Recommended Explanation-Eval Defaults
 
@@ -163,10 +163,9 @@ For the UI thesis/demo, use the Policy page's `Framework demo focus` preset afte
 
 ## 6. Run Thesis-Final Detection
 
-The v1 baseline (locked at git tag `thesis-final-v1`) is preserved at
-`outputs/thesis_final_detection_full/`. The PR `thesis/defensibility-pass`
-adds bootstrap CIs and a per-run `provenance.json`; produce that artifact
-set under a fresh `_v2` directory rather than overwriting v1:
+The tracked detection artifact set is
+`outputs/thesis_final_detection_full_v2/`. It carries bootstrap CIs and a
+per-run `provenance.json`:
 
 ```bash
 python run_benchmark_eval.py \

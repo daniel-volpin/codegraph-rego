@@ -78,9 +78,9 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. The primary p
   - LDAP injection: `precision=0.9643`, `recall=1.0`, `F1=0.9818`
   - XPath injection: `precision=0.9375`, `recall=1.0`, `F1=0.9677`
 - Benchmark-first outputs are the authoritative evidence for current capability.
-- Thesis-final authoritative benchmark outputs produced on `main` on 2026-03-22:
-  - detection: `outputs/thesis_final_detection_full/` (P=0.953, R=0.953, F1=0.953)
-  - explanation: `outputs/thesis_final_explanation_full/` (222 TPs, Citation@Context=0.9955)
+- Thesis evidence outputs currently kept in the repo:
+  - detection: `outputs/thesis_final_detection_full_v2/` (P=0.953, R=0.953, F1=0.953, provenance + CIs)
+  - explanation: `outputs/thesis_final_explanation_full_v2/` (`Citation@TP=1.000`, `Citation@FP=1.000`, provenance)
   - remediation: `outputs/thesis_final_remediation_v2/` (25/25 OK, Brier=0.006)
 - Historical reference runs (do not cite as primary):
   - `outputs/detection_calibration_path_precision_v4/` — pre-taint intermediate (F1=0.798)

@@ -1,0 +1,852 @@
+{
+  "population": "full",
+  "count": 21,
+  "missing_confidence_count": 4,
+  "label": "fully_verified",
+  "label_definition": "fully_verified := policy_fixed is true and build_success is true",
+  "positive_count": 18,
+  "negative_count": 3,
+  "brier_score": 0.095431,
+  "ece": 0.095705,
+  "reliability_bins": [
+    {
+      "bin_start": 0.3,
+      "bin_end": 0.4,
+      "count": 1,
+      "avg_confidence": 0.3318,
+      "empirical_success": 0.0,
+      "gap": 0.3318
+    },
+    {
+      "bin_start": 0.8,
+      "bin_end": 0.9,
+      "count": 4,
+      "avg_confidence": 0.8909,
+      "empirical_success": 1.0,
+      "gap": 0.1091
+    },
+    {
+      "bin_start": 0.9,
+      "bin_end": 1.0,
+      "count": 16,
+      "avg_confidence": 0.9526,
+      "empirical_success": 0.875,
+      "gap": 0.0776
+    }
+  ],
+  "risk_coverage": [
+    {
+      "coverage": 0.2381,
+      "success_rate": 0.8,
+      "risk": 0.2
+    },
+    {
+      "coverage": 0.4762,
+      "success_rate": 0.8,
+      "risk": 0.2
+    },
+    {
+      "coverage": 0.7619,
+      "success_rate": 0.875,
+      "risk": 0.125
+    },
+    {
+      "coverage": 1.0,
+      "success_rate": 0.8571,
+      "risk": 0.1429
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "BenchmarkTest00372_ISO-A.10-WEAK-HASH_b40df2023c",
+      "violation_id": "ISO-A.10-WEAK-HASH",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest00071_ISO-A.10-WEAK-HASH_f0f80c1749",
+      "violation_id": "ISO-A.10-WEAK-HASH",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest00266_ISO-A.10-WEAK-HASH_ea72697c10",
+      "violation_id": "ISO-A.10-WEAK-HASH",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest00635_ISO-A.10-WEAK-HASH_903871f07c",
+      "violation_id": "ISO-A.10-WEAK-HASH",
+      "status": "BUILD_ERROR",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": false,
+      "policy_fixed": false,
+      "build_success": false
+    },
+    {
+      "case_id": "BenchmarkTest00070_ISO-A.10-WEAK-HASH_1d0bfd2e4f",
+      "violation_id": "ISO-A.10-WEAK-HASH",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest00269_ISO-A.10-WEAK-HASH_47a8ca1d58",
+      "violation_id": "ISO-A.10-WEAK-HASH",
+      "status": "BUILD_ERROR",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": false,
+      "policy_fixed": false,
+      "build_success": false
+    },
+    {
+      "case_id": "BenchmarkTest02671_ISO-A.10-WEAK-HASH_73d1eefb99",
+      "violation_id": "ISO-A.10-WEAK-HASH",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest01911_ISO-A.10-WEAK-HASH_684510ac40",
+      "violation_id": "ISO-A.10-WEAK-HASH",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest01651_ISO-A.10-WEAK-HASH_2e9f6c7a6a",
+      "violation_id": "ISO-A.10-WEAK-HASH",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest01277_ISO-A.10-WEAK-RANDOM_d00b024d87",
+      "violation_id": "ISO-A.10-WEAK-RANDOM",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest01930_ISO-A.10-WEAK-RANDOM_bb16ff66d5",
+      "violation_id": "ISO-A.10-WEAK-RANDOM",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest00160_ISO-A.10-WEAK-RANDOM_90ce4c72e1",
+      "violation_id": "ISO-A.10-WEAK-RANDOM",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest00081_ISO-A.10-WEAK-RANDOM_9ceaaf3e3c",
+      "violation_id": "ISO-A.10-WEAK-RANDOM",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest01678_ISO-A.10-WEAK-RANDOM_be1c3b0796",
+      "violation_id": "ISO-A.10-WEAK-RANDOM",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest00240_ISO-A.10-WEAK-RANDOM_8da9b0acce",
+      "violation_id": "ISO-A.10-WEAK-RANDOM",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest00369_ISO-A.10-WEAK-RANDOM_a08caf1627",
+      "violation_id": "ISO-A.10-WEAK-RANDOM",
+      "status": "OK",
+      "confidence_score": 0.9526,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest02294_ISO-A.10-WEAK-CRYPTO_55ea806d5d",
+      "violation_id": "ISO-A.10-WEAK-CRYPTO",
+      "status": "OK",
+      "confidence_score": 0.8909,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest01323_ISO-A.10-WEAK-CRYPTO_b99c67cb12",
+      "violation_id": "ISO-A.10-WEAK-CRYPTO",
+      "status": "NO_FIX",
+      "confidence_score": 0.3318,
+      "confidence_band": "abstain",
+      "fully_verified": false,
+      "policy_fixed": false,
+      "build_success": false
+    },
+    {
+      "case_id": "BenchmarkTest02017_ISO-A.10-WEAK-CRYPTO_c7b784b1df",
+      "violation_id": "ISO-A.10-WEAK-CRYPTO",
+      "status": "OK",
+      "confidence_score": 0.8909,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest00521_ISO-A.10-WEAK-CRYPTO_e6864c6526",
+      "violation_id": "ISO-A.10-WEAK-CRYPTO",
+      "status": "OK",
+      "confidence_score": 0.8909,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    },
+    {
+      "case_id": "BenchmarkTest01017_ISO-A.10-WEAK-CRYPTO_7e051c5d77",
+      "violation_id": "ISO-A.10-WEAK-CRYPTO",
+      "status": "OK",
+      "confidence_score": 0.8909,
+      "confidence_band": "apply",
+      "fully_verified": true,
+      "policy_fixed": true,
+      "build_success": true
+    }
+  ],
+  "populations": {
+    "full": {
+      "population": "full",
+      "count": 21,
+      "missing_confidence_count": 4,
+      "label": "fully_verified",
+      "label_definition": "fully_verified := policy_fixed is true and build_success is true",
+      "positive_count": 18,
+      "negative_count": 3,
+      "brier_score": 0.095431,
+      "ece": 0.095705,
+      "reliability_bins": [
+        {
+          "bin_start": 0.3,
+          "bin_end": 0.4,
+          "count": 1,
+          "avg_confidence": 0.3318,
+          "empirical_success": 0.0,
+          "gap": 0.3318
+        },
+        {
+          "bin_start": 0.8,
+          "bin_end": 0.9,
+          "count": 4,
+          "avg_confidence": 0.8909,
+          "empirical_success": 1.0,
+          "gap": 0.1091
+        },
+        {
+          "bin_start": 0.9,
+          "bin_end": 1.0,
+          "count": 16,
+          "avg_confidence": 0.9526,
+          "empirical_success": 0.875,
+          "gap": 0.0776
+        }
+      ],
+      "risk_coverage": [
+        {
+          "coverage": 0.2381,
+          "success_rate": 0.8,
+          "risk": 0.2
+        },
+        {
+          "coverage": 0.4762,
+          "success_rate": 0.8,
+          "risk": 0.2
+        },
+        {
+          "coverage": 0.7619,
+          "success_rate": 0.875,
+          "risk": 0.125
+        },
+        {
+          "coverage": 1.0,
+          "success_rate": 0.8571,
+          "risk": 0.1429
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "BenchmarkTest00372_ISO-A.10-WEAK-HASH_b40df2023c",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00071_ISO-A.10-WEAK-HASH_f0f80c1749",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00266_ISO-A.10-WEAK-HASH_ea72697c10",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00635_ISO-A.10-WEAK-HASH_903871f07c",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "BUILD_ERROR",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": false,
+          "policy_fixed": false,
+          "build_success": false
+        },
+        {
+          "case_id": "BenchmarkTest00070_ISO-A.10-WEAK-HASH_1d0bfd2e4f",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00269_ISO-A.10-WEAK-HASH_47a8ca1d58",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "BUILD_ERROR",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": false,
+          "policy_fixed": false,
+          "build_success": false
+        },
+        {
+          "case_id": "BenchmarkTest02671_ISO-A.10-WEAK-HASH_73d1eefb99",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01911_ISO-A.10-WEAK-HASH_684510ac40",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01651_ISO-A.10-WEAK-HASH_2e9f6c7a6a",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01277_ISO-A.10-WEAK-RANDOM_d00b024d87",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01930_ISO-A.10-WEAK-RANDOM_bb16ff66d5",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00160_ISO-A.10-WEAK-RANDOM_90ce4c72e1",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00081_ISO-A.10-WEAK-RANDOM_9ceaaf3e3c",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01678_ISO-A.10-WEAK-RANDOM_be1c3b0796",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00240_ISO-A.10-WEAK-RANDOM_8da9b0acce",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00369_ISO-A.10-WEAK-RANDOM_a08caf1627",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest02294_ISO-A.10-WEAK-CRYPTO_55ea806d5d",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO",
+          "status": "OK",
+          "confidence_score": 0.8909,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01323_ISO-A.10-WEAK-CRYPTO_b99c67cb12",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO",
+          "status": "NO_FIX",
+          "confidence_score": 0.3318,
+          "confidence_band": "abstain",
+          "fully_verified": false,
+          "policy_fixed": false,
+          "build_success": false
+        },
+        {
+          "case_id": "BenchmarkTest02017_ISO-A.10-WEAK-CRYPTO_c7b784b1df",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO",
+          "status": "OK",
+          "confidence_score": 0.8909,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00521_ISO-A.10-WEAK-CRYPTO_e6864c6526",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO",
+          "status": "OK",
+          "confidence_score": 0.8909,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01017_ISO-A.10-WEAK-CRYPTO_7e051c5d77",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO",
+          "status": "OK",
+          "confidence_score": 0.8909,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        }
+      ]
+    },
+    "attempted_only": {
+      "population": "attempted_only",
+      "count": 20,
+      "missing_confidence_count": 4,
+      "label": "fully_verified",
+      "label_definition": "fully_verified := policy_fixed is true and build_success is true",
+      "positive_count": 18,
+      "negative_count": 2,
+      "brier_score": 0.094698,
+      "ece": 0.0839,
+      "reliability_bins": [
+        {
+          "bin_start": 0.8,
+          "bin_end": 0.9,
+          "count": 4,
+          "avg_confidence": 0.8909,
+          "empirical_success": 1.0,
+          "gap": 0.1091
+        },
+        {
+          "bin_start": 0.9,
+          "bin_end": 1.0,
+          "count": 16,
+          "avg_confidence": 0.9526,
+          "empirical_success": 0.875,
+          "gap": 0.0776
+        }
+      ],
+      "risk_coverage": [
+        {
+          "coverage": 0.25,
+          "success_rate": 0.8,
+          "risk": 0.2
+        },
+        {
+          "coverage": 0.5,
+          "success_rate": 0.8,
+          "risk": 0.2
+        },
+        {
+          "coverage": 0.75,
+          "success_rate": 0.8667,
+          "risk": 0.1333
+        },
+        {
+          "coverage": 1.0,
+          "success_rate": 0.9,
+          "risk": 0.1
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "BenchmarkTest00372_ISO-A.10-WEAK-HASH_b40df2023c",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00071_ISO-A.10-WEAK-HASH_f0f80c1749",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00266_ISO-A.10-WEAK-HASH_ea72697c10",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00635_ISO-A.10-WEAK-HASH_903871f07c",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "BUILD_ERROR",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": false,
+          "policy_fixed": false,
+          "build_success": false
+        },
+        {
+          "case_id": "BenchmarkTest00070_ISO-A.10-WEAK-HASH_1d0bfd2e4f",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00269_ISO-A.10-WEAK-HASH_47a8ca1d58",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "BUILD_ERROR",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": false,
+          "policy_fixed": false,
+          "build_success": false
+        },
+        {
+          "case_id": "BenchmarkTest02671_ISO-A.10-WEAK-HASH_73d1eefb99",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01911_ISO-A.10-WEAK-HASH_684510ac40",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01651_ISO-A.10-WEAK-HASH_2e9f6c7a6a",
+          "violation_id": "ISO-A.10-WEAK-HASH",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01277_ISO-A.10-WEAK-RANDOM_d00b024d87",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01930_ISO-A.10-WEAK-RANDOM_bb16ff66d5",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00160_ISO-A.10-WEAK-RANDOM_90ce4c72e1",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00081_ISO-A.10-WEAK-RANDOM_9ceaaf3e3c",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01678_ISO-A.10-WEAK-RANDOM_be1c3b0796",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00240_ISO-A.10-WEAK-RANDOM_8da9b0acce",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00369_ISO-A.10-WEAK-RANDOM_a08caf1627",
+          "violation_id": "ISO-A.10-WEAK-RANDOM",
+          "status": "OK",
+          "confidence_score": 0.9526,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest02294_ISO-A.10-WEAK-CRYPTO_55ea806d5d",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO",
+          "status": "OK",
+          "confidence_score": 0.8909,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest02017_ISO-A.10-WEAK-CRYPTO_c7b784b1df",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO",
+          "status": "OK",
+          "confidence_score": 0.8909,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest00521_ISO-A.10-WEAK-CRYPTO_e6864c6526",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO",
+          "status": "OK",
+          "confidence_score": 0.8909,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        },
+        {
+          "case_id": "BenchmarkTest01017_ISO-A.10-WEAK-CRYPTO_7e051c5d77",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO",
+          "status": "OK",
+          "confidence_score": 0.8909,
+          "confidence_band": "apply",
+          "fully_verified": true,
+          "policy_fixed": true,
+          "build_success": true
+        }
+      ]
+    },
+    "no_fix_only": {
+      "population": "no_fix_only",
+      "count": 1,
+      "missing_confidence_count": 0,
+      "label": "fully_verified",
+      "label_definition": "fully_verified := policy_fixed is true and build_success is true",
+      "positive_count": 0,
+      "negative_count": 1,
+      "brier_score": 0.110091,
+      "ece": 0.3318,
+      "reliability_bins": [
+        {
+          "bin_start": 0.3,
+          "bin_end": 0.4,
+          "count": 1,
+          "avg_confidence": 0.3318,
+          "empirical_success": 0.0,
+          "gap": 0.3318
+        }
+      ],
+      "risk_coverage": [
+        {
+          "coverage": 1.0,
+          "success_rate": 0.0,
+          "risk": 1.0
+        },
+        {
+          "coverage": 1.0,
+          "success_rate": 0.0,
+          "risk": 1.0
+        },
+        {
+          "coverage": 1.0,
+          "success_rate": 0.0,
+          "risk": 1.0
+        },
+        {
+          "coverage": 1.0,
+          "success_rate": 0.0,
+          "risk": 1.0
+        }
+      ],
+      "cases": [
+        {
+          "case_id": "BenchmarkTest01323_ISO-A.10-WEAK-CRYPTO_b99c67cb12",
+          "violation_id": "ISO-A.10-WEAK-CRYPTO",
+          "status": "NO_FIX",
+          "confidence_score": 0.3318,
+          "confidence_band": "abstain",
+          "fully_verified": false,
+          "policy_fixed": false,
+          "build_success": false
+        }
+      ]
+    }
+  }
+}

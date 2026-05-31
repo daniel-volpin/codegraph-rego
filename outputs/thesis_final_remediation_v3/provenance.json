@@ -1,0 +1,53 @@
+{
+  "config": {
+    "path": "configs/benchmark/remediation_supported_medium.json",
+    "sha256": "b0df1936c8b87e4c87140e004e98552fc473ab1ccb0c8c2dcc2ff6ca7b762566"
+  },
+  "eval_kind": "remediation",
+  "extra": {
+    "build_command": "",
+    "mapping_path": "configs/benchmark/policy_registry.json",
+    "max_attempts": 2,
+    "mode": "dry_run",
+    "reset_neo4j": true,
+    "sample_size": 60,
+    "table_format": "md"
+  },
+  "generated_at": "2026-05-03T09:00:46+00:00",
+  "git": {
+    "branch": "claude/codegraph-deep-review-6QdUw",
+    "dirty": false,
+    "dirty_files": [],
+    "last_commit_subject": "fix(thesis-defensibility): polish provenance and CI boundaries",
+    "sha": "7ad90a25a3ed69c50d4e639014342bad0e8413fb"
+  },
+  "llm": {
+    "max_tokens": 2048,
+    "model": "qwen3.5-9b-mlx",
+    "remediation_model": "gpt-5.4-mini",
+    "temperature": 0.0
+  },
+  "neo4j": {
+    "uri": "bolt://127.0.0.1:7687",
+    "user": "neo4j"
+  },
+  "opa": {
+    "raw": "Version: 1.15.1\nBuild Commit: \nBuild Timestamp: \nBuild Hostname: \nGo Version: go1.26.1\nPlatform: darwin/arm64\nRego Version: v1\nWebAssembly: unavailable"
+  },
+  "output_dir": "outputs/thesis_final_remediation_v3",
+  "package_version": null,
+  "platform": {
+    "machine": "arm64",
+    "release": "25.4.0",
+    "system": "Darwin"
+  },
+  "pyproject_sha256": "ff7dbbd646b28ea5e55f860bd75431764c3a5eb04c8450411ad82202f2fcc9d4",
+  "python": {
+    "executable": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/bin/python",
+    "implementation": "CPython",
+    "version": "3.14.3"
+  },
+  "schema_version": 1,
+  "seed": 11,
+  "uv_lock_sha256": "3f78a56e9536a15d798adbdc6fb5243019c0eb7abdf5de189a0c649b9d090441"
+}

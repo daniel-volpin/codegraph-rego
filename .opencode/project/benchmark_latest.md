@@ -1,10 +1,13 @@
 # Benchmark Latest
 
-Thesis-final benchmark results produced on `main` on 2026-03-22.
+Repo-tracked benchmark evidence for the current thesis baseline set.
+
+- Detection and explanation source the 2026-05-03 defensibility reruns.
+- Remediation sources the 2026-03-22 thesis-final baseline.
 
 ## Detection Full
 
-Source: `outputs/thesis_final_detection_full/`
+Source: `outputs/thesis_final_detection_full_v2/`
 Config: `multicat_full.json` · seed=7 · 60 cases/category · 454 total cases
 
 - Overall:
@@ -29,17 +32,18 @@ Config: `multicat_full.json` · seed=7 · 60 cases/category · 454 total cases
 
 ## Explanation Full
 
-Source: `outputs/thesis_final_explanation_full/`
+Source: `outputs/thesis_final_explanation_full_v2/`
 Config: `multicat_full.json` · seed=7 · `evidence_mode=lean` · `llm_max_tokens_eval=192` · `LLM_CONCURRENCY=1`
 
-- Evaluated violations: `222` true positives across all 8 categories
-- Overall `Citation@Context`: `0.9955` (221/222)
-- Overall `Citation@NoContext`: `0.000`
-- Per-category `Citation@Context`:
-  - Crypto (CWE-327): `1.000` · Hash (CWE-328): `1.000` · Randomness (CWE-330): `1.000`
-  - SQL Injection (CWE-89): `1.000` · Path Traversal (CWE-22): `1.000` · Command Injection (CWE-78): `1.000`
-  - LDAP Injection (CWE-90): `1.000` · XPath Injection (CWE-643): `0.933` (14/15)
-- `Citation@NoContext=0.000` is the expected ablation result: without evidence context the LLM cannot ground citations.
+- TP cohort: `222`
+- FP cohort: `9`
+- Overall `Citation@TP (ctx)`: `1.000` (222/222)
+- Overall `Citation@TP (no-ctx)`: `0.009` (2/222)
+- Overall `Citation@FP (ctx)`: `1.000` (9/9)
+- Overall `Citation@FP (no-ctx)`: `0.000` (0/9)
+- TP-context is perfect across all 8 categories.
+- FP-context is perfect across the 9 evaluated false positives.
+- `Citation@FP (no-ctx)=0.000` remains the expected ablation floor: without evidence context the LLM cannot ground citations.
 
 ## Remediation Supported Medium
 
@@ -59,8 +63,8 @@ Note: 25 attempted vs. 17 in the prior reference run reflects improved detection
 ## Authoritative vs Reference Runs
 
 Cite the following as the thesis-final authoritative evidence:
-- detection: `outputs/thesis_final_detection_full/`
-- explanation: `outputs/thesis_final_explanation_full/`
+- detection: `outputs/thesis_final_detection_full_v2/`
+- explanation: `outputs/thesis_final_explanation_full_v2/`
 - remediation: `outputs/thesis_final_remediation_v2/`
 
 Preserve but do not cite as primary evidence:
