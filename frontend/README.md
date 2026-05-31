@@ -22,6 +22,8 @@ The development server starts at <http://127.0.0.1:5173> by default and proxies 
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | Browser-visible API base override | `/api` |
 | `CODEGRAPH_DEV_PROXY_TARGET` | Vite dev-server proxy target | `http://127.0.0.1:8000` |
+| `VITE_OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP collector URL for browser spans (Tempo/Jaeger/Honeycomb). Console exporter when unset. | _unset_ |
+| `VITE_OTEL_DISABLED` | Set to `true` to disable browser tracing entirely. | _unset_ |
 
 Create a `.env` file in `frontend/` to override the default:
 
@@ -55,6 +57,7 @@ frontend/
       persistence.ts  # IndexedDB persistence (idb-keyval) for large eval payloads
       runtimeConfig.ts# Runtime base-URL resolution (window/meta/env/default)
       observability.ts# reportError + reportMetric event bus
+      tracing.ts      # Browser OpenTelemetry (FetchInstrumentation, OTLP/console exporter)
     store/        # Zustand stores (e.g. activity)
 ```
 
@@ -74,3 +77,12 @@ frontend/
 - **Observability:** `reportError` / `reportMetric` (with Web Vitals: LCP, INP,
   CLS, FCP, TTFB) dispatch `codegraph:error` / `codegraph:metric` window events
   for a future telemetry sink to subscribe.
+- **Distributed tracing:** `lib/tracing.ts` configures a `WebTracerProvider`
+  with a `ZoneContextManager`. `FetchInstrumentation` injects a `traceparent`
+  header into every API-origin request (scoped via `getRuntimeApiBase`) so
+  the FastAPI `FastAPIInstrumentor` chains spans server-side. Console
+  exporter by default; OTLP/HTTP when `VITE_OTEL_EXPORTER_OTLP_ENDPOINT` is
+  set. Dynamically imported at boot (~31 kB gz, separate chunk).
+- **Live observability surface:** the `/settings` page surfaces the
+  resolved tracing state (on/disabled, exporter target) so you can see at
+  a glance whether traceparent is being injected.

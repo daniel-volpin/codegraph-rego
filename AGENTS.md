@@ -29,7 +29,7 @@ Keep this file short. Detailed project context lives under `.opencode/project/`.
 - Keep `policy/catalog.json` aligned with Rego rules.
 - Prefer typed helpers and explicit return objects.
 - Use `logging`, not `print`.
-- Avoid frontend/backend contract drift; update `frontend/src/lib/types.ts` when API payloads change.
+- Avoid frontend/backend contract drift; update `frontend/src/lib/schemas.ts` (Zod schemas) when API payloads change. Types in `frontend/src/lib/types.ts` are auto-derived re-exports — no hand-maintained type definitions live there.
 
 ## Benchmark Rules
 
