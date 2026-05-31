@@ -1,0 +1,41 @@
+{
+  "findings": [
+    {
+      "codegraph_violation_id": "ISO-A.10-WEAK-HASH",
+      "end_line": 12,
+      "file_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/tests/fixtures/lexical_noise_v1/src/main/java/com/codegraph/lexicalnoise/L06.java",
+      "rule_id": "baselines.semgrep.rules.iso-a10-weak-hash",
+      "start_line": 12
+    },
+    {
+      "codegraph_violation_id": "ISO-A.8-SQL-INJECTION",
+      "end_line": 23,
+      "file_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/tests/fixtures/lexical_noise_v1/src/main/java/com/codegraph/lexicalnoise/L12.java",
+      "rule_id": "baselines.semgrep.rules.iso-a8-sql-injection",
+      "start_line": 23
+    },
+    {
+      "codegraph_violation_id": "ISO-A.10-WEAK-RANDOM",
+      "end_line": 14,
+      "file_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/tests/fixtures/lexical_noise_v1/src/main/java/com/codegraph/lexicalnoise/L18.java",
+      "rule_id": "baselines.semgrep.rules.iso-a10-weak-random",
+      "start_line": 14
+    },
+    {
+      "codegraph_violation_id": "ISO-A.8-PATH-TRAVERSAL",
+      "end_line": 21,
+      "file_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/tests/fixtures/lexical_noise_v1/src/main/java/com/codegraph/lexicalnoise/L24.java",
+      "rule_id": "baselines.semgrep.rules.iso-a8-path-traversal",
+      "start_line": 21
+    },
+    {
+      "codegraph_violation_id": "ISO-A.8-XPATH-INJECTION",
+      "end_line": 28,
+      "file_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/tests/fixtures/lexical_noise_v1/src/main/java/com/codegraph/lexicalnoise/L30.java",
+      "rule_id": "baselines.semgrep.rules.iso-a8-xpath-injection",
+      "start_line": 28
+    }
+  ],
+  "rules_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/baselines/semgrep/rules",
+  "target": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/tests/fixtures/lexical_noise_v1"
+}

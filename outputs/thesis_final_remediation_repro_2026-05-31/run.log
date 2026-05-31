@@ -1,0 +1,118 @@
+Traceback (most recent call last):
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/run_remediation_eval.py", line 282, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/run_remediation_eval.py", line 173, in main
+    eval_result = ingest_and_evaluate_subset(
+        java_root=workspace.java_root,
+        reset_neo4j=args.reset_neo4j,
+        logger=LOGGER,
+    )
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/codegraph/evaluation/pipeline.py", line 137, in ingest_and_evaluate_subset
+    clear_graph()
+    ~~~~~~~~~~~^^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/codegraph/evaluation/pipeline.py", line 61, in clear_graph
+    session.run("MATCH (n) DETACH DELETE n").consume()
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/work/session.py", line 305, in run
+    self._connect(self._config.default_access_mode)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/work/session.py", line 126, in _connect
+    super()._connect(
+    ~~~~~~~~~~~~~~~~^
+        access_mode, auth=self._config.auth, **acquire_kwargs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/work/workspace.py", line 181, in _connect
+    self._connection = self._pool.acquire(**acquire_kwargs_)
+                       ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_pool.py", line 678, in acquire
+    return self._acquire(
+           ~~~~~~~~~~~~~^
+        self.address, auth, deadline, liveness_check_timeout, unprepared
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_pool.py", line 418, in _acquire
+    return connection_creator()
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_pool.py", line 231, in connection_creator
+    connection = self.opener(
+        address, auth or self.pool_config.auth, deadline
+    )
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_pool.py", line 638, in opener
+    return Bolt.open(
+           ~~~~~~~~~^
+        addr,
+        ^^^^^
+    ...<3 lines>...
+        pool_config=pool_config,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_bolt.py", line 425, in open
+    connection.hello()
+    ~~~~~~~~~~~~~~~~^^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_bolt5.py", line 735, in hello
+    self.fetch_all()
+    ~~~~~~~~~~~~~~^^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_bolt.py", line 882, in fetch_all
+    detail_delta, summary_delta = self.fetch_message()
+                                  ~~~~~~~~~~~~~~~~~~^^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_bolt.py", line 867, in fetch_message
+    res = self._process_message(tag, fields)
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_bolt5.py", line 1202, in _process_message
+    response.on_failure(summary_metadata or {})
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_common.py", line 304, in on_failure
+    raise self._hydrate_error(metadata)
+neo4j.exceptions.ClientError: {neo4j_code: Neo.ClientError.Security.AuthenticationRateLimit} {message: The client has provided incorrect authentication details too many times in a row.} {gql_status: 50N42} {gql_status_description: error: general processing exception - unexpected error. Unexpected error has occurred. See debug log for details.}
+{
+    "name": "benchmark.run",
+    "context": {
+        "trace_id": "0x6e0b7333a6294bb029e9c5cce77567fb",
+        "span_id": "0x6746f4494032881d",
+        "trace_state": "[]"
+    },
+    "kind": "SpanKind.INTERNAL",
+    "parent_id": null,
+    "start_time": "2026-05-31T12:29:15.423900Z",
+    "end_time": "2026-05-31T12:29:15.639578Z",
+    "status": {
+        "status_code": "ERROR",
+        "description": "ClientError: {neo4j_code: Neo.ClientError.Security.AuthenticationRateLimit} {message: The client has provided incorrect authentication details too many times in a row.} {gql_status: 50N42} {gql_status_description: error: general processing exception - unexpected error. Unexpected error has occurred. See debug log for details.}"
+    },
+    "attributes": {
+        "config_name": "remediation_supported_medium",
+        "mode": "dry_run",
+        "max_attempts": 2,
+        "sample_size": 25,
+        "seed": 11,
+        "category_ids": "['hash-md5', 'rng-insecure', 'crypto-md5']",
+        "model": "gpt-4o-mini",
+        "remediation_model": "",
+        "final_status": "failed"
+    },
+    "events": [
+        {
+            "name": "exception",
+            "timestamp": "2026-05-31T12:29:15.639557Z",
+            "attributes": {
+                "exception.type": "neo4j.exceptions.ClientError",
+                "exception.message": "{neo4j_code: Neo.ClientError.Security.AuthenticationRateLimit} {message: The client has provided incorrect authentication details too many times in a row.} {gql_status: 50N42} {gql_status_description: error: general processing exception - unexpected error. Unexpected error has occurred. See debug log for details.}",
+                "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/opentelemetry/trace/__init__.py\", line 589, in use_span\n    yield span\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/opentelemetry/sdk/trace/__init__.py\", line 1105, in start_as_current_span\n    yield span\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/run_remediation_eval.py\", line 173, in main\n    eval_result = ingest_and_evaluate_subset(\n        java_root=workspace.java_root,\n        reset_neo4j=args.reset_neo4j,\n        logger=LOGGER,\n    )\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/codegraph/evaluation/pipeline.py\", line 137, in ingest_and_evaluate_subset\n    clear_graph()\n    ~~~~~~~~~~~^^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/codegraph/evaluation/pipeline.py\", line 61, in clear_graph\n    session.run(\"MATCH (n) DETACH DELETE n\").consume()\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/work/session.py\", line 305, in run\n    self._connect(self._config.default_access_mode)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/work/session.py\", line 126, in _connect\n    super()._connect(\n    ~~~~~~~~~~~~~~~~^\n        access_mode, auth=self._config.auth, **acquire_kwargs\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/work/workspace.py\", line 181, in _connect\n    self._connection = self._pool.acquire(**acquire_kwargs_)\n                       ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_pool.py\", line 678, in acquire\n    return self._acquire(\n           ~~~~~~~~~~~~~^\n        self.address, auth, deadline, liveness_check_timeout, unprepared\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_pool.py\", line 418, in _acquire\n    return connection_creator()\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_pool.py\", line 231, in connection_creator\n    connection = self.opener(\n        address, auth or self.pool_config.auth, deadline\n    )\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_pool.py\", line 638, in opener\n    return Bolt.open(\n           ~~~~~~~~~^\n        addr,\n        ^^^^^\n    ...<3 lines>...\n        pool_config=pool_config,\n        ^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_bolt.py\", line 425, in open\n    connection.hello()\n    ~~~~~~~~~~~~~~~~^^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_bolt5.py\", line 735, in hello\n    self.fetch_all()\n    ~~~~~~~~~~~~~~^^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_bolt.py\", line 882, in fetch_all\n    detail_delta, summary_delta = self.fetch_message()\n                                  ~~~~~~~~~~~~~~~~~~^^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_bolt.py\", line 867, in fetch_message\n    res = self._process_message(tag, fields)\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_bolt5.py\", line 1202, in _process_message\n    response.on_failure(summary_metadata or {})\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/lib/python3.14/site-packages/neo4j/_sync/io/_common.py\", line 304, in on_failure\n    raise self._hydrate_error(metadata)\nneo4j.exceptions.ClientError: {neo4j_code: Neo.ClientError.Security.AuthenticationRateLimit} {message: The client has provided incorrect authentication details too many times in a row.} {gql_status: 50N42} {gql_status_description: error: general processing exception - unexpected error. Unexpected error has occurred. See debug log for details.}\n",
+                "exception.escaped": "False"
+            }
+        }
+    ],
+    "links": [],
+    "resource": {
+        "attributes": {
+            "telemetry.sdk.language": "python",
+            "telemetry.sdk.name": "opentelemetry",
+            "telemetry.sdk.version": "1.37.0",
+            "service.name": "unknown_service"
+        },
+        "schema_url": ""
+    }
+}

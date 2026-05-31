@@ -1,0 +1,29 @@
+{
+  "status": "failed",
+  "stage": "finalization",
+  "started_at": "2026-05-31T12:29:15.423390+00:00",
+  "updated_at": "2026-05-31T12:29:15.636278+00:00",
+  "elapsed_seconds": 0.21,
+  "processed_cases": 0,
+  "total_cases": 0,
+  "percent_complete": 1.0,
+  "eta_seconds": 0.0,
+  "attempted": 0,
+  "structured_valid": 0,
+  "replacement_applied": 0,
+  "build_attempted": 0,
+  "build_success": 0,
+  "policy_fixed": 0,
+  "final_status_counts": {
+    "OK": 0,
+    "NO_FIX": 0,
+    "GENERATION_ERROR": 0,
+    "REPLACEMENT_ERROR": 0,
+    "BUILD_ERROR": 0,
+    "VERIFICATION_ERROR": 0
+  },
+  "untracked_status_counts": {},
+  "mode": "dry_run",
+  "max_attempts": 2,
+  "latest_case": null
+}

@@ -1,0 +1,18 @@
+\begin{table}[h]
+\centering
+\begin{tabular}{lrrrrrrrr}
+\hline
+Rule ID & CWE & Category & Control/reference & Mapping type & Rego module & Rego rule & Evidence fields & Remediation tier \\
+\hline
+ISO-A.10-WEAK-CRYPTO & CWE-327 & Crypto (CWE-327) & ISO/IEC 27001:2022 A.10 & direct ISO clause & policy/iso\_27001\_crypto.rego & violations & signature, file\_path, called\_signatures, source\_code, analysis\_flags & guarded \\
+ISO-A.10-WEAK-HASH & CWE-328 & Hash (CWE-328) & ISO/IEC 27001:2022 A.10 & direct ISO clause & policy/iso\_27001\_crypto.rego & violations & signature, file\_path, called\_signatures, source\_code, analysis\_flags & full \\
+ISO-A.10-WEAK-RANDOM & CWE-330 & Randomness (CWE-330) & ISO/IEC 27001:2022 A.10 & direct ISO clause & policy/iso\_27001\_crypto.rego & violations & signature, file\_path, called\_signatures, source\_code & full \\
+ISO-A.8-SQL-INJECTION & CWE-89 & SQL Injection (CWE-89) & Pragmatic mapping for OWASP Benchmark evaluation & pragmatic benchmark mapping & policy/iso\_27001\_injection.rego & violations & signature, file\_path, source\_code, called\_signatures & manual \\
+ISO-A.8-PATH-TRAVERSAL & CWE-22 & Path Traversal (CWE-22) & Pragmatic mapping for OWASP Benchmark evaluation & pragmatic benchmark mapping & policy/iso\_27001\_injection.rego & violations & signature, file\_path, source\_code, called\_signatures, analysis\_flags & manual \\
+ISO-A.8-CMD-INJECTION & CWE-78 & Command Injection (CWE-78) & Pragmatic mapping for OWASP Benchmark evaluation & pragmatic benchmark mapping & policy/iso\_27001\_injection.rego & violations & signature, file\_path, source\_code, called\_signatures, analysis\_flags & manual \\
+ISO-A.8-LDAP-INJECTION & CWE-90 & LDAP Injection (CWE-90) & Pragmatic mapping for OWASP Benchmark evaluation & pragmatic benchmark mapping & policy/iso\_27001\_injection.rego & violations & signature, file\_path, source\_code, called\_signatures, analysis\_flags & manual \\
+ISO-A.8-XPATH-INJECTION & CWE-643 & XPath Injection (CWE-643) & Pragmatic mapping for OWASP Benchmark evaluation & pragmatic benchmark mapping & policy/iso\_27001\_injection.rego & violations & signature, file\_path, source\_code, called\_signatures, analysis\_flags & manual \\
+\hline
+\end{tabular}
+\caption{Policy traceability for evaluated OWASP Benchmark families}
+\end{table}

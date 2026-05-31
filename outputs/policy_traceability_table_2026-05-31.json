@@ -1,0 +1,144 @@
+{
+  "generated_at": "2026-05-31T12:36:49+00:00",
+  "rows": [
+    {
+      "category": "Crypto (CWE-327)",
+      "control_reference": "ISO/IEC 27001:2022 A.10",
+      "cwe": "CWE-327",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "called_signatures",
+        "source_code",
+        "analysis_flags"
+      ],
+      "mapping_type": "direct ISO clause",
+      "rego_module": "policy/iso_27001_crypto.rego",
+      "rego_rule": "violations",
+      "remediation_tier": "guarded",
+      "rule_id": "ISO-A.10-WEAK-CRYPTO"
+    },
+    {
+      "category": "Hash (CWE-328)",
+      "control_reference": "ISO/IEC 27001:2022 A.10",
+      "cwe": "CWE-328",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "called_signatures",
+        "source_code",
+        "analysis_flags"
+      ],
+      "mapping_type": "direct ISO clause",
+      "rego_module": "policy/iso_27001_crypto.rego",
+      "rego_rule": "violations",
+      "remediation_tier": "full",
+      "rule_id": "ISO-A.10-WEAK-HASH"
+    },
+    {
+      "category": "Randomness (CWE-330)",
+      "control_reference": "ISO/IEC 27001:2022 A.10",
+      "cwe": "CWE-330",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "called_signatures",
+        "source_code"
+      ],
+      "mapping_type": "direct ISO clause",
+      "rego_module": "policy/iso_27001_crypto.rego",
+      "rego_rule": "violations",
+      "remediation_tier": "full",
+      "rule_id": "ISO-A.10-WEAK-RANDOM"
+    },
+    {
+      "category": "SQL Injection (CWE-89)",
+      "control_reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "cwe": "CWE-89",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "source_code",
+        "called_signatures"
+      ],
+      "mapping_type": "pragmatic benchmark mapping",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "remediation_tier": "manual",
+      "rule_id": "ISO-A.8-SQL-INJECTION"
+    },
+    {
+      "category": "Path Traversal (CWE-22)",
+      "control_reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "cwe": "CWE-22",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "source_code",
+        "called_signatures",
+        "analysis_flags"
+      ],
+      "mapping_type": "pragmatic benchmark mapping",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "remediation_tier": "manual",
+      "rule_id": "ISO-A.8-PATH-TRAVERSAL"
+    },
+    {
+      "category": "Command Injection (CWE-78)",
+      "control_reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "cwe": "CWE-78",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "source_code",
+        "called_signatures",
+        "analysis_flags"
+      ],
+      "mapping_type": "pragmatic benchmark mapping",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "remediation_tier": "manual",
+      "rule_id": "ISO-A.8-CMD-INJECTION"
+    },
+    {
+      "category": "LDAP Injection (CWE-90)",
+      "control_reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "cwe": "CWE-90",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "source_code",
+        "called_signatures",
+        "analysis_flags"
+      ],
+      "mapping_type": "pragmatic benchmark mapping",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "remediation_tier": "manual",
+      "rule_id": "ISO-A.8-LDAP-INJECTION"
+    },
+    {
+      "category": "XPath Injection (CWE-643)",
+      "control_reference": "Pragmatic mapping for OWASP Benchmark evaluation",
+      "cwe": "CWE-643",
+      "evidence_fields": [
+        "signature",
+        "file_path",
+        "source_code",
+        "called_signatures",
+        "analysis_flags"
+      ],
+      "mapping_type": "pragmatic benchmark mapping",
+      "rego_module": "policy/iso_27001_injection.rego",
+      "rego_rule": "violations",
+      "remediation_tier": "manual",
+      "rule_id": "ISO-A.8-XPATH-INJECTION"
+    }
+  ],
+  "safe_wording": "CodeGraph operationalises selected security/compliance concerns as Rego policies. The evaluated crypto/hash/randomness families use direct ISO A.10-style mappings, while the injection and path-query families are pragmatic OWASP Benchmark CWE mappings into the secure-development control area. The benchmark therefore validates pattern-level detection for those families rather than full standards-compliance fidelity.",
+  "source_files": [
+    "policy/catalog.json",
+    "configs/benchmark/policy_registry.json"
+  ]
+}

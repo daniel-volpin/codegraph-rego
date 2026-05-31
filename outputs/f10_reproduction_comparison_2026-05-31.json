@@ -1,0 +1,121 @@
+{
+  "generated_at": "2026-05-31T12:36:49+00:00",
+  "lexical_noise_java": {
+    "actual": {
+      "delta_fpr": -0.31999999999999995,
+      "delta_fpr_ci": [
+        -0.5,
+        -0.15384615384615385
+      ],
+      "mcnemar_p": 0.0078125,
+      "post_f10": {
+        "f1": 0.4,
+        "fn": 2,
+        "fp": 7,
+        "precision": 0.3,
+        "recall": 0.6,
+        "tn": 18,
+        "tp": 3
+      },
+      "pre_f10": {
+        "f1": 0.261,
+        "fn": 2,
+        "fp": 15,
+        "precision": 0.167,
+        "recall": 0.6,
+        "tn": 10,
+        "tp": 3
+      },
+      "semgrep": {
+        "f1": 1.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "tn": 25,
+        "tp": 5
+      }
+    },
+    "expected": {
+      "delta_fpr": -0.32,
+      "delta_fpr_ci": [
+        -0.478,
+        -0.154
+      ],
+      "mcnemar_p": 0.0078,
+      "post_f10": {
+        "f1": 0.4,
+        "fn": 2,
+        "fp": 7,
+        "precision": 0.3,
+        "recall": 0.6,
+        "tn": 18,
+        "tp": 3
+      },
+      "pre_f10": {
+        "f1": 0.261,
+        "fn": 2,
+        "fp": 15,
+        "precision": 0.167,
+        "recall": 0.6,
+        "tn": 10,
+        "tp": 3
+      },
+      "semgrep": {
+        "f1": 1.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "tn": 25,
+        "tp": 5
+      }
+    },
+    "matches_expected_delta_fpr_ci": false
+  },
+  "owasp_file_level": {
+    "actual": {
+      "post_f10": {
+        "f1": 0.892,
+        "fn": 21,
+        "fp": 24,
+        "precision": 0.885,
+        "recall": 0.898,
+        "tn": 155,
+        "tp": 185
+      },
+      "pre_f10": {
+        "f1": 0.892,
+        "fn": 21,
+        "fp": 24,
+        "precision": 0.885,
+        "recall": 0.898,
+        "tn": 155,
+        "tp": 185
+      },
+      "zero_per_case_deltas": true
+    },
+    "expected": {
+      "post_f10": {
+        "f1": 0.892,
+        "fn": 21,
+        "fp": 24,
+        "precision": 0.885,
+        "recall": 0.898,
+        "tn": 155,
+        "tp": 185
+      },
+      "pre_f10": {
+        "f1": 0.892,
+        "fn": 21,
+        "fp": 24,
+        "precision": 0.885,
+        "recall": 0.898,
+        "tn": 155,
+        "tp": 185
+      },
+      "zero_per_case_deltas": true
+    }
+  },
+  "thesis_action": "Keep the LexicalNoiseJava and OWASP point metrics. Replace the LexicalNoiseJava 95% CI if citing the regenerated artifact: delta FPR CI is [-0.500, -0.154] with seed 42 and 2000 bootstrap resamples, not [-0.478, -0.154]."
+}

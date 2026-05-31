@@ -1,0 +1,1054 @@
+{
+  "benchmark_id": "lexical_noise_v1",
+  "generated_at": "2026-05-31T12:36:49+00:00",
+  "metrics": {
+    "post_f10": {
+      "bootstrap": {
+        "f1": {
+          "ci_high": 0.7000000000000001,
+          "ci_low": 0.0,
+          "confidence": 0.95,
+          "method": "bootstrap_percentile",
+          "n": 30,
+          "n_resamples": 2000,
+          "point": 0.4,
+          "seed": 42
+        },
+        "precision": {
+          "ci_high": 0.625,
+          "ci_low": 0.0,
+          "confidence": 0.95,
+          "method": "bootstrap_percentile",
+          "n": 30,
+          "n_resamples": 2000,
+          "point": 0.3,
+          "seed": 42
+        },
+        "recall": {
+          "ci_high": 1.0,
+          "ci_low": 0.0,
+          "confidence": 0.95,
+          "method": "bootstrap_percentile",
+          "n": 30,
+          "n_resamples": 2000,
+          "point": 0.6,
+          "seed": 42
+        }
+      },
+      "f1": 0.4,
+      "fn": 2,
+      "fp": 7,
+      "name": "post_f10",
+      "precision": 0.3,
+      "recall": 0.6,
+      "tn": 18,
+      "tp": 3
+    },
+    "pre_f10": {
+      "bootstrap": {
+        "f1": {
+          "ci_high": 0.5,
+          "ci_low": 0.0,
+          "confidence": 0.95,
+          "method": "bootstrap_percentile",
+          "n": 30,
+          "n_resamples": 2000,
+          "point": 0.2608695652173913,
+          "seed": 42
+        },
+        "precision": {
+          "ci_high": 0.35714285714285715,
+          "ci_low": 0.0,
+          "confidence": 0.95,
+          "method": "bootstrap_percentile",
+          "n": 30,
+          "n_resamples": 2000,
+          "point": 0.16666666666666666,
+          "seed": 42
+        },
+        "recall": {
+          "ci_high": 1.0,
+          "ci_low": 0.0,
+          "confidence": 0.95,
+          "method": "bootstrap_percentile",
+          "n": 30,
+          "n_resamples": 2000,
+          "point": 0.6,
+          "seed": 42
+        }
+      },
+      "f1": 0.2608695652173913,
+      "fn": 2,
+      "fp": 15,
+      "name": "pre_f10",
+      "precision": 0.16666666666666666,
+      "recall": 0.6,
+      "tn": 10,
+      "tp": 3
+    },
+    "semgrep": {
+      "bootstrap": {
+        "f1": {
+          "ci_high": 1.0,
+          "ci_low": 1.0,
+          "confidence": 0.95,
+          "method": "bootstrap_percentile",
+          "n": 30,
+          "n_resamples": 2000,
+          "point": 1.0,
+          "seed": 42
+        },
+        "precision": {
+          "ci_high": 1.0,
+          "ci_low": 1.0,
+          "confidence": 0.95,
+          "method": "bootstrap_percentile",
+          "n": 30,
+          "n_resamples": 2000,
+          "point": 1.0,
+          "seed": 42
+        },
+        "recall": {
+          "ci_high": 1.0,
+          "ci_low": 1.0,
+          "confidence": 0.95,
+          "method": "bootstrap_percentile",
+          "n": 30,
+          "n_resamples": 2000,
+          "point": 1.0,
+          "seed": 42
+        }
+      },
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "name": "semgrep",
+      "precision": 1.0,
+      "recall": 1.0,
+      "tn": 25,
+      "tp": 5
+    }
+  },
+  "n_cases": 30,
+  "paired": [
+    {
+      "delta_fnr": {
+        "ci_high": 0.0,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fnr",
+        "n": 30,
+        "n_resamples": 2000,
+        "point": 0.0,
+        "seed": 42
+      },
+      "delta_fpr": {
+        "ci_high": -0.15384615384615385,
+        "ci_low": -0.5,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fpr",
+        "n": 30,
+        "n_resamples": 2000,
+        "point": -0.31999999999999995,
+        "seed": 42
+      },
+      "mcnemar": {
+        "b": 8,
+        "c": 0,
+        "n_disagreements": 8,
+        "p_value": 0.0078125,
+        "restrict_to": "all",
+        "test_defined": true
+      },
+      "method_a": "pre_f10",
+      "method_b": "post_f10",
+      "scope": "overall"
+    },
+    {
+      "delta_fnr": {
+        "ci_high": 0.0,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fnr",
+        "n": 30,
+        "n_resamples": 2000,
+        "point": 0.0,
+        "seed": 42
+      },
+      "delta_fpr": {
+        "ci_high": -0.15384615384615385,
+        "ci_low": -0.5,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fpr",
+        "n": 30,
+        "n_resamples": 2000,
+        "point": -0.31999999999999995,
+        "seed": 42
+      },
+      "mcnemar": {
+        "b": 8,
+        "c": 0,
+        "n_disagreements": 8,
+        "p_value": 0.0078125,
+        "restrict_to": "fp_class",
+        "test_defined": true
+      },
+      "method_a": "pre_f10",
+      "method_b": "post_f10",
+      "scope": "fp_class"
+    },
+    {
+      "delta_fnr": {
+        "ci_high": 0.0,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fnr",
+        "n": 6,
+        "n_resamples": 2000,
+        "point": 0.0,
+        "seed": 42
+      },
+      "delta_fpr": {
+        "ci_high": -0.4,
+        "ci_low": -1.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fpr",
+        "n": 6,
+        "n_resamples": 2000,
+        "point": -0.8,
+        "seed": 42
+      },
+      "mcnemar": {
+        "b": 4,
+        "c": 0,
+        "n_disagreements": 4,
+        "p_value": 0.125,
+        "restrict_to": "all",
+        "test_defined": true
+      },
+      "method_a": "pre_f10",
+      "method_b": "post_f10",
+      "scope": "stratum:block_comment"
+    },
+    {
+      "delta_fnr": {
+        "ci_high": 0.0,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fnr",
+        "n": 6,
+        "n_resamples": 2000,
+        "point": 0.0,
+        "seed": 42
+      },
+      "delta_fpr": {
+        "ci_high": 0.0,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fpr",
+        "n": 6,
+        "n_resamples": 2000,
+        "point": 0.0,
+        "seed": 42
+      },
+      "mcnemar": {
+        "b": 0,
+        "c": 0,
+        "n_disagreements": 0,
+        "p_value": null,
+        "restrict_to": "all",
+        "test_defined": false
+      },
+      "method_a": "pre_f10",
+      "method_b": "post_f10",
+      "scope": "stratum:char_literal"
+    },
+    {
+      "delta_fnr": {
+        "ci_high": 0.0,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fnr",
+        "n": 6,
+        "n_resamples": 2000,
+        "point": 0.0,
+        "seed": 42
+      },
+      "delta_fpr": {
+        "ci_high": -0.4,
+        "ci_low": -1.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fpr",
+        "n": 6,
+        "n_resamples": 2000,
+        "point": -0.8,
+        "seed": 42
+      },
+      "mcnemar": {
+        "b": 4,
+        "c": 0,
+        "n_disagreements": 4,
+        "p_value": 0.125,
+        "restrict_to": "all",
+        "test_defined": true
+      },
+      "method_a": "pre_f10",
+      "method_b": "post_f10",
+      "scope": "stratum:line_comment"
+    },
+    {
+      "delta_fnr": {
+        "ci_high": 0.0,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fnr",
+        "n": 6,
+        "n_resamples": 2000,
+        "point": 0.0,
+        "seed": 42
+      },
+      "delta_fpr": {
+        "ci_high": 0.0,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fpr",
+        "n": 6,
+        "n_resamples": 2000,
+        "point": 0.0,
+        "seed": 42
+      },
+      "mcnemar": {
+        "b": 0,
+        "c": 0,
+        "n_disagreements": 0,
+        "p_value": null,
+        "restrict_to": "all",
+        "test_defined": false
+      },
+      "method_a": "pre_f10",
+      "method_b": "post_f10",
+      "scope": "stratum:string_literal"
+    },
+    {
+      "delta_fnr": {
+        "ci_high": 0.0,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fnr",
+        "n": 6,
+        "n_resamples": 2000,
+        "point": 0.0,
+        "seed": 42
+      },
+      "delta_fpr": {
+        "ci_high": 0.0,
+        "ci_low": 0.0,
+        "confidence": 0.95,
+        "method": "bootstrap_percentile",
+        "metric": "delta_fpr",
+        "n": 6,
+        "n_resamples": 2000,
+        "point": 0.0,
+        "seed": 42
+      },
+      "mcnemar": {
+        "b": 0,
+        "c": 0,
+        "n_disagreements": 0,
+        "p_value": null,
+        "restrict_to": "all",
+        "test_defined": false
+      },
+      "method_a": "pre_f10",
+      "method_b": "post_f10",
+      "scope": "stratum:text_block"
+    }
+  ],
+  "per_cwe": null,
+  "per_stratum": {
+    "block_comment": {
+      "methods": {
+        "post_f10": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            }
+          },
+          "f1": 0.0,
+          "fn": 1,
+          "fp": 0,
+          "name": "post_f10",
+          "precision": 0.0,
+          "recall": 0.0,
+          "tn": 5,
+          "tp": 0
+        },
+        "pre_f10": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            }
+          },
+          "f1": 0.0,
+          "fn": 1,
+          "fp": 4,
+          "name": "pre_f10",
+          "precision": 0.0,
+          "recall": 0.0,
+          "tn": 1,
+          "tp": 0
+        },
+        "semgrep": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "name": "semgrep",
+          "precision": 1.0,
+          "recall": 1.0,
+          "tn": 5,
+          "tp": 1
+        }
+      },
+      "n_cases": 6,
+      "n_negative": 5,
+      "n_positive": 1,
+      "stratum": "block_comment"
+    },
+    "char_literal": {
+      "methods": {
+        "post_f10": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            }
+          },
+          "f1": 0.0,
+          "fn": 1,
+          "fp": 0,
+          "name": "post_f10",
+          "precision": 0.0,
+          "recall": 0.0,
+          "tn": 5,
+          "tp": 0
+        },
+        "pre_f10": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 0.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.0,
+              "seed": 42
+            }
+          },
+          "f1": 0.0,
+          "fn": 1,
+          "fp": 0,
+          "name": "pre_f10",
+          "precision": 0.0,
+          "recall": 0.0,
+          "tn": 5,
+          "tp": 0
+        },
+        "semgrep": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "name": "semgrep",
+          "precision": 1.0,
+          "recall": 1.0,
+          "tn": 5,
+          "tp": 1
+        }
+      },
+      "n_cases": 6,
+      "n_negative": 5,
+      "n_positive": 1,
+      "stratum": "char_literal"
+    },
+    "line_comment": {
+      "methods": {
+        "post_f10": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "name": "post_f10",
+          "precision": 1.0,
+          "recall": 1.0,
+          "tn": 5,
+          "tp": 1
+        },
+        "pre_f10": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 0.7499999999999999,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.33333333333333337,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 0.6,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.2,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 0.33333333333333337,
+          "fn": 0,
+          "fp": 4,
+          "name": "pre_f10",
+          "precision": 0.2,
+          "recall": 1.0,
+          "tn": 1,
+          "tp": 1
+        },
+        "semgrep": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "name": "semgrep",
+          "precision": 1.0,
+          "recall": 1.0,
+          "tn": 5,
+          "tp": 1
+        }
+      },
+      "n_cases": 6,
+      "n_negative": 5,
+      "n_positive": 1,
+      "stratum": "line_comment"
+    },
+    "string_literal": {
+      "methods": {
+        "post_f10": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 0.8571428571428571,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.4,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 0.75,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.25,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 0.4,
+          "fn": 0,
+          "fp": 3,
+          "name": "post_f10",
+          "precision": 0.25,
+          "recall": 1.0,
+          "tn": 2,
+          "tp": 1
+        },
+        "pre_f10": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 0.8571428571428571,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.4,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 0.75,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.25,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 0.4,
+          "fn": 0,
+          "fp": 3,
+          "name": "pre_f10",
+          "precision": 0.25,
+          "recall": 1.0,
+          "tn": 2,
+          "tp": 1
+        },
+        "semgrep": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "name": "semgrep",
+          "precision": 1.0,
+          "recall": 1.0,
+          "tn": 5,
+          "tp": 1
+        }
+      },
+      "n_cases": 6,
+      "n_negative": 5,
+      "n_positive": 1,
+      "stratum": "string_literal"
+    },
+    "text_block": {
+      "methods": {
+        "post_f10": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 0.7499999999999999,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.33333333333333337,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 0.6,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.2,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 0.33333333333333337,
+          "fn": 0,
+          "fp": 4,
+          "name": "post_f10",
+          "precision": 0.2,
+          "recall": 1.0,
+          "tn": 1,
+          "tp": 1
+        },
+        "pre_f10": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 0.7499999999999999,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.33333333333333337,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 0.6,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 0.2,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 0.33333333333333337,
+          "fn": 0,
+          "fp": 4,
+          "name": "pre_f10",
+          "precision": 0.2,
+          "recall": 1.0,
+          "tn": 1,
+          "tp": 1
+        },
+        "semgrep": {
+          "bootstrap": {
+            "f1": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "precision": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            },
+            "recall": {
+              "ci_high": 1.0,
+              "ci_low": 0.0,
+              "confidence": 0.95,
+              "method": "bootstrap_percentile",
+              "n": 6,
+              "n_resamples": 2000,
+              "point": 1.0,
+              "seed": 42
+            }
+          },
+          "f1": 1.0,
+          "fn": 0,
+          "fp": 0,
+          "name": "semgrep",
+          "precision": 1.0,
+          "recall": 1.0,
+          "tn": 5,
+          "tp": 1
+        }
+      },
+      "n_cases": 6,
+      "n_negative": 5,
+      "n_positive": 1,
+      "stratum": "text_block"
+    }
+  },
+  "source": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/outputs/lexical_noise_eval_v1/detection_per_case.json"
+}

@@ -1,0 +1,58 @@
+{
+  "config": {
+    "path": "configs/benchmark/remediation_supported_medium.json",
+    "sha256": "b0df1936c8b87e4c87140e004e98552fc473ab1ccb0c8c2dcc2ff6ca7b762566"
+  },
+  "eval_kind": "remediation",
+  "extra": {
+    "build_command": "",
+    "mapping_path": "configs/benchmark/policy_registry.json",
+    "max_attempts": 2,
+    "mode": "dry_run",
+    "reset_neo4j": true,
+    "sample_size": 25,
+    "table_format": "md"
+  },
+  "generated_at": "2026-05-31T12:29:15+00:00",
+  "git": {
+    "branch": "thesis/reproducibility-hardening",
+    "dirty": true,
+    "dirty_files": [
+      "?? configs/benchmark/multicat_all_available.json",
+      "?? outputs/thesis_final_remediation_v2/STALE_SUMMARY_DO_NOT_CITE.md",
+      "?? scripts/evaluation/build_thesis_evidence_artifacts.py",
+      "?? scripts/evaluation/scan_owasp_comment_tokens.py"
+    ],
+    "last_commit_subject": "docs: refresh frontend/backend contract + small drift fixes (#153)",
+    "sha": "eadab28ea4527b4a4df35ce3f07a19f3d0a88dbd"
+  },
+  "llm": {
+    "max_tokens": null,
+    "model": "gpt-4o-mini",
+    "remediation_model": null,
+    "temperature": null
+  },
+  "neo4j": {
+    "uri": "bolt://localhost:7687",
+    "user": "neo4j"
+  },
+  "opa": {
+    "raw": "Version: 1.15.1\nBuild Commit: \nBuild Timestamp: \nBuild Hostname: \nGo Version: go1.26.1\nPlatform: darwin/arm64\nRego Version: v1\nWebAssembly: unavailable"
+  },
+  "output_dir": "outputs/thesis_final_remediation_repro_2026-05-31",
+  "package_version": null,
+  "platform": {
+    "machine": "arm64",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "pyproject_sha256": "c2e7acb2a733a81a01de40e948e887b5bb958815f399710456a4709482cccf00",
+  "python": {
+    "executable": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/.venv/bin/python",
+    "implementation": "CPython",
+    "version": "3.14.3"
+  },
+  "schema_version": 1,
+  "seed": 11,
+  "uv_lock_sha256": "5ed4e74ad47ca23f20f06cce818c5419bb42c506c838a92f69b4869e409e9774"
+}
