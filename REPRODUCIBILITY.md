@@ -230,14 +230,26 @@ Notes:
 
 The v2 baseline at `outputs/thesis_final_remediation_v2/` is preserved.
 The defensibility pass splits the calibration into three populations
-(full / attempted_only / no_fix_only). Re-run into a fresh `_v3`
-directory:
+(full / attempted_only / no_fix_only). The provenance-backed fallback is
+preserved under `outputs/thesis_final_remediation_v3/`:
 
 ```bash
 python run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
   --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/thesis_final_remediation_v3 \
+  --sample-size 60 \
+  --reset-neo4j
+```
+
+After the raw-source evidence preservation fix, promote the clean
+supported-medium remediation artifact under `outputs/thesis_final_remediation_v4/`:
+
+```bash
+python run_remediation_eval.py \
+  --config configs/benchmark/remediation_supported_medium.json \
+  --mapping configs/benchmark/policy_registry.json \
+  --output-dir outputs/thesis_final_remediation_v4 \
   --sample-size 60 \
   --reset-neo4j
 ```
@@ -299,6 +311,9 @@ Latest PR #107 rerun snapshot (2026-05-03):
   attempted builds), full-population Brier `0.095431` / ECE `0.095705`,
   attempted-only Brier `0.094698` / ECE `0.083900`, no-fix-only Brier
   `0.110091` / ECE `0.331800`; provenance SHA `7ad90a2`.
+- remediation v4 (`outputs/thesis_final_remediation_v4/`): raw-source
+  evidence preservation fix applied; fully verified success rate `0.96`
+  (`24/25`), build success rate `1.00` (`24/24` attempted builds).
 
 ### Detection
 

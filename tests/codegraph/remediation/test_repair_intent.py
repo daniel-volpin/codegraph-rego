@@ -36,8 +36,9 @@ def _make_context(
     target_method: str = "com.example.Foo.hash()",
     file_path: str = "src/com/example/Foo.java",
     source_code: str = 'java.security.MessageDigest.getInstance("MD5")',
+    exact_method_source: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    context = {
         "rule_id": rule_id,
         "target_method": target_method,
         "file_path": file_path,
@@ -45,6 +46,9 @@ def _make_context(
             "source_code": source_code,
         },
     }
+    if exact_method_source is not None:
+        context["exact_method_source"] = exact_method_source
+    return context
 
 
 # ---------------------------------------------------------------------------
@@ -539,6 +543,16 @@ class TestPlanRepairIntent(unittest.TestCase):
         self.assertEqual(intent.kind, RepairIntentKind.LITERAL_REPLACEMENT)
         self.assertEqual(intent.rule_id, "ISO-A.10-WEAK-CRYPTO")
         self.assertEqual(intent.support_tier, "guarded")
+        self.assertIsNone(intent.refusal)
+
+    def test_weak_crypto_guarded_uses_exact_method_when_evidence_is_literal_stripped(self) -> None:
+        ctx = _make_context(
+            rule_id="ISO-A.10-WEAK-CRYPTO",
+            source_code='javax.crypto.Cipher.getInstance("")',
+            exact_method_source='javax.crypto.Cipher.getInstance("DES/CBC/PKCS5Padding")',
+        )
+        intent = plan_repair_intent(ctx)
+        self.assertEqual(intent.kind, RepairIntentKind.LITERAL_REPLACEMENT)
         self.assertIsNone(intent.refusal)
 
     def test_weak_crypto_unsupported_subcase_produces_no_repair(self) -> None:

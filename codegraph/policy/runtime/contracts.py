@@ -267,6 +267,7 @@ class PolicyBundle:
     end_line: int | None = None
     modifiers: tuple[str, ...] = ()
     source_code: str = ""
+    source_code_raw: str = ""
     graph_context: PolicyGraphContext = field(default_factory=PolicyGraphContext)
     vector_context: tuple[str, ...] = ()
     analysis_flags: PolicyAnalysisFlags | None = field(default_factory=PolicyAnalysisFlags.empty)
@@ -282,6 +283,7 @@ class PolicyBundle:
             "end_line": self.end_line,
             "modifiers": list(self.modifiers),
             "source_code": self.source_code,
+            "source_code_raw": self.source_code_raw,
             "graph_context": self.graph_context.to_dict(),
             "vector_context": list(self.vector_context),
             "analysis_flags": None if self.analysis_flags is None else self.analysis_flags.to_dict(),
@@ -313,6 +315,7 @@ def build_policy_bundle(
     end_line: Any = None,
     modifiers: Any = (),
     source_code: Any = "",
+    source_code_raw: Any = "",
     graph_context: Mapping[str, Any] | PolicyGraphContext | None = None,
     vector_context: Any = (),
     analysis_flags: Mapping[str, Any] | PolicyAnalysisFlags | None = None,
@@ -354,6 +357,7 @@ def build_policy_bundle(
         end_line=_normalize_optional_int(end_line),
         modifiers=_normalize_string_list(modifiers, field_name="modifiers"),
         source_code="" if source_code is None else str(source_code),
+        source_code_raw="" if source_code_raw is None else str(source_code_raw),
         graph_context=normalized_graph_context,
         vector_context=_normalize_string_list(vector_context, field_name="vector_context"),
         analysis_flags=normalized_analysis_flags,
@@ -382,6 +386,7 @@ def normalize_policy_bundle_mapping(raw: Mapping[str, Any]) -> PolicyBundle:
         end_line=raw.get("end_line"),
         modifiers=raw.get("modifiers", []),
         source_code=raw.get("source_code", ""),
+        source_code_raw=raw.get("source_code_raw", ""),
         graph_context=graph_context,
         vector_context=raw.get("vector_context", []),
         analysis_flags=analysis_flags,

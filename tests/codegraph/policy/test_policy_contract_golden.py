@@ -10,6 +10,7 @@ from codegraph.policy.runtime.contracts import (
     HELPER_SUMMARY_LIST_FIELDS,
     normalize_policy_bundle_mapping,
     serialize_policy_bundle,
+    serialize_policy_input_envelope,
 )
 from codegraph.policy.runtime.opa import normalize_violation_payload
 from codegraph.policy.runtime.opa import evaluate_bundle
@@ -53,6 +54,7 @@ class TestPolicyContractSerialization(unittest.TestCase):
                 "end_line",
                 "modifiers",
                 "source_code",
+                "source_code_raw",
                 "graph_context",
                 "vector_context",
                 "analysis_flags",
@@ -60,6 +62,7 @@ class TestPolicyContractSerialization(unittest.TestCase):
             },
         )
         self.assertEqual(bundle["source_code"], "")
+        self.assertEqual(bundle["source_code_raw"], "")
         self.assertIsNone(bundle["analysis_flags"])
         self.assertEqual(
             bundle["graph_context"],
@@ -113,6 +116,27 @@ class TestPolicyContractSerialization(unittest.TestCase):
         self.assertEqual(bundle["helper_summaries"]["safe_constant_return_vars"], [])
         for field_name in HELPER_SUMMARY_LIST_FIELDS:
             self.assertIn(field_name, bundle["helper_summaries"])
+
+    def test_source_code_raw_survives_input_envelope_serialization(self) -> None:
+        raw_source = 'Cipher.getInstance("DES/CBC/PKCS5Padding");'
+        cleaned_source = "Cipher.getInstance(\"\");"
+
+        envelope = serialize_policy_input_envelope(
+            bundles=[
+                {
+                    "target_method": "org.example.Foo.encrypt()",
+                    "graph_context": {},
+                    "source_code": cleaned_source,
+                    "source_code_raw": raw_source,
+                }
+            ],
+            rules_catalog={},
+            catalog=[],
+        )
+
+        bundle = envelope["bundles"][0]
+        self.assertEqual(bundle["source_code"], cleaned_source)
+        self.assertEqual(bundle["source_code_raw"], raw_source)
 
     def test_normalize_policy_bundle_mapping_rejects_non_mapping_graph_context(self) -> None:
         with self.assertRaisesRegex(TypeError, "graph_context must be a mapping"):

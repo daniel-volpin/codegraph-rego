@@ -40,12 +40,12 @@ Remediation support tiers:
 
 - Provenance-backed remediation rerun: `outputs/thesis_final_remediation_v3/`
   - `18/25 = 0.72`
-- Strongest provenance-backed remediation anchor: `outputs/pr_full_verification_2026-05-11/remediation_supported_medium/`
-  - `19/25 = 0.76`
+- Strongest provenance-backed remediation anchor: `outputs/thesis_final_remediation_v4/`
+  - `24/25 = 0.96`
 
 If a minimum remediation threshold of `70%` is required, use:
 
-- primary anchor: `19/25` PR verification artifact
+- primary anchor: `24/25` remediation v4 artifact
 - fallback anchor: `18/25` remediation v3 artifact
 
 ## Run And Citation Guidance
