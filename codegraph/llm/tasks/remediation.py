@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from codegraph.config import settings
+from codegraph.remediation.contracts import resolve_context_source_code
 from codegraph.remediation.planning import RemediationPlan
 
 
@@ -171,7 +172,7 @@ class RemediationPromptTemplate:
 
         target_method = context.get("target_method") or context.get("method") or "unknown"
         file_path = context.get("file_path") or "unknown"
-        source_code = (context.get("exact_method_source") or evidence.get("source_code") or "").rstrip()
+        source_code = resolve_context_source_code(context).rstrip()
         numbered_source = context.get("numbered_method_source") or ""
         graph_context = cls._build_graph_payload(evidence.get("graph_context") or {})
         vector_context = list(evidence.get("vector_context") or [])[:_MAX_VECTOR_CONTEXT_ITEMS]

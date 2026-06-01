@@ -265,19 +265,19 @@ def build_evidence_bundle(
             end_line=method_snapshot.get("end_line"),
             modifiers=method_snapshot.get("modifiers") or [],
             source_code=source_code_substring_safe,
+            # Preserve the original source for downstream consumers that
+            # need human-readable text (LLM citation grounding,
+            # evidence-card rendering, audit excerpts). Rego policies see
+            # ``source_code`` (the substring-safe view) and never read this
+            # field; the Python regex layer ran on source_code_active above
+            # to set the analysis flags.
+            source_code_raw=source_code,
             graph_context=graph_context,
             vector_context=vector_context,
             analysis_flags=analysis_flags,
             helper_summaries=helper_summaries,
         )
         result = serialize_policy_bundle(bundle)
-        # Preserve the original source for downstream consumers that
-        # need human-readable text (LLM citation grounding,
-        # evidence-card rendering, audit excerpts). Rego policies see
-        # ``source_code`` (the substring-safe view) and never read this
-        # field; the Python regex layer ran on source_code_active above
-        # to set the analysis flags.
-        result["source_code_raw"] = source_code
 
         taint_paths = (
             taint_path_finder.find_reachable_sinks(method_snapshot["signature"])

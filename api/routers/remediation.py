@@ -20,6 +20,26 @@ from codegraph.remediation.orchestration import (
 router = APIRouter()
 LOGGER = logging.getLogger("codegraph.api.routers.remediation")
 
+_SERVER_ERROR_STATUSES = {
+    "ERROR",
+    "GENERATION_ERROR",
+    "REPLACEMENT_ERROR",
+    "BUILD_ERROR",
+    "VERIFICATION_ERROR",
+}
+
+
+def _http_status_for_result(result: dict) -> int:
+    """Map a remediation result ``status`` to an HTTP status code."""
+    status = (result.get("status") or "").upper()
+    if status == "INVALID":
+        return 400
+    if status == "NOT_FOUND":
+        return 404
+    if status in _SERVER_ERROR_STATUSES:
+        return 500
+    return 200
+
 
 @router.post("/remediation/preview", response_model=RemediationPreviewResponse)
 async def remediation_preview(payload: RemediationPreviewRequest):
@@ -29,14 +49,7 @@ async def remediation_preview(payload: RemediationPreviewRequest):
         target_method=payload.target_method,
         file_path=payload.file_path,
     )
-    status = (result.get("status") or "").upper()
-    if status in {"INVALID"}:
-        return JSONResponse(result, status_code=400)
-    if status in {"NOT_FOUND"}:
-        return JSONResponse(result, status_code=404)
-    if status in {"ERROR", "GENERATION_ERROR", "REPLACEMENT_ERROR", "BUILD_ERROR", "VERIFICATION_ERROR"}:
-        return JSONResponse(result, status_code=500)
-    return JSONResponse(result, status_code=200)
+    return JSONResponse(result, status_code=_http_status_for_result(result))
 
 
 @router.post("/remediation/apply", response_model=RemediationApplyResponse)
@@ -49,11 +62,4 @@ async def remediation_apply(payload: RemediationApplyRequest):
         mode=payload.mode,
         max_attempts=payload.max_attempts,
     )
-    status = (result.get("status") or "").upper()
-    if status in {"INVALID"}:
-        return JSONResponse(result, status_code=400)
-    if status in {"NOT_FOUND"}:
-        return JSONResponse(result, status_code=404)
-    if status in {"ERROR", "GENERATION_ERROR", "REPLACEMENT_ERROR", "BUILD_ERROR", "VERIFICATION_ERROR"}:
-        return JSONResponse(result, status_code=500)
-    return JSONResponse(result, status_code=200)
+    return JSONResponse(result, status_code=_http_status_for_result(result))

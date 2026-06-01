@@ -16,7 +16,6 @@ from __future__ import annotations
 import difflib
 import logging
 import os
-import re
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -51,6 +50,8 @@ from codegraph.remediation.contracts import (
     FIX_STRATEGIES,
     NO_FIX_PREFIX,
     build_no_fix_response,
+    preflight_unsupported_reason,
+    resolve_context_source_code,
 )
 from codegraph.remediation.editing import (
     apply_method_edits,
@@ -174,37 +175,8 @@ class RemediationService:
     @classmethod
     def _preflight_fixability_reason(cls, context: Dict[str, Any]) -> Optional[str]:
         rule_id = str(context.get("rule_id") or "")
-        source_code = str(
-            context.get("exact_method_source")
-            or ((context.get("evidence") or {}).get("source_code"))
-            or ""
-        )
-        source_lower = source_code.lower()
-
-        if rule_id == "ISO-A.10-WEAK-CRYPTO":
-            weak_cipher_literals = (
-                "des/cbc/pkcs5padding",
-                "desede/ecb/pkcs5padding",
-                "aes/ecb/",
-                '"rc4"',
-                'cipher.getinstance("des")',
-                'cipher.getinstance("rc4")',
-            )
-            has_supported_literal = any(literal in source_lower for literal in weak_cipher_literals)
-            if not has_supported_literal or "cipher.getinstance" not in source_lower:
-                return "weak-crypto remediation only supports explicit DES/RC4/AES-ECB literal subcases with local cipher context"
-
-        if rule_id == "ISO-A.10-WEAK-RANDOM":
-            supported_patterns = (
-                r"new\s+(?:java\.util\.)?random\s*\(",
-                r"(?:java\.lang\.)?math\s*\.\s*random\s*\(",
-                r"(?:java\.util\.concurrent\.)?threadlocalrandom\s*\.\s*current\s*\(",
-                r"(?:java\.security\.)?securerandom\s*\.\s*getinstance\s*\(\s*\"sha1prng\"\s*\)",
-            )
-            if not any(re.search(pattern, source_lower) for pattern in supported_patterns):
-                return "weak-random remediation only supports local Random/Math.random/ThreadLocalRandom/SHA1PRNG replacements"
-
-        return None
+        source_code = resolve_context_source_code(context)
+        return preflight_unsupported_reason(rule_id, source_code)
 
     @classmethod
     def _build_no_fix_response(
@@ -286,7 +258,7 @@ class RemediationService:
             response["confidence"] = confidence
             return response
 
-        original_source = context.get("exact_method_source") or (context.get("evidence") or {}).get("source_code") or ""
+        original_source = resolve_context_source_code(context)
         diff = _unified_diff(original_source, updated_source or "", label="method")
         if not updated_source:
             return {
