@@ -22,7 +22,6 @@ export NEO4J_USER=neo4j
 export NEO4J_PASS=your_password
 export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
 
-export LLM_PROVIDER=openai
 export LLM_API_BASE=http://localhost:1234/v1
 export LLM_API_KEY=lm-studio
 export LLM_MODEL=qwen3.5-9b-mlx
@@ -50,7 +49,6 @@ defaults — keep it in sync when adding new variables.
 | `NEO4J_USER` | `neo4j` | Neo4j auth user. Required. |
 | `NEO4J_PASS` | _unset_ | Neo4j auth password. Required (no default). |
 | `OWASP_BENCHMARK_ROOT` | _unset_ | Absolute path to the local `BenchmarkJava` checkout. Required for benchmark eval scripts. |
-| `LLM_PROVIDER` | `openai` | LLM transport family (currently OpenAI-compatible only). |
 | `LLM_API_BASE` | `http://localhost:1234/v1` | OpenAI-compatible base URL (LM Studio, vLLM, etc.). |
 | `LLM_API_KEY` | _unset_ | API key sent to the LLM endpoint. Use `lm-studio` for LM Studio. |
 | `LLM_MODEL` | `qwen3.5-9b-mlx` | Default explanation model. |

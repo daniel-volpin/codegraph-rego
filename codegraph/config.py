@@ -2,7 +2,7 @@ import ipaddress
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -75,11 +75,6 @@ class Settings(BaseSettings):
         None,
         validation_alias=AliasChoices("NEO4J_PASS", "neo4j_pass"),
         description="Neo4j password",
-    )
-    llm_provider: str = Field(
-        "openai",
-        validation_alias=AliasChoices("LLM_PROVIDER", "llm_provider"),
-        description="LLM provider",
     )
     llm_model: str = Field(
         "gpt-4o-mini",
@@ -194,16 +189,6 @@ class Settings(BaseSettings):
         gt=0.0,
         validation_alias=AliasChoices("REMEDIATION_CONFIDENCE_TEMPERATURE", "remediation_confidence_temperature"),
         description="Temperature scaling for remediation confidence scoring; >1 softens confidence.",
-    )
-    remediation_ranking_enabled: bool = Field(
-        False,
-        validation_alias=AliasChoices("REMEDIATION_RANKING_ENABLED", "remediation_ranking_enabled"),
-        description="When true, optional backend flows may compute multi-candidate ranking.",
-    )
-    remediation_ranking_mode: Literal["off", "shadow"] = Field(
-        "off",
-        validation_alias=AliasChoices("REMEDIATION_RANKING_MODE", "remediation_ranking_mode"),
-        description="Ranking operation mode. Use 'shadow' to score but not alter decisions.",
     )
     remediation_trace_prompt_enabled: bool = Field(
         False,

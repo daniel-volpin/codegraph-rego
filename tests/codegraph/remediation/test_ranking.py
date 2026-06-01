@@ -169,14 +169,6 @@ def test_build_ranking_summary():
     assert summary.per_rule["r1"]["llm"] == 1
 
 
-def test_config_flag_default_behavior():
-    from codegraph.config import Settings
-
-    settings = Settings(_env_file=None)
-    assert settings.remediation_ranking_enabled is False
-    assert settings.remediation_ranking_mode == "off"
-
-
 def test_artifact_serialization():
     outcome = CandidateOutcome(source="llm", produced_edits=True, refused=False, edit_count=1)
     result = rank_candidates("v1", "r1", [outcome])
