@@ -193,7 +193,6 @@ Important environment variables:
 - `NEO4J_URI`
 - `NEO4J_USER`
 - `NEO4J_PASS`
-- `LLM_PROVIDER`
 - `LLM_MODEL`
 - `LLM_API_BASE`
 - `LLM_API_KEY`
