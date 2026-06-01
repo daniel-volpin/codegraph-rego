@@ -141,7 +141,7 @@ def evaluate_policies(
             normalized = _normalize_violation_payload(violation)
             if normalized is None:
                 continue
-            violation_id = normalized.get("violation_id") or normalized.get("id")
+            violation_id = normalized.get("violation_id")
             if allowed_rule_ids and str(violation_id or "").strip() not in allowed_rule_ids:
                 continue
             if violation_id is not None:
@@ -239,7 +239,7 @@ class PolicyEvaluator:
             normalized = _normalize_violation_payload(violation)
             if normalized is None:
                 continue
-            violation_id = normalized.get("violation_id") or normalized.get("id")
+            violation_id = normalized.get("violation_id")
             control_meta = _resolve_catalog_entry(violation_id, catalog)
             violations.append(_build_violation_response(normalized, bundle, control_meta))
         return {

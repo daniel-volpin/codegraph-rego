@@ -56,7 +56,7 @@ def build_violation_response(
     decision_id: str | None = None,
     evaluated_at: str | None = None,
 ) -> dict[str, Any]:
-    violation_id = normalized.get("violation_id") or normalized.get("id")
+    violation_id = normalized.get("violation_id")
     # Prefer the raw source for human-facing fields (citation grounding,
     # evidence-card rendering, audit excerpts). ``source_code`` carries
     # the lexically-active view used by Rego matching; ``source_code_raw``
