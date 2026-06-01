@@ -107,7 +107,7 @@ python run_remediation_eval.py \
   --reset-neo4j
 ```
 
-The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/pr_full_verification_2026-05-11/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier runs under `outputs/detection_calibration_path_precision_v4/` and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` are preserved as historical reference only.
+The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/thesis_final_remediation_v4/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier runs under `outputs/detection_calibration_path_precision_v4/` and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` are preserved as historical reference only.
 
 ## 4. Recommended Explanation-Eval Defaults
 
@@ -312,8 +312,8 @@ Latest PR #107 rerun snapshot (2026-05-03):
   attempted-only Brier `0.094698` / ECE `0.083900`, no-fix-only Brier
   `0.110091` / ECE `0.331800`; provenance SHA `7ad90a2`.
 - remediation v4 (`outputs/thesis_final_remediation_v4/`): raw-source
-  evidence preservation fix applied; fully verified success rate `0.96`
-  (`24/25`), build success rate `1.00` (`24/24` attempted builds).
+  evidence preservation fix applied; fully verified success rate `1.00`
+  (`25/25`), build success rate `1.00` (`25/25` attempted builds).
 
 ### Detection
 
