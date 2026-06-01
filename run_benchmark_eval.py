@@ -7,25 +7,24 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from codegraph.telemetry import install_log_correlation
 from codegraph.db import get_neo4j_driver
 from codegraph.evaluation.benchmark import (
     CategorySpec,
 )
 from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
 from codegraph.evaluation.pipeline import (
-    ingest_and_evaluate_subset,
     group_violations_by_testcase,
+    ingest_and_evaluate_subset,
     load_benchmark_evaluation_context,
     staged_benchmark_workspace,
 )
 from codegraph.evaluation.provenance import collect_provenance, write_provenance
 from codegraph.evaluation.uncertainty import bootstrap_prf_ci, wilson_score_ci
+from codegraph.telemetry import install_log_correlation
 
 LOGGER = logging.getLogger("codegraph.eval.benchmark")
 
@@ -68,13 +67,13 @@ def parse_args() -> argparse.Namespace:
 
 def extract_api_occurrences(
     file_path: Path,
-    terms: List[str],
+    terms: list[str],
     context_lines: int = 3,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     if not file_path.is_file():
         return []
     lines = file_path.read_text(encoding="utf-8").splitlines()
-    occurrences: List[Dict[str, Any]] = []
+    occurrences: list[dict[str, Any]] = []
     lowered_terms = [term.lower() for term in terms]
     for idx, line in enumerate(lines):
         if any(term in line.lower() for term in lowered_terms):
@@ -90,7 +89,7 @@ def extract_api_occurrences(
     return occurrences
 
 
-def fetch_graph_debug(file_path: Optional[str]) -> Dict[str, Any]:
+def fetch_graph_debug(file_path: str | None) -> dict[str, Any]:
     if not file_path:
         return {}
     driver = get_neo4j_driver()
@@ -111,16 +110,16 @@ def fetch_graph_debug(file_path: Optional[str]) -> Dict[str, Any]:
 
 def score_category(
     category: CategorySpec,
-    ground_truth: Dict[str, bool],
-    testcases: List[str],
-    violations_by_testcase: Dict[str, List[Dict[str, Any]]],
+    ground_truth: dict[str, bool],
+    testcases: list[str],
+    violations_by_testcase: dict[str, list[dict[str, Any]]],
     *,
     ci_seed: int | None = 7,
     ci_resamples: int = 2000,
     ci_confidence: float = 0.95,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     tp = fp = tn = fn = 0
-    outcomes: List[tuple[bool, bool]] = []
+    outcomes: list[tuple[bool, bool]] = []
     for testcase_id in testcases:
         label = ground_truth.get(testcase_id)
         if label is None:
@@ -225,9 +224,9 @@ def main() -> int:
         violations = eval_result.get("violations") or []
         violations_by_testcase = group_violations_by_testcase(violations)
 
-        metrics: Dict[str, Any] = {}
-        rows: List[List[Any]] = []
-        fn_records: List[Dict[str, Any]] = []
+        metrics: dict[str, Any] = {}
+        rows: list[list[Any]] = []
+        fn_records: list[dict[str, Any]] = []
         for category_id in context.selected_category_ids:
             spec = categories_by_id.get(category_id)
             if not spec:

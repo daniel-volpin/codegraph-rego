@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict
-
 from codegraph.policy.analysis.patterns import (
     CMDI_PATTERNS,
     LDAP_PATTERNS,
@@ -264,7 +262,7 @@ class PolicyIndicatorAnalyzer:
         self._sql_safety = SQLSafetyAnalyzer()
 
     @staticmethod
-    def empty_flags() -> Dict[str, bool]:
+    def empty_flags() -> dict[str, bool]:
         return {
             "md5_literal": False,
             "md5_variable": False,
@@ -298,7 +296,7 @@ class PolicyIndicatorAnalyzer:
             "sql_dynamic_query_detected": False,
         }
 
-    def analyze(self, source_code: str) -> Dict[str, bool]:
+    def analyze(self, source_code: str) -> dict[str, bool]:
         if not source_code:
             return self.empty_flags()
 

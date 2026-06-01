@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict
+from typing import Any
 
 from codegraph.config import settings
 from codegraph.policy.integration import evaluate_policies, get_policy_catalog_payload
@@ -14,7 +14,7 @@ def evaluate(
     max_per_violation_id: int | None = None,
     rule_ids: list[str] | None = None,
     workspace_root: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run OPA evaluation and return the enriched result dictionary."""
     resolved_workspace_root = workspace_root
     if resolved_workspace_root is None:
@@ -28,6 +28,6 @@ def evaluate(
     )
 
 
-def catalog() -> Dict[str, Any]:
+def catalog() -> dict[str, Any]:
     """Return policy catalog metadata for UI consumption."""
     return get_policy_catalog_payload()

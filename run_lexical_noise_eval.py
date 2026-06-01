@@ -34,7 +34,6 @@ from codegraph.evaluation.lexical_noise_eval import (
 )
 from codegraph.evaluation.provenance import collect_provenance, write_provenance
 
-
 _DEFAULT_MANIFEST = "configs/benchmark/lexical_noise_v1.json"
 
 

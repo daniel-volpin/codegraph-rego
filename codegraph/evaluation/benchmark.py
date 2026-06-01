@@ -8,9 +8,10 @@ import random
 import re
 import shutil
 import xml.etree.ElementTree as ET
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 
@@ -19,9 +20,9 @@ LOGGER = logging.getLogger(__name__)
 class CategorySpec:
     id: str
     label: str
-    cwes: List[str]
-    rego_rules: List[str]
-    iso_controls: List[str] = field(default_factory=list)
+    cwes: list[str]
+    rego_rules: list[str]
+    iso_controls: list[str] = field(default_factory=list)
     remediation_tier: str = "manual"
     framework_demo: bool = False
 
@@ -31,7 +32,7 @@ class GroundTruthRecord:
     testcase_id: str
     cwe: str
     label: bool
-    category: Optional[str] = None
+    category: str | None = None
 
 
 @dataclass(frozen=True)
@@ -40,7 +41,7 @@ class CoverageStats:
     selected_cases: int
     sampled: bool
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "available_cases": int(self.available_cases),
             "selected_cases": int(self.selected_cases),
@@ -67,7 +68,7 @@ def _normalize_key(key: str) -> str:
     return key.strip().lstrip("#").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
 
 
-def _first_value(row: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
+def _first_value(row: dict[str, Any], keys: Iterable[str]) -> str | None:
     for key in keys:
         if key in row and row[key] is not None:
             value = str(row[key]).strip()
@@ -76,7 +77,7 @@ def _first_value(row: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
     return None
 
 
-def _parse_truth(value: str | None) -> Optional[bool]:
+def _parse_truth(value: str | None) -> bool | None:
     if value is None:
         return None
     lowered = value.strip().lower()
@@ -93,13 +94,13 @@ def _expand_env_path(value: str | None) -> str | None:
     return os.path.expandvars(value)
 
 
-def load_mapping_config(path: Path) -> List[CategorySpec]:
+def load_mapping_config(path: Path) -> list[CategorySpec]:
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     categories = payload.get("categories") if isinstance(payload, dict) else payload
     if not isinstance(categories, list):
         raise ValueError("Mapping file must include a 'categories' array.")
-    specs: List[CategorySpec] = []
+    specs: list[CategorySpec] = []
     for entry in categories:
         if not isinstance(entry, dict):
             continue
@@ -121,13 +122,13 @@ def load_mapping_config(path: Path) -> List[CategorySpec]:
     return specs
 
 
-def load_selection_config(path: Path) -> Dict[str, Any]:
+def load_selection_config(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     if not isinstance(payload, dict) or "benchmark_root" not in payload:
         raise ValueError("Selection config must include 'benchmark_root'.")
     raw_max_cases = payload.get("max_cases_per_category")
-    max_cases: Optional[int] = None
+    max_cases: int | None = None
     if isinstance(raw_max_cases, int):
         max_cases = raw_max_cases if raw_max_cases > 0 else None
     elif isinstance(raw_max_cases, str) and raw_max_cases.strip().isdigit():
@@ -147,7 +148,7 @@ def load_selection_config(path: Path) -> Dict[str, Any]:
     }
 
 
-def find_ground_truth_file(benchmark_root: Path, override: Optional[str]) -> Path:
+def find_ground_truth_file(benchmark_root: Path, override: str | None) -> Path:
     if override:
         path = Path(override)
         if not path.is_file():
@@ -167,7 +168,7 @@ def find_ground_truth_file(benchmark_root: Path, override: Optional[str]) -> Pat
     raise FileNotFoundError("Could not locate benchmark ground truth (benchmarkdata.csv/xml or expectedresults*.csv).")
 
 
-def inspect_ground_truth_schema(path: Path) -> Dict[str, Any]:
+def inspect_ground_truth_schema(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError(f"Ground truth file not found: {path}")
     if path.suffix.lower() == ".csv":
@@ -192,15 +193,15 @@ def inspect_ground_truth_schema(path: Path) -> Dict[str, Any]:
     }
 
 
-def load_ground_truth(benchmark_root: Path, ground_truth_path: Optional[str]) -> List[GroundTruthRecord]:
+def load_ground_truth(benchmark_root: Path, ground_truth_path: str | None) -> list[GroundTruthRecord]:
     truth_path = find_ground_truth_file(benchmark_root, ground_truth_path)
     if truth_path.suffix.lower() == ".csv":
         return _load_ground_truth_csv(truth_path)
     return _load_ground_truth_xml(truth_path)
 
 
-def _load_ground_truth_csv(path: Path) -> List[GroundTruthRecord]:
-    records: List[GroundTruthRecord] = []
+def _load_ground_truth_csv(path: Path) -> list[GroundTruthRecord]:
+    records: list[GroundTruthRecord] = []
     with path.open("r", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         for row in reader:
@@ -228,8 +229,8 @@ def _load_ground_truth_csv(path: Path) -> List[GroundTruthRecord]:
     return records
 
 
-def _load_ground_truth_xml(path: Path) -> List[GroundTruthRecord]:
-    records: List[GroundTruthRecord] = []
+def _load_ground_truth_xml(path: Path) -> list[GroundTruthRecord]:
+    records: list[GroundTruthRecord] = []
     tree = ET.parse(path)
     root = tree.getroot()
     for elem in root.iter():
@@ -253,24 +254,24 @@ def _load_ground_truth_xml(path: Path) -> List[GroundTruthRecord]:
 
 @dataclass
 class SelectionResult:
-    selected_by_category: Dict[str, List[GroundTruthRecord]]
-    selected_testcase_ids: List[str]
-    coverage_by_category: Dict[str, CoverageStats] = field(default_factory=dict)
+    selected_by_category: dict[str, list[GroundTruthRecord]]
+    selected_testcase_ids: list[str]
+    coverage_by_category: dict[str, CoverageStats] = field(default_factory=dict)
 
 
 def select_testcases(
-    records: List[GroundTruthRecord],
-    categories: List[CategorySpec],
-    selection: Dict[str, Any],
+    records: list[GroundTruthRecord],
+    categories: list[CategorySpec],
+    selection: dict[str, Any],
 ) -> SelectionResult:
     selected_ids = selection.get("categories") or [spec.id for spec in categories]
     filter_set = set(selection.get("testcase_ids") or [])
     max_cases = selection.get("max_cases_per_category")
     seed = selection.get("seed", 7)
     categories_by_id = {spec.id: spec for spec in categories}
-    selected_by_category: Dict[str, List[GroundTruthRecord]] = {}
-    selected_testcases: List[str] = []
-    coverage_by_category: Dict[str, CoverageStats] = {}
+    selected_by_category: dict[str, list[GroundTruthRecord]] = {}
+    selected_testcases: list[str] = []
+    coverage_by_category: dict[str, CoverageStats] = {}
 
     for idx, category_id in enumerate(selected_ids):
         spec = categories_by_id.get(category_id)
@@ -303,9 +304,9 @@ def select_testcases(
     )
 
 
-def coverage_report(selection: SelectionResult, selected_category_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+def coverage_report(selection: SelectionResult, selected_category_ids: list[str]) -> dict[str, dict[str, Any]]:
     """Return JSON-serializable coverage stats for the selected category ids."""
-    report: Dict[str, Dict[str, Any]] = {}
+    report: dict[str, dict[str, Any]] = {}
     for category_id in selected_category_ids:
         stats = selection.coverage_by_category.get(category_id)
         if stats is None:
@@ -319,12 +320,12 @@ def stage_benchmark_subset(
     java_relative_root: str,
     testcase_ids: Iterable[str],
     dest_root: Path,
-) -> Dict[str, Path]:
+) -> dict[str, Path]:
     source_root = benchmark_root / java_relative_root
     dest_java_root = dest_root / java_relative_root
     dest_java_root.mkdir(parents=True, exist_ok=True)
-    staged: Dict[str, Path] = {}
-    missing: List[str] = []
+    staged: dict[str, Path] = {}
+    missing: list[str] = []
 
     scaffold_entries = [
         "pom.xml",
@@ -373,7 +374,7 @@ def stage_benchmark_subset(
     return staged
 
 
-def extract_testcase_id(value: str | None) -> Optional[str]:
+def extract_testcase_id(value: str | None) -> str | None:
     if not value:
         return None
     match = re.search(r"(BenchmarkTest\d+)", value)

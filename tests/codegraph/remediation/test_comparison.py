@@ -19,7 +19,6 @@ from codegraph.remediation.comparison import (
     render_comparison_summary_markdown,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

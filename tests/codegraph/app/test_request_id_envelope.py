@@ -23,7 +23,6 @@ from codegraph.app import (
     _generic_exception_handler,
 )
 
-
 _UUID_HEX_RE = re.compile(r"^[0-9a-f]{32}$")
 
 

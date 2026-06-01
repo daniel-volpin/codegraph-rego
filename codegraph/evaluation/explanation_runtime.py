@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from codegraph.evaluation.io import write_json
 
@@ -13,10 +13,10 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-CompletedKey = Tuple[str, str, str]  # (cohort, category_id, violation_id)
+CompletedKey = tuple[str, str, str]  # (cohort, category_id, violation_id)
 
 
-def load_completed_violation_outcomes(path: Path) -> Dict[CompletedKey, Dict[str, bool]]:
+def load_completed_violation_outcomes(path: Path) -> dict[CompletedKey, dict[str, bool]]:
     """Read ``request_metrics.jsonl`` and return paired outcomes per violation.
 
     Returns a mapping from ``(cohort, category_id, violation_id)`` to
@@ -27,7 +27,7 @@ def load_completed_violation_outcomes(path: Path) -> Dict[CompletedKey, Dict[str
     skipped silently. Rows without a ``cohort`` field default to ``tp``
     for backward compatibility with pre-cohort-split runs.
     """
-    by_key: Dict[CompletedKey, Dict[str, bool]] = {}
+    by_key: dict[CompletedKey, dict[str, bool]] = {}
     if not path.exists():
         return {}
 
@@ -59,9 +59,9 @@ class ExplanationRuntime:
     output_dir: Path
     benchmark_root: Path
     truth_path: Path
-    truth_schema: Dict[str, Any]
-    selection_cfg: Dict[str, Any]
-    coverage_by_category: Dict[str, Any]
+    truth_schema: dict[str, Any]
+    selection_cfg: dict[str, Any]
+    coverage_by_category: dict[str, Any]
     sample_per_category: int
     evidence_mode: str = "full"
     llm_max_tokens_eval: int | None = None
@@ -84,8 +84,8 @@ class ExplanationRuntime:
         self.request_count = 0
         self.total_request_latency_ms = 0.0
 
-        self.current_category_id: Optional[str] = None
-        self.current_category_label: Optional[str] = None
+        self.current_category_id: str | None = None
+        self.current_category_label: str | None = None
         self.current_category_done = 0
         self.current_category_total = 0
 
@@ -116,12 +116,12 @@ class ExplanationRuntime:
         }
         write_json(self.progress_path, payload)
 
-    def begin_explanations(self, total_target_violations: int, metrics: Dict[str, Any]) -> None:
+    def begin_explanations(self, total_target_violations: int, metrics: dict[str, Any]) -> None:
         self.total_target_violations = total_target_violations
         self.write_live_artifacts(status="running", stage="explanation", metrics=metrics)
 
     def start_category(
-        self, category_id: str, category_label: str, category_total: int, metrics: Dict[str, Any]
+        self, category_id: str, category_label: str, category_total: int, metrics: dict[str, Any]
     ) -> None:
         self.current_category_id = category_id
         self.current_category_label = category_label
@@ -130,7 +130,7 @@ class ExplanationRuntime:
         self.write_live_artifacts(status="running", stage="explanation", metrics=metrics)
 
     def record_violation_result(
-        self, with_context_hit: bool, without_context_hit: bool, metrics: Dict[str, Any]
+        self, with_context_hit: bool, without_context_hit: bool, metrics: dict[str, Any]
     ) -> None:
         self.processed_violations += 1
         self.total_count += 1
@@ -141,20 +141,20 @@ class ExplanationRuntime:
             self.total_without += 1
         self.write_live_artifacts(status="running", stage="explanation", metrics=metrics)
 
-    def record_nonheadline_violation_result(self, metrics: Dict[str, Any]) -> None:
+    def record_nonheadline_violation_result(self, metrics: dict[str, Any]) -> None:
         """Record progress for non-headline cohorts without changing TP totals."""
         self.processed_violations += 1
         self.current_category_done += 1
         self.write_live_artifacts(status="running", stage="explanation", metrics=metrics)
 
-    def write_sample(self, sample: Dict[str, Any]) -> None:
+    def write_sample(self, sample: dict[str, Any]) -> None:
         if self.samples_handle is None:
             return
         self.samples_handle.write(json.dumps(sample) + "\n")
         self.samples_handle.flush()
         self.sample_count += 1
 
-    def write_request_metric(self, metric: Dict[str, Any]) -> None:
+    def write_request_metric(self, metric: dict[str, Any]) -> None:
         self.request_metrics_handle.write(json.dumps(metric) + "\n")
         self.request_metrics_handle.flush()
         self.request_count += 1
@@ -168,11 +168,11 @@ class ExplanationRuntime:
             self.samples_handle = None
         self.request_metrics_handle.close()
 
-    def finalize(self, status: str, metrics: Dict[str, Any]) -> None:
+    def finalize(self, status: str, metrics: dict[str, Any]) -> None:
         self.write_live_artifacts(status=status, stage="finalization", metrics=metrics)
         self.close()
 
-    def write_live_artifacts(self, *, status: str, stage: str, metrics: Dict[str, Any]) -> None:
+    def write_live_artifacts(self, *, status: str, stage: str, metrics: dict[str, Any]) -> None:
         elapsed = self.elapsed_seconds()
         if self.processed_violations > 0 and self.total_target_violations > self.processed_violations:
             seconds_per_item = elapsed / self.processed_violations

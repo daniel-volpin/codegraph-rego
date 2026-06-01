@@ -1,13 +1,14 @@
-from sentence_transformers import SentenceTransformer
-from neo4j import GraphDatabase
+import hashlib
+import json
+import logging
+import os
+from collections.abc import Callable
+from datetime import datetime, timezone
+
 import faiss
 import numpy as np
-import json
-import os
-from datetime import datetime, timezone
-from typing import Callable, Dict, List, Tuple
-import hashlib
-import logging
+from neo4j import GraphDatabase
+from sentence_transformers import SentenceTransformer
 
 from codegraph.config import settings
 
@@ -20,11 +21,11 @@ def _hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _load_embedding_cache(cache_path: str, model_name: str) -> Dict[str, Dict[str, object]]:
+def _load_embedding_cache(cache_path: str, model_name: str) -> dict[str, dict[str, object]]:
     if not os.path.isfile(cache_path):
         return {}
     try:
-        with open(cache_path, "r") as handle:
+        with open(cache_path) as handle:
             payload = json.load(handle) or {}
     except json.JSONDecodeError:
         LOGGER.warning("Embedding cache at %s is invalid JSON; ignoring.", cache_path)
@@ -42,7 +43,7 @@ def _persist_embedding_cache(
     cache_path: str,
     model_name: str,
     dim: int | None,
-    entries: Dict[str, Dict[str, object]],
+    entries: dict[str, dict[str, object]],
 ) -> None:
     payload = {
         "model": model_name,
@@ -80,7 +81,7 @@ class EmbeddingService:
         4. Build a FAISS index for fast vector search and save it to disk.
         5. Save the mapping from FAISS index to method signatures as a JSON file.
         """
-        method_records: List[Tuple[str, str]] = []
+        method_records: list[tuple[str, str]] = []
         if progress_callback:
             progress_callback("embedding", "Fetching methods from Neo4j…", 82.0)
         model = SentenceTransformer(settings.embedding_model_name)
@@ -95,7 +96,7 @@ class EmbeddingService:
                         method_records.append((record["sig"], code))
         signatures = [sig for sig, _ in method_records]
         if rebuild_index:
-            cache_entries: Dict[str, Dict[str, object]] = {}
+            cache_entries: dict[str, dict[str, object]] = {}
         else:
             cache_entries = _load_embedding_cache(settings.embedding_cache_path, settings.embedding_model_name)
         if not signatures:
@@ -104,10 +105,10 @@ class EmbeddingService:
         if progress_callback:
             progress_callback("embedding", f"Preparing {len(signatures)} methods…", 84.0)
         cached_hits = 0
-        to_encode: List[str] = []
-        to_encode_sigs: List[str] = []
-        to_encode_hashes: List[str] = []
-        vectors_by_sig: Dict[str, List[float]] = {}
+        to_encode: list[str] = []
+        to_encode_sigs: list[str] = []
+        to_encode_hashes: list[str] = []
+        vectors_by_sig: dict[str, list[float]] = {}
         cache_dim = None
         if cache_entries:
             sample = next(iter(cache_entries.values()), None)

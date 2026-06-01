@@ -7,8 +7,7 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Dict, List
-
+from typing import Any
 
 DEFAULT_MODELS = ["qwen/qwen3-coder-30b", "qwen3.5-27b"]
 
@@ -88,15 +87,15 @@ def _slugify_model(model: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", model)
 
 
-def _status_counts(results: List[Dict[str, Any]]) -> Dict[str, int]:
-    counts: Dict[str, int] = {}
+def _status_counts(results: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
     for item in results:
         status = str(item.get("status") or "UNKNOWN")
         counts[status] = counts.get(status, 0) + 1
     return counts
 
 
-def _summarize_metrics(model: str, metrics: Dict[str, Any]) -> Dict[str, Any]:
+def _summarize_metrics(model: str, metrics: dict[str, Any]) -> dict[str, Any]:
     results = list(metrics.get("results") or [])
     status_counts = _status_counts(results)
     generation_valid = sum(
@@ -140,7 +139,7 @@ def _summarize_metrics(model: str, metrics: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _render_markdown(summary_rows: List[Dict[str, Any]]) -> str:
+def _render_markdown(summary_rows: list[dict[str, Any]]) -> str:
     headers = [
         "Model",
         "Attempted",
@@ -193,9 +192,9 @@ def _normalize_loaded_model_name(name: str) -> str:
     return re.sub(r"\s+\(\d+\s+variant[s]?\)$", "", name.strip())
 
 
-def _loaded_models() -> List[str]:
+def _loaded_models() -> list[str]:
     result = _run_lms_command("ls")
-    loaded: List[str] = []
+    loaded: list[str] = []
     for line in result.stdout.splitlines():
         if "✓ LOADED" not in line:
             continue
@@ -204,7 +203,7 @@ def _loaded_models() -> List[str]:
     return loaded
 
 
-def _terminate_process(process: subprocess.Popen[str], timeout_seconds: float = 3.0) -> Dict[str, Any]:
+def _terminate_process(process: subprocess.Popen[str], timeout_seconds: float = 3.0) -> dict[str, Any]:
     try:
         stdout, stderr = process.communicate(timeout=timeout_seconds)
         return {"stdout": stdout, "stderr": stderr, "timed_out": False}
@@ -215,11 +214,11 @@ def _terminate_process(process: subprocess.Popen[str], timeout_seconds: float = 
 
 
 def _wait_for_loaded_models(
-    expected_loaded: List[str], timeout_seconds: float = 90.0, poll_seconds: float = 1.5
-) -> Dict[str, Any]:
+    expected_loaded: list[str], timeout_seconds: float = 90.0, poll_seconds: float = 1.5
+) -> dict[str, Any]:
     deadline = time.time() + timeout_seconds
     normalized_expected = sorted(_normalize_loaded_model_name(model) for model in expected_loaded)
-    observations: List[List[str]] = []
+    observations: list[list[str]] = []
     while time.time() < deadline:
         current = sorted(_loaded_models())
         observations.append(current)
@@ -229,7 +228,7 @@ def _wait_for_loaded_models(
     return {"ok": False, "loaded_models": sorted(_loaded_models()), "observations": observations}
 
 
-def _unload_all_models() -> Dict[str, Any]:
+def _unload_all_models() -> dict[str, Any]:
     process = subprocess.Popen(
         [os.path.expanduser("~/.lmstudio/bin/lms"), "unload", "--all"],
         text=True,
@@ -248,7 +247,7 @@ def _unload_all_models() -> Dict[str, Any]:
     }
 
 
-def _load_single_model(model: str) -> Dict[str, Any]:
+def _load_single_model(model: str) -> dict[str, Any]:
     unload_result = _unload_all_models()
     process = subprocess.Popen(
         [os.path.expanduser("~/.lmstudio/bin/lms"), "load", "-y", model],
@@ -280,14 +279,14 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    summary_rows: List[Dict[str, Any]] = []
+    summary_rows: list[dict[str, Any]] = []
 
     for model in args.models:
         slug = _slugify_model(model)
         model_output_dir = output_dir / slug
         model_output_dir.mkdir(parents=True, exist_ok=True)
 
-        load_metadata: Dict[str, Any] | None = None
+        load_metadata: dict[str, Any] | None = None
         if args.load_with_lms:
             load_metadata = _load_single_model(model)
             (model_output_dir / "load.log").write_text(

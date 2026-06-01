@@ -1,8 +1,7 @@
-import os
-import zipfile
-import shutil
 import logging
-from typing import Optional
+import os
+import shutil
+import zipfile
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -19,7 +18,7 @@ def safe_extract_zip(
     max_total_size: int = 500 * 1024 * 1024,
     max_entries: int = 10_000,
     max_compression_ratio: float = 100.0,
-    allowed_exts: Optional[list[str]] = None,
+    allowed_exts: list[str] | None = None,
 ) -> None:
     """
     Safely extract a ZIP to dest_dir, preventing Zip Slip path traversal and enforcing file size/type limits.

@@ -11,7 +11,6 @@ from codegraph.llm.schema.explanation import strip_structured_stop_tokens
 from codegraph.llm.transport.base import LLMRequest, LLMTransport, LLMUnavailableError
 from codegraph.telemetry import get_tracer
 
-
 logger = logging.getLogger("codegraph.llm.transport.openai_compatible")
 _tracer = get_tracer("codegraph.llm.transport")
 

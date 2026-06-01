@@ -17,7 +17,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from codegraph.config import settings
 
@@ -29,7 +29,7 @@ def _now_iso_utc() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _safe_run(cmd: list[str], *, cwd: Optional[Path] = None, timeout: float = 5.0) -> Dict[str, Any]:
+def _safe_run(cmd: list[str], *, cwd: Path | None = None, timeout: float = 5.0) -> dict[str, Any]:
     try:
         proc = subprocess.run(
             cmd,
@@ -52,8 +52,8 @@ def _safe_run(cmd: list[str], *, cwd: Optional[Path] = None, timeout: float = 5.
         return {"error": f"os_error: {exc}"}
 
 
-def _git_info(repo: Path = _PROJECT_ROOT) -> Dict[str, Any]:
-    info: Dict[str, Any] = {}
+def _git_info(repo: Path = _PROJECT_ROOT) -> dict[str, Any]:
+    info: dict[str, Any] = {}
     sha = _safe_run(["git", "rev-parse", "HEAD"], cwd=repo)
     info["sha"] = sha.get("stdout") if sha.get("returncode") == 0 else None
     info["sha_error"] = sha.get("error") or sha.get("stderr") if "stdout" not in sha or sha.get("returncode") != 0 else None
@@ -75,14 +75,14 @@ def _git_info(repo: Path = _PROJECT_ROOT) -> Dict[str, Any]:
     return {k: v for k, v in info.items() if v is not None}
 
 
-def _opa_version() -> Dict[str, Any]:
+def _opa_version() -> dict[str, Any]:
     result = _safe_run(["opa", "version"])
     if result.get("returncode") == 0:
         return {"raw": result.get("stdout")}
     return {"error": result.get("error") or result.get("stderr") or "opa_failed"}
 
 
-def _file_sha256(path: Path) -> Optional[str]:
+def _file_sha256(path: Path) -> str | None:
     try:
         h = hashlib.sha256()
         with path.open("rb") as handle:
@@ -93,7 +93,7 @@ def _file_sha256(path: Path) -> Optional[str]:
         return None
 
 
-def _package_version() -> Optional[str]:
+def _package_version() -> str | None:
     try:
         from importlib.metadata import PackageNotFoundError, version
 
@@ -105,7 +105,7 @@ def _package_version() -> Optional[str]:
         return None
 
 
-def _redact_uri(uri: Optional[str]) -> Optional[str]:
+def _redact_uri(uri: str | None) -> str | None:
     """Strip embedded credentials from a connection URI before recording it."""
     if not uri:
         return uri
@@ -120,7 +120,7 @@ def _redact_uri(uri: Optional[str]) -> Optional[str]:
     return f"{scheme}://***@{host}"
 
 
-def _neo4j_settings() -> Dict[str, Any]:
+def _neo4j_settings() -> dict[str, Any]:
     return {
         "uri": _redact_uri(getattr(settings, "neo4j_uri", None)),
         "user": getattr(settings, "neo4j_user", None),
@@ -130,13 +130,13 @@ def _neo4j_settings() -> Dict[str, Any]:
 def collect_provenance(
     *,
     eval_kind: str,
-    config_path: Optional[str | os.PathLike] = None,
-    output_dir: Optional[str | os.PathLike] = None,
-    seed: Optional[int] = None,
-    llm: Optional[Dict[str, Any]] = None,
-    extra: Optional[Dict[str, Any]] = None,
-    repo_root: Optional[Path] = None,
-) -> Dict[str, Any]:
+    config_path: str | os.PathLike | None = None,
+    output_dir: str | os.PathLike | None = None,
+    seed: int | None = None,
+    llm: dict[str, Any] | None = None,
+    extra: dict[str, Any] | None = None,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
     """Return a JSON-serialisable snapshot of inputs influencing this run.
 
     Flat top level so ``jq .git.sha provenance.json`` works directly.
@@ -146,7 +146,7 @@ def collect_provenance(
     uv_lock = root / "uv.lock"
     pyproject = root / "pyproject.toml"
 
-    provenance: Dict[str, Any] = {
+    provenance: dict[str, Any] = {
         "schema_version": 1,
         "eval_kind": eval_kind,
         "generated_at": _now_iso_utc(),
@@ -179,7 +179,7 @@ def collect_provenance(
     return provenance
 
 
-def write_provenance(provenance: Dict[str, Any], output_dir: str | os.PathLike) -> Path:
+def write_provenance(provenance: dict[str, Any], output_dir: str | os.PathLike) -> Path:
     """Write ``provenance.json`` into ``output_dir`` and return the path."""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)

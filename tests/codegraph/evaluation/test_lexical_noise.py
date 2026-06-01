@@ -30,7 +30,6 @@ from codegraph.evaluation.lexical_noise import (
 )
 from codegraph.policy.source_analysis_core import strip_java_lexical_noise
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 MANIFEST_PATH = PROJECT_ROOT / "configs" / "benchmark" / "lexical_noise_v1.json"
 

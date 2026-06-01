@@ -131,8 +131,9 @@ def test_remediation_prompt_empty_context_no_sections():
 
 def test_apply_flow_does_not_mutate_caller_prompt_context():
     """execute_apply_fix must not mutate the caller's prompt_context dict."""
-    from codegraph.remediation.apply_flow import execute_apply_fix
     from unittest.mock import MagicMock
+
+    from codegraph.remediation.apply_flow import execute_apply_fix
 
     caller_context = {
         "deterministic_baseline_available": True,

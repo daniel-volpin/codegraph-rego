@@ -11,7 +11,6 @@ from codegraph.benchmark_registry import (
 )
 from tests._support import PROJECT_ROOT
 
-
 SCRIPT_PATH = PROJECT_ROOT / "scripts" / "evaluation" / "build_benchmark_demo_pack.py"
 MANIFEST_PATH = PROJECT_ROOT / "demo" / "benchmark-framework-demo" / "manifest.json"
 

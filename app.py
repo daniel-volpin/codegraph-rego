@@ -1,4 +1,5 @@
 import logging
+
 from codegraph.app import app as asgi_app
 from codegraph.config import settings
 

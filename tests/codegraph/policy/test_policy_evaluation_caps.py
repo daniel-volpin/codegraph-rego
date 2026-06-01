@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from tests.codegraph.policy._test_helpers import PolicyTestBase, BundleBuilder
+from tests.codegraph.policy._test_helpers import BundleBuilder, PolicyTestBase
 
 
 class TestPolicyEvaluationCaps(PolicyTestBase):

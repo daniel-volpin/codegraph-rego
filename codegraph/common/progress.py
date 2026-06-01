@@ -18,10 +18,11 @@ from __future__ import annotations
 import contextvars
 import uuid
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 
 def _now() -> str:
@@ -34,20 +35,20 @@ class ProgressState:
     message: str = "Idle"
     progress: float = 0.0
     complete: bool = True
-    error: Optional[str] = None
+    error: str | None = None
     updated_at: str = field(default_factory=_now)
-    started_at: Optional[str] = None
-    request_id: Optional[str] = None
+    started_at: str | None = None
+    request_id: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
 _MAX_TRACKED_JOBS = 64
-_states: "OrderedDict[str, ProgressState]" = OrderedDict()
+_states: OrderedDict[str, ProgressState] = OrderedDict()
 _lock = Lock()
-_latest_request_id: Optional[str] = None
-_current_request_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_latest_request_id: str | None = None
+_current_request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "codegraph_progress_request_id", default=None
 )
 
@@ -56,8 +57,8 @@ _current_request_id: contextvars.ContextVar[Optional[str]] = contextvars.Context
 # are called from whichever thread mutated state, so listener callbacks
 # must be thread-safe (typically they hand off via
 # `loop.call_soon_threadsafe`).
-_StateChangeListener = Callable[[Optional[str]], None]
-_listeners: "list[_StateChangeListener]" = []
+_StateChangeListener = Callable[[str | None], None]
+_listeners: list[_StateChangeListener] = []
 _listeners_lock = Lock()
 
 
@@ -82,7 +83,7 @@ def register_state_change_listener(listener: _StateChangeListener) -> Callable[[
     return _unregister
 
 
-def _notify(changed_rid: Optional[str]) -> None:
+def _notify(changed_rid: str | None) -> None:
     """Fan out to all registered listeners. Exceptions are isolated so one
     misbehaving listener cannot starve the others or leak through to the
     progress writer.
@@ -100,7 +101,7 @@ def _idle_state() -> ProgressState:
     return ProgressState()
 
 
-def _resolve_request_id(explicit: Optional[str]) -> Optional[str]:
+def _resolve_request_id(explicit: str | None) -> str | None:
     if explicit is not None:
         return explicit
     rid = _current_request_id.get()
@@ -119,7 +120,7 @@ def start_progress(
     message: str = "Starting",
     progress: float = 0.0,
     *,
-    request_id: Optional[str] = None,
+    request_id: str | None = None,
 ) -> str:
     """Allocate a new progress slot and return its ``request_id``."""
     global _latest_request_id
@@ -195,7 +196,7 @@ def error_progress(message: str) -> None:
     _notify(rid)
 
 
-def get_progress(*, request_id: Optional[str] = None) -> Dict[str, Any]:
+def get_progress(*, request_id: str | None = None) -> dict[str, Any]:
     rid = _resolve_request_id(request_id)
     with _lock:
         if rid is None:

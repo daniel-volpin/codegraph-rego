@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import json
 import unittest
-from types import SimpleNamespace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest import mock
 
 from codegraph.evaluation import provenance as prov_module

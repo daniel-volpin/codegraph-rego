@@ -22,7 +22,6 @@ from codegraph.evaluation.owasp_lexical_eval import (
     resolve_owasp_root,
 )
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 

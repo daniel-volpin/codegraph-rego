@@ -7,12 +7,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import List
 
 from codegraph import config
 
 
-def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run hybrid semantic code search.")
     parser.add_argument("query", help="Natural language query to search for")
     parser.add_argument(
@@ -42,7 +41,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _print_results(matches: List[str], contexts: List[List[dict]], as_json: bool) -> None:
+def _print_results(matches: list[str], contexts: list[list[dict]], as_json: bool) -> None:
     if as_json:
         print(json.dumps({"matches": matches, "contexts": contexts}, indent=2))
         return
@@ -55,7 +54,7 @@ def _print_results(matches: List[str], contexts: List[List[dict]], as_json: bool
             print(f"    - {rel}: ({node_type}) {target}")
 
 
-def main(argv: List[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     from codegraph.search import service as search_service

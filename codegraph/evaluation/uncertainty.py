@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Any, Callable, Dict, Sequence, Tuple
+from collections.abc import Callable, Sequence
+from typing import Any
 
-Outcome = Tuple[bool, bool]  # (predicted, label)
+Outcome = tuple[bool, bool]  # (predicted, label)
 
 
 # Hardcoded common z-values avoid pulling scipy in for the typical case.
@@ -98,7 +99,7 @@ def wilson_score_ci(
     trials: int,
     *,
     confidence: float = 0.95,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Wilson score interval for a binomial proportion.
 
     Returns a dict with ``point``, ``ci_low``, ``ci_high``, ``n``, ``method``,
@@ -165,7 +166,7 @@ def bootstrap_metric_ci(
     n_resamples: int = 2000,
     confidence: float = 0.95,
     seed: int | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Percentile bootstrap CI for ``metric_fn`` over ``outcomes``.
 
     Resamples ``outcomes`` with replacement ``n_resamples`` times. The CI is the
@@ -219,7 +220,7 @@ def bootstrap_prf_ci(
     n_resamples: int = 2000,
     confidence: float = 0.95,
     seed: int | None = None,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Convenience: bootstrap CIs for precision, recall, and F1 from one set of
     per-case outcomes. Uses the same resamples for all three metrics so the
     intervals are jointly comparable.
@@ -251,7 +252,7 @@ def bootstrap_prf_ci(
     lo_idx = max(0, int(math.floor(alpha * n_resamples)))
     hi_idx = min(n_resamples - 1, int(math.ceil((1 - alpha) * n_resamples)) - 1)
 
-    def _summary(point: float, samples: list[float]) -> Dict[str, Any]:
+    def _summary(point: float, samples: list[float]) -> dict[str, Any]:
         samples.sort()
         return {
             "point": float(point),
@@ -279,7 +280,7 @@ def bootstrap_prf_ci(
 # setting for SAST tool comparison.
 # ---------------------------------------------------------------------------
 
-PairedOutcome = Tuple[bool, bool, bool]  # (pred_a, pred_b, label)
+PairedOutcome = tuple[bool, bool, bool]  # (pred_a, pred_b, label)
 
 
 def _binom_pmf(k: int, n: int, p: float) -> float:
@@ -294,7 +295,7 @@ def paired_classifier_mcnemar(
     paired: Sequence[PairedOutcome],
     *,
     restrict_to: str = "all",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Exact-binomial McNemar's test for two paired classifiers.
 
     Counts discordant pairs:
@@ -377,7 +378,7 @@ def bootstrap_paired_delta_ci(
     n_resamples: int = 2000,
     confidence: float = 0.95,
     seed: int | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Paired bootstrap CI for the *delta* in a per-case rate metric.
 
     ``paired`` is a sequence of ``(pred_a, pred_b, label)`` triples — the

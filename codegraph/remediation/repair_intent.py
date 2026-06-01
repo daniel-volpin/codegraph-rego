@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -144,12 +144,7 @@ class ImportAdjustmentOp(BaseModel):
 
 
 RepairOperation = Annotated[
-    Union[
-        LiteralReplacementOp,
-        ConstructorReplacementOp,
-        MethodCallReplacementOp,
-        ImportAdjustmentOp,
-    ],
+    LiteralReplacementOp | ConstructorReplacementOp | MethodCallReplacementOp | ImportAdjustmentOp,
     Field(discriminator="op_type"),
 ]
 

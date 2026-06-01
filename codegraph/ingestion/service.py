@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from collections.abc import Callable
 
 import javalang
 from javalang.tree import (
@@ -15,7 +15,6 @@ from codegraph.config import settings
 from codegraph.db import ensure_constraints
 from codegraph.ingestion.models import FieldEntity, MethodEntity
 
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -23,7 +22,7 @@ class IngestionError(RuntimeError):
     """Raised when ingestion cannot complete successfully."""
 
 
-def _line_from_position(position: Optional[Tuple[int, int]]) -> Optional[int]:
+def _line_from_position(position: tuple[int, int] | None) -> int | None:
     if not position:
         return None
     if isinstance(position, tuple):
@@ -31,7 +30,7 @@ def _line_from_position(position: Optional[Tuple[int, int]]) -> Optional[int]:
     return getattr(position, "line", None)
 
 
-def _infer_block_end_line(lines: List[str], start_line: Optional[int]) -> Optional[int]:
+def _infer_block_end_line(lines: list[str], start_line: int | None) -> int | None:
     if not start_line or start_line <= 0 or start_line > len(lines):
         return start_line
     open_braces = 0
@@ -50,7 +49,7 @@ def _infer_block_end_line(lines: List[str], start_line: Optional[int]) -> Option
     return start_line
 
 
-def _infer_statement_end_line(lines: List[str], start_line: Optional[int]) -> Optional[int]:
+def _infer_statement_end_line(lines: list[str], start_line: int | None) -> int | None:
     if not start_line or start_line <= 0 or start_line > len(lines):
         return start_line
     for idx in range(start_line - 1, len(lines)):
@@ -59,7 +58,7 @@ def _infer_statement_end_line(lines: List[str], start_line: Optional[int]) -> Op
     return start_line
 
 
-def link_extends_classes_batch(tx, relations: List[Dict[str, str]]) -> None:
+def link_extends_classes_batch(tx, relations: list[dict[str, str]]) -> None:
     tx.run(
         """
         UNWIND $relations AS rel
@@ -71,7 +70,7 @@ def link_extends_classes_batch(tx, relations: List[Dict[str, str]]) -> None:
     )
 
 
-def link_implements_classes_batch(tx, relations: List[Dict[str, str]]) -> None:
+def link_implements_classes_batch(tx, relations: list[dict[str, str]]) -> None:
     tx.run(
         """
         UNWIND $relations AS rel
@@ -83,7 +82,7 @@ def link_implements_classes_batch(tx, relations: List[Dict[str, str]]) -> None:
     )
 
 
-def link_uses_batch(tx, relations: List[Dict[str, str]]) -> None:
+def link_uses_batch(tx, relations: list[dict[str, str]]) -> None:
     tx.run(
         """
         UNWIND $relations AS rel
@@ -95,7 +94,7 @@ def link_uses_batch(tx, relations: List[Dict[str, str]]) -> None:
     )
 
 
-def link_depends_on_batch(tx, relations: List[Dict[str, str]]) -> None:
+def link_depends_on_batch(tx, relations: list[dict[str, str]]) -> None:
     tx.run(
         """
         UNWIND $relations AS rel
@@ -107,7 +106,7 @@ def link_depends_on_batch(tx, relations: List[Dict[str, str]]) -> None:
     )
 
 
-def link_calls_batch(tx, relations: List[Dict[str, str]]) -> None:
+def link_calls_batch(tx, relations: list[dict[str, str]]) -> None:
     tx.run(
         """
         UNWIND $relations AS rel
@@ -143,7 +142,7 @@ def create_field(tx, field: FieldEntity) -> None:
     )
 
 
-def link_method_annotation_batch(tx, relations: List[Dict[str, str]]) -> None:
+def link_method_annotation_batch(tx, relations: list[dict[str, str]]) -> None:
     tx.run(
         """
         UNWIND $relations AS rel
@@ -155,7 +154,7 @@ def link_method_annotation_batch(tx, relations: List[Dict[str, str]]) -> None:
     )
 
 
-def link_method_field_use_batch(tx, relations: List[Dict[str, str]]) -> None:
+def link_method_field_use_batch(tx, relations: list[dict[str, str]]) -> None:
     tx.run(
         """
         UNWIND $relations AS rel
@@ -197,7 +196,7 @@ def create_class_and_method(tx, m: MethodEntity) -> None:
     )
 
 
-def link_nested_classes_batch(tx, relations: List[Dict[str, str]]) -> None:
+def link_nested_classes_batch(tx, relations: list[dict[str, str]]) -> None:
     tx.run(
         """
         UNWIND $relations AS rel
@@ -213,18 +212,18 @@ def walk_class_declarations(
     type_decls,
     package: str,
     file_path: str,
-    file_lines: List[str],
-    parent_fqn: Optional[str] = None,
+    file_lines: list[str],
+    parent_fqn: str | None = None,
 ):
-    methods: List[MethodEntity] = []
-    nested_relations: List[Tuple[str, str]] = []
-    extends_relations: List[Tuple[str, str]] = []
-    implements_relations: List[Tuple[str, str]] = []
-    uses_relations: List[Tuple[str, str]] = []
-    depends_on_relations: List[Tuple[str, str]] = []
-    calls_relations: List[Tuple[str, str]] = []
-    field_entities: List[FieldEntity] = []
-    method_field_relations: List[Tuple[str, str, str]] = []
+    methods: list[MethodEntity] = []
+    nested_relations: list[tuple[str, str]] = []
+    extends_relations: list[tuple[str, str]] = []
+    implements_relations: list[tuple[str, str]] = []
+    uses_relations: list[tuple[str, str]] = []
+    depends_on_relations: list[tuple[str, str]] = []
+    calls_relations: list[tuple[str, str]] = []
+    field_entities: list[FieldEntity] = []
+    method_field_relations: list[tuple[str, str, str]] = []
 
     for decl in type_decls:
         if not isinstance(decl, (ClassDeclaration, InterfaceDeclaration)):
@@ -242,7 +241,7 @@ def walk_class_declarations(
             for impl in getattr(decl, "implements"):
                 implements_relations.append((class_fqn, f"{package}.{getattr(impl, 'name', str(impl))}"))
 
-        declared_fields: Dict[str, FieldEntity] = {}
+        declared_fields: dict[str, FieldEntity] = {}
         for field in getattr(decl, "fields", []):
             field_type = getattr(field.type, "name", str(field.type))
             depends_on_relations.append((class_fqn, f"{package}.{field_type}"))
@@ -294,8 +293,8 @@ def walk_class_declarations(
                 if getattr(method, "body", None)
                 else method_start_line
             )
-            calls: List[str] = []
-            field_usage: Set[str] = set()
+            calls: list[str] = []
+            field_usage: set[str] = set()
             if getattr(method, "body", None):
                 for _, node in method:
                     if isinstance(node, MethodInvocation):
@@ -417,7 +416,7 @@ def walk_class_declarations(
 
 def extract_entities_from_file(file_path: str):
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
         tree = javalang.parse.parse(content)
     except Exception as exc:
@@ -451,17 +450,17 @@ def extract_entities_from_content(file_path: str, content: str):
     )
 
 
-def collect_code_structure(root_dir: str, progress_callback: Optional[Callable[[str, str, float], None]] = None):
-    all_methods: List[MethodEntity] = []
-    all_nested: List[Tuple[str, str]] = []
-    all_extends: List[Tuple[str, str]] = []
-    all_implements: List[Tuple[str, str]] = []
-    all_uses: List[Tuple[str, str]] = []
-    all_depends: List[Tuple[str, str]] = []
-    all_calls: List[Tuple[str, str]] = []
-    all_fields: List[FieldEntity] = []
-    all_method_field_relations: List[Tuple[str, str, str]] = []
-    java_files: List[str] = []
+def collect_code_structure(root_dir: str, progress_callback: Callable[[str, str, float], None] | None = None):
+    all_methods: list[MethodEntity] = []
+    all_nested: list[tuple[str, str]] = []
+    all_extends: list[tuple[str, str]] = []
+    all_implements: list[tuple[str, str]] = []
+    all_uses: list[tuple[str, str]] = []
+    all_depends: list[tuple[str, str]] = []
+    all_calls: list[tuple[str, str]] = []
+    all_fields: list[FieldEntity] = []
+    all_method_field_relations: list[tuple[str, str, str]] = []
+    java_files: list[str] = []
 
     for root, _, files in os.walk(root_dir):
         for file in files:
@@ -525,16 +524,16 @@ def collect_code_structure(root_dir: str, progress_callback: Optional[Callable[[
 
 
 def ingest_to_neo4j(
-    methods: List[MethodEntity],
-    nested_relations: List[tuple],
-    extends_relations: List[tuple],
-    implements_relations: List[tuple],
-    uses_relations: List[tuple],
-    depends_on_relations: List[tuple],
-    calls_relations: List[tuple],
-    field_entities: List[FieldEntity],
-    method_field_relations: List[tuple],
-    progress_callback: Optional[Callable[[str, str, float], None]] = None,
+    methods: list[MethodEntity],
+    nested_relations: list[tuple],
+    extends_relations: list[tuple],
+    implements_relations: list[tuple],
+    uses_relations: list[tuple],
+    depends_on_relations: list[tuple],
+    calls_relations: list[tuple],
+    field_entities: list[FieldEntity],
+    method_field_relations: list[tuple],
+    progress_callback: Callable[[str, str, float], None] | None = None,
 ) -> None:
     def execute_write_or_raise(session, label: str, func, *args) -> None:
         try:
@@ -653,7 +652,7 @@ def ingest_to_neo4j(
 
 def ingest(
     java_root_dir: str,
-    progress_callback: Optional[Callable[[str, str, float], None]] = None,
+    progress_callback: Callable[[str, str, float], None] | None = None,
     sync: bool = False,
 ) -> None:
     java_root_dir = os.path.abspath(java_root_dir)
@@ -777,7 +776,7 @@ def purge_workspace_entities(root_dir: str) -> None:
 def process_single_file_content(
     file_path: str,
     content: str,
-    progress_callback: Optional[Callable[[str, str, float], None]] = None,
+    progress_callback: Callable[[str, str, float], None] | None = None,
 ) -> None:
     """Re-ingest a single Java source file from in-memory content."""
 

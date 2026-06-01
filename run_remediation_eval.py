@@ -8,10 +8,8 @@ import argparse
 import logging
 import random
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
-from codegraph.telemetry import configure_telemetry, get_tracer, install_log_correlation
-from codegraph.remediation.orchestration import apply_remediation
 from codegraph.evaluation.pipeline import (
     collect_category_violations,
     group_violations_by_testcase,
@@ -27,6 +25,8 @@ from codegraph.evaluation.remediation_runtime import (
     build_skipped_result,
     write_final_artifacts,
 )
+from codegraph.remediation.orchestration import apply_remediation
+from codegraph.telemetry import configure_telemetry, get_tracer, install_log_correlation
 
 LOGGER = logging.getLogger("codegraph.eval.remediation")
 
@@ -188,7 +188,7 @@ def main() -> int:
                     selection=context.selection,
                     violations_by_testcase=violations_by_testcase,
                 )
-                candidates: List[Dict[str, Any]] = []
+                candidates: list[dict[str, Any]] = []
                 for category_id in context.selected_category_ids:
                     spec = context.categories_by_id.get(category_id)
                     if not spec:
@@ -206,7 +206,7 @@ def main() -> int:
                 if len(candidates) > args.sample_size:
                     candidates = rng.sample(candidates, k=args.sample_size)
 
-                results: List[Dict[str, Any]] = []
+                results: list[dict[str, Any]] = []
                 runtime.begin(total_cases=len(candidates))
                 for violation in candidates:
                     with tracer.start_as_current_span("benchmark.case") as case_span:

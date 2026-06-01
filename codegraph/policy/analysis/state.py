@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import re
 from dataclasses import dataclass
-from typing import Dict
 
 from codegraph.policy.analysis.primitives import SourceSanitizer
 
@@ -43,7 +42,7 @@ _MAX_INTEGER_ABS = 1_000_000
 @dataclass(frozen=True)
 class AssignmentState:
     tainted_vars: set[str]
-    string_constants: Dict[str, str]
+    string_constants: dict[str, str]
 
 
 class AssignmentStateAnalyzer:
@@ -54,9 +53,9 @@ class AssignmentStateAnalyzer:
     def analyze(self, source_code: str, initial_tainted_vars: set[str] | None = None) -> AssignmentState:
         source_code = SourceSanitizer.strip_comments_and_annotations(source_code)
         tainted_vars = set(initial_tainted_vars or set())
-        string_constants: Dict[str, str] = {}
-        int_constants: Dict[str, int] = {}
-        char_constants: Dict[str, str] = {}
+        string_constants: dict[str, str] = {}
+        int_constants: dict[str, int] = {}
+        char_constants: dict[str, str] = {}
         conditional_spans = self._conditional_assignment_spans(source_code)
 
         for match in SIMPLE_ASSIGNMENT_RE.finditer(source_code):
@@ -140,7 +139,7 @@ class AssignmentStateAnalyzer:
             return self.analyze(collapsed_if_else, initial_tainted_vars=initial_tainted_vars)
 
         tainted_before_join = set(tainted_vars)
-        joined_taint_cutoffs: Dict[str, int] = {}
+        joined_taint_cutoffs: dict[str, int] = {}
 
         # For unresolved branches, keep taint if either side may assign tainted input.
         self._apply_unresolved_if_else_taint_join(
@@ -185,10 +184,10 @@ class AssignmentStateAnalyzer:
         source_code: str,
         *,
         tainted_vars: set[str],
-        string_constants: Dict[str, str],
-        int_constants: Dict[str, int],
-        char_constants: Dict[str, str],
-        joined_taint_cutoffs: Dict[str, int],
+        string_constants: dict[str, str],
+        int_constants: dict[str, int],
+        char_constants: dict[str, str],
+        joined_taint_cutoffs: dict[str, int],
     ) -> None:
         for match in IF_ELSE_ASSIGNMENT_RE.finditer(source_code):
             decision = self._evaluate_constant_boolean(match.group("condition"), int_constants)
@@ -221,10 +220,10 @@ class AssignmentStateAnalyzer:
         source_code: str,
         *,
         tainted_vars: set[str],
-        string_constants: Dict[str, str],
-        int_constants: Dict[str, int],
-        char_constants: Dict[str, str],
-        joined_taint_cutoffs: Dict[str, int],
+        string_constants: dict[str, str],
+        int_constants: dict[str, int],
+        char_constants: dict[str, str],
+        joined_taint_cutoffs: dict[str, int],
     ) -> None:
         for match in IF_ASSIGNMENT_RE.finditer(source_code):
             if IF_ELSE_ASSIGNMENT_RE.fullmatch(match.group(0).strip()):
@@ -250,7 +249,7 @@ class AssignmentStateAnalyzer:
         source_code: str,
         tainted_vars: set[str],
         *,
-        joined_taint_cutoffs: Dict[str, int],
+        joined_taint_cutoffs: dict[str, int],
     ) -> None:
         unresolved_spans = self._conditional_assignment_spans(source_code)
         while True:
@@ -272,7 +271,7 @@ class AssignmentStateAnalyzer:
             tainted_vars.clear()
             tainted_vars.update(updated_taints)
 
-    def _simulate_assignment_flow(self, source_code: str, tainted_vars: set[str]) -> Dict[str, bool]:
+    def _simulate_assignment_flow(self, source_code: str, tainted_vars: set[str]) -> dict[str, bool]:
         simulated_taints = set(tainted_vars)
         assigned_vars: list[str] = []
         for assign in SIMPLE_ASSIGNMENT_RE.finditer(source_code):
@@ -305,9 +304,9 @@ class AssignmentStateAnalyzer:
         var: str,
         *,
         tainted_vars: set[str],
-        string_constants: Dict[str, str],
-        int_constants: Dict[str, int],
-        char_constants: Dict[str, str],
+        string_constants: dict[str, str],
+        int_constants: dict[str, int],
+        char_constants: dict[str, str],
     ) -> None:
         tainted_vars.discard(var)
         string_constants.pop(var, None)
@@ -320,9 +319,9 @@ class AssignmentStateAnalyzer:
         var: str,
         *,
         tainted_vars: set[str],
-        string_constants: Dict[str, str],
-        int_constants: Dict[str, int],
-        char_constants: Dict[str, str],
+        string_constants: dict[str, str],
+        int_constants: dict[str, int],
+        char_constants: dict[str, str],
     ) -> None:
         cls._clear_var_state(
             var,
@@ -340,9 +339,9 @@ class AssignmentStateAnalyzer:
         value: str,
         *,
         tainted_vars: set[str],
-        string_constants: Dict[str, str],
-        int_constants: Dict[str, int],
-        char_constants: Dict[str, str],
+        string_constants: dict[str, str],
+        int_constants: dict[str, int],
+        char_constants: dict[str, str],
     ) -> None:
         cls._clear_var_state(
             var,
@@ -360,9 +359,9 @@ class AssignmentStateAnalyzer:
         value: int,
         *,
         tainted_vars: set[str],
-        string_constants: Dict[str, str],
-        int_constants: Dict[str, int],
-        char_constants: Dict[str, str],
+        string_constants: dict[str, str],
+        int_constants: dict[str, int],
+        char_constants: dict[str, str],
     ) -> None:
         cls._clear_var_state(
             var,
@@ -374,7 +373,7 @@ class AssignmentStateAnalyzer:
         int_constants[var] = value
 
     @staticmethod
-    def _evaluate_constant_boolean(expr: str, int_constants: Dict[str, int]) -> bool | None:
+    def _evaluate_constant_boolean(expr: str, int_constants: dict[str, int]) -> bool | None:
         normalized = expr
         for var, value in int_constants.items():
             normalized = re.sub(rf"\b{re.escape(var)}\b", str(value), normalized)
@@ -473,7 +472,7 @@ class AssignmentStateAnalyzer:
         raise ValueError("unsupported_expression")
 
     @staticmethod
-    def _resolve_selected_switch_body(source_code: str, char_constants: Dict[str, str]) -> str:
+    def _resolve_selected_switch_body(source_code: str, char_constants: dict[str, str]) -> str:
         def _replace(match: re.Match[str]) -> str:
             target = match.group(1)
             body = match.group(2)
@@ -496,10 +495,10 @@ class AssignmentStateAnalyzer:
     def _resolve_selected_list_gets(
         cls,
         source_code: str,
-        string_constants: Dict[str, str],
+        string_constants: dict[str, str],
         tainted_vars: set[str],
     ) -> str:
-        items: Dict[str, list[str]] = {}
+        items: dict[str, list[str]] = {}
         for list_name, raw_value in LIST_ADD_VALUE_RE.findall(source_code):
             resolved = cls._resolve_collection_expr(raw_value.strip(), string_constants, tainted_vars)
             if resolved is not None:
@@ -528,10 +527,10 @@ class AssignmentStateAnalyzer:
     def _resolve_selected_map_gets(
         cls,
         source_code: str,
-        string_constants: Dict[str, str],
+        string_constants: dict[str, str],
         tainted_vars: set[str],
     ) -> str:
-        entries: Dict[str, Dict[str, str]] = {}
+        entries: dict[str, dict[str, str]] = {}
         for map_name, key, raw_value in MAP_PUT_VALUE_RE.findall(source_code):
             resolved = cls._resolve_collection_expr(raw_value.strip(), string_constants, tainted_vars)
             if resolved is not None:
@@ -549,7 +548,7 @@ class AssignmentStateAnalyzer:
     @staticmethod
     def _resolve_collection_expr(
         expr: str,
-        string_constants: Dict[str, str],
+        string_constants: dict[str, str],
         tainted_vars: set[str],
     ) -> str | None:
         literal_match = STRING_LITERAL_FULL_RE.match(expr)
@@ -564,7 +563,7 @@ class AssignmentStateAnalyzer:
 
 class ConditionalAssignmentResolver:
     @staticmethod
-    def resolve(source_code: str, int_constants: Dict[str, int]) -> str:
+    def resolve(source_code: str, int_constants: dict[str, int]) -> str:
         def _replace(match: re.Match[str]) -> str:
             decision = AssignmentStateAnalyzer._evaluate_constant_boolean(match.group("condition"), int_constants)
             if decision is None:

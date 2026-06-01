@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import List
 
 from codegraph import config
 
@@ -16,7 +15,7 @@ def _progress(phase: str, message: str, progress: float) -> None:
     print(f"[{phase:<10}] {pct}% {message}")
 
 
-def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build semantic code embeddings.")
     parser.add_argument("--neo4j-uri", default=config.NEO4J_URI, help="Neo4j Bolt URI")
     parser.add_argument("--neo4j-user", default=config.NEO4J_USER, help="Neo4j username")
@@ -39,7 +38,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: List[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     import codegraph.embedding.service as embedding_module
 

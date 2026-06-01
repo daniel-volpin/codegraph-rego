@@ -1,7 +1,7 @@
 import unittest
-from types import SimpleNamespace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from codegraph.ingestion.service import IngestionError, ingest, ingest_to_neo4j

@@ -6,14 +6,14 @@ reduce coupling with scripts and enable reuse from services and API.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
 import json
 import os
 import threading
+from typing import Any
 
 import faiss  # type: ignore
-from sentence_transformers import SentenceTransformer
 from neo4j import Driver
+from sentence_transformers import SentenceTransformer
 
 from codegraph.config import settings
 
@@ -22,8 +22,8 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 # In-process caches
 _INDEX: Any | None = None
 _INDEX_MTIME: float | None = None
-_SIGMAP: List[str] | None = None
-_SIGMAP_MTIME: Tuple[str, float] | None = None
+_SIGMAP: list[str] | None = None
+_SIGMAP_MTIME: tuple[str, float] | None = None
 _MODEL: SentenceTransformer | None = None
 _MODEL_LOCK = threading.Lock()
 
@@ -40,7 +40,7 @@ def load_faiss_index(index_path: str = settings.faiss_index_path):
     return _INDEX
 
 
-def load_signature_map(map_path: str = settings.signature_map_path) -> List[str]:
+def load_signature_map(map_path: str = settings.signature_map_path) -> list[str]:
     global _SIGMAP, _SIGMAP_MTIME
     candidates = [settings.signature_map_path_full, map_path, settings.signature_map_path]
     last_exc: Exception | None = None
@@ -51,7 +51,7 @@ def load_signature_map(map_path: str = settings.signature_map_path) -> List[str]
         if _SIGMAP is not None and _SIGMAP_MTIME == (candidate, mtime):
             return _SIGMAP
         try:
-            with open(candidate, "r") as f:
+            with open(candidate) as f:
                 _SIGMAP = json.load(f)
             _SIGMAP_MTIME = (candidate, mtime)
             return _SIGMAP
@@ -77,13 +77,13 @@ def load_embedding_model(model_name: str = settings.embedding_model_name) -> Sen
     return _MODEL
 
 
-def semantic_search(query: str, model: SentenceTransformer, index, signature_map: List[str], k: int = 5) -> List[str]:
+def semantic_search(query: str, model: SentenceTransformer, index, signature_map: list[str], k: int = 5) -> list[str]:
     query_vector = model.encode([query], normalize_embeddings=True)
     _, indices = index.search(query_vector, k=k)
     return [signature_map[i] for i in indices[0]]
 
 
-def fetch_graph_context_for_method(sig: str, neo4j_driver: Driver) -> List[Dict[str, Any]]:
+def fetch_graph_context_for_method(sig: str, neo4j_driver: Driver) -> list[dict[str, Any]]:
     with neo4j_driver.session() as session:
         cypher = """
             MATCH (m:Method)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from codegraph.benchmark_registry import (
     iso_rules_payload_from_registry,
@@ -8,17 +8,17 @@ from codegraph.benchmark_registry import (
     policy_catalog_payload_from_registry,
 )
 
-_CATALOG_CACHE: Dict[str, Dict[str, Any]] | None = None
-_CATALOG_ENTRIES_CACHE: List[Dict[str, Any]] | None = None
-_ISO_RULES_CACHE: Dict[str, Any] | None = None
+_CATALOG_CACHE: dict[str, dict[str, Any]] | None = None
+_CATALOG_ENTRIES_CACHE: list[dict[str, Any]] | None = None
+_ISO_RULES_CACHE: dict[str, Any] | None = None
 
 
-def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
+def load_policy_catalog() -> dict[str, dict[str, Any]]:
     global _CATALOG_CACHE, _CATALOG_ENTRIES_CACHE
     if _CATALOG_CACHE is None or _CATALOG_ENTRIES_CACHE is None:
         entries = policy_catalog_entries_from_registry()
-        catalog_lookup: Dict[str, Dict[str, Any]] = {}
-        catalog_entries: List[Dict[str, Any]] = []
+        catalog_lookup: dict[str, dict[str, Any]] = {}
+        catalog_entries: list[dict[str, Any]] = []
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
@@ -37,12 +37,12 @@ def load_policy_catalog() -> Dict[str, Dict[str, Any]]:
     return _CATALOG_CACHE or {}
 
 
-def get_policy_catalog_entries() -> List[Dict[str, Any]]:
+def get_policy_catalog_entries() -> list[dict[str, Any]]:
     load_policy_catalog()
     return list(_CATALOG_ENTRIES_CACHE or [])
 
 
-def violation_id_variants(violation_id: str) -> List[str]:
+def violation_id_variants(violation_id: str) -> list[str]:
     text = str(violation_id).strip()
     if not text:
         return []
@@ -61,8 +61,8 @@ def violation_id_variants(violation_id: str) -> List[str]:
 
 def resolve_catalog_entry(
     violation_id: Any,
-    catalog: Dict[str, Dict[str, Any]],
-) -> Optional[Dict[str, Any]]:
+    catalog: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
     if not violation_id:
         return None
     for candidate in violation_id_variants(str(violation_id)):
@@ -72,14 +72,14 @@ def resolve_catalog_entry(
     return None
 
 
-def load_iso_rules() -> Dict[str, Any]:
+def load_iso_rules() -> dict[str, Any]:
     global _ISO_RULES_CACHE
     if _ISO_RULES_CACHE is None:
         _ISO_RULES_CACHE = iso_rules_payload_from_registry()
     return _ISO_RULES_CACHE or {}
 
 
-def get_policy_catalog_payload() -> Dict[str, Any]:
+def get_policy_catalog_payload() -> dict[str, Any]:
     payload = policy_catalog_payload_from_registry()
     payload["controls"] = get_policy_catalog_entries()
     payload["rules"] = load_iso_rules().get("rules", [])

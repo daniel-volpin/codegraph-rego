@@ -41,5 +41,11 @@ dev = [
 line-length = 120
 target-version = "py310"
 
+[tool.ruff.lint]
+# Keep ruff's defaults and add import sorting (I) and pyupgrade (UP) so
+# type-hint modernization (PEP 585/604) and import order stay enforced
+# and cannot drift back.
+extend-select = ["I", "UP"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]

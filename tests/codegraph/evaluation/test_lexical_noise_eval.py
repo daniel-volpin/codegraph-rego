@@ -26,7 +26,6 @@ from codegraph.evaluation.lexical_noise_eval import (
     format_markdown_summary,
 )
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 MANIFEST_PATH = PROJECT_ROOT / "configs" / "benchmark" / "lexical_noise_v1.json"
 
@@ -453,8 +452,10 @@ class FormatMarkdownTests(unittest.TestCase):
         )
         from codegraph.evaluation.lexical_noise_eval import (
             CaseRow,
-            DetectionResult as DR,
             EvalReport,
+        )
+        from codegraph.evaluation.lexical_noise_eval import (
+            DetectionResult as DR,
         )
         row = CaseRow(
             case_id="L01",

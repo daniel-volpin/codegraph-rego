@@ -4,16 +4,17 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
 from codegraph.db import get_neo4j_driver
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.policy.source_analysis_core import strip_java_lexical_noise
-from codegraph.search.service import HybridSearchService
 from codegraph.policy.taint_graph import TaintPathFinder
+from codegraph.search.service import HybridSearchService
 from codegraph.telemetry import get_tracer
+
 from .catalog import get_policy_catalog_entries, load_iso_rules
 from .contracts import build_policy_bundle, serialize_policy_bundle, serialize_policy_input_envelope
 
@@ -23,11 +24,11 @@ LOGGER = logging.getLogger(__name__)
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.abspath(os.path.join(_THIS_DIR, os.pardir, os.pardir, os.pardir))
-_HYBRID_SEARCH: Optional[HybridSearchService] = None
+_HYBRID_SEARCH: HybridSearchService | None = None
 _HELPER_SUMMARY_BUILDER = DirectCallSummaryBuilder()
 
 
-def load_hybrid_search() -> Optional[HybridSearchService]:
+def load_hybrid_search() -> HybridSearchService | None:
     global _HYBRID_SEARCH
     if _HYBRID_SEARCH is not None:
         return _HYBRID_SEARCH
@@ -51,9 +52,9 @@ def fetch_methods_with_context(
     *,
     max_bundles: int | None = None,
     workspace_root: str | None = None,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     cypher = "MATCH (m:Method) "
-    params: Dict[str, Any] = {}
+    params: dict[str, Any] = {}
     if workspace_root:
         cypher += " WHERE m.file_path STARTS WITH $workspace_root "
         params["workspace_root"] = workspace_root
@@ -87,7 +88,7 @@ def fetch_methods_with_context(
     if isinstance(max_bundles, int) and max_bundles > 0:
         cypher += " LIMIT $max_bundles"
         params["max_bundles"] = max_bundles
-    snapshots: List[Dict[str, Any]] = []
+    snapshots: list[dict[str, Any]] = []
     with driver.session() as session:
         for rec in session.run(cypher, params):
             signature = rec.get("signature")
@@ -118,7 +119,7 @@ def fetch_methods_with_context(
     return snapshots
 
 
-def fetch_method_snapshot(driver, method_signature: str) -> Dict[str, Any] | None:
+def fetch_method_snapshot(driver, method_signature: str) -> dict[str, Any] | None:
     cypher = (
         "MATCH (m:Method) "
         "WHERE coalesce(m.full_signature, m.signature) = $method_signature "
@@ -172,7 +173,7 @@ def fetch_method_snapshot(driver, method_signature: str) -> Dict[str, Any] | Non
         }
 
 
-def resolve_source_path(file_path: Optional[str]) -> Optional[Path]:
+def resolve_source_path(file_path: str | None) -> Path | None:
     if not file_path:
         return None
     path = Path(file_path)
@@ -185,12 +186,12 @@ def resolve_source_path(file_path: Optional[str]) -> Optional[Path]:
 
 
 def build_evidence_bundle(
-    method_snapshot: Dict[str, Any],
-    search_service: Optional[HybridSearchService] = None,
-    method_index: Optional[Dict[str, Dict[str, Any]]] = None,
+    method_snapshot: dict[str, Any],
+    search_service: HybridSearchService | None = None,
+    method_index: dict[str, dict[str, Any]] | None = None,
     source_path_override: str | Path | None = None,
-    taint_path_finder: Optional[TaintPathFinder] = None,
-) -> Dict[str, Any]:
+    taint_path_finder: TaintPathFinder | None = None,
+) -> dict[str, Any]:
     with _tracer.start_as_current_span("evidence.build") as span:
         span.set_attribute("method_signature", str(method_snapshot.get("signature") or ""))
         span.set_attribute("file_path", str(method_snapshot.get("file_path") or ""))
@@ -250,7 +251,7 @@ def build_evidence_bundle(
             if method_index is not None
             else {}
         )
-        vector_context: List[str] = []
+        vector_context: list[str] = []
         if search_service is not None:
             try:
                 vector_context = search_service.similar_to_signature(method_snapshot["signature"], top_k=3)
@@ -311,7 +312,7 @@ def build_policy_input(
     *,
     max_bundles: int | None = None,
     workspace_root: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     driver = get_neo4j_driver()
     try:
         methods = fetch_methods_with_context(
@@ -326,7 +327,7 @@ def build_policy_input(
     workers = min(32, (os.cpu_count() or 4) + 4)
     method_index = {snapshot["signature"]: snapshot for snapshot in methods if snapshot.get("signature")}
     taint_finder = TaintPathFinder(method_index)
-    bundles: List[Dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
+    bundles: list[dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
     with ThreadPoolExecutor(max_workers=workers) as pool:
         future_to_idx = {
             pool.submit(build_evidence_bundle, method, hybrid_search, method_index, None, taint_finder): idx

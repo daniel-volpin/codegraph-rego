@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 
 class ExplanationEvidenceCard(TypedDict):
@@ -27,17 +27,17 @@ def build_evidence_cards(
     start_line: Any,
     end_line: Any,
     source_code: str,
-    graph_context: Dict[str, Any],
-    vector_context: List[Any],
-    analysis_flags: Dict[str, Any],
+    graph_context: dict[str, Any],
+    vector_context: list[Any],
+    analysis_flags: dict[str, Any],
     include_graph_context: bool,
     evidence_mode: str,
-) -> List[ExplanationEvidenceCard]:
+) -> list[ExplanationEvidenceCard]:
     if not include_graph_context:
         return []
 
     citation = format_citation(file_path, start_line, end_line)
-    cards: List[ExplanationEvidenceCard] = []
+    cards: list[ExplanationEvidenceCard] = []
     if citation != "No file citation available" or source_code.strip():
         title = "Primary code evidence"
         if target_method:
@@ -87,7 +87,7 @@ def build_evidence_cards(
 
 
 def resolve_evidence_card(
-    evidence_cards: List[ExplanationEvidenceCard],
+    evidence_cards: list[ExplanationEvidenceCard],
     evidence_id: str | None,
 ) -> ExplanationEvidenceCard | None:
     if not evidence_id:

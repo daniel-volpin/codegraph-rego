@@ -39,7 +39,7 @@ class TestPolicyReviewStore(unittest.TestCase):
         self.assertEqual(payload["violation_key"], "ISO-A.10-WEAK-HASH::org.example.Foo.doPost()::Example.java")
 
     def test_oversized_explanation_gets_truncated(self) -> None:
-        from codegraph.policy.review_store import append_review_jsonl, MAX_STRING_CHARS
+        from codegraph.policy.review_store import MAX_STRING_CHARS, append_review_jsonl
 
         out = Path("outputs/test_policy_ui_reviews")
         out.mkdir(parents=True, exist_ok=True)

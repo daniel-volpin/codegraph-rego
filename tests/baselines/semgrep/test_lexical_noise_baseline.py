@@ -24,7 +24,6 @@ from baselines.semgrep.runner import (
 )
 from codegraph.evaluation.lexical_noise import load_lexical_noise_manifest
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 MANIFEST_PATH = PROJECT_ROOT / "configs" / "benchmark" / "lexical_noise_v1.json"
 

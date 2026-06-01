@@ -12,10 +12,8 @@ from codegraph.policy.runtime.contracts import (
     serialize_policy_bundle,
     serialize_policy_input_envelope,
 )
-from codegraph.policy.runtime.opa import normalize_violation_payload
-from codegraph.policy.runtime.opa import evaluate_bundle
+from codegraph.policy.runtime.opa import evaluate_bundle, normalize_violation_payload
 from tests._support import PROJECT_ROOT
-
 
 FIXTURE_DIR = PROJECT_ROOT / "tests" / "fixtures" / "policy_contract"
 OPA_AVAILABLE = bool(shutil.which("opa"))

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from codegraph.policy.analysis.patterns import (
     APPEND_CALL_RE,
@@ -26,11 +26,10 @@ from codegraph.policy.analysis.patterns import (
     XPATH_SINK_VARIABLE_PATTERNS,
 )
 from codegraph.policy.analysis.state import (
+    SIMPLE_ASSIGNMENT_RE,
     AssignmentState,
     AssignmentStateAnalyzer,
-    SIMPLE_ASSIGNMENT_RE,
 )
-
 
 SQL_BUILDER_APPEND_RE = re.compile(
     r"([A-Za-z_][A-Za-z0-9_]*)\.append\(\s*([^;]+?)\s*\)\s*;",

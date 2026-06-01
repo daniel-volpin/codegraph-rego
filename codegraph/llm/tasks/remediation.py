@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import logging
+from dataclasses import dataclass, field
 from typing import Any
 
 from codegraph.config import settings
 from codegraph.remediation.contracts import resolve_context_source_code
 from codegraph.remediation.planning import RemediationPlan
-
 
 LOGGER = logging.getLogger(__name__)
 _MAX_VECTOR_CONTEXT_ITEMS = 8
