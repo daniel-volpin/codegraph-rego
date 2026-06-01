@@ -174,7 +174,11 @@ class RemediationService:
     @classmethod
     def _preflight_fixability_reason(cls, context: Dict[str, Any]) -> Optional[str]:
         rule_id = str(context.get("rule_id") or "")
-        source_code = str(((context.get("evidence") or {}).get("source_code")) or "")
+        source_code = str(
+            context.get("exact_method_source")
+            or ((context.get("evidence") or {}).get("source_code"))
+            or ""
+        )
         source_lower = source_code.lower()
 
         if rule_id == "ISO-A.10-WEAK-CRYPTO":

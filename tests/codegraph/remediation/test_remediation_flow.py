@@ -253,6 +253,19 @@ class RemediationFlowTests(RemediationTestBase):
         self.assertEqual(out["generation"]["decision"], "apply_edits")
         llm_client.assert_called_once()
 
+    def test_preflight_crypto_uses_exact_method_when_evidence_is_literal_stripped(self):
+        svc_mod = self.service
+
+        exact_method = 'public void encrypt() { Cipher.getInstance("DES/CBC/PKCS5Padding"); }'
+        stripped_evidence = 'public void encrypt() { Cipher.getInstance(""); }'
+        context = {
+            "rule_id": "ISO-A.10-WEAK-CRYPTO",
+            "evidence": {"source_code": stripped_evidence, "graph_context": {}, "vector_context": []},
+            "exact_method_source": exact_method,
+        }
+
+        self.assertIsNone(svc_mod.RemediationService._preflight_fixability_reason(context))
+
     def test_preview_virtual_fix_allows_structured_no_fix_from_model(self):
         svc_mod = self.service
 

@@ -314,7 +314,7 @@ def plan_repair_intent(
         )
 
     # Preflight subcase check.
-    source_code = str(evidence.get("source_code") or "")
+    source_code = str(context.get("exact_method_source") or evidence.get("source_code") or "")
     preflight = _preflight_refusal(rule_id, source_code)
     if preflight is not None:
         LOGGER.debug(
