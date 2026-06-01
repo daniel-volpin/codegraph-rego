@@ -230,18 +230,6 @@ def benchmark_category_payloads(path: str | None = None) -> List[Dict[str, Any]]
     return [category.as_dict() for category in load_policy_registry(path).categories]
 
 
-def benchmark_category_rule_ids(path: str | None = None) -> List[str]:
-    seen: set[str] = set()
-    ordered: List[str] = []
-    for category in load_policy_registry(path).categories:
-        for rule_id in category.rego_rule_ids:
-            if rule_id in seen:
-                continue
-            seen.add(rule_id)
-            ordered.append(rule_id)
-    return ordered
-
-
 def framework_demo_rule_ids(path: str | None = None) -> List[str]:
     seen: set[str] = set()
     ordered: List[str] = []

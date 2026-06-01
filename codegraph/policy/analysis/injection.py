@@ -129,12 +129,6 @@ class PathSafetyAnalyzer:
             path_traversal_detected=path_traversal_detected,
         )
 
-    def safe_constant_override_detected(self, source_code: str) -> bool:
-        return self.analyze(source_code).path_sink_uses_safe_constant
-
-    def sink_references_tainted_data(self, source_code: str) -> bool:
-        return self.analyze(source_code).path_sink_uses_tainted_input
-
     @staticmethod
     def _sink_uses_tainted_input(source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:
         if any(pattern.search(source_code) for pattern in DIRECT_PATH_UNTRUSTED_PATTERNS):

@@ -64,13 +64,6 @@ class HybridSearchService:
         deduped = [sig for sig in matches if sig != signature]
         return deduped[:top_k]
 
-    def fetch_graph_context(self, signature: str) -> List[Dict[str, Any]]:
-        driver = get_neo4j_driver()
-        try:
-            return fetch_graph_context_for_method(signature, driver)
-        finally:
-            driver.close()
-
 
 def run_search(query: str, k: int = 5) -> Tuple[List[str], List[List[Dict[str, Any]]]]:
     """

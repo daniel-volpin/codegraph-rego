@@ -33,10 +33,6 @@ def get_policy_catalog_entries() -> List[Dict[str, Any]]:
     return runtime_catalog.get_policy_catalog_entries()
 
 
-def _violation_id_variants(violation_id: str) -> List[str]:
-    return runtime_catalog.violation_id_variants(violation_id)
-
-
 def _resolve_catalog_entry(violation_id: Any, catalog: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return runtime_catalog.resolve_catalog_entry(violation_id, catalog)
 

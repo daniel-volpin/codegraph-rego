@@ -255,7 +255,6 @@ def _load_ground_truth_xml(path: Path) -> List[GroundTruthRecord]:
 class SelectionResult:
     selected_by_category: Dict[str, List[GroundTruthRecord]]
     selected_testcase_ids: List[str]
-    missing_testcases: List[str] = field(default_factory=list)
     coverage_by_category: Dict[str, CoverageStats] = field(default_factory=dict)
 
 

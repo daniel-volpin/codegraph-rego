@@ -77,9 +77,6 @@ class CaseRow:
     target_violation_ids: tuple[str, ...]
     by_method: Mapping[str, DetectionResult]
 
-    def label_is_positive(self) -> bool:
-        return self.expected == "positive"
-
 
 @dataclass(frozen=True)
 class MethodMetrics:
