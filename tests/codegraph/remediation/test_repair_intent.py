@@ -21,10 +21,9 @@ from codegraph.remediation.repair_intent import (
     RepairIntentKind,
     SourceSpan,
     TransformationSpec,
-    plan_repair_intent,
     _preflight_refusal,
+    plan_repair_intent,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -3,10 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Sequence
+from typing import Any
 
 from codegraph.evaluation.benchmark import extract_testcase_id
 from codegraph.evaluation.io import (
@@ -61,12 +62,12 @@ def is_fully_verified(item: Mapping[str, Any]) -> bool:
 
 def _calibration_block(
     points: list[tuple[float, int]],
-    cases: list[Dict[str, Any]],
+    cases: list[dict[str, Any]],
     missing_confidence_count: int,
     *,
     bins: int,
     population: str,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     if not points:
         return None
 
@@ -80,7 +81,7 @@ def _calibration_block(
         buckets[index].append((score, label))
 
     ece = 0.0
-    reliability_bins: list[Dict[str, Any]] = []
+    reliability_bins: list[dict[str, Any]] = []
     for idx, bucket in enumerate(buckets):
         if not bucket:
             continue
@@ -102,7 +103,7 @@ def _calibration_block(
 
     ranked = sorted(points, key=lambda pair: pair[0], reverse=True)
     checkpoints = [0.25, 0.5, 0.75, 1.0]
-    risk_coverage: list[Dict[str, Any]] = []
+    risk_coverage: list[dict[str, Any]] = []
     for checkpoint in checkpoints:
         k = max(1, int(round(n * checkpoint)))
         subset = ranked[:k]
@@ -135,9 +136,9 @@ def _collect_calibration_points(
     results: Sequence[Mapping[str, Any]],
     *,
     status_filter: set[str] | None = None,
-) -> tuple[list[tuple[float, int]], list[Dict[str, Any]], int]:
+) -> tuple[list[tuple[float, int]], list[dict[str, Any]], int]:
     points: list[tuple[float, int]] = []
-    cases: list[Dict[str, Any]] = []
+    cases: list[dict[str, Any]] = []
     missing_confidence_count = 0
     for item in results:
         if status_filter is not None:
@@ -170,7 +171,7 @@ def build_confidence_calibration(
     results: Sequence[Mapping[str, Any]],
     *,
     bins: int = 10,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     """Compute confidence calibration over the remediation results.
 
     The top-level fields (``count``, ``brier_score``, ``ece``,
@@ -223,7 +224,7 @@ def build_case_id(violation: Mapping[str, Any]) -> str:
     return f"{_safe_slug(testcase_id)}_{_safe_slug(violation_id)}_{digest}"
 
 
-def tracked_status_counts(results: Iterable[Mapping[str, Any]]) -> Dict[str, int]:
+def tracked_status_counts(results: Iterable[Mapping[str, Any]]) -> dict[str, int]:
     counts = {status: 0 for status in TRACKED_FINAL_STATUSES}
     for item in results:
         status = str(item.get("status") or "")
@@ -232,8 +233,8 @@ def tracked_status_counts(results: Iterable[Mapping[str, Any]]) -> Dict[str, int
     return counts
 
 
-def untracked_status_counts(results: Iterable[Mapping[str, Any]]) -> Dict[str, int]:
-    counts: Dict[str, int] = {}
+def untracked_status_counts(results: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
     for item in results:
         status = str(item.get("status") or "")
         if not status or status in TRACKED_FINAL_STATUSES:
@@ -242,7 +243,7 @@ def untracked_status_counts(results: Iterable[Mapping[str, Any]]) -> Dict[str, i
     return counts
 
 
-def build_stage_counts(results: Iterable[Mapping[str, Any]]) -> Dict[str, int]:
+def build_stage_counts(results: Iterable[Mapping[str, Any]]) -> dict[str, int]:
     items = list(results)
     return {
         "attempted": len(items),
@@ -259,7 +260,7 @@ def build_remediation_result(
     violation: Mapping[str, Any],
     apply_result: Mapping[str, Any],
     case_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     verification = apply_result.get("verification") or {}
     compilation = apply_result.get("compilation") or {}
     generation = apply_result.get("generation")
@@ -309,7 +310,7 @@ def build_skipped_result(
     violation: Mapping[str, Any],
     case_id: str,
     error: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     evidence = violation.get("evidence") or {}
     return {
         "case_id": case_id,
@@ -346,14 +347,14 @@ def build_metrics_payload(
     *,
     benchmark_root: Path,
     truth_path: Path,
-    truth_schema: Dict[str, Any],
-    selection_cfg: Dict[str, Any],
-    coverage_by_category: Dict[str, Any],
+    truth_schema: dict[str, Any],
+    selection_cfg: dict[str, Any],
+    coverage_by_category: dict[str, Any],
     mode: str,
     max_attempts: int,
     legacy_build_command_arg: str | None,
-    results: Sequence[Dict[str, Any]],
-) -> Dict[str, Any]:
+    results: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
     stage_counts = build_stage_counts(results)
     status_counts = tracked_status_counts(results)
     fix_rate = stage_counts["policy_fixed"] / stage_counts["attempted"] if stage_counts["attempted"] else 0.0
@@ -625,9 +626,9 @@ class RemediationRuntime:
     output_dir: Path
     benchmark_root: Path
     truth_path: Path
-    truth_schema: Dict[str, Any]
-    selection_cfg: Dict[str, Any]
-    coverage_by_category: Dict[str, Any]
+    truth_schema: dict[str, Any]
+    selection_cfg: dict[str, Any]
+    coverage_by_category: dict[str, Any]
     mode: str
     max_attempts: int
 
@@ -640,7 +641,7 @@ class RemediationRuntime:
         self.results_jsonl_path = self.output_dir / "results.jsonl"
         self.started_at = datetime.now(timezone.utc)
         self.total_cases = 0
-        self.completed_results: list[Dict[str, Any]] = []
+        self.completed_results: list[dict[str, Any]] = []
         self.results_handle = self.results_jsonl_path.open("w", encoding="utf-8")
 
     def close(self) -> None:
@@ -693,7 +694,7 @@ class RemediationRuntime:
         self,
         *,
         apply_result: Mapping[str, Any],
-        result: Dict[str, Any],
+        result: dict[str, Any],
     ) -> None:
         case_dir = self.case_dir(str(result["case_id"]))
         case_dir.mkdir(parents=True, exist_ok=True)
@@ -743,7 +744,7 @@ class RemediationRuntime:
         *,
         status: str,
         stage: str,
-        latest_case: Dict[str, Any] | None = None,
+        latest_case: dict[str, Any] | None = None,
     ) -> None:
         stage_counts = build_stage_counts(self.completed_results)
         status_counts = tracked_status_counts(self.completed_results)

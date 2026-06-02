@@ -14,10 +14,9 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
-
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 DEFAULT_RULES_DIR = PACKAGE_DIR / "rules"

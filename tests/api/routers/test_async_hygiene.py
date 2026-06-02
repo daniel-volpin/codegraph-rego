@@ -137,8 +137,8 @@ class PolicyEvaluateDoesNotBlockEventLoop(unittest.IsolatedAsyncioTestCase):
 class SearchDoesNotBlockEventLoop(unittest.IsolatedAsyncioTestCase):
     @patch("api.routers.search.run_search")
     async def test_search_yields_to_event_loop(self, mock_run_search) -> None:
-        from api.routers.search import search
         from api.models.validation import SearchRequest
+        from api.routers.search import search
 
         def _slow_search(*_a, **_k):
             time.sleep(0.15)
@@ -163,8 +163,8 @@ class SearchDoesNotBlockEventLoop(unittest.IsolatedAsyncioTestCase):
 class RemediationPreviewDoesNotBlockEventLoop(unittest.IsolatedAsyncioTestCase):
     @patch("api.routers.remediation.preview_virtual_remediation")
     async def test_remediation_preview_yields_to_event_loop(self, mock_preview) -> None:
-        from api.routers.remediation import remediation_preview
         from api.models.validation import RemediationPreviewRequest
+        from api.routers.remediation import remediation_preview
 
         def _slow_preview(*_a, **_k):
             time.sleep(0.15)

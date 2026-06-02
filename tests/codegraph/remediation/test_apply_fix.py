@@ -4,10 +4,9 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from codegraph.remediation import apply_flow as apply_flow_mod
-
 from tests.codegraph.remediation._test_helpers import (
-    RemediationTestBase,
     ProposalResponseBuilder,
+    RemediationTestBase,
     ViolationContextBuilder,
 )
 

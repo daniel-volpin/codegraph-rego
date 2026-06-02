@@ -4,7 +4,6 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
-
 ConfidenceBand = Literal["apply", "review", "abstain"]
 
 

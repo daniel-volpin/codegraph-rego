@@ -6,8 +6,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import Any
 
 MAX_RECORD_BYTES = 200_000
 MAX_STRING_CHARS = 20_000
@@ -20,10 +19,10 @@ MAX_DICT_KEYS = 500
 @dataclass(frozen=True)
 class AppendResult:
     status: str
-    review_id: Optional[str] = None
-    store_path: Optional[str] = None
-    scrub_warnings: Optional[List[str]] = None
-    error: Optional[str] = None
+    review_id: str | None = None
+    store_path: str | None = None
+    scrub_warnings: list[str] | None = None
+    error: str | None = None
 
 
 def _repo_root() -> Path:
@@ -35,7 +34,7 @@ def _outputs_root(repo_root: Path) -> Path:
     return (repo_root / "outputs").resolve()
 
 
-def resolve_review_store_path(store_path: str) -> Tuple[Optional[Path], Optional[str]]:
+def resolve_review_store_path(store_path: str) -> tuple[Path | None, str | None]:
     repo_root = _repo_root()
     outputs_root = _outputs_root(repo_root)
 
@@ -57,18 +56,18 @@ def resolve_review_store_path(store_path: str) -> Tuple[Optional[Path], Optional
     return resolved, None
 
 
-def derive_violation_key(violation: Dict[str, Any]) -> str:
+def derive_violation_key(violation: dict[str, Any]) -> str:
     violation_id = violation.get("violation_id") or violation.get("id") or "unknown"
     target_method = violation.get("target_method") or violation.get("method") or ""
     file_path = violation.get("file_path") or ""
     return f"{violation_id}::{target_method}::{file_path}"
 
 
-def _safe_len(value: Any) -> Optional[int]:
+def _safe_len(value: Any) -> int | None:
     return len(value) if isinstance(value, list) else None
 
 
-def _summarize_verification(verification: Any) -> Dict[str, Any]:
+def _summarize_verification(verification: Any) -> dict[str, Any]:
     if not isinstance(verification, dict):
         return {}
     baseline = verification.get("baseline")
@@ -85,7 +84,7 @@ def _summarize_verification(verification: Any) -> Dict[str, Any]:
     }
 
 
-def _summarize_compilation(compilation: Any) -> Dict[str, Any]:
+def _summarize_compilation(compilation: Any) -> dict[str, Any]:
     if not isinstance(compilation, dict):
         return {}
     return {
@@ -95,10 +94,10 @@ def _summarize_compilation(compilation: Any) -> Dict[str, Any]:
     }
 
 
-def summarize_remediation_payload(payload: Any, *, kind: str) -> Dict[str, Any]:
+def summarize_remediation_payload(payload: Any, *, kind: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
-    summary: Dict[str, Any] = {
+    summary: dict[str, Any] = {
         "status": payload.get("status"),
         "rule_id": payload.get("rule_id"),
         "opa_status": payload.get("opa_status"),
@@ -120,8 +119,8 @@ def _string_cap_for_path(path: str) -> int:
     return MAX_STRING_CHARS
 
 
-def scrub_value(value: Any, *, path: str) -> Tuple[Any, List[str]]:
-    warnings: List[str] = []
+def scrub_value(value: Any, *, path: str) -> tuple[Any, list[str]]:
+    warnings: list[str] = []
 
     if isinstance(value, str):
         cap = _string_cap_for_path(path)
@@ -134,7 +133,7 @@ def scrub_value(value: Any, *, path: str) -> Tuple[Any, List[str]]:
         if len(value) > MAX_LIST_ITEMS:
             warnings.append(f"truncated_list:{path}")
             value = value[:MAX_LIST_ITEMS]
-        out: List[Any] = []
+        out: list[Any] = []
         for idx, item in enumerate(value):
             scrubbed, child_warnings = scrub_value(item, path=f"{path}[{idx}]")
             out.append(scrubbed)
@@ -146,7 +145,7 @@ def scrub_value(value: Any, *, path: str) -> Tuple[Any, List[str]]:
         if len(keys) > MAX_DICT_KEYS:
             warnings.append(f"truncated_dict:{path}")
             keys = keys[:MAX_DICT_KEYS]
-        out: Dict[str, Any] = {}
+        out: dict[str, Any] = {}
         for key in keys:
             k = str(key)
             scrubbed, child_warnings = scrub_value(value.get(key), path=f"{path}.{k}")
@@ -162,7 +161,7 @@ def _json_size_bytes(obj: Any) -> int:
     return len(payload.encode("utf-8"))
 
 
-def _drop_ladder(record: Dict[str, Any], warnings: List[str]) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+def _drop_ladder(record: dict[str, Any], warnings: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
     def current_size() -> int:
         return _json_size_bytes(record)
 
@@ -231,8 +230,8 @@ def _drop_ladder(record: Dict[str, Any], warnings: List[str]) -> Tuple[Optional[
     return record, warnings
 
 
-def _get_git_context(repo_root: Path) -> Dict[str, str]:
-    context: Dict[str, str] = {}
+def _get_git_context(repo_root: Path) -> dict[str, str]:
+    context: dict[str, str] = {}
     try:
         sha = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -264,13 +263,13 @@ def append_review_jsonl(
     *,
     store_path: str,
     label: str,
-    notes: Optional[str],
-    violation: Dict[str, Any],
-    explanation: Optional[str],
-    llm_model: Optional[str],
+    notes: str | None,
+    violation: dict[str, Any],
+    explanation: str | None,
+    llm_model: str | None,
     include_graph_context: bool,
-    remediation_preview: Optional[Dict[str, Any]] = None,
-    remediation_apply: Optional[Dict[str, Any]] = None,
+    remediation_preview: dict[str, Any] | None = None,
+    remediation_apply: dict[str, Any] | None = None,
 ) -> AppendResult:
     resolved, error = resolve_review_store_path(store_path)
     if error:
@@ -283,13 +282,13 @@ def append_review_jsonl(
     created_at = datetime.now(timezone.utc).isoformat()
     repo_root = _repo_root()
 
-    remediation: Dict[str, Any] = {}
+    remediation: dict[str, Any] = {}
     if remediation_preview:
         remediation["preview"] = summarize_remediation_payload(remediation_preview, kind="preview")
     if remediation_apply:
         remediation["apply"] = summarize_remediation_payload(remediation_apply, kind="apply")
 
-    record: Dict[str, Any] = {
+    record: dict[str, Any] = {
         "review_id": review_id,
         "created_at": created_at,
         "violation_key": derive_violation_key(violation),

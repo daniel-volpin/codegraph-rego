@@ -1,7 +1,7 @@
-from codegraph.remediation.dossier import build_dossier
-from codegraph.remediation.comparison import CandidateOutcome
-from codegraph.remediation.ranking import RankingResult, RankedCandidate, score_candidate
 from codegraph.policy.trace import TraceProfile
+from codegraph.remediation.comparison import CandidateOutcome
+from codegraph.remediation.dossier import build_dossier
+from codegraph.remediation.ranking import RankedCandidate, RankingResult, score_candidate
 
 
 def test_build_dossier_extracts_trace_from_llm_outcome():

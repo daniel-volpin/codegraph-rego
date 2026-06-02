@@ -3,13 +3,12 @@ import json
 import logging
 from collections import deque
 
-from fastapi import APIRouter
-from fastapi import Query
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 from api.models.validation import (
-    PolicyEvaluateResponse,
     PolicyCatalogResponse,
+    PolicyEvaluateResponse,
     PolicyEvaluateWithLLMRequest,
     PolicyExplainOneRequest,
     PolicyExplainOneResponse,
@@ -17,16 +16,17 @@ from api.models.validation import (
     PolicyReviewCreateResponse,
     PolicyReviewListResponse,
 )
-from codegraph.policy.service import evaluate as evaluate_policies, catalog as get_policy_catalog_payload
+from codegraph.config import settings
+from codegraph.llm.client import LLMUnavailableError
 from codegraph.llm.integration import (
     explain_policy_violations,
     generate_policy_explanation,
     generate_policy_explanation_structured,
     render_policy_explanation_structured,
 )
-from codegraph.llm.client import LLMUnavailableError
-from codegraph.config import settings
 from codegraph.policy.review_store import append_review_jsonl, resolve_review_store_path
+from codegraph.policy.service import catalog as get_policy_catalog_payload
+from codegraph.policy.service import evaluate as evaluate_policies
 
 router = APIRouter()
 logger = logging.getLogger("codegraph.api.routers.policy")
@@ -167,7 +167,7 @@ async def policy_list_reviews(
 
     def _scan_jsonl() -> deque[dict]:
         buffer: deque[dict] = deque(maxlen=limit)
-        with open(resolved.as_posix(), "r", encoding="utf-8") as handle:
+        with open(resolved.as_posix(), encoding="utf-8") as handle:
             for line in handle:
                 raw = line.strip()
                 if not raw:

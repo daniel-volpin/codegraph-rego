@@ -14,11 +14,10 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from codegraph.benchmark_registry import supported_remediation_rule_ids
 from codegraph.evaluation.benchmark import load_mapping_config
-
 
 LOGGER = logging.getLogger("codegraph.eval.experiments")
 
@@ -27,7 +26,7 @@ def _utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def _run(cmd: List[str]) -> None:
+def _run(cmd: list[str]) -> None:
     LOGGER.info("Running: %s", " ".join(cmd))
     subprocess.run(cmd, check=True)
 
@@ -41,19 +40,19 @@ def _load_json(path: Path) -> Any:
         return json.load(handle)
 
 
-def _supported_remediation_rule_ids() -> List[str]:
+def _supported_remediation_rule_ids() -> list[str]:
     return sorted(supported_remediation_rule_ids())
 
 
 def _partition_categories_for_remediation(
-    selection_cfg: Dict[str, Any],
+    selection_cfg: dict[str, Any],
     mapping_path: Path,
-) -> Tuple[List[str], List[Dict[str, str]]]:
+) -> tuple[list[str], list[dict[str, str]]]:
     selected_category_ids = selection_cfg.get("categories") or []
     by_id = {spec.id: spec for spec in load_mapping_config(mapping_path)}
 
-    attempted: List[str] = []
-    skipped: List[Dict[str, str]] = []
+    attempted: list[str] = []
+    skipped: list[dict[str, str]] = []
     for category_id in selected_category_ids:
         spec = by_id.get(str(category_id))
         if spec and spec.remediation_tier in {"full", "guarded"}:
@@ -149,9 +148,9 @@ def main() -> int:
         path.mkdir(parents=True, exist_ok=True)
 
     selection_cfg = _load_json(selection_path)
-    commands_executed: List[str] = []
+    commands_executed: list[str] = []
 
-    def add_and_run(cmd: List[str]) -> None:
+    def add_and_run(cmd: list[str]) -> None:
         commands_executed.append(" ".join(cmd))
         _run(cmd)
 

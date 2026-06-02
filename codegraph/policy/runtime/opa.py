@@ -6,8 +6,9 @@ import subprocess
 import tempfile
 import time
 import uuid
+from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any
 
 from codegraph.remediation.capabilities import remediation_capability_dict
 from codegraph.telemetry import get_tracer
@@ -22,7 +23,7 @@ POLICY_DIR = os.path.join(_PROJECT_ROOT, "policy")
 POLICY_QUERY = "data.iso27001.violations"
 
 
-def normalize_violation_payload(payload: Any, logger) -> Optional[Dict[str, Any]]:
+def normalize_violation_payload(payload: Any, logger) -> dict[str, Any] | None:
     if isinstance(payload, dict):
         return payload
     if isinstance(payload, str):
@@ -48,14 +49,14 @@ def _now_iso_utc() -> str:
 
 
 def build_violation_response(
-    normalized: Dict[str, Any],
+    normalized: dict[str, Any],
     bundle: Mapping[str, Any],
-    control_meta: Optional[Dict[str, Any]],
+    control_meta: dict[str, Any] | None,
     *,
-    decision_id: Optional[str] = None,
-    evaluated_at: Optional[str] = None,
-) -> Dict[str, Any]:
-    violation_id = normalized.get("violation_id") or normalized.get("id")
+    decision_id: str | None = None,
+    evaluated_at: str | None = None,
+) -> dict[str, Any]:
+    violation_id = normalized.get("violation_id")
     # Prefer the raw source for human-facing fields (citation grounding,
     # evidence-card rendering, audit excerpts). ``source_code`` carries
     # the lexically-active view used by Rego matching; ``source_code_raw``
@@ -95,7 +96,7 @@ def build_violation_response(
     }
 
 
-def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> List[Dict[str, Any]]:
+def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, Any]]:
     # When the bundle is already a plain dict (produced by build_evidence_bundle),
     # use it directly to preserve extra fields such as ``taint_paths`` that are
     # appended after the PolicyBundle serialization step.
@@ -150,7 +151,7 @@ def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> List[Dict[str, 
             return violations
 
 
-def evaluate_package_root(bundle: PolicyBundle | Mapping[str, Any], package: str = "data.iso27001") -> Dict[str, Any]:
+def evaluate_package_root(bundle: PolicyBundle | Mapping[str, Any], package: str = "data.iso27001") -> dict[str, Any]:
     if isinstance(bundle, PolicyBundle):
         serialized_bundle = bundle.to_dict()
     elif isinstance(bundle, dict):

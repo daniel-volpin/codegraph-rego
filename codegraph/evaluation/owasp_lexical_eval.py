@@ -22,9 +22,10 @@ import csv
 import multiprocessing as mp
 import os
 import random
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any
 
 from baselines.semgrep.runner import SemgrepRunResult
 from codegraph.evaluation.lexical_noise_eval import (
@@ -42,8 +43,7 @@ from codegraph.evaluation.uncertainty import (
 )
 from codegraph.policy.runtime.opa import evaluate_bundle
 
-
-CWE_TO_ISO: Dict[str, str] = {
+CWE_TO_ISO: dict[str, str] = {
     "22": "ISO-A.8-PATH-TRAVERSAL",
     "78": "ISO-A.8-CMD-INJECTION",
     "89": "ISO-A.8-SQL-INJECTION",
@@ -155,7 +155,7 @@ class OwaspEvalReport:
     per_cwe: Mapping[str, Mapping[str, MethodMetrics]]
     paired: tuple[PairedComparison, ...] = ()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "benchmark_id": self.benchmark_id,
             "n_cases": self.n_cases,
@@ -199,7 +199,7 @@ class OwaspEvalReport:
         }
 
 
-def _metrics_to_dict(m: MethodMetrics) -> Dict[str, Any]:
+def _metrics_to_dict(m: MethodMetrics) -> dict[str, Any]:
     payload = {k: v for k, v in asdict(m).items() if k != "bootstrap"}
     payload["bootstrap"] = dict(m.bootstrap)
     return payload
@@ -217,7 +217,7 @@ def load_owasp_cases(
     cwes: Iterable[str] | None = None,
     limit_per_cwe: int | None = None,
     seed: int = 0,
-) -> List[OwaspCase]:
+) -> list[OwaspCase]:
     """Load the OWASP expected-results CSV, restricted to CodeGraph CWEs.
 
     Each surviving row is resolved against ``java_root`` (the directory
@@ -234,7 +234,7 @@ def load_owasp_cases(
         unknown = target_cwes - SUPPORTED_CWES
         raise ValueError(f"Unsupported CWEs requested: {sorted(unknown)}")
 
-    by_cwe: Dict[str, List[OwaspCase]] = {cwe: [] for cwe in target_cwes}
+    by_cwe: dict[str, list[OwaspCase]] = {cwe: [] for cwe in target_cwes}
     with csv_path.open("r", encoding="utf-8") as handle:
         reader = csv.reader(handle)
         for row in reader:
@@ -264,7 +264,7 @@ def load_owasp_cases(
             )
 
     rng = random.Random(seed)
-    flat: List[OwaspCase] = []
+    flat: list[OwaspCase] = []
     for cwe in sorted(by_cwe.keys()):
         cases = by_cwe[cwe]
         rng.shuffle(cases)
@@ -298,8 +298,8 @@ _OWASP_FQN_PACKAGE = "org.owasp.benchmark.testcode"
 
 
 def _worker_run(
-    payload: Tuple[str, str, str, str],
-) -> Tuple[str, bool, tuple[str, ...], bool, tuple[str, ...]]:
+    payload: tuple[str, str, str, str],
+) -> tuple[str, bool, tuple[str, ...], bool, tuple[str, ...]]:
     """Module-level worker for ``multiprocessing.Pool``.
 
     Input  : ``(test_name, java_path, target_violation_id, rel_path)``.
@@ -345,8 +345,8 @@ def _aggregate_metrics(
     *,
     n_resamples: int,
     seed: int,
-) -> Dict[str, MethodMetrics]:
-    out: Dict[str, MethodMetrics] = {}
+) -> dict[str, MethodMetrics]:
+    out: dict[str, MethodMetrics] = {}
     for method in METHODS:
         outcomes = [
             (row.by_method[method].target_fired, row.case.real_vulnerability)
@@ -370,14 +370,14 @@ def evaluate_owasp(
 ) -> OwaspEvalReport:
     """Run the file-level eval. Uses a process pool when ``workers`` > 1."""
 
-    semgrep_idx: Dict[str, List[str]] = {}
+    semgrep_idx: dict[str, list[str]] = {}
     for finding in semgrep_result.findings:
         cg_id = finding.codegraph_violation_id
         if not cg_id:
             continue
         semgrep_idx.setdefault(Path(finding.file_path).name, []).append(cg_id)
 
-    payloads: List[Tuple[str, str, str, str]] = []
+    payloads: list[tuple[str, str, str, str]] = []
     for case in cases:
         try:
             rel = str(case.java_path.relative_to(java_root))
@@ -396,7 +396,7 @@ def evaluate_owasp(
     else:
         results = [_worker_run(p) for p in payloads]
 
-    rows: List[OwaspCaseRow] = []
+    rows: list[OwaspCaseRow] = []
     case_index = {c.test_name: c for c in cases}
     for test_name, pre_fired_target, pre_fired, post_fired_target, post_fired in results:
         case = case_index[test_name]
@@ -423,7 +423,7 @@ def evaluate_owasp(
         )
 
     overall = _aggregate_metrics(rows, n_resamples=n_resamples, seed=seed)
-    per_cwe: Dict[str, Mapping[str, MethodMetrics]] = {}
+    per_cwe: dict[str, Mapping[str, MethodMetrics]] = {}
     for cwe in sorted({row.case.cwe for row in rows}):
         cwe_rows = [r for r in rows if r.case.cwe == cwe]
         per_cwe[cwe] = _aggregate_metrics(cwe_rows, n_resamples=n_resamples, seed=seed)

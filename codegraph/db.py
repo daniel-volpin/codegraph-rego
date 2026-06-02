@@ -3,6 +3,7 @@ Shared Neo4j helpers: driver factory and idempotent constraint creation.
 """
 
 from neo4j import GraphDatabase
+
 from codegraph.config import settings
 
 

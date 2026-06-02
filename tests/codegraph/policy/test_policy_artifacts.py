@@ -6,10 +6,10 @@ from pathlib import Path
 
 from codegraph.benchmark_registry import (
     framework_demo_rule_ids,
+    iso_rules_payload_from_registry,
     load_policy_registry,
     policy_catalog_entries_from_registry,
     policy_catalog_payload_from_registry,
-    iso_rules_payload_from_registry,
 )
 from tests._support import PROJECT_ROOT
 

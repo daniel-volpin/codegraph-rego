@@ -5,6 +5,12 @@ Covers the additive surfaces only; point estimates are unchanged.
 
 from __future__ import annotations
 
+# `score_category` lives at the script top-level; importing the script module
+# triggers `argparse` only inside `main()`, so this is safe.
+import importlib.util
+import json
+import pathlib
+import tempfile
 import unittest
 
 from codegraph.evaluation.benchmark import (
@@ -12,20 +18,11 @@ from codegraph.evaluation.benchmark import (
     GroundTruthRecord,
     SelectionResult,
 )
+from codegraph.evaluation.explanation_runtime import ExplanationRuntime
 from codegraph.evaluation.pipeline import (
     collect_category_false_positive_violations,
     collect_category_violations,
 )
-
-
-# `score_category` lives at the script top-level; importing the script module
-# triggers `argparse` only inside `main()`, so this is safe.
-import importlib.util
-import json
-import pathlib
-import tempfile
-
-from codegraph.evaluation.explanation_runtime import ExplanationRuntime
 
 _SCRIPT_PATH = pathlib.Path(__file__).resolve().parents[3] / "run_benchmark_eval.py"
 _spec = importlib.util.spec_from_file_location("_run_benchmark_eval", _SCRIPT_PATH)

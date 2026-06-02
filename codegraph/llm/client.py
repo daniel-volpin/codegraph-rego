@@ -5,7 +5,6 @@ from typing import Any
 from codegraph.llm.transport.base import LLMRequest, LLMUnavailableError
 from codegraph.llm.transport.openai_compatible_transport import OpenAICompatibleTransport
 
-
 __all__ = ["generate_chat_completion", "LLMUnavailableError"]
 
 

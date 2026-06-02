@@ -16,10 +16,9 @@ from __future__ import annotations
 import difflib
 import logging
 import os
-import re
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from codegraph.config import settings
 from codegraph.llm.client import generate_chat_completion
@@ -33,6 +32,7 @@ from codegraph.policy.integration import (
     load_policy_catalog,
     normalize_violation_payload,
 )
+from codegraph.remediation.apply_flow import execute_apply_fix
 from codegraph.remediation.capabilities import get_remediation_capability, rule_id_variants
 from codegraph.remediation.confidence import (
     ConfidenceFeatures,
@@ -51,6 +51,8 @@ from codegraph.remediation.contracts import (
     FIX_STRATEGIES,
     NO_FIX_PREFIX,
     build_no_fix_response,
+    preflight_unsupported_reason,
+    resolve_context_source_code,
 )
 from codegraph.remediation.editing import (
     apply_method_edits,
@@ -62,7 +64,6 @@ from codegraph.remediation.editing import (
     replace_method_in_source,
     resolve_file_path,
 )
-from codegraph.remediation.apply_flow import execute_apply_fix
 from codegraph.remediation.metrics import summarize_retry_error
 from codegraph.remediation.planning import build_remediation_plan
 from codegraph.remediation.validation import (
@@ -91,15 +92,15 @@ def _unified_diff(before: str, after: str, *, label: str = "method") -> str:
     return "\n".join(diff)
 
 
-def _extract_json_block(text: str) -> Optional[str]:
+def _extract_json_block(text: str) -> str | None:
     return extract_json_block(text)
 
 
 def _build_verification_summary(
-    rule_id: Optional[str],
-    baseline: Optional[List[Dict[str, Any]]],
-    after: Optional[List[Dict[str, Any]]],
-) -> Dict[str, Any]:
+    rule_id: str | None,
+    baseline: list[dict[str, Any]] | None,
+    after: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
     return build_verification_summary(rule_id, baseline, after)
 
 
@@ -111,13 +112,13 @@ class RemediationService:
     """Preview-only remediation using virtual OPA evaluation."""
 
     _NO_FIX_PREFIX = NO_FIX_PREFIX
-    _FIX_STRATEGIES: Dict[str, Dict[str, Any]] = FIX_STRATEGIES
+    _FIX_STRATEGIES: dict[str, dict[str, Any]] = FIX_STRATEGIES
 
     def __init__(self, *, llm_client=generate_chat_completion) -> None:
         self._generation_service = RemediationGenerationService(llm_client=llm_client)
 
     @staticmethod
-    def _has_graph_context(context: Dict[str, Any]) -> bool:
+    def _has_graph_context(context: dict[str, Any]) -> bool:
         graph_context = ((context.get("evidence") or {}).get("graph_context")) or {}
         if not isinstance(graph_context, dict):
             return False
@@ -127,12 +128,12 @@ class RemediationService:
     def _build_confidence(
         self,
         *,
-        context: Dict[str, Any],
+        context: dict[str, Any],
         support_tier: str,
         decision: str,
         structured_valid: bool,
         attempt_count: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         assessment = assess_remediation_confidence(
             ConfidenceFeatures(
                 support_tier=support_tier,
@@ -155,11 +156,11 @@ class RemediationService:
         }
 
     @classmethod
-    def _rule_id_variants(cls, rule_id: str) -> List[str]:
+    def _rule_id_variants(cls, rule_id: str) -> list[str]:
         return rule_id_variants(rule_id)
 
     @classmethod
-    def _resolve_fix_strategy(cls, rule_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    def _resolve_fix_strategy(cls, rule_id: str | None) -> dict[str, Any] | None:
         if not rule_id:
             return None
         capability = get_remediation_capability(rule_id, supported_rule_ids=cls._FIX_STRATEGIES.keys())
@@ -172,49 +173,20 @@ class RemediationService:
         return None
 
     @classmethod
-    def _preflight_fixability_reason(cls, context: Dict[str, Any]) -> Optional[str]:
+    def _preflight_fixability_reason(cls, context: dict[str, Any]) -> str | None:
         rule_id = str(context.get("rule_id") or "")
-        source_code = str(
-            context.get("exact_method_source")
-            or ((context.get("evidence") or {}).get("source_code"))
-            or ""
-        )
-        source_lower = source_code.lower()
-
-        if rule_id == "ISO-A.10-WEAK-CRYPTO":
-            weak_cipher_literals = (
-                "des/cbc/pkcs5padding",
-                "desede/ecb/pkcs5padding",
-                "aes/ecb/",
-                '"rc4"',
-                'cipher.getinstance("des")',
-                'cipher.getinstance("rc4")',
-            )
-            has_supported_literal = any(literal in source_lower for literal in weak_cipher_literals)
-            if not has_supported_literal or "cipher.getinstance" not in source_lower:
-                return "weak-crypto remediation only supports explicit DES/RC4/AES-ECB literal subcases with local cipher context"
-
-        if rule_id == "ISO-A.10-WEAK-RANDOM":
-            supported_patterns = (
-                r"new\s+(?:java\.util\.)?random\s*\(",
-                r"(?:java\.lang\.)?math\s*\.\s*random\s*\(",
-                r"(?:java\.util\.concurrent\.)?threadlocalrandom\s*\.\s*current\s*\(",
-                r"(?:java\.security\.)?securerandom\s*\.\s*getinstance\s*\(\s*\"sha1prng\"\s*\)",
-            )
-            if not any(re.search(pattern, source_lower) for pattern in supported_patterns):
-                return "weak-random remediation only supports local Random/Math.random/ThreadLocalRandom/SHA1PRNG replacements"
-
-        return None
+        source_code = resolve_context_source_code(context)
+        return preflight_unsupported_reason(rule_id, source_code)
 
     @classmethod
     def _build_no_fix_response(
         cls,
         *,
         violation_id: str,
-        context: Dict[str, Any],
+        context: dict[str, Any],
         reason: str,
         attempt_count: int | None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return build_no_fix_response(
             violation_id=violation_id,
             context=context,
@@ -225,9 +197,9 @@ class RemediationService:
     def preview_virtual_fix(
         self,
         violation_id: str,
-        target_method: Optional[str] = None,
-        file_path: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        target_method: str | None = None,
+        file_path: str | None = None,
+    ) -> dict[str, Any]:
         context = self.get_violation_context(violation_id, target_method, file_path)
         if context is None:
             return {
@@ -286,7 +258,7 @@ class RemediationService:
             response["confidence"] = confidence
             return response
 
-        original_source = context.get("exact_method_source") or (context.get("evidence") or {}).get("source_code") or ""
+        original_source = resolve_context_source_code(context)
         diff = _unified_diff(original_source, updated_source or "", label="method")
         if not updated_source:
             return {
@@ -324,7 +296,7 @@ class RemediationService:
                 "confidence": confidence,
             }
 
-        normalized_output: List[Dict[str, Any]] = []
+        normalized_output: list[dict[str, Any]] = []
         for raw in opa_raw:
             normalized = normalize_violation_payload(raw)
             if not normalized:
@@ -356,14 +328,14 @@ class RemediationService:
         self,
         violation_id: str,
         *,
-        target_method: Optional[str] = None,
-        file_path: Optional[str] = None,
+        target_method: str | None = None,
+        file_path: str | None = None,
         mode: str = "dry_run",
         max_attempts: int = 2,
-        raw_capture_dir: Optional[str] = None,
-        build_command: Optional[str] = None,
-        prompt_context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        raw_capture_dir: str | None = None,
+        build_command: str | None = None,
+        prompt_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return execute_apply_fix(
             service=self,
             violation_id=violation_id,
@@ -379,9 +351,9 @@ class RemediationService:
     def get_violation_context(
         self,
         violation_id: str,
-        target_method: Optional[str] = None,
-        file_path: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        target_method: str | None = None,
+        file_path: str | None = None,
+    ) -> dict[str, Any] | None:
         workspace_root = self._resolve_policy_workspace_root(file_path)
         return gather_violation_context(
             violation_id,
@@ -399,9 +371,9 @@ class RemediationService:
 
     def propose_method_edits(
         self,
-        context: Dict[str, Any],
-        previous_errors: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        context: dict[str, Any],
+        previous_errors: list[str] | None = None,
+    ) -> dict[str, Any]:
         rule_id = context.get("rule_id")
         strategy = self._resolve_fix_strategy(str(rule_id) if rule_id else None) or {}
         spec = RemediationTaskSpec(
@@ -422,12 +394,12 @@ class RemediationService:
     def _parse_structured_generation_response(
         response: Any,
         *,
-        target_method: Optional[str] = None,
-        original_method_lines: Optional[List[str]] = None,
-        original_method_source: Optional[str] = None,
+        target_method: str | None = None,
+        original_method_lines: list[str] | None = None,
+        original_method_source: str | None = None,
         plan: Any = None,
-        rule_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        rule_id: str | None = None,
+    ) -> dict[str, Any]:
         _ = original_method_source
         _ = rule_id
         return parse_structured_generation_response(
@@ -440,8 +412,8 @@ class RemediationService:
     def build_virtual_graph_context(
         self,
         source_code: str,
-        base_graph: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        base_graph: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return build_virtual_graph_context(source_code, base_graph=base_graph)
 
     @staticmethod
@@ -449,27 +421,27 @@ class RemediationService:
         return sanitize_method_snippet(source_code)
 
     @staticmethod
-    def _apply_fallback_graph_heuristics(snippet: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_fallback_graph_heuristics(snippet: str, context: dict[str, Any]) -> dict[str, Any]:
         return apply_fallback_graph_heuristics(snippet, context)
 
     @staticmethod
-    def _apply_logger_heuristic(snippet: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_logger_heuristic(snippet: str, context: dict[str, Any]) -> dict[str, Any]:
         return apply_logger_heuristic(snippet, context)
 
     @staticmethod
-    def _apply_annotation_heuristic(snippet: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_annotation_heuristic(snippet: str, context: dict[str, Any]) -> dict[str, Any]:
         return apply_annotation_heuristic(snippet, context)
 
     @staticmethod
-    def _dedupe_fields(fields: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _dedupe_fields(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return dedupe_fields(fields)
 
     @staticmethod
-    def _resolve_file_path(file_path: str) -> Optional[Path]:
+    def _resolve_file_path(file_path: str) -> Path | None:
         return resolve_file_path(file_path)
 
     @staticmethod
-    def _resolve_policy_workspace_root(file_path: Optional[str] = None) -> str:
+    def _resolve_policy_workspace_root(file_path: str | None = None) -> str:
         if file_path:
             resolved = resolve_file_path(file_path)
             if resolved is not None:
@@ -478,18 +450,18 @@ class RemediationService:
         return os.path.abspath(settings.upload_dir)
 
     @staticmethod
-    def _detect_build_root(source_path: Path) -> Optional[Path]:
+    def _detect_build_root(source_path: Path) -> Path | None:
         return detect_build_root(source_path)
 
-    def _prepare_temp_workspace(self, temp_root: Path, source_path: Path) -> Tuple[Path, Path, Optional[Path]]:
+    def _prepare_temp_workspace(self, temp_root: Path, source_path: Path) -> tuple[Path, Path, Path | None]:
         return prepare_temp_workspace(temp_root, source_path)
 
     @staticmethod
-    def _compile_project(build_root: Optional[Path], build_command: Optional[str] = None) -> Dict[str, Any]:
+    def _compile_project(build_root: Path | None, build_command: str | None = None) -> dict[str, Any]:
         return compile_project(build_root, build_command=build_command, run_command=subprocess.run)
 
     @staticmethod
-    def _parse_signature(signature: str) -> Tuple[str, List[str]]:
+    def _parse_signature(signature: str) -> tuple[str, list[str]]:
         return parse_signature(signature)
 
     @staticmethod
@@ -497,7 +469,7 @@ class RemediationService:
         return normalize_type_name(type_name)
 
     @classmethod
-    def _params_match(cls, expected: List[str], actual: List[str]) -> bool:
+    def _params_match(cls, expected: list[str], actual: list[str]) -> bool:
         _ = cls
         return params_match(expected, actual)
 
@@ -506,17 +478,17 @@ class RemediationService:
         cls,
         source: str,
         target_method: str,
-    ) -> Tuple[List[str], int, int, str]:
+    ) -> tuple[list[str], int, int, str]:
         _ = cls
         return extract_method_span(source, target_method)
 
     @classmethod
     def _apply_method_edits(
         cls,
-        original_lines: List[str],
-        edits: List[Dict[str, Any]],
+        original_lines: list[str],
+        edits: list[dict[str, Any]],
         target_method: str,
-    ) -> Tuple[List[str], str]:
+    ) -> tuple[list[str], str]:
         _ = cls
         return apply_method_edits(original_lines, edits, target_method)
 
@@ -524,25 +496,25 @@ class RemediationService:
     def _replace_method_in_source(
         cls,
         source: str,
-        updated_method_lines: List[str],
+        updated_method_lines: list[str],
         target_method: str,
-    ) -> Tuple[str, str, str]:
+    ) -> tuple[str, str, str]:
         _ = cls
         return replace_method_in_source(source, updated_method_lines, target_method)
 
     @staticmethod
-    def _infer_method_end_line(lines: List[str], start_line: int) -> Optional[int]:
+    def _infer_method_end_line(lines: list[str], start_line: int) -> int | None:
         return infer_method_end_line(lines, start_line)
 
     def _build_virtual_bundle(
         self,
-        context: Dict[str, Any],
+        context: dict[str, Any],
         updated_source: str,
-        virtual_graph: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        virtual_graph: dict[str, Any],
+    ) -> dict[str, Any]:
         _ = self
         return build_virtual_bundle(context, updated_source, virtual_graph)
 
     @staticmethod
-    def _method_name_from_signature(signature: Optional[str]) -> Optional[str]:
+    def _method_name_from_signature(signature: str | None) -> str | None:
         return method_name_from_signature(signature)

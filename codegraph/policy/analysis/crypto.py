@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Dict
 
 from codegraph.policy.analysis.primitives import SourceSanitizer
 
@@ -63,7 +62,7 @@ class CryptoIndicatorAnalyzer:
             if normalized == "md5":
                 md5_literal = True
 
-        assignments: Dict[str, str] = {}
+        assignments: dict[str, str] = {}
         for var, value in STRING_ASSIGN_RE.findall(source_code):
             normalized = value.strip().lower()
             if normalized in WEAK_HASH_ALGORITHMS:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from codegraph.policy.analysis.patterns import (
     APPEND_CALL_RE,
@@ -26,11 +26,10 @@ from codegraph.policy.analysis.patterns import (
     XPATH_SINK_VARIABLE_PATTERNS,
 )
 from codegraph.policy.analysis.state import (
+    SIMPLE_ASSIGNMENT_RE,
     AssignmentState,
     AssignmentStateAnalyzer,
-    SIMPLE_ASSIGNMENT_RE,
 )
-
 
 SQL_BUILDER_APPEND_RE = re.compile(
     r"([A-Za-z_][A-Za-z0-9_]*)\.append\(\s*([^;]+?)\s*\)\s*;",
@@ -128,12 +127,6 @@ class PathSafetyAnalyzer:
             path_sink_uses_safe_resource_helper=path_sink_uses_safe_resource_helper,
             path_traversal_detected=path_traversal_detected,
         )
-
-    def safe_constant_override_detected(self, source_code: str) -> bool:
-        return self.analyze(source_code).path_sink_uses_safe_constant
-
-    def sink_references_tainted_data(self, source_code: str) -> bool:
-        return self.analyze(source_code).path_sink_uses_tainted_input
 
     @staticmethod
     def _sink_uses_tainted_input(source_code: str, state: AssignmentState, sink_vars: set[str]) -> bool:

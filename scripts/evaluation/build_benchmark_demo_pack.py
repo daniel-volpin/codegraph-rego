@@ -8,9 +8,9 @@ import argparse
 import json
 import os
 import shutil
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
-
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = REPO_ROOT / "demo" / "benchmark-framework-demo" / "manifest.json"
@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_manifest(path: Path) -> Dict[str, Any]:
+def _load_manifest(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Manifest must be a JSON object.")
@@ -56,7 +56,7 @@ def _copy_if_exists(source: Path, destination: Path) -> None:
         shutil.copy2(source, destination)
 
 
-def _iter_testcase_ids(manifest: Dict[str, Any]) -> Iterable[str]:
+def _iter_testcase_ids(manifest: dict[str, Any]) -> Iterable[str]:
     for entry in manifest.get("testcases", []):
         if isinstance(entry, dict):
             testcase_id = entry.get("testcase_id")
@@ -64,10 +64,10 @@ def _iter_testcase_ids(manifest: Dict[str, Any]) -> Iterable[str]:
                 yield testcase_id.strip()
 
 
-def _stage_selected_testcases(benchmark_root: Path, destination_root: Path, testcase_ids: List[str]) -> List[str]:
+def _stage_selected_testcases(benchmark_root: Path, destination_root: Path, testcase_ids: list[str]) -> list[str]:
     source_root = benchmark_root / "src" / "main" / "java"
     destination_source_root = destination_root / "src" / "main" / "java"
-    missing: List[str] = []
+    missing: list[str] = []
 
     for testcase_id in testcase_ids:
         matches = list(source_root.rglob(f"{testcase_id}.java"))
@@ -83,7 +83,7 @@ def _stage_selected_testcases(benchmark_root: Path, destination_root: Path, test
     return missing
 
 
-def build_demo_pack(benchmark_root: Path, manifest_path: Path, output_dir: Path) -> Dict[str, Any]:
+def build_demo_pack(benchmark_root: Path, manifest_path: Path, output_dir: Path) -> dict[str, Any]:
     manifest = _load_manifest(manifest_path)
     output_dir.mkdir(parents=True, exist_ok=True)
 

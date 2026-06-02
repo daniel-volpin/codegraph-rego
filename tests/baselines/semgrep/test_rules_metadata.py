@@ -9,7 +9,6 @@ import yaml
 
 from baselines.semgrep.runner import DEFAULT_RULES_DIR
 
-
 EXPECTED_RULES: dict[str, str] = {
     "iso-a10-weak-hash": "ISO-A.10-WEAK-HASH",
     "iso-a10-weak-crypto": "ISO-A.10-WEAK-CRYPTO",

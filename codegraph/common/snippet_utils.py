@@ -7,7 +7,6 @@ Utility for extracting code snippets from source files around a method/function 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 
 def _read_lines(file_path: Path) -> list[str]:
@@ -35,7 +34,7 @@ def extract_code_snippet(file_path: str, needle: str, before: int = 8, after: in
 
 
 def extract_snippet_by_lines(
-    file_path: str, start_line: Optional[int], end_line: Optional[int], padding: int = 2
+    file_path: str, start_line: int | None, end_line: int | None, padding: int = 2
 ) -> str:
     """
     Return the snippet defined by `start_line`/`end_line` (1-based, inclusive).

@@ -9,8 +9,8 @@ from typing import Any
 from codegraph.config import settings
 from codegraph.ingestion.service import process_single_file_content
 from codegraph.policy.integration import PolicyEvaluator
-from codegraph.remediation.capabilities import get_remediation_capability
 from codegraph.policy.trace import PolicyStateTrace, filter_predicate_trace, project_trace_profile
+from codegraph.remediation.capabilities import get_remediation_capability
 from codegraph.remediation.editing import (
     read_source_preserving_format,
     write_source_preserving_format,

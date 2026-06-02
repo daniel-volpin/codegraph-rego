@@ -1,5 +1,6 @@
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field
-from typing import Any, List, Literal, Optional
 
 
 class HealthStartupStatus(BaseModel):
@@ -17,10 +18,10 @@ class LivenessResponse(BaseModel):
 
 class UploadResponse(BaseModel):
     status: str
-    java_root: Optional[str] = None
-    java_roots: List[str] = Field(default_factory=list)
-    error: Optional[str] = None
-    request_id: Optional[str] = None
+    java_root: str | None = None
+    java_roots: list[str] = Field(default_factory=list)
+    error: str | None = None
+    request_id: str | None = None
 
 
 class UploadStatusResponse(BaseModel):
@@ -28,10 +29,10 @@ class UploadStatusResponse(BaseModel):
     message: str
     progress: float
     complete: bool
-    error: Optional[str] = None
+    error: str | None = None
     updated_at: str
-    started_at: Optional[str] = None
-    request_id: Optional[str] = None
+    started_at: str | None = None
+    request_id: str | None = None
 
 
 class HealthCheckResponse(BaseModel):
@@ -52,45 +53,45 @@ class SearchRequest(BaseModel):
 
 class SearchMatch(BaseModel):
     method: str
-    neighbors: List[dict]
+    neighbors: list[dict]
 
 
 class SearchResponse(BaseModel):
-    matches: List[str]
-    contexts: List[List[SearchMatch]]
+    matches: list[str]
+    contexts: list[list[SearchMatch]]
 
 
 class PolicyEvaluateResponse(BaseModel):
-    violations: Optional[list] = None
-    opa_output: Optional[dict] = None
-    error: Optional[str] = None
+    violations: list | None = None
+    opa_output: dict | None = None
+    error: str | None = None
 
 
 class PolicyCatalogResponse(BaseModel):
-    controls: List[dict] = Field(default_factory=list)
-    rules: List[dict] = Field(default_factory=list)
-    benchmark_categories: List[dict] = Field(default_factory=list)
-    framework_demo_rule_ids: List[str] = Field(default_factory=list)
-    error: Optional[str] = None
+    controls: list[dict] = Field(default_factory=list)
+    rules: list[dict] = Field(default_factory=list)
+    benchmark_categories: list[dict] = Field(default_factory=list)
+    framework_demo_rule_ids: list[str] = Field(default_factory=list)
+    error: str | None = None
 
 
 class PolicyEvaluateWithLLMRequest(BaseModel):
     limit: int = 10
-    model: Optional[str] = None
-    max_bundles: Optional[int] = None
-    max_total_violations: Optional[int] = None
-    max_per_violation_id: Optional[int] = None
-    rule_ids: Optional[List[str]] = None
+    model: str | None = None
+    max_bundles: int | None = None
+    max_total_violations: int | None = None
+    max_per_violation_id: int | None = None
+    rule_ids: list[str] | None = None
 
 
 class PolicyExplainOneRequest(BaseModel):
     violation: dict
     include_graph_context: bool = True
-    model: Optional[str] = None
+    model: str | None = None
 
 
 class PolicyExplanationStructured(BaseModel):
-    evidence_id: Optional[str] = None
+    evidence_id: str | None = None
     citation: str
     why: str
     fix: str
@@ -98,82 +99,82 @@ class PolicyExplanationStructured(BaseModel):
 
 class PolicyExplainOneResponse(BaseModel):
     status: Literal["OK", "ERROR"]
-    explanation: Optional[str] = None
-    explanation_structured: Optional[PolicyExplanationStructured] = None
-    model: Optional[str] = None
+    explanation: str | None = None
+    explanation_structured: PolicyExplanationStructured | None = None
+    model: str | None = None
     include_graph_context: bool = True
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class PolicyReviewCreateRequest(BaseModel):
     label: Literal["TP", "FP", "UNCLEAR"]
-    notes: Optional[str] = None
+    notes: str | None = None
     violation: dict
-    explanation: Optional[str] = None
-    llm_model: Optional[str] = None
+    explanation: str | None = None
+    llm_model: str | None = None
     include_graph_context: bool = True
-    remediation_preview: Optional[dict] = None
-    remediation_apply: Optional[dict] = None
+    remediation_preview: dict | None = None
+    remediation_apply: dict | None = None
 
 
 class PolicyReviewCreateResponse(BaseModel):
     status: Literal["OK", "ERROR"]
-    review_id: Optional[str] = None
-    store_path: Optional[str] = None
-    scrub_warnings: List[str] = Field(default_factory=list)
-    error: Optional[str] = None
+    review_id: str | None = None
+    store_path: str | None = None
+    scrub_warnings: list[str] = Field(default_factory=list)
+    error: str | None = None
 
 
 class PolicyReviewListResponse(BaseModel):
     status: Literal["OK", "ERROR"]
-    reviews: List[dict] = Field(default_factory=list)
-    error: Optional[str] = None
+    reviews: list[dict] = Field(default_factory=list)
+    error: str | None = None
 
 
 class RemediationPreviewRequest(BaseModel):
     violation_id: str
-    target_method: Optional[str] = None
-    file_path: Optional[str] = None
+    target_method: str | None = None
+    file_path: str | None = None
 
 
 class RemediationEditResponse(BaseModel):
     start_line: int
     end_line: int
-    original_lines: List[str]
-    replacement_lines: List[str]
+    original_lines: list[str]
+    replacement_lines: list[str]
 
 
 class RemediationGenerationResponse(BaseModel):
-    decision: Optional[Literal["apply_edits", "no_fix"]] = None
-    edits: Optional[List[RemediationEditResponse]] = None
-    replacement_method_lines: Optional[List[str]] = None
-    replacement_method_code: Optional[str] = None
-    reason: Optional[str] = None
+    decision: Literal["apply_edits", "no_fix"] | None = None
+    edits: list[RemediationEditResponse] | None = None
+    replacement_method_lines: list[str] | None = None
+    replacement_method_code: str | None = None
+    reason: str | None = None
     raw_response_valid: bool = False
-    schema_error: Optional[str] = None
+    schema_error: str | None = None
 
 
 class RemediationPreviewResponse(BaseModel):
     status: str
     violation_id: str
-    rule_id: Optional[str] = None
-    target_method: Optional[str] = None
-    file_path: Optional[str] = None
-    updated_source_code: Optional[str] = None
-    explanation: Optional[str] = None
-    opa_status: Optional[str] = None
-    opa_details: Optional[Any] = None
-    diff: Optional[str] = None
-    verification: Optional[dict] = None
-    generation: Optional[RemediationGenerationResponse] = None
-    confidence: Optional[dict] = None
-    error: Optional[str] = None
+    rule_id: str | None = None
+    target_method: str | None = None
+    file_path: str | None = None
+    updated_source_code: str | None = None
+    explanation: str | None = None
+    opa_status: str | None = None
+    opa_details: Any | None = None
+    diff: str | None = None
+    verification: dict | None = None
+    generation: RemediationGenerationResponse | None = None
+    confidence: dict | None = None
+    error: str | None = None
 
 
 class RemediationApplyRequest(BaseModel):
     violation_id: str
-    target_method: Optional[str] = None
-    file_path: Optional[str] = None
+    target_method: str | None = None
+    file_path: str | None = None
     mode: str = "dry_run"
     max_attempts: int = 2
 
@@ -181,14 +182,14 @@ class RemediationApplyRequest(BaseModel):
 class RemediationApplyResponse(BaseModel):
     status: str
     violation_id: str
-    rule_id: Optional[str] = None
-    target_method: Optional[str] = None
-    file_path: Optional[str] = None
-    updated_source_code: Optional[str] = None
-    diff: Optional[str] = None
-    verification: Optional[dict] = None
-    compilation: Optional[dict] = None
-    metadata: Optional[dict] = None
-    generation: Optional[RemediationGenerationResponse] = None
-    confidence: Optional[dict] = None
-    error: Optional[str] = None
+    rule_id: str | None = None
+    target_method: str | None = None
+    file_path: str | None = None
+    updated_source_code: str | None = None
+    diff: str | None = None
+    verification: dict | None = None
+    compilation: dict | None = None
+    metadata: dict | None = None
+    generation: RemediationGenerationResponse | None = None
+    confidence: dict | None = None
+    error: str | None = None

@@ -20,10 +20,12 @@ reproducible inside CI environments without external services.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Mapping, Sequence
+from typing import Any
 
+from baselines.semgrep.runner import SemgrepRunResult
 from codegraph.evaluation.lexical_noise import (
     LexicalNoiseBenchmark,
     LexicalNoiseCase,
@@ -37,9 +39,6 @@ from codegraph.policy.runtime.opa import evaluate_bundle
 from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.policy.source_analysis_core import strip_java_lexical_noise
 
-from baselines.semgrep.runner import SemgrepRunResult
-
-
 _PUBLIC_METHOD_RE = re.compile(
     r"public\s+(?:static\s+|final\s+|synchronized\s+|abstract\s+|native\s+)*"
     r"[\w<>\[\],\s]+?\s+(?P<name>\w+)\s*\((?P<params>[^)]*)\)",
@@ -50,7 +49,7 @@ METHODS = ("pre_f10", "post_f10", "semgrep")
 SEMGREP_REGISTRY_METHOD = "semgrep_registry"
 
 
-def report_methods(report: "EvalReport") -> tuple[str, ...]:
+def report_methods(report: EvalReport) -> tuple[str, ...]:
     """Canonical method order for ``report`` — known METHODS first, extras after."""
 
     known = [m for m in METHODS if m in report.metrics]
@@ -77,9 +76,6 @@ class CaseRow:
     target_violation_ids: tuple[str, ...]
     by_method: Mapping[str, DetectionResult]
 
-    def label_is_positive(self) -> bool:
-        return self.expected == "positive"
-
 
 @dataclass(frozen=True)
 class MethodMetrics:
@@ -101,7 +97,7 @@ class MethodMetrics:
         *,
         n_resamples: int = 2000,
         seed: int = 0,
-    ) -> "MethodMetrics":
+    ) -> MethodMetrics:
         tp = sum(1 for pred, label in outcomes if pred and label)
         fp = sum(1 for pred, label in outcomes if pred and not label)
         tn = sum(1 for pred, label in outcomes if not pred and not label)
@@ -155,7 +151,7 @@ class EvalReport:
     per_stratum: Mapping[str, StratumMetrics] = field(default_factory=dict)
     paired: tuple[PairedComparison, ...] = ()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "benchmark_id": self.benchmark_id,
             "n_cases": self.n_cases,
@@ -269,7 +265,7 @@ def _build_minimal_bundle(
     file_path: str,
     target_method: str,
     f10_active: bool,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build a minimal OPA bundle mirroring the production wiring.
 
     Pre-F10 (``f10_active=False``) reproduces the pre-F10 pipeline:
@@ -412,7 +408,7 @@ def evaluate_benchmark(
         active_methods.append(SEMGREP_REGISTRY_METHOD)
 
     rows: list[CaseRow] = []
-    outcomes_by_method: Dict[str, list[tuple[bool, bool]]] = {
+    outcomes_by_method: dict[str, list[tuple[bool, bool]]] = {
         m: [] for m in active_methods
     }
 
@@ -426,7 +422,7 @@ def evaluate_benchmark(
         post = detect_via_opa(case, source, file_path=rel_path, f10_active=True)
         smg = detect_via_semgrep(case, semgrep_result)
 
-        by_method: Dict[str, DetectionResult] = {
+        by_method: dict[str, DetectionResult] = {
             "pre_f10": pre,
             "post_f10": post,
             "semgrep": smg,
@@ -478,7 +474,7 @@ def _compute_per_stratum(
     *,
     n_resamples: int,
     seed: int,
-) -> Dict[str, StratumMetrics]:
+) -> dict[str, StratumMetrics]:
     """Group rows by ``fp_source`` and compute per-stratum metrics.
 
     Per-stratum bootstrap CIs are intentionally retained (rather than
@@ -492,7 +488,7 @@ def _compute_per_stratum(
     ``semgrep_registry`` show up in the per-stratum tables when active.
     """
 
-    grouped: Dict[str, list[CaseRow]] = {}
+    grouped: dict[str, list[CaseRow]] = {}
     for row in rows:
         grouped.setdefault(row.fp_source, []).append(row)
 
@@ -507,10 +503,10 @@ def _compute_per_stratum(
             if method not in seen:
                 active_methods.append(method)
 
-    out: Dict[str, StratumMetrics] = {}
+    out: dict[str, StratumMetrics] = {}
     for stratum in sorted(grouped.keys()):
         s_rows = grouped[stratum]
-        s_methods: Dict[str, MethodMetrics] = {}
+        s_methods: dict[str, MethodMetrics] = {}
         for method in active_methods:
             outcomes = [
                 (r.by_method[method].target_fired, r.expected == "positive")
@@ -724,21 +720,8 @@ def _format_per_stratum_section(report: EvalReport) -> str:
                 continue
             m = s.methods[method]
             lines.append(
-                "| {st} | {n} | {npos} | {nneg} | {meth} | {tp} | {fp} | {tn} | {fn} "
-                "| {p:.3f} | {r:.3f} | {f:.3f} |".format(
-                    st=s.stratum,
-                    n=s.n_cases,
-                    npos=s.n_positive,
-                    nneg=s.n_negative,
-                    meth=method,
-                    tp=m.tp,
-                    fp=m.fp,
-                    tn=m.tn,
-                    fn=m.fn,
-                    p=m.precision,
-                    r=m.recall,
-                    f=m.f1,
-                )
+                f"| {s.stratum} | {s.n_cases} | {s.n_positive} | {s.n_negative} | {method} | {m.tp} | {m.fp} | {m.tn} | {m.fn} "
+                f"| {m.precision:.3f} | {m.recall:.3f} | {m.f1:.3f} |"
             )
     return "\n".join(lines) + "\n"
 

@@ -1,6 +1,6 @@
 import unittest
 
-from tests.codegraph.policy._test_helpers import PolicyTestBase, BundleBuilder
+from tests.codegraph.policy._test_helpers import BundleBuilder, PolicyTestBase
 
 
 class TestCryptoDetection(PolicyTestBase):

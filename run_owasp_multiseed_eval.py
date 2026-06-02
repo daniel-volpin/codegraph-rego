@@ -32,7 +32,7 @@ import json
 import statistics
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from baselines.semgrep.runner import run_semgrep_baseline
 from codegraph.evaluation.owasp_lexical_eval import (
@@ -44,7 +44,6 @@ from codegraph.evaluation.owasp_lexical_eval import (
     resolve_owasp_root,
 )
 from codegraph.evaluation.provenance import collect_provenance, write_provenance
-
 
 _METRIC_KEYS = ("tp", "fp", "tn", "fn", "precision", "recall", "f1")
 
@@ -94,7 +93,7 @@ def _build_argparser() -> argparse.ArgumentParser:
     return parser
 
 
-def _per_seed_summary(report: Any) -> Dict[str, Dict[str, float]]:
+def _per_seed_summary(report: Any) -> dict[str, dict[str, float]]:
     return {
         method: {k: getattr(m, k) for k in _METRIC_KEYS}
         for method, m in report.overall.items()
@@ -102,16 +101,16 @@ def _per_seed_summary(report: Any) -> Dict[str, Dict[str, float]]:
 
 
 def _aggregate_across_seeds(
-    per_seed: List[Dict[str, Dict[str, float]]],
-) -> Dict[str, Dict[str, Dict[str, float]]]:
+    per_seed: list[dict[str, dict[str, float]]],
+) -> dict[str, dict[str, dict[str, float]]]:
     """Mean / stddev / min / max across seeds for every method × metric."""
 
     if not per_seed:
         return {}
     methods = list(per_seed[0].keys())
-    out: Dict[str, Dict[str, Dict[str, float]]] = {}
+    out: dict[str, dict[str, dict[str, float]]] = {}
     for method in methods:
-        method_summary: Dict[str, Dict[str, float]] = {}
+        method_summary: dict[str, dict[str, float]] = {}
         for metric in _METRIC_KEYS:
             values = [seed_summary[method][metric] for seed_summary in per_seed]
             method_summary[metric] = {
@@ -125,9 +124,9 @@ def _aggregate_across_seeds(
 
 
 def _format_multi_seed_markdown(
-    seeds: List[int],
-    per_seed: List[Dict[str, Dict[str, float]]],
-    aggregate: Dict[str, Dict[str, Dict[str, float]]],
+    seeds: list[int],
+    per_seed: list[dict[str, dict[str, float]]],
+    aggregate: dict[str, dict[str, dict[str, float]]],
     *,
     limit_per_cwe: int | None,
 ) -> str:
@@ -205,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
     # reuse the result across seeds; only the OWASP case sampling changes.
     semgrep_result = run_semgrep_baseline(target=java_root)
 
-    per_seed_overall: List[Dict[str, Dict[str, float]]] = []
+    per_seed_overall: list[dict[str, dict[str, float]]] = []
     for seed in seeds:
         print(f"seed={seed}: loading & evaluating...")
         cases = load_owasp_cases(

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
-
+from typing import Any
 
 ANALYSIS_FLAG_NAMES: tuple[str, ...] = (
     "md5_literal",
@@ -116,7 +116,7 @@ class PolicyFieldUse:
     class_fqn: str | None = None
 
     @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any]) -> "PolicyFieldUse":
+    def from_mapping(cls, raw: Mapping[str, Any]) -> PolicyFieldUse:
         name = raw.get("name")
         if not isinstance(name, str) or not name.strip():
             raise TypeError("graph_context.uses_fields entries must include a non-blank string name")
@@ -142,7 +142,7 @@ class PolicyGraphContext:
     callers: tuple[str, ...] = ()
 
     @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any]) -> "PolicyGraphContext":
+    def from_mapping(cls, raw: Mapping[str, Any]) -> PolicyGraphContext:
         raw_uses_fields = raw.get("uses_fields", [])
         if raw_uses_fields is None:
             raw_uses_fields = []
@@ -174,7 +174,7 @@ class PolicyAnalysisFlags:
     values: dict[str, bool] = field(default_factory=_empty_analysis_flags_dict)
 
     @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any]) -> "PolicyAnalysisFlags":
+    def from_mapping(cls, raw: Mapping[str, Any]) -> PolicyAnalysisFlags:
         values = _empty_analysis_flags_dict()
         for key in ANALYSIS_FLAG_NAMES:
             value = raw.get(key, values[key])
@@ -182,7 +182,7 @@ class PolicyAnalysisFlags:
         return cls(values=values)
 
     @classmethod
-    def empty(cls) -> "PolicyAnalysisFlags":
+    def empty(cls) -> PolicyAnalysisFlags:
         return cls(values=_empty_analysis_flags_dict())
 
     def to_dict(self) -> dict[str, bool]:
@@ -206,7 +206,7 @@ class PolicyHelperSummaries:
     analyzed_call_count: int = 0
 
     @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any]) -> "PolicyHelperSummaries":
+    def from_mapping(cls, raw: Mapping[str, Any]) -> PolicyHelperSummaries:
         list_values: dict[str, tuple[str, ...]] = {}
         for field_name in HELPER_SUMMARY_LIST_FIELDS:
             list_values[field_name] = _normalize_string_list(raw.get(field_name, []), field_name=field_name)
@@ -236,7 +236,7 @@ class PolicyHelperSummaries:
         )
 
     @classmethod
-    def empty(cls) -> "PolicyHelperSummaries":
+    def empty(cls) -> PolicyHelperSummaries:
         return cls()
 
     def to_dict(self) -> dict[str, Any]:

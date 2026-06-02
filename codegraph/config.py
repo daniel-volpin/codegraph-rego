@@ -1,11 +1,11 @@
 import ipaddress
-from functools import lru_cache
 import os
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any
+
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LOCAL_ENV_FILE = PROJECT_ROOT / ".env"
@@ -71,27 +71,22 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("NEO4J_USER", "neo4j_user"),
         description="Neo4j user",
     )
-    neo4j_pass: Optional[str] = Field(
+    neo4j_pass: str | None = Field(
         None,
         validation_alias=AliasChoices("NEO4J_PASS", "neo4j_pass"),
         description="Neo4j password",
-    )
-    llm_provider: str = Field(
-        "openai",
-        validation_alias=AliasChoices("LLM_PROVIDER", "llm_provider"),
-        description="LLM provider",
     )
     llm_model: str = Field(
         "gpt-4o-mini",
         validation_alias=AliasChoices("LLM_MODEL", "llm_model"),
         description="LLM model",
     )
-    llm_api_base: Optional[str] = Field(
+    llm_api_base: str | None = Field(
         None,
         validation_alias=AliasChoices("LLM_API_BASE", "llm_api_base"),
         description="LLM API base",
     )
-    llm_api_key: Optional[str] = Field(
+    llm_api_key: str | None = Field(
         None,
         validation_alias=AliasChoices("LLM_API_KEY", "llm_api_key"),
         description="LLM API key",
@@ -110,43 +105,43 @@ class Settings(BaseSettings):
             "Set to false to suppress thinking on models that support it (Qwen3, DeepSeek)."
         ),
     )
-    llm_max_tokens_explanation: Optional[int] = Field(
+    llm_max_tokens_explanation: int | None = Field(
         512,
         gt=0,
         validation_alias=AliasChoices("LLM_MAX_TOKENS_EXPLANATION", "llm_max_tokens_explanation"),
         description="Maximum tokens to generate for explanation calls.",
     )
-    llm_max_tokens_remediation: Optional[int] = Field(
+    llm_max_tokens_remediation: int | None = Field(
         1024,
         gt=0,
         validation_alias=AliasChoices("LLM_MAX_TOKENS_REMEDIATION", "llm_max_tokens_remediation"),
         description="Maximum tokens to generate for remediation calls.",
     )
-    llm_model_ttl_seconds: Optional[int] = Field(
+    llm_model_ttl_seconds: int | None = Field(
         None,
         gt=0,
         validation_alias=AliasChoices("LLM_MODEL_TTL_SECONDS", "llm_model_ttl_seconds"),
         description="Optional LM Studio model TTL (seconds) for explanation/default requests.",
     )
-    remediation_llm_model: Optional[str] = Field(
+    remediation_llm_model: str | None = Field(
         None,
         validation_alias=AliasChoices("REMEDIATION_LLM_MODEL", "remediation_llm_model"),
         description="Optional model override for remediation generation.",
     )
-    remediation_llm_max_tokens: Optional[int] = Field(
+    remediation_llm_max_tokens: int | None = Field(
         None,
         gt=0,
         validation_alias=AliasChoices("REMEDIATION_LLM_MAX_TOKENS", "remediation_llm_max_tokens"),
         description="Optional token cap override for remediation generation.",
     )
-    remediation_llm_temperature: Optional[float] = Field(
+    remediation_llm_temperature: float | None = Field(
         None,
         ge=0.0,
         le=2.0,
         validation_alias=AliasChoices("REMEDIATION_LLM_TEMPERATURE", "remediation_llm_temperature"),
         description="Optional temperature override for remediation generation.",
     )
-    remediation_llm_model_ttl_seconds: Optional[int] = Field(
+    remediation_llm_model_ttl_seconds: int | None = Field(
         None,
         gt=0,
         validation_alias=AliasChoices("REMEDIATION_LLM_MODEL_TTL_SECONDS", "remediation_llm_model_ttl_seconds"),
@@ -195,16 +190,6 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("REMEDIATION_CONFIDENCE_TEMPERATURE", "remediation_confidence_temperature"),
         description="Temperature scaling for remediation confidence scoring; >1 softens confidence.",
     )
-    remediation_ranking_enabled: bool = Field(
-        False,
-        validation_alias=AliasChoices("REMEDIATION_RANKING_ENABLED", "remediation_ranking_enabled"),
-        description="When true, optional backend flows may compute multi-candidate ranking.",
-    )
-    remediation_ranking_mode: Literal["off", "shadow"] = Field(
-        "off",
-        validation_alias=AliasChoices("REMEDIATION_RANKING_MODE", "remediation_ranking_mode"),
-        description="Ranking operation mode. Use 'shadow' to score but not alter decisions.",
-    )
     remediation_trace_prompt_enabled: bool = Field(
         False,
         validation_alias=AliasChoices("REMEDIATION_TRACE_PROMPT_ENABLED", "remediation_trace_prompt_enabled"),
@@ -245,7 +230,7 @@ def clear_settings_cache() -> None:
     get_settings.cache_clear()
 
 
-def validate_runtime_settings(candidate: Optional[Settings] = None) -> Settings:
+def validate_runtime_settings(candidate: Settings | None = None) -> Settings:
     settings_obj = candidate or get_settings()
     missing: list[str] = []
     if not settings_obj.neo4j_pass:

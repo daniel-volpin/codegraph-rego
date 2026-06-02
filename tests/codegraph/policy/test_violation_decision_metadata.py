@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 
 from codegraph.policy.runtime.opa import build_violation_response
 
-
 _DECISION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 

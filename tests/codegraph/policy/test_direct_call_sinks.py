@@ -4,13 +4,13 @@ from pathlib import Path
 
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from tests.codegraph.policy._test_helpers import (
-    DirectCallTestBase,
-    _JAVA_SAFE_CONSTANT,
     _JAVA_SAFE_CONDITIONAL,
+    _JAVA_SAFE_CONSTANT,
     _JAVA_SAFE_RETURN_LITERAL,
     _JAVA_SAFE_RETURN_STRING,
     _JAVA_TAINTED_INDIRECTION,
     _JAVA_TAINTED_PASSTHROUGH,
+    DirectCallTestBase,
 )
 
 

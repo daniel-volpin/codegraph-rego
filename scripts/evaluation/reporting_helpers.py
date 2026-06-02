@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
 DEFAULT_OUTPUT_DIR = "outputs/reporting/latest"
 SUPPORT_TIERS = {
     "full": ["ISO-A.10-WEAK-HASH", "ISO-A.10-WEAK-RANDOM"],

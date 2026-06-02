@@ -8,7 +8,7 @@ full / attempted_only / no_fix_only sub-blocks.
 from __future__ import annotations
 
 import unittest
-from typing import Any, Dict, List
+from typing import Any
 
 from codegraph.evaluation.remediation_runtime import (
     ATTEMPTED_REMEDIATION_STATUSES,
@@ -22,7 +22,7 @@ def _result(
     status: str,
     confidence: float,
     fully_verified: bool,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "case_id": case_id,
         "violation_id": "ISO-A.10-WEAK-HASH",
@@ -35,7 +35,7 @@ def _result(
 
 
 class TestCalibrationPopulationSplit(unittest.TestCase):
-    def _mixed_results(self) -> List[Dict[str, Any]]:
+    def _mixed_results(self) -> list[dict[str, Any]]:
         # Five attempted (some succeed, some fail) and three NO_FIX abstentions.
         return [
             _result(case_id="a1", status="OK", confidence=0.9, fully_verified=True),

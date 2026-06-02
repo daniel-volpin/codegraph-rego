@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
 from codegraph.policy.analysis.state import AssignmentStateAnalyzer
@@ -169,8 +169,8 @@ class HelperMethodAnalyzer:
         return names
 
     @staticmethod
-    def _map_string_constants(source_code: str) -> Dict[str, Dict[str, str]]:
-        values: Dict[str, Dict[str, str]] = {}
+    def _map_string_constants(source_code: str) -> dict[str, dict[str, str]]:
+        values: dict[str, dict[str, str]] = {}
         for map_name, key, value in MAP_PUT_LITERAL_RE.findall(source_code):
             values.setdefault(map_name, {})[key] = value
         return values
@@ -195,7 +195,7 @@ class HelperCollectionResolver:
         return resolved
 
     def _replace_map_gets(self, source_code: str, assignment_analyzer: AssignmentStateAnalyzer, state) -> str:
-        entries: Dict[str, Dict[str, str]] = {}
+        entries: dict[str, dict[str, str]] = {}
         for map_name, key, raw_value in MAP_PUT_VALUE_RE.findall(source_code):
             resolved = self._resolve_expr(raw_value.strip(), assignment_analyzer, state)
             if resolved is not None:
@@ -211,7 +211,7 @@ class HelperCollectionResolver:
         return MAP_GET_ASSIGNMENT_RE.sub(_replace, source_code)
 
     def _replace_list_gets(self, source_code: str, assignment_analyzer: AssignmentStateAnalyzer, state) -> str:
-        items: Dict[str, list[str]] = {}
+        items: dict[str, list[str]] = {}
         for list_name, raw_value in LIST_ADD_RE.findall(source_code):
             resolved = self._resolve_expr(raw_value.strip(), assignment_analyzer, state)
             if resolved is not None:
@@ -260,9 +260,9 @@ class DirectCallSummaryBuilder:
         self,
         *,
         current_source: str,
-        method_snapshot: Dict[str, Any],
-        method_index: Dict[str, Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        method_snapshot: dict[str, Any],
+        method_index: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
         safe_vars: list[str] = []
         tainted_vars: list[str] = []
         path_safe_vars: list[str] = []
@@ -392,8 +392,8 @@ class DirectCallSummaryBuilder:
         call_signatures: list[str],
         current_class_fqn: str | None,
         current_file_path: str | None,
-        method_index: Dict[str, Dict[str, Any]],
-    ) -> Dict[str, Any] | None:
+        method_index: dict[str, dict[str, Any]],
+    ) -> dict[str, Any] | None:
         candidates = [sig for sig in call_signatures if sig and _method_name_from_signature(sig) == method_name]
         if not candidates:
             return DirectCallSummaryBuilder._resolve_same_file_method(
@@ -432,8 +432,8 @@ class DirectCallSummaryBuilder:
         method_name: str,
         current_class_fqn: str | None,
         current_file_path: str | None,
-        method_index: Dict[str, Dict[str, Any]],
-    ) -> Dict[str, Any] | None:
+        method_index: dict[str, dict[str, Any]],
+    ) -> dict[str, Any] | None:
         if not current_file_path:
             return None
         candidates = [
@@ -455,7 +455,7 @@ class DirectCallSummaryBuilder:
         return candidates[0]
 
     @staticmethod
-    def _read_method_source(method_snapshot: Dict[str, Any]) -> str:
+    def _read_method_source(method_snapshot: dict[str, Any]) -> str:
         file_path = method_snapshot.get("file_path")
         if not file_path:
             return ""

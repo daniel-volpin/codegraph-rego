@@ -4,25 +4,25 @@ import os
 import shutil
 import tempfile
 import zipfile
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 import aiofiles
 from fastapi import APIRouter, File, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from codegraph.ingestion.utils import UploadValidationError, find_java_roots, safe_extract_zip
-from codegraph.ingestion.service import IngestionError, ingest, purge_workspace_entities
-from codegraph.embedding.service import EmbeddingService
 from api.models.validation import UploadResponse, UploadStatusResponse
-from codegraph.config import settings
 from codegraph.common.progress import (
-    start_progress,
-    update_progress,
     complete_progress,
     error_progress,
     get_progress,
     register_state_change_listener,
+    start_progress,
+    update_progress,
 )
+from codegraph.config import settings
+from codegraph.embedding.service import EmbeddingService
+from codegraph.ingestion.service import IngestionError, ingest, purge_workspace_entities
+from codegraph.ingestion.utils import UploadValidationError, find_java_roots, safe_extract_zip
 
 router = APIRouter()
 UPLOAD_CHUNK_SIZE = 1024 * 1024
@@ -311,10 +311,10 @@ async def _upload_status_event_stream(
             state = get_progress(request_id=request_id)
             payload = json.dumps(state, separators=(",", ":"))
             if payload != last_payload:
-                yield f"event: status\ndata: {payload}\n\n".encode("utf-8")
+                yield f"event: status\ndata: {payload}\n\n".encode()
                 last_payload = payload
             if state.get("complete"):
-                yield f"event: complete\ndata: {payload}\n\n".encode("utf-8")
+                yield f"event: complete\ndata: {payload}\n\n".encode()
                 # Brief grace so client buffers flush before the stream closes.
                 await asyncio.sleep(_SSE_TERMINAL_GRACE_S)
                 return

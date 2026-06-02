@@ -9,9 +9,8 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from codegraph.telemetry import install_log_correlation
 from codegraph.config import settings
 from codegraph.evaluation.explanation_runtime import (
     ExplanationRuntime,
@@ -22,10 +21,12 @@ from codegraph.evaluation.io import render_latex_table, render_markdown_table, w
 from codegraph.evaluation.pipeline import (
     collect_category_false_positive_violations,
     collect_category_violations,
-    group_violations_by_testcase as index_violations_by_testcase,
     ingest_and_evaluate_subset,
     load_benchmark_evaluation_context,
     staged_benchmark_workspace,
+)
+from codegraph.evaluation.pipeline import (
+    group_violations_by_testcase as index_violations_by_testcase,
 )
 from codegraph.evaluation.provenance import collect_provenance, write_provenance
 from codegraph.evaluation.uncertainty import wilson_score_ci
@@ -35,6 +36,7 @@ from codegraph.llm.integration import (
     generate_policy_explanation_structured,
     render_policy_explanation_structured,
 )
+from codegraph.telemetry import install_log_correlation
 
 LOGGER = logging.getLogger("codegraph.eval.explanation")
 
@@ -103,11 +105,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_expected_citation(
-    violation: Dict[str, Any],
+    violation: dict[str, Any],
     *,
     include_graph_context: bool,
     evidence_mode: str,
-) -> Optional[str]:
+) -> str | None:
     payload = build_explanation_evidence(
         violation,
         include_graph_context=include_graph_context,
@@ -129,7 +131,7 @@ def build_expected_citation(
     return citation
 
 
-def has_exact_citation(explanation_payload: Dict[str, Any] | None, expected_citation: str | None) -> bool:
+def has_exact_citation(explanation_payload: dict[str, Any] | None, expected_citation: str | None) -> bool:
     if not expected_citation or not isinstance(explanation_payload, dict):
         return False
     actual_citation = explanation_payload.get("citation")
@@ -138,11 +140,11 @@ def has_exact_citation(explanation_payload: Dict[str, Any] | None, expected_cita
     return actual_citation.strip() == expected_citation
 
 
-def _measure_prompt_chars(messages: List[Dict[str, str]]) -> int:
+def _measure_prompt_chars(messages: list[dict[str, str]]) -> int:
     return sum(len(message.get("content", "")) for message in messages)
 
 
-def _empty_cohort_block() -> Dict[str, Any]:
+def _empty_cohort_block() -> dict[str, Any]:
     return {
         "count": 0,
         "with_context": 0,
@@ -154,7 +156,7 @@ def _empty_cohort_block() -> Dict[str, Any]:
     }
 
 
-def _attach_cohort_cis(block: Dict[str, Any]) -> Dict[str, Any]:
+def _attach_cohort_cis(block: dict[str, Any]) -> dict[str, Any]:
     """Add Wilson 95% intervals for the with/without-context citation rates."""
     n = int(block.get("count") or 0)
     with_hits = int(block.get("with_context") or 0)
@@ -170,11 +172,11 @@ def _attach_cohort_cis(block: Dict[str, Any]) -> Dict[str, Any]:
 
 def _run_explanation_request(
     *,
-    violation: Dict[str, Any],
+    violation: dict[str, Any],
     include_graph_context: bool,
     evidence_mode: str,
     max_tokens: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     messages = build_explanation_prompt(
         violation,
         include_graph_context=include_graph_context,
@@ -183,7 +185,7 @@ def _run_explanation_request(
     prompt_chars = _measure_prompt_chars(messages)
     started = perf_counter()
     error = None
-    structured_explanation: Dict[str, Any] | None = None
+    structured_explanation: dict[str, Any] | None = None
     try:
         structured_explanation = generate_policy_explanation_structured(
             violation,
@@ -299,8 +301,8 @@ def main() -> int:
 
     violations_by_testcase = index_violations_by_testcase(violations)
 
-    metrics: Dict[str, Any] = {}
-    samples_per_category: Dict[str, int] = {}
+    metrics: dict[str, Any] = {}
+    samples_per_category: dict[str, int] = {}
     categories_by_id = context.categories_by_id
     runtime.write_stage_progress(
         "violation_indexing",
@@ -334,7 +336,7 @@ def main() -> int:
     fp_total_count = 0
     fp_total_with = 0
     fp_total_without = 0
-    fp_samples_per_category: Dict[str, int] = {}
+    fp_samples_per_category: dict[str, int] = {}
 
     try:
         with ThreadPoolExecutor(max_workers=max(1, settings.llm_concurrency)) as pool:
@@ -538,7 +540,7 @@ def main() -> int:
         LOGGER.warning("Interrupted by user. Writing partial artifacts to %s", output_dir)
         runtime.close()
 
-    rows: List[List[Any]] = []
+    rows: list[list[Any]] = []
     for category_id in context.selected_category_ids:
         spec = categories_by_id.get(category_id)
         if not spec or category_id not in metrics:

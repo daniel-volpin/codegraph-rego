@@ -46,7 +46,7 @@ class RemediationFlowTests(RemediationTestBase):
         self.assertEqual(out["generation"]["edits"][0]["start_line"], 1)
 
     def test_remediation_prompt_omits_empty_graph_and_vector_blocks(self):
-        from codegraph.remediation.prompting import RemediationPromptTemplate, RemediationTaskSpec
+        from codegraph.llm.tasks.remediation import RemediationPromptTemplate, RemediationTaskSpec
 
         prompt = RemediationPromptTemplate.build_user_prompt(
             context={
@@ -69,7 +69,7 @@ class RemediationFlowTests(RemediationTestBase):
         self.assertNotIn(RemediationPromptTemplate.VECTOR_BEGIN, prompt)
 
     def test_remediation_system_prompt_requires_complete_valid_method_or_no_fix(self):
-        from codegraph.remediation.prompting import RemediationPromptTemplate
+        from codegraph.llm.tasks.remediation import RemediationPromptTemplate
 
         prompt = RemediationPromptTemplate.system_prompt()
         self.assertIn("Return only the changed spans as edits", prompt)

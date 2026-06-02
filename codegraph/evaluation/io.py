@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 
 def ensure_dir(path: Path) -> None:

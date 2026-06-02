@@ -8,7 +8,6 @@ turns a parametric lookup into a full scan).
 from __future__ import annotations
 
 import unittest
-from typing import List
 
 from codegraph.db import ensure_constraints
 
@@ -19,10 +18,10 @@ class _CapturingResult:
 
 
 class _CapturingSession:
-    def __init__(self, sink: List[str]) -> None:
+    def __init__(self, sink: list[str]) -> None:
         self._sink = sink
 
-    def __enter__(self) -> "_CapturingSession":
+    def __enter__(self) -> _CapturingSession:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
@@ -35,7 +34,7 @@ class _CapturingSession:
 
 class _CapturingDriver:
     def __init__(self) -> None:
-        self.statements: List[str] = []
+        self.statements: list[str] = []
 
     def session(self) -> _CapturingSession:
         return _CapturingSession(self.statements)

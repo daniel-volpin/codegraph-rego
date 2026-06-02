@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
 
 from codegraph.policy.analysis.patterns import (
     BUILDER_TOSTRING_RE,
@@ -121,9 +120,9 @@ class CommandFlowAnalyzer:
         expr: str,
         *,
         state: AssignmentState,
-        list_taint: Dict[str, bool],
-        array_taint: Dict[str, bool],
-        builder_taint: Dict[str, bool],
+        list_taint: dict[str, bool],
+        array_taint: dict[str, bool],
+        builder_taint: dict[str, bool],
     ) -> tuple[bool, bool]:
         normalized = expr.strip()
         if not normalized:
@@ -146,8 +145,8 @@ class CommandFlowAnalyzer:
             return True, False
         return False, False
 
-    def _list_taint(self, source_code: str, state: AssignmentState) -> Dict[str, bool]:
-        values: Dict[str, bool] = {}
+    def _list_taint(self, source_code: str, state: AssignmentState) -> dict[str, bool]:
+        values: dict[str, bool] = {}
         for list_name, expr in COMMAND_LIST_ADD_RE.findall(source_code):
             tainted, _ = self._command_expr_tainted(
                 expr.strip(),
@@ -159,8 +158,8 @@ class CommandFlowAnalyzer:
             values[list_name] = values.get(list_name, False) or tainted
         return values
 
-    def _array_taint(self, source_code: str, state: AssignmentState) -> Dict[str, bool]:
-        values: Dict[str, bool] = {}
+    def _array_taint(self, source_code: str, state: AssignmentState) -> dict[str, bool]:
+        values: dict[str, bool] = {}
         for array_name, entries in COMMAND_ARRAY_ASSIGNMENT_RE.findall(source_code):
             tainted, _ = self._command_expr_tainted(
                 entries.strip(),
@@ -172,8 +171,8 @@ class CommandFlowAnalyzer:
             values[array_name] = tainted or array_name in state.tainted_vars
         return values
 
-    def _builder_taint(self, source_code: str, state: AssignmentState) -> Dict[str, bool]:
-        values: Dict[str, bool] = {}
+    def _builder_taint(self, source_code: str, state: AssignmentState) -> dict[str, bool]:
+        values: dict[str, bool] = {}
         for builder_name, expr in COMMAND_APPEND_RE.findall(source_code):
             tainted, _ = self._command_expr_tainted(
                 expr.strip(),

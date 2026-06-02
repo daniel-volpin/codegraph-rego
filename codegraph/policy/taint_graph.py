@@ -17,7 +17,7 @@ import os
 import re
 from collections import deque
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from codegraph.common.snippet_utils import extract_snippet_by_lines
 from codegraph.policy.source_analysis_core import (
@@ -34,7 +34,7 @@ _PROJECT_ROOT = os.path.abspath(os.path.join(_THIS_DIR, os.pardir, os.pardir))
 # Sink type → tuple of compiled patterns matched against callee source code.
 # These reuse the same patterns as the single-method analysis so detection
 # semantics stay consistent.
-_SINK_SOURCE_PATTERNS: Dict[str, tuple[re.Pattern[str], ...]] = {
+_SINK_SOURCE_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
     "sql": SQL_EXECUTE_CALL_PATTERNS,
     "command": CMDI_PATTERNS,
     "path": PATH_TRAVERSAL_PATTERNS,
@@ -43,7 +43,7 @@ _SINK_SOURCE_PATTERNS: Dict[str, tuple[re.Pattern[str], ...]] = {
 }
 
 
-def _resolve_path(file_path: Optional[str]) -> Optional[Path]:
+def _resolve_path(file_path: str | None) -> Path | None:
     """Resolve a file path to an existing file, trying absolute then project-relative."""
     if not file_path:
         return None
@@ -69,15 +69,15 @@ class TaintPathFinder:
     external library methods do not have Method nodes in the graph.
     """
 
-    def __init__(self, method_index: Dict[str, Dict[str, Any]]) -> None:
+    def __init__(self, method_index: dict[str, dict[str, Any]]) -> None:
         self._index = method_index
-        self._source_cache: Dict[str, str] = {}
+        self._source_cache: dict[str, str] = {}
 
     def find_reachable_sinks(
         self,
         signature: str,
         max_depth: int = 4,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """BFS the call graph from *signature*, returning reachable sink types.
 
         Sink detection starts at depth 1 (direct callees of the evaluated
@@ -92,8 +92,8 @@ class TaintPathFinder:
             A list of ``{"sink_type": str, "hops": int}`` dicts, one per
             reachable sink type, using the minimum hop count.
         """
-        found: Dict[str, int] = {}  # sink_type → minimum hop count
-        visited: Set[str] = {signature}
+        found: dict[str, int] = {}  # sink_type → minimum hop count
+        visited: set[str] = {signature}
         queue: deque[tuple[str, int]] = deque([(signature, 0)])
 
         while queue:

@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from api.models.validation import SearchRequest, SearchResponse, SearchMatch
+from api.models.validation import SearchMatch, SearchRequest, SearchResponse
 from codegraph.search.service import run_search
 
 router = APIRouter()

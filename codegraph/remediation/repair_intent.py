@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -25,7 +25,11 @@ from codegraph.remediation.capabilities import (
     RemediationCapability,
     get_remediation_capability,
 )
-from codegraph.remediation.contracts import FIX_STRATEGIES
+from codegraph.remediation.contracts import (
+    FIX_STRATEGIES,
+    preflight_unsupported_reason,
+    resolve_context_source_code,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -140,12 +144,7 @@ class ImportAdjustmentOp(BaseModel):
 
 
 RepairOperation = Annotated[
-    Union[
-        LiteralReplacementOp,
-        ConstructorReplacementOp,
-        MethodCallReplacementOp,
-        ImportAdjustmentOp,
-    ],
+    LiteralReplacementOp | ConstructorReplacementOp | MethodCallReplacementOp | ImportAdjustmentOp,
     Field(discriminator="op_type"),
 ]
 
@@ -202,48 +201,14 @@ _DEFAULT_INVARIANTS: list[Invariant] = [
 def _preflight_refusal(rule_id: str, source_code: str) -> RefusalReason | None:
     """Check subcase-level fixability.
 
-    This deliberately mirrors the regex/literal checks in
-    ``RemediationService._preflight_fixability_reason`` so that the
-    repair-intent planner produces identical refusal semantics without
-    altering the existing service code path.
+    Delegates to :func:`preflight_unsupported_reason` (the shared source of
+    truth also used by ``RemediationService._preflight_fixability_reason``)
+    and wraps any reason in a typed :class:`RefusalReason`, so both paths
+    produce identical refusal semantics.
     """
-    source_lower = source_code.lower()
-
-    if rule_id == "ISO-A.10-WEAK-CRYPTO":
-        weak_cipher_literals = (
-            "des/cbc/pkcs5padding",
-            "desede/ecb/pkcs5padding",
-            "aes/ecb/",
-            '"rc4"',
-            'cipher.getinstance("des")',
-            'cipher.getinstance("rc4")',
-        )
-        has_supported_literal = any(literal in source_lower for literal in weak_cipher_literals)
-        if not has_supported_literal or "cipher.getinstance" not in source_lower:
-            return RefusalReason(
-                code=RefusalCode.UNSUPPORTED_SUBCASE,
-                explanation=(
-                    "weak-crypto remediation only supports explicit "
-                    "DES/RC4/AES-ECB literal subcases with local cipher context"
-                ),
-            )
-
-    if rule_id == "ISO-A.10-WEAK-RANDOM":
-        supported_patterns = (
-            r"new\s+(?:java\.util\.)?random\s*\(",
-            r"(?:java\.lang\.)?math\s*\.\s*random\s*\(",
-            r"(?:java\.util\.concurrent\.)?threadlocalrandom\s*\.\s*current\s*\(",
-            r"(?:java\.security\.)?securerandom\s*\.\s*getinstance\s*\(\s*\"sha1prng\"\s*\)",
-        )
-        if not any(re.search(pattern, source_lower) for pattern in supported_patterns):
-            return RefusalReason(
-                code=RefusalCode.UNSUPPORTED_SUBCASE,
-                explanation=(
-                    "weak-random remediation only supports local "
-                    "Random/Math.random/ThreadLocalRandom/SHA1PRNG replacements"
-                ),
-            )
-
+    reason = preflight_unsupported_reason(rule_id, source_code)
+    if reason is not None:
+        return RefusalReason(code=RefusalCode.UNSUPPORTED_SUBCASE, explanation=reason)
     return None
 
 
@@ -280,7 +245,6 @@ def plan_repair_intent(
     rule_id = str(context.get("rule_id") or "")
     target_method = str(context.get("target_method") or "unknown")
     file_path = str(context.get("file_path") or "unknown")
-    evidence = context.get("evidence") or {}
 
     # Build a minimal SourceSpan from available context.
     target = SourceSpan(
@@ -314,7 +278,7 @@ def plan_repair_intent(
         )
 
     # Preflight subcase check.
-    source_code = str(context.get("exact_method_source") or evidence.get("source_code") or "")
+    source_code = resolve_context_source_code(context)
     preflight = _preflight_refusal(rule_id, source_code)
     if preflight is not None:
         LOGGER.debug(

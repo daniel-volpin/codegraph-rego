@@ -7,10 +7,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import List
 
 
-def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate ISO 27001 policies via OPA.")
     parser.add_argument(
         "--json",
@@ -58,7 +57,7 @@ def _print_summary(result: dict, limit: int | None) -> None:
             print(f"    {reason}")
 
 
-def main(argv: List[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     from codegraph.policy import integration as policy_integration
 

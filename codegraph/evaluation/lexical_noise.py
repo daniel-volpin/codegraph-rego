@@ -21,8 +21,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple
-
 
 VALID_FP_SOURCES: frozenset[str] = frozenset(
     {"line_comment", "block_comment", "string_literal", "char_literal", "text_block"}
@@ -36,8 +34,8 @@ class LexicalNoiseCase:
     file_name: str
     fp_source: str
     expected: str
-    target_violation_ids: Tuple[str, ...]
-    tokens_in_noise: Tuple[str, ...]
+    target_violation_ids: tuple[str, ...]
+    tokens_in_noise: tuple[str, ...]
     rationale: str
 
     def __post_init__(self) -> None:
@@ -61,7 +59,7 @@ class LexicalNoiseBenchmark:
     fixture_root_relative: str
     java_relative_root: str
     package: str
-    cases: Tuple[LexicalNoiseCase, ...]
+    cases: tuple[LexicalNoiseCase, ...]
 
     def resolve_fixture_root(self, project_root: Path) -> Path:
         return project_root / self.fixture_root_relative
@@ -69,13 +67,13 @@ class LexicalNoiseBenchmark:
     def resolve_java_root(self, project_root: Path) -> Path:
         return self.resolve_fixture_root(project_root) / self.java_relative_root
 
-    def negatives(self) -> Tuple[LexicalNoiseCase, ...]:
+    def negatives(self) -> tuple[LexicalNoiseCase, ...]:
         return tuple(case for case in self.cases if case.expected == "negative")
 
-    def positives(self) -> Tuple[LexicalNoiseCase, ...]:
+    def positives(self) -> tuple[LexicalNoiseCase, ...]:
         return tuple(case for case in self.cases if case.expected == "positive")
 
-    def by_fp_source(self, fp_source: str) -> Tuple[LexicalNoiseCase, ...]:
+    def by_fp_source(self, fp_source: str) -> tuple[LexicalNoiseCase, ...]:
         return tuple(case for case in self.cases if case.fp_source == fp_source)
 
 
