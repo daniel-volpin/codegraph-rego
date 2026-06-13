@@ -126,6 +126,7 @@ def evaluate_policies(
     # OPA subprocesses are CPU-bound, so we maximize thread usage independent of LLM limits.
     workers = min(32, (os.cpu_count() or 4) + 4)
     opa_results: list[Any] = [None] * len(bundles)  # preserve order
+    failed_bundles: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
         future_to_idx = {pool.submit(_evaluate_bundle, b): i for i, b in enumerate(bundles)}
         for future in as_completed(future_to_idx):
@@ -133,7 +134,22 @@ def evaluate_policies(
             try:
                 opa_results[idx] = future.result()
             except RuntimeError as exc:
-                return {"error": str(exc), "bundle": bundles[idx].get("target_method")}
+                # Record and continue rather than discarding every already-computed
+                # violation. One malformed method must not abort a whole-corpus run;
+                # the failure is surfaced in ``failed_bundles`` for attribution.
+                opa_results[idx] = None
+                failed_bundles.append(
+                    {
+                        "target_method": bundles[idx].get("target_method"),
+                        "file_path": bundles[idx].get("file_path"),
+                        "error": str(exc),
+                    }
+                )
+                LOGGER.warning(
+                    "OPA evaluation failed for bundle %s: %s",
+                    bundles[idx].get("target_method"),
+                    exc,
+                )
 
     opa_runs = len(bundles)
     for bundle, opa_result in zip(bundles, opa_results):
@@ -166,6 +182,9 @@ def evaluate_policies(
         "opa_runs": opa_runs,
         "bundle_count": len(bundles),
     }
+    if failed_bundles:
+        response["failed_bundles"] = failed_bundles
+        response["failed_bundle_count"] = len(failed_bundles)
     if include_limit_metadata:
         response.update(
             {

@@ -335,6 +335,44 @@ class TestPolicyEvaluationCaps(PolicyTestBase):
         self.assertEqual(len(result["violations"]), 1)
         self.assertEqual(result["violations"][0]["violation_id"], "ISO-A.10-WEAK-HASH")
 
+    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
+    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
+    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
+    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
+    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
+    def test_one_failing_bundle_does_not_abort_whole_run(
+        self,
+        _mock_which,
+        _mock_resolve_catalog,
+        _mock_load_catalog,
+        _mock_load_rules,
+        _mock_catalog_entries,
+    ) -> None:
+        """A single OPA failure must not discard the other bundles' violations."""
+        from codegraph.policy.integration import evaluate_policies
+
+        bundles = [
+            BundleBuilder().with_target_method("good").with_file_path("g").with_source_code("").build(),
+            BundleBuilder().with_target_method("bad").with_file_path("b").with_source_code("").build(),
+        ]
+
+        def fake_eval(bundle):
+            if bundle.get("target_method") == "bad":
+                raise RuntimeError("OPA evaluation failed for bad")
+            return [{"violation_id": "A", "reason": "r", "severity": "high"}]
+
+        with (
+            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
+            patch("codegraph.policy.integration._evaluate_bundle", side_effect=fake_eval),
+        ):
+            result = evaluate_policies()
+
+        # The good bundle's violation survives; the bad bundle is attributed.
+        self.assertEqual(len(result["violations"]), 1)
+        self.assertNotIn("error", result)
+        self.assertEqual(result.get("failed_bundle_count"), 1)
+        self.assertEqual(result["failed_bundles"][0]["target_method"], "bad")
+
 
 if __name__ == "__main__":
     unittest.main()
