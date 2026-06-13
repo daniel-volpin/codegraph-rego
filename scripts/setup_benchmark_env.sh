@@ -47,7 +47,7 @@ else
         exit 1
     fi
 
-    DOWNLOAD_URL="https://github.com/open-policy-agent/opa/releases/download/v1.14.1/opa_${OPA_OS}_${OPA_ARCH}_static"
+    DOWNLOAD_URL="https://github.com/open-policy-agent/opa/releases/download/v1.15.1/opa_${OPA_OS}_${OPA_ARCH}_static"
     
     echo "Fetching OPA from: $DOWNLOAD_URL"
     curl -L -o "$OPA_BIN" "$DOWNLOAD_URL"

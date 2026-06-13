@@ -8,9 +8,11 @@ RUN pip install uv
 
 # Install OPA so readiness checks and policy evaluation work inside the container too.
 # Pin to the same version as scripts/setup_benchmark_env.sh so benchmark numbers
-# are reproducible regardless of which environment produced them. Bumping this
-# version is an intentional, reviewable change (it can shift policy results).
-ARG OPA_VERSION=v1.14.1
+# are reproducible regardless of which environment produced them. v1.15.1 is the
+# version recorded in the canonical thesis_final_* provenance manifests, so the
+# container reproduces that evidence. Bumping is an intentional, reviewable
+# change (it can shift policy results) — pinned by tag, not yet by digest.
+ARG OPA_VERSION=v1.15.1
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
