@@ -92,8 +92,9 @@ per the task's guardrail.
   already inconsistent). If a benchmark harness genuinely needs it, move it to a benchmark-only
   overlay explicitly excluded from real-world claims.
 - **Validation:** Re-run the weak-random slice with the clause removed; report the TP/FP delta and
-  regenerate the affected canonical artifacts. Add a guard test asserting **no** Rego module under
-  `policy/` references `benchmarktest` (added in this pass — see FIX list).
+  regenerate the affected canonical artifacts. Once removed, add a guard test asserting **no** Rego
+  module under `policy/` references `benchmarktest`. (Not added in this pass — such a test cannot
+  pass while the fingerprint remains, and removing the fingerprint is a STOP-FOR-REVIEW change.)
 
 ---
 
