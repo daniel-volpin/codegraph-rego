@@ -197,6 +197,7 @@ def main() -> int:
         eval_kind="detection",
         config_path=args.config,
         output_dir=output_dir,
+        ground_truth_path=context.truth_path.as_posix(),
         seed=ci_seed,
         llm=None,  # detection eval does not call the LLM.
         extra={

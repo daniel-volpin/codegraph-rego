@@ -85,6 +85,25 @@ class TestCollectProvenance(unittest.TestCase):
         self.assertIsNotNone(p["config"]["sha256"])
         self.assertEqual(len(p["config"]["sha256"]), 64)
 
+    def test_ground_truth_hash_and_corpus_sha_recorded(self) -> None:
+        with TemporaryDirectory() as tmp:
+            gt = Path(tmp) / "expectedresults-1.2.csv"
+            gt.write_text("# test name, category, real vulnerability, cwe\n", encoding="utf-8")
+            p = collect_provenance(eval_kind="detection", ground_truth_path=gt)
+        self.assertIsNotNone(p["ground_truth"])
+        self.assertEqual(p["ground_truth"]["path"], str(gt))
+        self.assertEqual(len(p["ground_truth"]["sha256"]), 64)
+        # corpus_git_sha may be None outside a git tree, but the key is present.
+        self.assertIn("corpus_git_sha", p["ground_truth"])
+
+    def test_ground_truth_missing_file_is_flagged(self) -> None:
+        p = collect_provenance(eval_kind="detection", ground_truth_path="/nonexistent/labels.csv")
+        self.assertEqual(p["ground_truth"]["error"], "ground_truth_not_found")
+
+    def test_ground_truth_absent_by_default(self) -> None:
+        p = collect_provenance(eval_kind="detection")
+        self.assertIsNone(p["ground_truth"])
+
     def test_subprocess_failure_does_not_raise(self) -> None:
         with mock.patch.object(prov_module, "_safe_run", return_value={"error": "command_not_found: opa"}):
             p = collect_provenance(eval_kind="detection")
