@@ -308,6 +308,7 @@ def _execute_apply_fix_inner(
     attempt_count = min(max_attempts, max(1, len(attempt_errors) + 1))
     live_workspace_modified = False
     graph_modified = False
+    restore_failed = False
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -368,11 +369,18 @@ def _execute_apply_fix_inner(
                     after_eval.get("violations") or [],
                 )
 
+            # Fail-closed: an apply-mode write requires the build to have been
+            # attempted AND succeeded. Previously a *skipped* build (no build
+            # system detected) satisfied the gate, so a remediation that was
+            # never compiled could be persisted to the live workspace. The
+            # benchmark runs in dry_run, so this does not change reported
+            # metrics; it only tightens the apply-mode side effect.
             can_apply = (
                 mode == "apply"
                 and verification.get("target_rule_status") == "PASS"
                 and verification.get("overall_status") == "PASS"
-                and (not compilation.get("attempted") or compilation.get("success"))
+                and bool(compilation.get("attempted"))
+                and bool(compilation.get("success"))
             )
             apply_successful = bool(can_apply)
     except Exception as exc:  # pragma: no cover - runtime guard
@@ -398,11 +406,13 @@ def _execute_apply_fix_inner(
             try:
                 process_single_file_content(file_path, original_content)
             except Exception as exc:  # pragma: no cover - runtime guard
+                restore_failed = True
                 LOGGER.warning("Failed to restore original graph content for %s: %s", file_path, exc)
         if live_workspace_modified and (mode != "apply" or not apply_successful):
             try:
                 write_source_preserving_format(resolved_path, original_content, source_encoding, source_newline)
             except Exception as exc:  # pragma: no cover - filesystem guard
+                restore_failed = True
                 LOGGER.warning("Failed to restore original content for %s: %s", resolved_path, exc)
 
     status = "OK"
@@ -413,6 +423,11 @@ def _execute_apply_fix_inner(
     elif verification.get("overall_status") == "FAIL" or verification.get("target_rule_status") == "FAIL":
         status = "VERIFICATION_ERROR"
     if mode == "apply" and not apply_successful:
+        status = "VERIFICATION_ERROR"
+    # A failed rollback leaves the workspace/graph in the candidate state; such a
+    # case must never be reported as a clean success. Downgrade to a tracked
+    # failure status so it cannot be counted as OK / fully_verified.
+    if restore_failed:
         status = "VERIFICATION_ERROR"
 
     trace_rule_id = str(context.get("rule_id"))
@@ -452,6 +467,14 @@ def _execute_apply_fix_inner(
         metadata=metadata,
         generation=generation_payload,
         confidence=confidence,
-        error=None if status == "OK" else (verification.get("error") or "Apply verification failed"),
+        error=(
+            None
+            if status == "OK"
+            else (
+                "Rollback failed: workspace/graph left in candidate state"
+                if restore_failed
+                else (verification.get("error") or "Apply verification failed")
+            )
+        ),
         predicate_trace=trace_obj.model_dump(),
     )
