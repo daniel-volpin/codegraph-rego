@@ -67,6 +67,37 @@ class IngestionUtilsTests(unittest.TestCase):
             with self.assertRaises(UploadValidationError):
                 safe_extract_zip(archive, tmp_dir, max_compression_ratio=2.0)
 
+    def test_safe_extract_zip_skips_symlink_member(self) -> None:
+        # Build an archive containing a symlink entry pointing outside dest, plus
+        # a normal file. The symlink must be skipped (Zip-Slip protection) while
+        # the normal file extracts.
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            link_info = zipfile.ZipInfo("escape")
+            # Mark as symlink (S_IFLNK | 0777) in the external attributes.
+            link_info.external_attr = (0o120777 << 16) | 0xA000
+            archive.writestr(link_info, "/etc/passwd")
+            archive.writestr("src/main/java/A.java", b"class A {}")
+        archive_bytes = payload.getvalue()
+
+        with tempfile.TemporaryDirectory() as tmp_dir, zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as archive:
+            safe_extract_zip(archive, tmp_dir)
+            self.assertFalse(os.path.lexists(os.path.join(tmp_dir, "escape")))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "src/main/java/A.java")))
+
+    def test_safe_extract_zip_skips_traversal_entry(self) -> None:
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("../escape.txt", b"owned")
+            archive.writestr("src/main/java/A.java", b"class A {}")
+        archive_bytes = payload.getvalue()
+
+        with tempfile.TemporaryDirectory() as tmp_dir, zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as archive:
+            safe_extract_zip(archive, tmp_dir)
+            parent_escape = os.path.join(os.path.dirname(os.path.realpath(tmp_dir)), "escape.txt")
+            self.assertFalse(os.path.exists(parent_escape))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "src/main/java/A.java")))
+
 
 if __name__ == "__main__":
     unittest.main()
