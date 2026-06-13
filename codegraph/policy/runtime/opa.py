@@ -23,6 +23,24 @@ POLICY_DIR = os.path.join(_PROJECT_ROOT, "policy")
 POLICY_QUERY = "data.iso27001.violations"
 
 
+def _opa_timeout_seconds() -> float:
+    """Per-invocation wall-clock cap for ``opa eval``.
+
+    A hung or pathologically slow OPA subprocess must never stall a whole
+    benchmark run (these calls fan out across a 32-wide thread pool). Override
+    with ``CODEGRAPH_OPA_TIMEOUT`` (seconds); defaults to 120.
+    """
+    raw = os.environ.get("CODEGRAPH_OPA_TIMEOUT", "").strip()
+    if raw:
+        try:
+            value = float(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            pass
+    return 120.0
+
+
 def normalize_violation_payload(payload: Any, logger) -> dict[str, Any] | None:
     if isinstance(payload, dict):
         return payload
@@ -127,7 +145,14 @@ def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, 
                 input_path,
                 POLICY_QUERY,
             ]
-            proc = subprocess.run(cmd, capture_output=True, text=True)
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=_opa_timeout_seconds())
+            except subprocess.TimeoutExpired as exc:
+                span.set_attribute("opa_error", "OPA evaluation timed out")
+                span.set_attribute("opa_duration_ms", round((time.monotonic() - t0) * 1000))
+                raise RuntimeError(
+                    f"OPA evaluation timed out for {serialized_bundle.get('target_method')}"
+                ) from exc
             span.set_attribute("opa_returncode", proc.returncode)
             span.set_attribute("opa_duration_ms", round((time.monotonic() - t0) * 1000))
             if proc.returncode != 0:
@@ -173,7 +198,12 @@ def evaluate_package_root(bundle: PolicyBundle | Mapping[str, Any], package: str
             input_path,
             package,
         ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=_opa_timeout_seconds())
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"OPA package evaluation timed out for {serialized_bundle.get('target_method')}"
+            ) from exc
         if proc.returncode != 0:
             raise RuntimeError(
                 f"OPA package evaluation failed for {serialized_bundle.get('target_method')}: {proc.stderr}"

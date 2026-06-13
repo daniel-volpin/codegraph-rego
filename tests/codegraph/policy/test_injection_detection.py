@@ -1,6 +1,10 @@
 import unittest
 
+import pytest
+
 from tests.codegraph.policy._test_helpers import BundleBuilder, PolicyTestBase
+
+pytestmark = pytest.mark.requires_opa
 
 
 class TestPathTraversalDetection(PolicyTestBase):
