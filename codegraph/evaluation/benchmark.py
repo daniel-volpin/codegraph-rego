@@ -315,6 +315,45 @@ def coverage_report(selection: SelectionResult, selected_category_ids: list[str]
     return report
 
 
+class IncompleteCorpusError(RuntimeError):
+    """Raised in thesis/canonical mode when requested testcases are not staged.
+
+    A benchmark run must not silently report thesis metrics from an incomplete
+    checkout: missing source files shrink the evaluated population (and thus the
+    precision/recall denominators) with no artifact-visible signal. This guard
+    validates the staged set against stable testcase identifiers and counts.
+    """
+
+
+def missing_staged_testcases(requested_ids: Iterable[str], staged: dict[str, Path]) -> list[str]:
+    """Sorted requested testcase IDs that did not produce a staged source file."""
+    return sorted(set(requested_ids) - set(staged))
+
+
+def validate_staged_corpus(
+    requested_ids: Iterable[str],
+    staged: dict[str, Path],
+    *,
+    require_complete: bool,
+) -> list[str]:
+    """Return missing IDs; raise ``IncompleteCorpusError`` when complete is required.
+
+    Validates by stable case identifiers (not just a denominator), so a partial
+    corpus fails fast in thesis mode instead of producing a smaller-than-declared
+    evaluated population.
+    """
+    requested = list(requested_ids)
+    missing = missing_staged_testcases(requested, staged)
+    if require_complete and missing:
+        raise IncompleteCorpusError(
+            f"Incomplete benchmark corpus: {len(missing)} of {len(requested)} requested "
+            f"testcases are not staged (e.g. {', '.join(missing[:10])}). Refusing to report "
+            "thesis metrics from a partial checkout. Verify OWASP_BENCHMARK_ROOT, or rerun "
+            "without --require-complete-corpus for a non-thesis exploratory run."
+        )
+    return missing
+
+
 def stage_benchmark_subset(
     benchmark_root: Path,
     java_relative_root: str,
