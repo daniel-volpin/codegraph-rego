@@ -375,3 +375,191 @@ per the task's guardrail.
    additively this pass; verify the manifest is kept current on every promotion).
 5. **POLICY-M1 / EVAL-F4** — residual non-determinism (UUID/timestamp fields; shared bootstrap
    seed) that complicates byte-level artifact reproducibility and CI-level CI independence.
+
+---
+
+# Appendix — Reviewer sign-off packet (2026-06-14)
+
+Added in response to reviewer decisions. **Execution constraint:** this audit
+sandbox has **no `opa` binary** (network-blocked download, HTTP 403) and **no
+OWASP Benchmark corpus checked out**. Every item below that needs OPA or the
+corpus to produce a *number* is marked **BLOCKED (needs runner)** — no such
+number is fabricated. Static mechanism, traces, and code edits are complete.
+
+## A. POLICY-C1 — benchmark fingerprint
+
+- **Rego file/rule/symbol:** `policy/iso_27001_access.rego`, rule `benchmark_context`
+  (previously lines 67-70). Consumed by `policy/iso_27001_crypto.rego` rule
+  `random_context` (previously the clause at lines 23-25), which gates
+  `insecure_random` (`crypto.rego:100-113`).
+- **Python input field feeding it:** `input.target_method` — the method
+  full-signature placed on the bundle as `target_method`
+  (`bundles.build_evidence_bundle`), surfaced to OPA as `input.target_method`.
+- **Exact condition:** `contains(lower(input.target_method), "benchmarktest")`.
+  OWASP Benchmark v1.2 names every test class `BenchmarkTestNNNNN`, so the
+  predicate is true for every benchmark method and false for general code.
+- **Minimal counterexample (proof from the Rego logic):** identical
+  `new java.util.Random()` used outside a servlet context.
+  - In `org.example.Foo.bar()` → `servlet_context` false, `benchmark_context`
+    false → `random_context` false → `insecure_random` does **not** fire.
+  - In `org.owasp.benchmark.testcode.BenchmarkTest00123.doPost(...)` →
+    `benchmark_context` true → `random_context` true → `insecure_random` fires.
+  The decision differs solely because of the class name. (Logical proof; the
+  empirical run is BLOCKED.)
+- **Affected family:** `ISO-A.10-WEAK-RANDOM` (CWE-330).
+- **Canonical sampled cases exercising the condition:** BLOCKED (needs corpus +
+  OPA to enumerate IDs).
+- **Isolated removal commit:** done — `fix(policy): remove OWASP benchmark
+  fingerprint…`. Guard test `tests/codegraph/policy/test_no_benchmark_fingerprint.py`.
+- **Before/after weak-random deltas (TP/FP/FN, P/R/F1 by family + full 454):**
+  BLOCKED (needs runner). Reproduce with:
+  `OWASP_BENCHMARK_ROOT=… python run_benchmark_eval.py --config configs/benchmark/multicat_full.json --output-dir outputs/cmp_c1_after_<sha>`
+  run once on the evidence tag and once on this branch; diff `metrics.json`.
+  **Do not write into any `outputs/thesis_final_*` directory.**
+- **Canonical artifacts:** NOT modified (verified — manifest unchanged).
+- **`opa check` of the edited Rego:** BLOCKED (no binary). Edits are deletions of
+  complete rules/clauses; syntactically low-risk but **must** pass `opa check`
+  before merge.
+
+## B. REM-F1/F2 — canonical remediation path trace
+
+**Canonical run identity (recovered from `outputs/thesis_final_remediation_v4/provenance.json`):**
+`mode: "dry_run"`, `sample_size: 60`, `seed: 11`, `max_attempts: 2`,
+`reset_neo4j: true`, OPA `1.15.1`. So the canonical evidence **did** use the
+dry_run path under audit.
+
+**Path (files/symbols):**
+`run_remediation_eval.py` (serial loop, `:211`) → `orchestration.apply_remediation(mode="dry_run")`
+→ `service.RemediationService.apply_fix` → `apply_flow._execute_apply_fix_inner`:
+1. candidate generation: `service.propose_method_edits` → `editing.apply_method_edits` → `updated_content`.
+2. temp workspace + build: `apply_flow:313-316` (`TemporaryDirectory`, `_prepare_temp_workspace`,
+   write patched temp file, `_compile_project` → `verification.compile_project`, `timeout=120`).
+3. **graph mutation:** `apply_flow:323-324` `process_single_file_content(file_path, updated_content)`
+   → `ingestion/service.py:798-810` = `_purge_file_entities` + `ingest_to_neo4j` (purge + re-ingest
+   of the **patched** source into the **live** Neo4j graph).
+4. **OPA re-eval:** `apply_flow:345-348` `PolicyEvaluator().evaluate(target_method,
+   source_path_override=temp_file)` → `integration.PolicyEvaluator.evaluate:234-269` →
+   `_fetch_method_snapshot(driver, …)` (reads the **mutated live graph**) →
+   `build_evidence_bundle(snapshot, …, source_path_override=temp_file)` (source **text** from the
+   patched temp file; graph_context calls/callers/annotations + line spans from the **mutated**
+   snapshot).
+5. classification: `build_verification_summary` (baseline vs after) → `remediation_runtime`
+   `fully_verified := policy_fixed AND build_success`.
+6. **restore:** `apply_flow:397-406` finally block re-ingests the **original** source (and restores
+   the live file in apply mode) **after** the eval.
+
+**Explicit answers:**
+- *Does dry_run write to the live Neo4j graph?* **Yes** — purge + re-ingest of patched content.
+- *Is the graph restored before verification?* **No** — restored *after*, in `finally`. Verification
+  deliberately reads the mutated (patched) graph; that is how patched graph facts reach OPA.
+- *Does OPA re-eval read source-derived facts, graph-derived facts, or both?* **Both** — source text
+  from the override temp file; calls/callers/annotations/line-spans from the mutated live-graph snapshot.
+- *Could any canonical case pass because of prior dry-run mutation?* Under the **serial** canonical run
+  (`run_remediation_eval` is single-loop) with `reset_neo4j: true` and per-case
+  mutate→eval→restore, each case verifies against **its own** patch's facts, not a prior case's.
+  No path was found by which a *prior* case's mutation leaks into a later case's recorded verdict in
+  serial execution. The residual hazards are (a) a crash between mutate and restore corrupting
+  *subsequent* cases, and (b) concurrent evaluation — neither occurs in the canonical serial run.
+- *Is the re-ingested graph "a clean representation of the patched source"?* **Yes** —
+  `process_single_file_content` is a full purge + re-ingest, so the graph facts are exactly what a
+  fresh ingest of the patched file would produce.
+- *Rollback consistency (source/graph/status)?* dry_run never writes the live file; the graph is
+  mutated then restored; with the REM-F9 fix a restore failure now downgrades status to
+  `VERIFICATION_ERROR`, so a left-mutated state can no longer be reported as a clean success.
+
+**Assessment / revised severity:** post-repair verification **is** evaluated against the patched
+representation (both source and graph derive from the patch), **not** stale or prematurely-mutated
+state, under the serial canonical run. The canonical fully-verified counts are therefore **not
+invalidated** by REM-F1 on correctness grounds. REM-F1/F2 remain genuine defects — the
+"graph remains untouched" docstring is false, and a naive F1 fix (stop mutating) would desynchronize
+graph line-spans from the patched source (REM-F2) — but the correct rating is **High-priority
+engineering hardening, not a falsification of the remediation evidence.** Recommended fix: verify the
+candidate off the temp-file virtual bundle (as `preview_virtual_fix` already does via
+`evaluate_bundle`) without touching Neo4j; that change needs its own before/after.
+- *Instrumented trace / regression:* a true instrumented Neo4j trace is BLOCKED (no Neo4j here).
+  Existing `tests/codegraph/remediation/test_apply_fix.py:139-145` already proves the
+  mutate→eval→restore **ordering** (`reingest_calls == [(path, updated), (path, original)]`) and that
+  the re-eval consumes the patched override (`temp_file_content == updated_content`).
+
+## C. ING-C1 / ING-M7 impact analysis (no implementation — measurement first)
+
+**ING-C1** — `codegraph/ingestion/service.py:33-49` `_infer_block_end_line`. Root cause: counts `{`/`}`
+in raw line text including string/char/comment content. Real nested blocks (anonymous classes,
+lambdas) are handled correctly — only braces inside literals/comments break it. Counterexamples:
+1. `String s = "}";` — literal `}` closes the count early → truncated `end_line`.
+2. `char c = '}';` — char-literal `}`.
+3. `// done }` — line comment containing `}`.
+4. `/* } */` — block comment containing `}`.
+5. `String fmt = "{0}";` — literal `{` inflates the count → over-captured `end_line`.
+6. `String s = "if (x) {";` — unbalanced `{` in a string.
+- **Affected file/node counts across the 454-case sample:** BLOCKED (needs corpus).
+- **Presentation-only vs detection-outcome:** a span error changes which lines populate `source_code`;
+  detection changes only if the sink token falls outside the miscomputed span (Rego matches over the
+  substring-safe view). Splitting the two requires running detection on the corpus — BLOCKED.
+
+**ING-M7** — `service.py:277` `method_sig = f"{class_fqn}.{method_name}()"` (parameter-less) is the
+MERGE key; `full_sig` (`:278`) carries params but the node MERGE and `CALLS`/`USES` edges key on the
+bare signature. Collision: `void process(String)` and `void process(int)` → both `Foo.process()` →
+last-write-wins single node, mis-attributed edges. `method_index` in `build_policy_input` keys on
+`full_signature` (partial mitigation for bundle building). Whether any TP/FP/FN/remediation case
+depends on a collision: BLOCKED (needs corpus). Likely consistent with the explicit selective-graph
+claim; **defer/document** unless measurement shows an evidence impact. No parser redesign proposed.
+
+## D. Validation gap (explicit)
+
+- The branch is **not** fully validated: the authoritative OPA path did not execute here.
+- **Skipped-test inventory by reason** (53 total; none mask a logic failure — all are external
+  tool/corpus absence):
+  - ~24 — `opa binary not found on PATH` (detection suites `test_crypto_detection`,
+    `test_injection_detection` via the new `requires_opa` skip, plus `test_policy_contract_golden`).
+  - ~13 — `opa CLI not installed` (`test_owasp_lexical_eval`, `test_lexical_noise_eval`).
+  - 5 — `semgrep CLI not installed` (`tests/baselines/semgrep/…`).
+  - 1 — `/tmp/owasp-benchmark is not a git repo`.
+  - remainder — pre-existing Neo4j/other environment skips.
+- **Run-when-runner-available:** full OPA-dependent suite, `make policy-check` (`opa check --strict` +
+  `opa fmt`), under the pinned OPA 1.15.1. Confirm a timeout / bundle error / per-bundle failure is
+  never counted as a clean negative or a silent denominator reduction:
+  - timeout → `RuntimeError` (`opa.py`); in `PolicyEvaluator.evaluate` it returns
+    `{"violations": [], "error": …}` and `apply_flow` maps a present `error` to `VERIFICATION_ERROR`
+    (not a clean pass); in batch `evaluate_policies` it lands in `failed_bundles` (not zero-violation
+    success).
+  - **Residual (documented, not yet implemented):** the detection runner does not yet assert
+    `failed_bundles == []` in thesis mode, so a per-bundle failure could still drop one method's
+    violations from the population. Recommend a thesis-mode assertion mirroring EVAL-F5.
+- **CI environmental evidence:** workflow run `27462785191`; `changes` job attempt 1
+  (`81179599442`) and the re-run attempt 2 (`81179640926`) both failed in 2-3 s with
+  `runner_id: 0` (no runner allocated, before checkout). Both 2026-06-08 dependabot PRs also failed;
+  last green run was `main` on 2026-06-02. Conclusion: account-level GitHub Actions runner
+  availability, independent of this branch.
+
+## E. Historical evidence vs hardened implementation
+
+**OPA versions:** canonical evidence (detection v2, remediation v3/v4 provenance) used **OPA 1.15.1**
+(darwin/arm64, Rego v1). The repo previously pinned **1.14.1** (setup script) / unpinned `latest`
+(Dockerfile, CI) — a mismatch. Now aligned to **v1.15.1** across Dockerfile, setup script, and CI,
+pinned **by tag, not digest** (digest pin is a recommended follow-up). Provenance captures: git SHA +
+branch + dirty flag, `config.sha256`, `uv_lock_sha256`, `pyproject_sha256`, `opa.raw`, `seed`, `llm`
+block, redacted Neo4j URI, and (new) `ground_truth.sha256` + `ground_truth.corpus_git_sha`
+(`ground_truth` was `null` in all pre-fix canonical manifests).
+
+| Commit (subject) | Alters frozen artifact bytes | Can change future rerun output | Can change metric under normal success | Only failure/provenance/order | Requires artifact/thesis regen |
+|---|---|---|---|---|---|
+| docs(audit): report | no | no | no | n/a | no |
+| fix(policy): OPA timeout + skip tests | no | only on hang/missing-binary | no | failure-handling | no |
+| fix(ingestion): zip symlink/root hardening | no | yes (rejects malicious uploads) | no (OWASP detection unaffected) | upload behaviour | no |
+| fix(ci): OPA pin v1.14.1 (superseded) | no | yes (pinned engine) | conditional | env | no |
+| fix(policy): deterministic graph-context sort | no | yes (byte order) | no (detection invariant) | order-only | conditional (explanation card order) |
+| fix(remediation): fail-closed gate + rollback downgrade | no | yes (apply-mode only) | no (dry_run benchmark unaffected) | failure-handling | no |
+| fix(policy): batch per-bundle failures | no | only on failures | no (clean corpus identical) | failure-handling | no |
+| feat(provenance): ground-truth + corpus hash | no | yes (adds fields) | no | provenance-only | no |
+| test(eval): canonical tripwire + manifest | no | no | no | n/a (guard) | no |
+| fix(ci): OPA align to v1.15.1 (canonical) | no | yes (matches canonical engine) | conditional (1.14→1.15 could shift policy; **aligns to** canonical) | env | no (aligns to canonical) |
+| fix(policy): remove benchmark fingerprint (C1) | no | **yes** | **YES (weak-random)** | no | **YES — regenerate weak-random/detection** |
+| feat(eval): require-complete-corpus guard (F5) | no | yes (fails fast on partial) | no (complete corpus identical) | failure-handling | no |
+| refactor: streamline error msg + inline helper | no | no | no | n/a | no |
+
+**Net:** existing canonical files remain unchanged and checksum-protected; the only commit that changes
+metric outcomes under normal successful execution is **POLICY-C1** (and the OPA 1.15.1 alignment, which
+moves the runtime *toward* the canonical-evidence engine). The branch is therefore behaviourally
+distinct from the evidence-tag implementation, which is acceptable provided both baselines are named —
+the evidence tag for the frozen numbers, this branch for the hardened re-run path.
