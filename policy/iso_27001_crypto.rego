@@ -20,10 +20,6 @@ random_context if {
 	servlet_context
 }
 
-random_context if {
-	benchmark_context
-}
-
 source_contains(pattern) if {
 	input.source_code != null
 	contains(lower(input.source_code), pattern)

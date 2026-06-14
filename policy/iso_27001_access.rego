@@ -64,11 +64,6 @@ servlet_context if {
 	contains(lower(input.source_code), "httpservletrequest")
 }
 
-benchmark_context if {
-	input.target_method != null
-	contains(lower(input.target_method), "benchmarktest")
-}
-
 violation_record(id, reason) := {
 	"violation_id": id,
 	"target_method": input.target_method,
