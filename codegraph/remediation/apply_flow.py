@@ -430,6 +430,13 @@ def _execute_apply_fix_inner(
     if restore_failed:
         status = "VERIFICATION_ERROR"
 
+    if status == "OK":
+        error_message = None
+    elif restore_failed:
+        error_message = "Rollback failed: workspace/graph left in candidate state"
+    else:
+        error_message = verification.get("error") or "Apply verification failed"
+
     trace_rule_id = str(context.get("rule_id"))
     before_filtered = filter_predicate_trace(before_trace_raw)
     after_filtered = filter_predicate_trace(after_trace_raw)
@@ -467,14 +474,6 @@ def _execute_apply_fix_inner(
         metadata=metadata,
         generation=generation_payload,
         confidence=confidence,
-        error=(
-            None
-            if status == "OK"
-            else (
-                "Rollback failed: workspace/graph left in candidate state"
-                if restore_failed
-                else (verification.get("error") or "Apply verification failed")
-            )
-        ),
+        error=error_message,
         predicate_trace=trace_obj.model_dump(),
     )

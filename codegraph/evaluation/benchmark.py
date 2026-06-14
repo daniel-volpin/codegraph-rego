@@ -325,25 +325,20 @@ class IncompleteCorpusError(RuntimeError):
     """
 
 
-def missing_staged_testcases(requested_ids: Iterable[str], staged: dict[str, Path]) -> list[str]:
-    """Sorted requested testcase IDs that did not produce a staged source file."""
-    return sorted(set(requested_ids) - set(staged))
-
-
 def validate_staged_corpus(
     requested_ids: Iterable[str],
     staged: dict[str, Path],
     *,
     require_complete: bool,
 ) -> list[str]:
-    """Return missing IDs; raise ``IncompleteCorpusError`` when complete is required.
+    """Return missing testcase IDs; raise ``IncompleteCorpusError`` when complete is required.
 
     Validates by stable case identifiers (not just a denominator), so a partial
     corpus fails fast in thesis mode instead of producing a smaller-than-declared
     evaluated population.
     """
     requested = list(requested_ids)
-    missing = missing_staged_testcases(requested, staged)
+    missing = sorted(set(requested) - set(staged))
     if require_complete and missing:
         raise IncompleteCorpusError(
             f"Incomplete benchmark corpus: {len(missing)} of {len(requested)} requested "

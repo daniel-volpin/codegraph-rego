@@ -10,7 +10,6 @@ from pathlib import Path
 
 from codegraph.evaluation.benchmark import (
     IncompleteCorpusError,
-    missing_staged_testcases,
     validate_staged_corpus,
 )
 
@@ -42,10 +41,10 @@ class CorpusCompletenessTests(unittest.TestCase):
         missing = validate_staged_corpus(requested, staged, require_complete=False)
         self.assertEqual(missing, ["BenchmarkTest00002"])
 
-    def test_missing_helper_is_sorted_and_set_based(self) -> None:
+    def test_missing_ids_are_sorted_and_deduplicated(self) -> None:
         requested = ["B3", "B1", "B2", "B1"]
         staged = self._staged(["B2"])
-        self.assertEqual(missing_staged_testcases(requested, staged), ["B1", "B3"])
+        self.assertEqual(validate_staged_corpus(requested, staged, require_complete=False), ["B1", "B3"])
 
 
 if __name__ == "__main__":
