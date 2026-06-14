@@ -563,3 +563,54 @@ metric outcomes under normal successful execution is **POLICY-C1** (and the OPA 
 moves the runtime *toward* the canonical-evidence engine). The branch is therefore behaviourally
 distinct from the evidence-tag implementation, which is acceptable provided both baselines are named —
 the evidence tag for the frozen numbers, this branch for the hardened re-run path.
+
+---
+
+# Appendix — Live OPA validation (2026-06-14)
+
+OPA `1.15.1` (the canonical-evidence version) was installed from the pinned
+GitHub release (`releases/download/v1.15.1/opa_linux_amd64_static`; the
+`/downloads/latest` redirect 403s but the pinned URL works) and the full OWASP
+BenchmarkJava corpus was cloned (commit `278105dcd6cba9f851806d9578984243e1cfd527`,
+2740 testcases + `expectedresults-1.2.csv`). This unblocks the items previously
+marked BLOCKED.
+
+## Authoritative policy path — validated live
+- `opa check --strict policy/` → **PASS** (the POLICY-C1 Rego edit compiles).
+- `opa fmt -d policy/` → **no diff** (`make policy-check` would pass).
+- Full suite with OPA on PATH → **692 passed, 27 skipped, 0 failed** (the 24+
+  previously-skipped OPA detection tests now execute and pass, including the
+  crypto/injection detection suites with the fingerprint removed).
+- No test depends on the benchmark fingerprint (grep + green suite).
+
+## POLICY-C1 — empirical A/B on the weak-random family (resolves the C1 blocker)
+Method: for every `weakrand` (CWE-330) testcase in `expectedresults-1.2.csv`,
+build the production-wiring minimal bundle (`_build_minimal_bundle`,
+`f10_active=True`) and evaluate `ISO-A.10-WEAK-RANDOM` under (A) the current
+policy (fingerprint removed) and (B) a temp copy with `benchmark_context` and its
+`random_context` clause restored (pre-C1 state). `benchmark_context` only ever
+gated `insecure_random`, so weak-random is the **complete** affected population.
+
+| Policy variant | TP | FP | FN | TN | P | R | F1 |
+|---|---|---|---|---|---|---|---|
+| A — fingerprint removed (branch) | 218 | 0 | 0 | 275 | 1.000 | 1.000 | 1.000 |
+| B — fingerprint restored (pre-C1) | 218 | 0 | 0 | 275 | 1.000 | 1.000 | 1.000 |
+
+**Decisions that differ: 0 of 493.** Every OWASP testcase is a
+`doPost(HttpServletRequest …)` servlet, so `servlet_context` is always satisfied
+and `benchmark_context` was redundant. **POLICY-C1 removal is empirically
+metric-neutral on the OWASP Benchmark corpus** — the fingerprint is a real
+construct-validity smell (it would leak on a non-servlet corpus) but does not
+change any canonical detection number, so **no canonical regeneration is required**.
+
+Caveat: this uses the file-level minimal-bundle path (no Neo4j graph context).
+The `random_context` gate depends only on `servlet_context`/`benchmark_context`,
+both derived from `target_method`/`source_code`, which are identical in both
+pipelines; the full graph pipeline can *additionally* satisfy `servlet_context`
+via endpoint annotations, so it is at least as neutral. A full graph-pipeline
+A/B (needs Neo4j) would confirm, but the gate logic makes the result determinate.
+
+## Still pending a Neo4j-equipped runner
+The full graph-pipeline detection eval (`run_benchmark_eval.py`) and the
+remediation re-eval both require Neo4j, which is not available in this sandbox.
+The ING-C1/ING-M7 per-case corpus counts likewise need the full ingest pipeline.
