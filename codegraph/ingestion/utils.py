@@ -13,15 +13,8 @@ class UploadValidationError(ValueError):
 
 
 def _is_symlink_member(member: zipfile.ZipInfo) -> bool:
-    """True when a zip entry's mode bits mark it as a symbolic link.
-
-    Symlink members are a Zip-Slip vector: a malicious archive can write a
-    symlink (e.g. ``link -> /``) and then a later entry whose path traverses
-    that link to escape the destination directory. We refuse to materialize any
-    symlink, which removes the through-symlink escape entirely.
-    """
-    mode = member.external_attr >> 16
-    return stat.S_ISLNK(mode)
+    """True if the entry is a symlink (a Zip-Slip vector we refuse to extract)."""
+    return stat.S_ISLNK(member.external_attr >> 16)
 
 
 def safe_extract_zip(
@@ -61,8 +54,7 @@ def safe_extract_zip(
         if member.is_dir():
             os.makedirs(member_path, exist_ok=True)
         elif member_path == dest_root:
-            # A non-directory entry that normalizes exactly to the destination
-            # root would otherwise try to open the directory itself for writing.
+            # Would otherwise open the destination directory itself for writing.
             logger.warning("Skipping entry resolving to destination root: %s", member.filename)
             continue
         else:

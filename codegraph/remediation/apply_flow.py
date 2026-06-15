@@ -369,12 +369,7 @@ def _execute_apply_fix_inner(
                     after_eval.get("violations") or [],
                 )
 
-            # Fail-closed: an apply-mode write requires the build to have been
-            # attempted AND succeeded. Previously a *skipped* build (no build
-            # system detected) satisfied the gate, so a remediation that was
-            # never compiled could be persisted to the live workspace. The
-            # benchmark runs in dry_run, so this does not change reported
-            # metrics; it only tightens the apply-mode side effect.
+            # Fail-closed: an apply-mode write requires a successful build.
             can_apply = (
                 mode == "apply"
                 and verification.get("target_rule_status") == "PASS"
@@ -424,9 +419,7 @@ def _execute_apply_fix_inner(
         status = "VERIFICATION_ERROR"
     if mode == "apply" and not apply_successful:
         status = "VERIFICATION_ERROR"
-    # A failed rollback leaves the workspace/graph in the candidate state; such a
-    # case must never be reported as a clean success. Downgrade to a tracked
-    # failure status so it cannot be counted as OK / fully_verified.
+    # A failed rollback leaves candidate state behind; never report it as success.
     if restore_failed:
         status = "VERIFICATION_ERROR"
 

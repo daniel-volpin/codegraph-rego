@@ -101,11 +101,8 @@ def fetch_methods_with_context(
             annotations = rec.get("property_annotations") or []
             annotation_nodes = rec.get("annotation_nodes") or []
             combined_annotations = sorted({a for a in annotations + annotation_nodes if a})
-            # Neo4j ``collect(DISTINCT ...)`` has no defined ordering, so sort the
-            # graph-context lists deterministically to keep evidence bundles
-            # byte-stable across reruns. Rego sink checks are any-match, so
-            # detection outcomes are invariant under ordering; this only removes
-            # run-to-run noise from the serialized artifacts.
+            # collect(DISTINCT ...) is unordered; sort for byte-stable bundles.
+            # Rego sink checks are any-match, so detection stays invariant.
             uses_fields = sorted(uses_fields, key=lambda field: str(field.get("name") or ""))
             calls = sorted(str(call) for call in (rec.get("calls") or []) if call)
             callers = sorted(str(caller) for caller in (rec.get("callers") or []) if caller)

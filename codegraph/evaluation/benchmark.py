@@ -316,13 +316,7 @@ def coverage_report(selection: SelectionResult, selected_category_ids: list[str]
 
 
 class IncompleteCorpusError(RuntimeError):
-    """Raised in thesis/canonical mode when requested testcases are not staged.
-
-    A benchmark run must not silently report thesis metrics from an incomplete
-    checkout: missing source files shrink the evaluated population (and thus the
-    precision/recall denominators) with no artifact-visible signal. This guard
-    validates the staged set against stable testcase identifiers and counts.
-    """
+    """Requested testcases are missing from the staged corpus (thesis mode)."""
 
 
 def validate_staged_corpus(
@@ -331,12 +325,7 @@ def validate_staged_corpus(
     *,
     require_complete: bool,
 ) -> list[str]:
-    """Return missing testcase IDs; raise ``IncompleteCorpusError`` when complete is required.
-
-    Validates by stable case identifiers (not just a denominator), so a partial
-    corpus fails fast in thesis mode instead of producing a smaller-than-declared
-    evaluated population.
-    """
+    """Return missing testcase IDs; raise ``IncompleteCorpusError`` when complete is required."""
     requested = list(requested_ids)
     missing = sorted(set(requested) - set(staged))
     if require_complete and missing:

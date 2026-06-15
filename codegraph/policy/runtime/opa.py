@@ -24,12 +24,7 @@ POLICY_QUERY = "data.iso27001.violations"
 
 
 def _opa_timeout_seconds() -> float:
-    """Per-invocation wall-clock cap for ``opa eval``.
-
-    A hung or pathologically slow OPA subprocess must never stall a whole
-    benchmark run (these calls fan out across a 32-wide thread pool). Override
-    with ``CODEGRAPH_OPA_TIMEOUT`` (seconds); defaults to 120.
-    """
+    """Per-invocation ``opa eval`` cap (``CODEGRAPH_OPA_TIMEOUT`` seconds, default 120)."""
     raw = os.environ.get("CODEGRAPH_OPA_TIMEOUT", "").strip()
     if raw:
         try:

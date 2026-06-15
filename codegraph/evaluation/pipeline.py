@@ -110,8 +110,7 @@ def staged_benchmark_workspace(
             testcase_ids,
             work_root,
         )
-        # Thesis/canonical mode: refuse to proceed on a partial checkout so a
-        # smaller-than-declared population can never be reported as a thesis metric.
+        # Thesis mode: refuse a partial checkout (would shrink the population).
         validate_staged_corpus(testcase_ids, staged_files, require_complete=require_complete)
         yield StagedBenchmarkWorkspace(
             work_root=work_root,

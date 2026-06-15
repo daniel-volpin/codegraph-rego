@@ -94,12 +94,7 @@ def _file_sha256(path: Path) -> str | None:
 
 
 def _git_sha_for_path(path: Path) -> str | None:
-    """Best-effort git SHA of the repository containing ``path``.
-
-    Used to pin the OWASP Benchmark corpus that produced a detection/explanation
-    run, since the corpus lives outside this repo and the config references it by
-    env var.
-    """
+    """Best-effort git SHA of the repo containing ``path`` (pins the OWASP corpus)."""
     anchor = path if path.is_dir() else path.parent
     result = _safe_run(["git", "-C", str(anchor), "rev-parse", "HEAD"])
     if result.get("returncode") == 0:
@@ -108,12 +103,7 @@ def _git_sha_for_path(path: Path) -> str | None:
 
 
 def _ground_truth_info(ground_truth_path: str | os.PathLike | None) -> dict[str, Any] | None:
-    """Hash the ground-truth labels and pin the corpus commit.
-
-    Without this, a run records ``config.sha256`` but not the actual labels/corpus
-    it was scored against — the config points at the corpus by env var, so the
-    config hash alone cannot prove which BenchmarkJava commit was used.
-    """
+    """Hash the ground-truth labels and pin the corpus commit they were scored against."""
     if not ground_truth_path:
         return None
     path = Path(ground_truth_path)

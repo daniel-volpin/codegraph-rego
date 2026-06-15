@@ -134,9 +134,7 @@ def evaluate_policies(
             try:
                 opa_results[idx] = future.result()
             except RuntimeError as exc:
-                # Record and continue rather than discarding every already-computed
-                # violation. One malformed method must not abort a whole-corpus run;
-                # the failure is surfaced in ``failed_bundles`` for attribution.
+                # One bad bundle must not abort the whole run; record and continue.
                 opa_results[idx] = None
                 failed_bundles.append(
                     {
