@@ -96,72 +96,119 @@ def _read_registry(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _string_tuple(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(item) for item in value if item)
+
+
+def _require_mapping(value: Any, *, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f"Each {label} entry must be a JSON object.")
+    return value
+
+
+def _parse_rule_entry(entry: Any) -> PolicyRuleSpec:
+    rule = _require_mapping(entry, label="rule")
+    iso_rule = rule.get("iso_rule") or {}
+    if not isinstance(iso_rule, dict):
+        raise ValueError("Each rule entry must include an 'iso_rule' object.")
+    return PolicyRuleSpec(
+        id=str(rule.get("id") or ""),
+        control=str(rule.get("control") or ""),
+        title=str(rule.get("title") or ""),
+        reference=str(rule.get("reference") or ""),
+        summary=str(rule.get("summary") or ""),
+        rego_module=str(rule.get("rego_module") or ""),
+        rego_rule=str(rule.get("rego_rule") or ""),
+        evidence_fields=_string_tuple(rule.get("evidence_fields")),
+        standard=str(iso_rule.get("standard") or ""),
+        iso_rule_id=str(iso_rule.get("id") or ""),
+        subject=str(iso_rule.get("subject") or ""),
+        action=str(iso_rule.get("action") or ""),
+        object=str(iso_rule.get("object") or ""),
+        conditions=_string_tuple(iso_rule.get("conditions")),
+        description=str(iso_rule.get("description") or ""),
+        alias_ids=_string_tuple(rule.get("alias_ids")),
+    )
+
+
 def _parse_rules(entries: Any) -> tuple[PolicyRuleSpec, ...]:
     if not isinstance(entries, list):
         raise ValueError("Policy registry must define a 'rules' list.")
-    specs: list[PolicyRuleSpec] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        iso_rule = entry.get("iso_rule") or {}
-        if not isinstance(iso_rule, dict):
-            raise ValueError("Each rule entry must include an 'iso_rule' object.")
-        specs.append(
-            PolicyRuleSpec(
-                id=str(entry.get("id") or ""),
-                control=str(entry.get("control") or ""),
-                title=str(entry.get("title") or ""),
-                reference=str(entry.get("reference") or ""),
-                summary=str(entry.get("summary") or ""),
-                rego_module=str(entry.get("rego_module") or ""),
-                rego_rule=str(entry.get("rego_rule") or ""),
-                evidence_fields=tuple(str(field) for field in (entry.get("evidence_fields") or []) if field),
-                standard=str(iso_rule.get("standard") or ""),
-                iso_rule_id=str(iso_rule.get("id") or ""),
-                subject=str(iso_rule.get("subject") or ""),
-                action=str(iso_rule.get("action") or ""),
-                object=str(iso_rule.get("object") or ""),
-                conditions=tuple(str(item) for item in (iso_rule.get("conditions") or []) if item),
-                description=str(iso_rule.get("description") or ""),
-                alias_ids=tuple(str(item) for item in (entry.get("alias_ids") or []) if item),
-            )
-        )
-    return tuple(specs)
+    return tuple(_parse_rule_entry(entry) for entry in entries)
+
+
+def _parse_category_entry(entry: Any) -> BenchmarkCategorySpec:
+    category = _require_mapping(entry, label="category")
+    tier = str(category.get("remediation_tier") or "manual")
+    if tier not in {"full", "guarded", "manual"}:
+        raise ValueError(f"Unknown remediation tier: {tier}")
+    return BenchmarkCategorySpec(
+        category_id=str(category.get("category_id") or category.get("id") or ""),
+        label=str(category.get("label") or category.get("category_id") or category.get("id") or ""),
+        cwes=_string_tuple(category.get("cwes")),
+        rego_rule_ids=_string_tuple(category.get("rego_rule_ids") or category.get("rego_rules")),
+        control_ids=_string_tuple(category.get("control_ids") or category.get("iso_controls")),
+        remediation_tier=tier,
+        framework_demo=bool(category.get("framework_demo", False)),
+    )
 
 
 def _parse_categories(entries: Any) -> tuple[BenchmarkCategorySpec, ...]:
     if not isinstance(entries, list):
         raise ValueError("Policy registry must define a 'categories' list.")
-    specs: list[BenchmarkCategorySpec] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
+    return tuple(_parse_category_entry(entry) for entry in entries)
+
+
+def _first_duplicate(values: list[str]) -> str | None:
+    seen: set[str] = set()
+    for value in values:
+        if not value:
             continue
-        tier = str(entry.get("remediation_tier") or "manual")
-        if tier not in {"full", "guarded", "manual"}:
-            raise ValueError(f"Unknown remediation tier: {tier}")
-        specs.append(
-            BenchmarkCategorySpec(
-                category_id=str(entry.get("category_id") or entry.get("id") or ""),
-                label=str(entry.get("label") or entry.get("category_id") or entry.get("id") or ""),
-                cwes=tuple(str(item) for item in (entry.get("cwes") or []) if item),
-                rego_rule_ids=tuple(
-                    str(item) for item in (entry.get("rego_rule_ids") or entry.get("rego_rules") or []) if item
-                ),
-                control_ids=tuple(
-                    str(item) for item in (entry.get("control_ids") or entry.get("iso_controls") or []) if item
-                ),
-                remediation_tier=tier,
-                framework_demo=bool(entry.get("framework_demo", False)),
-            )
-        )
-    return tuple(specs)
+        if value in seen:
+            return value
+        seen.add(value)
+    return None
+
+
+def _validate_rule_module(rule: PolicyRuleSpec) -> None:
+    rego_module_path = (PROJECT_ROOT / rule.rego_module).resolve()
+    if rego_module_path.suffix != ".rego":
+        raise ValueError(f"Policy registry rule {rule.id} must reference a .rego module: {rule.rego_module}")
+    if PROJECT_ROOT.resolve() not in rego_module_path.parents:
+        raise ValueError(f"Policy registry rule {rule.id} references a module outside the repository.")
+    if not rego_module_path.is_file():
+        raise ValueError(f"Policy registry rule {rule.id} references a missing module: {rule.rego_module}")
+
+
+def _validate_rule(rule: PolicyRuleSpec, *, rule_ids: set[str], alias_ids: set[str], iso_rule_ids: set[str]) -> None:
+    if not rule.id:
+        raise ValueError("Policy registry rules must include a non-empty id.")
+    if not rule.iso_rule_id:
+        raise ValueError(f"Policy registry rule {rule.id} must include a non-empty ISO rule id.")
+    if rule.iso_rule_id in iso_rule_ids:
+        raise ValueError(f"Policy registry contains duplicate ISO rule id: {rule.iso_rule_id}")
+    iso_rule_ids.add(rule.iso_rule_id)
+    _validate_rule_module(rule)
+
+    for evidence_field in rule.evidence_fields:
+        if evidence_field not in EVIDENCE_FIELD_ALIAS_MAP:
+            raise ValueError(f"Policy registry rule {rule.id} references an unknown evidence field: {evidence_field}")
+
+    for alias in rule.alias_ids:
+        if alias in rule_ids:
+            raise ValueError(f"Policy registry alias {alias} collides with a rule id.")
+        if alias in alias_ids:
+            raise ValueError(f"Policy registry contains duplicate alias id: {alias}")
+        alias_ids.add(alias)
 
 
 def _validate_registry(registry: PolicyRegistry) -> PolicyRegistry:
     all_rule_ids = [rule.id for rule in registry.rules]
-    duplicate_rule_ids = sorted({rule_id for rule_id in all_rule_ids if all_rule_ids.count(rule_id) > 1 and rule_id})
-    if duplicate_rule_ids:
-        raise ValueError(f"Policy registry contains duplicate rule id: {duplicate_rule_ids[0]}")
+    duplicate_rule_id = _first_duplicate(all_rule_ids)
+    if duplicate_rule_id:
+        raise ValueError(f"Policy registry contains duplicate rule id: {duplicate_rule_id}")
 
     rule_ids = set(all_rule_ids)
     alias_ids: set[str] = set()
@@ -169,35 +216,7 @@ def _validate_registry(registry: PolicyRegistry) -> PolicyRegistry:
     category_ids: set[str] = set()
 
     for rule in registry.rules:
-        if not rule.id:
-            raise ValueError("Policy registry rules must include a non-empty id.")
-
-        if not rule.iso_rule_id:
-            raise ValueError(f"Policy registry rule {rule.id} must include a non-empty ISO rule id.")
-        if rule.iso_rule_id in iso_rule_ids:
-            raise ValueError(f"Policy registry contains duplicate ISO rule id: {rule.iso_rule_id}")
-        iso_rule_ids.add(rule.iso_rule_id)
-
-        rego_module_path = (PROJECT_ROOT / rule.rego_module).resolve()
-        if rego_module_path.suffix != ".rego":
-            raise ValueError(f"Policy registry rule {rule.id} must reference a .rego module: {rule.rego_module}")
-        if PROJECT_ROOT.resolve() not in rego_module_path.parents:
-            raise ValueError(f"Policy registry rule {rule.id} references a module outside the repository.")
-        if not rego_module_path.is_file():
-            raise ValueError(f"Policy registry rule {rule.id} references a missing module: {rule.rego_module}")
-
-        for evidence_field in rule.evidence_fields:
-            if evidence_field not in EVIDENCE_FIELD_ALIAS_MAP:
-                raise ValueError(
-                    f"Policy registry rule {rule.id} references an unknown evidence field: {evidence_field}"
-                )
-
-        for alias in rule.alias_ids:
-            if alias in rule_ids:
-                raise ValueError(f"Policy registry alias {alias} collides with a rule id.")
-            if alias in alias_ids:
-                raise ValueError(f"Policy registry contains duplicate alias id: {alias}")
-            alias_ids.add(alias)
+        _validate_rule(rule, rule_ids=rule_ids, alias_ids=alias_ids, iso_rule_ids=iso_rule_ids)
 
     for category in registry.categories:
         if not category.category_id:
