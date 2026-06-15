@@ -8,7 +8,10 @@ This module implements a closed-loop remediation flow for the thesis:
 4) Build a lightweight virtual graph context from that updated method.
 5) Re-run the same OPA/Rego policies on the virtual bundle.
 
-The original codebase, Neo4j graph, and filesystem remain untouched.
+The virtual-preview path leaves the codebase, Neo4j graph, and filesystem
+untouched. The dry_run apply path transiently re-ingests the candidate into the
+live Neo4j graph to re-evaluate it, then restores the original; the filesystem is
+never modified in dry_run.
 """
 
 from __future__ import annotations

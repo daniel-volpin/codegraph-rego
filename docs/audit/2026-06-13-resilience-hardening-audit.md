@@ -614,3 +614,41 @@ A/B (needs Neo4j) would confirm, but the gate logic makes the result determinate
 The full graph-pipeline detection eval (`run_benchmark_eval.py`) and the
 remediation re-eval both require Neo4j, which is not available in this sandbox.
 The ING-C1/ING-M7 per-case corpus counts likewise need the full ingest pipeline.
+
+---
+
+# Appendix — Live Neo4j graph-pipeline verification (2026-06-15)
+
+Neo4j 5.26.20 (Docker) was brought up alongside OPA 1.15.1 + the OWASP corpus,
+closing the previously-BLOCKED graph-pipeline items.
+
+## Full-pipeline detection (ingest → Neo4j → OPA → metrics)
+- Pipeline runs end-to-end. Baseline smoke: Crypto P=1.0/R=0.875, Hash
+  P=1.0/R=0.79, overall FP=0.
+- **POLICY-C1 confirmed metric-neutral in the real graph pipeline** (not just the
+  file-level path): weak-random A/B with the fingerprint removed vs restored is
+  **identical — TP=218, FP=0, FN=0, P=R=F1=1.000 both ways**, matching the canonical
+  `thesis_final_detection_full_v2` weak-random number.
+- The sentence-transformer/embedding model was HTTP-403 blocked for the entire
+  run, yet detection completed with perfect metrics — a live demonstration that
+  **FAISS/vector retrieval is not in the authoritative detection path**.
+
+## REM-F1/F2 — instrumented dry_run trace against the live graph
+Replaying `apply_flow`'s exact dry_run sequence on a real ingested MD5 case
+(BenchmarkTest00046), querying the Neo4j method node and re-evaluating at each step:
+
+| Question | Result | Evidence |
+|---|---|---|
+| dry_run mutates the live graph? | **YES** | method `end_line` shifted 97→98 after the patched re-ingest |
+| graph restored after eval? | **YES** | reverted 98→97 after rollback |
+| verification reflects the patched state (not stale)? | **YES** | baseline weak-hash fires → after-patch does not |
+| serial-safe (next case sees clean baseline)? | **YES** | post-restore weak-hash fires again |
+
+**Conclusion (confirms the REM-F1/F2 write-up):** the live-graph mutation is real
+(so the old "graph untouched" docstring was false — now corrected in
+`service.py`), but under the serial canonical run the post-repair verification is
+evaluated against the patched representation and the graph is restored, so the
+canonical fully-verified counts are **not invalidated**. The residual risk is the
+crash/concurrency window between mutate and restore (out of scope for the serial
+benchmark; recommended hardening: verify off the temp-file virtual bundle without
+touching Neo4j, as `preview_virtual_fix` already does).
