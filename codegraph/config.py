@@ -8,7 +8,6 @@ from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-LOCAL_ENV_FILE = PROJECT_ROOT / ".env"
 ENV_FILE_OVERRIDE_VAR = "CODEGRAPH_ENV_FILE"
 
 
