@@ -35,6 +35,90 @@ def cached_policy_evaluation(evaluate_policies_fn, *, cache_key: str | None = No
     return data
 
 
+def _violation_rule_id(violation: dict[str, Any]) -> str | None:
+    value = violation.get("violation_id") or violation.get("id")
+    return str(value) if value else None
+
+
+def _violation_method(violation: dict[str, Any]) -> str | None:
+    value = violation.get("target_method") or violation.get("method")
+    return str(value) if value else None
+
+
+def _violation_matches(
+    violation: dict[str, Any],
+    *,
+    violation_id: str,
+    target_method: str | None,
+    file_path: str | None,
+) -> bool:
+    current_id = _violation_rule_id(violation)
+    if current_id != str(violation_id):
+        return False
+
+    method = _violation_method(violation)
+    path = violation.get("file_path")
+    if target_method and method and target_method != method:
+        return False
+    return not (file_path and path and file_path != path)
+
+
+def _evaluate_baseline_violations(policy_evaluator_cls, method: str | None, logger: logging.Logger) -> list[dict[str, Any]] | None:
+    if not method:
+        return None
+    evaluator = policy_evaluator_cls()
+    evaluation = evaluator.evaluate(method)
+    if evaluation.get("error"):
+        logger.warning("Baseline evaluation failed for %s: %s", method, evaluation.get("error"))
+    return evaluation.get("violations") or []
+
+
+def _extract_exact_method_source(
+    violation: dict[str, Any],
+    method: str | None,
+    *,
+    resolve_file_path_fn,
+    extract_method_span_fn,
+    logger: logging.Logger,
+) -> tuple[str | None, str | None]:
+    resolved_path = resolve_file_path_fn(violation.get("file_path") or "")
+    if resolved_path is None or not method:
+        return None, None
+    try:
+        file_source = resolved_path.read_text(encoding="utf-8")
+        exact_lines, _, _, exact_snippet = extract_method_span_fn(file_source, method)
+        return exact_snippet, format_numbered_lines(exact_lines)
+    except Exception as exc:
+        logger.debug("Failed to extract exact method span for %s: %s", method, exc)
+        return None, None
+
+
+def _context_payload(
+    violation: dict[str, Any],
+    *,
+    rule_id: str,
+    method: str | None,
+    catalog_entry: Any,
+    baseline_violations: list[dict[str, Any]] | None,
+    exact_method_source: str | None,
+    numbered_method_source: str | None,
+    build_remediation_plan_fn,
+) -> dict[str, Any]:
+    evidence = violation.get("evidence") or {}
+    return {
+        "violation": violation,
+        "target_method": method,
+        "file_path": violation.get("file_path"),
+        "rule_id": rule_id,
+        "evidence": evidence,
+        "catalog_entry": catalog_entry,
+        "baseline_violations": baseline_violations,
+        "exact_method_source": exact_method_source,
+        "numbered_method_source": numbered_method_source,
+        "remediation_plan": build_remediation_plan_fn(exact_method_source or evidence.get("source_code") or ""),
+    }
+
+
 def gather_violation_context(
     violation_id: str,
     *,
@@ -56,51 +140,32 @@ def gather_violation_context(
     violations = result.get("violations") or []
     catalog = load_policy_catalog_fn()
     for violation in violations:
-        current_id = violation.get("violation_id") or violation.get("id")
-        if not current_id or str(current_id) != str(violation_id):
+        if not isinstance(violation, dict):
             continue
-        method = violation.get("target_method") or violation.get("method")
-        path = violation.get("file_path")
-        if target_method and method and target_method != method:
+        if not _violation_matches(violation, violation_id=violation_id, target_method=target_method, file_path=file_path):
             continue
-        if file_path and path and file_path != path:
+
+        rule_id = _violation_rule_id(violation)
+        if rule_id is None:
             continue
-        evidence = violation.get("evidence") or {}
-        catalog_entry = catalog.get(current_id) if isinstance(catalog, dict) else None
-        baseline_violations: list[dict[str, Any]] | None = None
-        if method:
-            evaluator = policy_evaluator_cls()
-            evaluation = evaluator.evaluate(method)
-            baseline_violations = evaluation.get("violations") or []
-            if evaluation.get("error"):
-                logger.warning(
-                    "Baseline evaluation failed for %s: %s",
-                    method,
-                    evaluation.get("error"),
-                )
-        exact_method_source = None
-        numbered_method_source = None
-        resolved_path = resolve_file_path_fn(violation.get("file_path") or "")
-        if resolved_path is not None and method:
-            try:
-                file_source = resolved_path.read_text(encoding="utf-8")
-                exact_lines, _, _, exact_snippet = extract_method_span_fn(file_source, method)
-                exact_method_source = exact_snippet
-                numbered_method_source = format_numbered_lines(exact_lines)
-            except Exception as exc:
-                logger.debug("Failed to extract exact method span for %s: %s", method, exc)
-        return {
-            "violation": violation,
-            "target_method": violation.get("target_method") or violation.get("method"),
-            "file_path": violation.get("file_path"),
-            "rule_id": current_id,
-            "evidence": evidence,
-            "catalog_entry": catalog_entry,
-            "baseline_violations": baseline_violations,
-            "exact_method_source": exact_method_source,
-            "numbered_method_source": numbered_method_source,
-            "remediation_plan": build_remediation_plan_fn(exact_method_source or evidence.get("source_code") or ""),
-        }
+        method = _violation_method(violation)
+        exact_method_source, numbered_method_source = _extract_exact_method_source(
+            violation,
+            method,
+            resolve_file_path_fn=resolve_file_path_fn,
+            extract_method_span_fn=extract_method_span_fn,
+            logger=logger,
+        )
+        return _context_payload(
+            violation,
+            rule_id=rule_id,
+            method=method,
+            catalog_entry=catalog.get(rule_id) if isinstance(catalog, dict) else None,
+            baseline_violations=_evaluate_baseline_violations(policy_evaluator_cls, method, logger),
+            exact_method_source=exact_method_source,
+            numbered_method_source=numbered_method_source,
+            build_remediation_plan_fn=build_remediation_plan_fn,
+        )
     return None
 
 
@@ -166,61 +231,92 @@ def apply_fallback_graph_heuristics(snippet: str, context: dict[str, Any]) -> di
     return apply_annotation_heuristic(snippet, context)
 
 
-def build_virtual_graph_context(source_code: str, base_graph: dict[str, Any] | None = None) -> dict[str, Any]:
-    context: dict[str, Any] = {
-        "annotations": list((base_graph or {}).get("annotations") or []),
-        "uses_fields": list((base_graph or {}).get("uses_fields") or []),
-        "calls": list((base_graph or {}).get("calls") or []),
-        "callers": list((base_graph or {}).get("callers") or []),
+def _base_graph_context(base_graph: dict[str, Any] | None) -> dict[str, Any]:
+    graph = base_graph or {}
+    return {
+        "annotations": list(graph.get("annotations") or []),
+        "uses_fields": list(graph.get("uses_fields") or []),
+        "calls": list(graph.get("calls") or []),
+        "callers": list(graph.get("callers") or []),
     }
-    if not source_code:
-        return context
 
-    snippet = sanitize_method_snippet(source_code)
+
+def _parse_virtual_method(snippet: str) -> MethodDeclaration | None:
     wrapped = f"class VirtualPreview {{\n{snippet}\n}}"
     try:
         tree = javalang.parse.parse(wrapped)
     except Exception as exc:  # pragma: no cover - parser guard
         LOGGER.warning("Failed to parse virtual method snippet: %s", exc)
-        return apply_fallback_graph_heuristics(snippet, context)
+        return None
 
-    if not getattr(tree, "types", None):
-        return apply_fallback_graph_heuristics(snippet, context)
+    type_declarations = getattr(tree, "types", None) or []
+    if not type_declarations:
+        return None
+    methods = getattr(type_declarations[0], "methods", None) or []
+    return methods[0] if methods else None
 
-    type_decl = tree.types[0]
-    methods = getattr(type_decl, "methods", None) or []
-    if not methods:
-        return apply_fallback_graph_heuristics(snippet, context)
 
-    method: MethodDeclaration = methods[0]
-    ann_names = [
-        (ann.name or "").split(".")[-1].lstrip("@") for ann in (method.annotations or []) if getattr(ann, "name", None)
+def _method_annotation_names(method: MethodDeclaration) -> list[str]:
+    return [
+        (annotation.name or "").split(".")[-1].lstrip("@")
+        for annotation in (method.annotations or [])
+        if getattr(annotation, "name", None)
     ]
-    context["annotations"] = sorted({*context["annotations"], *ann_names})
 
+
+def _method_invocation_call(node: MethodInvocation) -> str | None:
+    parts = [part for part in (node.qualifier, node.member) if part]
+    if parts:
+        return ".".join(parts)
+    return node.member or None
+
+
+def _member_reference_field(node: MemberReference) -> dict[str, Any] | None:
+    member = node.member
+    if not member:
+        return None
+    return {
+        "name": member,
+        "type": "Logger" if member.lower().startswith("log") else None,
+        "class_fqn": None,
+    }
+
+
+def _graph_delta_from_method(method: MethodDeclaration, context: dict[str, Any]) -> dict[str, Any]:
     calls: set[str] = set(context["calls"])
     uses_fields: list[dict[str, Any]] = list(context["uses_fields"])
+
     for _, node in method:
         if isinstance(node, MethodInvocation):
-            parts = [part for part in (node.qualifier, node.member) if part]
-            call = ".".join(parts) if parts else node.member
+            call = _method_invocation_call(node)
             if call:
                 calls.add(call)
             if node.qualifier and node.qualifier.lower() in {"logger", "log"}:
                 uses_fields.append({"name": node.qualifier, "type": "Logger", "class_fqn": None})
-        elif isinstance(node, MemberReference):
-            member = node.member
-            if member:
-                uses_fields.append(
-                    {
-                        "name": member,
-                        "type": "Logger" if member.lower().startswith("log") else None,
-                        "class_fqn": None,
-                    }
-                )
+            continue
+        if isinstance(node, MemberReference):
+            field = _member_reference_field(node)
+            if field is not None:
+                uses_fields.append(field)
 
-    context["calls"] = sorted(calls)
-    context["uses_fields"] = dedupe_fields(uses_fields)
+    return {
+        "calls": sorted(calls),
+        "uses_fields": dedupe_fields(uses_fields),
+    }
+
+
+def build_virtual_graph_context(source_code: str, base_graph: dict[str, Any] | None = None) -> dict[str, Any]:
+    context = _base_graph_context(base_graph)
+    if not source_code:
+        return context
+
+    snippet = sanitize_method_snippet(source_code)
+    method = _parse_virtual_method(snippet)
+    if method is None:
+        return apply_fallback_graph_heuristics(snippet, context)
+
+    context["annotations"] = sorted({*context["annotations"], *_method_annotation_names(method)})
+    context.update(_graph_delta_from_method(method, context))
     context = apply_annotation_heuristic(snippet, context)
     context = apply_logger_heuristic(snippet, context)
     return context

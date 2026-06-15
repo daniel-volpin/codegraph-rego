@@ -1,9 +1,11 @@
 import hashlib
 import json
 import logging
-import os
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 import faiss
 import numpy as np
@@ -15,17 +17,35 @@ from codegraph.config import settings
 CONTEXT_LINES_BEFORE = 5
 CONTEXT_LINES_AFTER = 20
 LOGGER = logging.getLogger(__name__)
+ProgressCallback = Callable[[str, str, float], None]
+EmbeddingCache = dict[str, dict[str, object]]
+
+
+@dataclass(frozen=True)
+class _MethodSnippet:
+    signature: str
+    code: str
+
+
+@dataclass(frozen=True)
+class _EmbeddingPlan:
+    vectors_by_sig: dict[str, list[float]]
+    snippets_to_encode: list[str]
+    signatures_to_encode: list[str]
+    hashes_to_encode: list[str]
+    cached_hits: int
 
 
 def _hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _load_embedding_cache(cache_path: str, model_name: str) -> dict[str, dict[str, object]]:
-    if not os.path.isfile(cache_path):
+def _load_embedding_cache(cache_path: str, model_name: str) -> EmbeddingCache:
+    path = Path(cache_path)
+    if not path.is_file():
         return {}
     try:
-        with open(cache_path) as handle:
+        with path.open(encoding="utf-8") as handle:
             payload = json.load(handle) or {}
     except json.JSONDecodeError:
         LOGGER.warning("Embedding cache at %s is invalid JSON; ignoring.", cache_path)
@@ -43,7 +63,7 @@ def _persist_embedding_cache(
     cache_path: str,
     model_name: str,
     dim: int | None,
-    entries: dict[str, dict[str, object]],
+    entries: EmbeddingCache,
 ) -> None:
     payload = {
         "model": model_name,
@@ -51,9 +71,115 @@ def _persist_embedding_cache(
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "entries": entries,
     }
-    os.makedirs(os.path.dirname(cache_path) or ".", exist_ok=True)
-    with open(cache_path, "w") as handle:
+    path = Path(cache_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle)
+
+
+def _write_json(path: str | Path, payload: Any, *, indent: int | None = None) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=indent)
+
+
+def _cache_vector_dim(cache_entries: EmbeddingCache) -> int | None:
+    sample = next(iter(cache_entries.values()), None)
+    if not isinstance(sample, dict):
+        return None
+    vector = sample.get("vector")
+    return len(vector) if isinstance(vector, list) else None
+
+
+def _fetch_method_snippets() -> list[_MethodSnippet]:
+    snippets: list[_MethodSnippet] = []
+    query = "MATCH (m:Method) RETURN coalesce(m.full_signature, m.signature) AS sig, m.name AS name, m.file_path AS path"
+    with GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass)) as driver:
+        with driver.session() as session:
+            for record in session.run(query):
+                code = EmbeddingService.extract_method_snippet(record["path"], record["name"])
+                if code:
+                    snippets.append(_MethodSnippet(signature=record["sig"], code=code))
+    return snippets
+
+
+def _plan_embedding_work(
+    method_snippets: list[_MethodSnippet],
+    cache_entries: EmbeddingCache,
+    *,
+    rebuild_index: bool,
+) -> _EmbeddingPlan:
+    cache_dim = _cache_vector_dim(cache_entries)
+    vectors_by_sig: dict[str, list[float]] = {}
+    snippets_to_encode: list[str] = []
+    signatures_to_encode: list[str] = []
+    hashes_to_encode: list[str] = []
+    cached_hits = 0
+
+    for snippet in method_snippets:
+        code_hash = _hash_text(snippet.code)
+        cached = cache_entries.get(snippet.signature) if cache_entries else None
+        vector = cached.get("vector") if isinstance(cached, dict) else None
+        cached_hash = cached.get("hash") if isinstance(cached, dict) else None
+        if _cache_hit(vector, cached_hash, code_hash, cache_dim=cache_dim, rebuild_index=rebuild_index):
+            vectors_by_sig[snippet.signature] = list(vector) if isinstance(vector, list) else []
+            cached_hits += 1
+            continue
+        snippets_to_encode.append(snippet.code)
+        signatures_to_encode.append(snippet.signature)
+        hashes_to_encode.append(code_hash)
+
+    return _EmbeddingPlan(
+        vectors_by_sig=vectors_by_sig,
+        snippets_to_encode=snippets_to_encode,
+        signatures_to_encode=signatures_to_encode,
+        hashes_to_encode=hashes_to_encode,
+        cached_hits=cached_hits,
+    )
+
+
+def _cache_hit(
+    vector: object,
+    cached_hash: object,
+    code_hash: str,
+    *,
+    cache_dim: int | None,
+    rebuild_index: bool,
+) -> bool:
+    return (
+        not rebuild_index
+        and isinstance(vector, list)
+        and cached_hash == code_hash
+        and (cache_dim is None or len(vector) == cache_dim)
+    )
+
+
+def _encode_missing_vectors(
+    model: SentenceTransformer,
+    plan: _EmbeddingPlan,
+    cache_entries: EmbeddingCache,
+) -> dict[str, list[float]]:
+    if not plan.snippets_to_encode:
+        return {}
+
+    encoded = model.encode(plan.snippets_to_encode, normalize_embeddings=True)
+    vectors: dict[str, list[float]] = {}
+    for idx, signature in enumerate(plan.signatures_to_encode):
+        vector = encoded[idx].tolist()
+        vectors[signature] = vector
+        cache_entries[signature] = {"hash": plan.hashes_to_encode[idx], "vector": vector}
+    return vectors
+
+
+def _build_faiss_index(vectors_np: np.ndarray, index_path: Path) -> int | None:
+    if vectors_np.ndim != 2 or vectors_np.shape[0] == 0:
+        return None
+    dim = int(vectors_np.shape[1])
+    index = faiss.IndexFlatIP(dim)
+    index.add(vectors_np)
+    faiss.write_index(index, str(index_path))
+    return dim
 
 
 class EmbeddingService:
@@ -69,7 +195,7 @@ class EmbeddingService:
 
     @staticmethod
     def build_embeddings(
-        progress_callback: Callable[[str, str, float], None] | None = None,
+        progress_callback: ProgressCallback | None = None,
         *,
         rebuild_index: bool = False,
     ) -> None:
@@ -81,99 +207,52 @@ class EmbeddingService:
         4. Build a FAISS index for fast vector search and save it to disk.
         5. Save the mapping from FAISS index to method signatures as a JSON file.
         """
-        method_records: list[tuple[str, str]] = []
         if progress_callback:
             progress_callback("embedding", "Fetching methods from Neo4j…", 82.0)
-        model = SentenceTransformer(settings.embedding_model_name)
-        with GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass)) as driver:
-            with driver.session() as session:
-                results = session.run(
-                    "MATCH (m:Method) RETURN coalesce(m.full_signature, m.signature) AS sig, m.name AS name, m.file_path AS path"
-                )
-                for record in results:
-                    code = EmbeddingService.extract_method_snippet(record["path"], record["name"])
-                    if code:
-                        method_records.append((record["sig"], code))
-        signatures = [sig for sig, _ in method_records]
-        if rebuild_index:
-            cache_entries: dict[str, dict[str, object]] = {}
-        else:
-            cache_entries = _load_embedding_cache(settings.embedding_cache_path, settings.embedding_model_name)
+        method_snippets = _fetch_method_snippets()
+        signatures = [snippet.signature for snippet in method_snippets]
         if not signatures:
             LOGGER.warning("No method snippets found; skipping embedding build.")
             return
+
+        cache_entries: EmbeddingCache = (
+            {} if rebuild_index else _load_embedding_cache(settings.embedding_cache_path, settings.embedding_model_name)
+        )
         if progress_callback:
             progress_callback("embedding", f"Preparing {len(signatures)} methods…", 84.0)
-        cached_hits = 0
-        to_encode: list[str] = []
-        to_encode_sigs: list[str] = []
-        to_encode_hashes: list[str] = []
-        vectors_by_sig: dict[str, list[float]] = {}
-        cache_dim = None
-        if cache_entries:
-            sample = next(iter(cache_entries.values()), None)
-            if isinstance(sample, dict):
-                cached_vector = sample.get("vector")
-                if isinstance(cached_vector, list):
-                    cache_dim = len(cached_vector)
-        for sig, code in method_records:
-            code_hash = _hash_text(code)
-            cached = cache_entries.get(sig) if cache_entries else None
-            vector = cached.get("vector") if isinstance(cached, dict) else None
-            cached_hash = cached.get("hash") if isinstance(cached, dict) else None
-            if (
-                not rebuild_index
-                and isinstance(vector, list)
-                and cached_hash == code_hash
-                and (cache_dim is None or len(vector) == cache_dim)
-            ):
-                vectors_by_sig[sig] = vector
-                cached_hits += 1
-                continue
-            to_encode.append(code)
-            to_encode_sigs.append(sig)
-            to_encode_hashes.append(code_hash)
-        if to_encode:
+        plan = _plan_embedding_work(method_snippets, cache_entries, rebuild_index=rebuild_index)
+
+        vectors_by_sig = dict(plan.vectors_by_sig)
+        if plan.snippets_to_encode:
             if progress_callback:
-                progress_callback("embedding", f"Encoding {len(to_encode)} methods…", 86.0)
-            encoded = model.encode(to_encode, normalize_embeddings=True)
-            for idx, sig in enumerate(to_encode_sigs):
-                vec = encoded[idx].tolist()
-                vectors_by_sig[sig] = vec
-                cache_entries[sig] = {"hash": to_encode_hashes[idx], "vector": vec}
-        else:
-            if progress_callback:
-                progress_callback("embedding", "All embeddings reused from cache.", 86.0)
+                progress_callback("embedding", f"Encoding {len(plan.snippets_to_encode)} methods…", 86.0)
+            model = SentenceTransformer(settings.embedding_model_name)
+            vectors_by_sig.update(_encode_missing_vectors(model, plan, cache_entries))
+        elif progress_callback:
+            progress_callback("embedding", "All embeddings reused from cache.", 86.0)
+
         vectors_list = [vectors_by_sig[sig] for sig in signatures if sig in vectors_by_sig]
         vectors_np = np.asarray(vectors_list, dtype="float32")
         LOGGER.info("Embedding %d methods", len(signatures))
         if progress_callback:
-            progress_callback("embedding", f"Cache hits: {cached_hits}; encoded: {len(to_encode)}", 88.0)
+            progress_callback(
+                "embedding",
+                f"Cache hits: {plan.cached_hits}; encoded: {len(plan.snippets_to_encode)}",
+                88.0,
+            )
         LOGGER.info("Embedding tensor prepared with shape=%s dtype=%s", vectors_np.shape, vectors_np.dtype)
-        os.makedirs(settings.index_dir, exist_ok=True)
-        index_path = os.path.join(settings.index_dir, "code_embeddings.index")
-        sigmap_legacy_path = os.path.join(settings.index_dir, "embedding_signature_map.json")
-        sigmap_full_path = os.path.join(settings.index_dir, "embedding_full_signature_map.json")
-        if vectors_np.shape[0] > 0:
-            dim = int(vectors_np.shape[1])
-            index = faiss.IndexFlatIP(dim)
-            # Ensure vectors_np is 2D and non-empty before adding
-            if vectors_np.ndim == 2 and vectors_np.shape[0] > 0:
-                index.add(vectors_np)
-                faiss.write_index(index, index_path)
-                if progress_callback:
-                    progress_callback("embedding", "FAISS index written to disk.", 92.0)
-        else:
-            # No vectors: do not create or save index
-            index = None
-            dim = None
-        with open(sigmap_full_path, "w") as f:
-            json.dump(signatures, f)
-        try:
-            with open(sigmap_legacy_path, "w") as f:
-                json.dump(signatures, f)
-        except Exception:
-            pass
+
+        index_dir = Path(settings.index_dir)
+        index_dir.mkdir(parents=True, exist_ok=True)
+        index_path = index_dir / "code_embeddings.index"
+        sigmap_legacy_path = index_dir / "embedding_signature_map.json"
+        sigmap_full_path = index_dir / "embedding_full_signature_map.json"
+        dim = _build_faiss_index(vectors_np, index_path)
+        if dim is not None and progress_callback:
+            progress_callback("embedding", "FAISS index written to disk.", 92.0)
+
+        _write_json(sigmap_full_path, signatures)
+        _write_json(sigmap_legacy_path, signatures)
         if progress_callback:
             progress_callback("embedding", "Embedding metadata saved.", 95.0)
         metadata = {
@@ -182,17 +261,13 @@ class EmbeddingService:
             "metric": "cosine",
             "count": len(signatures),
             "built_at": datetime.now(timezone.utc).isoformat(),
-            "index_path": index_path,
-            "signature_map": {"full": sigmap_full_path, "legacy": sigmap_legacy_path},
+            "index_path": str(index_path),
+            "signature_map": {"full": str(sigmap_full_path), "legacy": str(sigmap_legacy_path)},
             "cache_path": settings.embedding_cache_path,
-            "cache_hits": cached_hits,
-            "cache_misses": len(to_encode),
+            "cache_hits": plan.cached_hits,
+            "cache_misses": len(plan.snippets_to_encode),
         }
-        try:
-            with open(settings.embedding_metadata_path, "w") as f:
-                json.dump(metadata, f, indent=2)
-        except Exception:
-            pass
+        _write_json(settings.embedding_metadata_path, metadata, indent=2)
         try:
             _persist_embedding_cache(settings.embedding_cache_path, settings.embedding_model_name, dim, cache_entries)
         except Exception as exc:
