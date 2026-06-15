@@ -47,6 +47,45 @@ def is_test_source_path(file_path: Any) -> bool:
     return "/src/test/" in normalized
 
 
+def _sorted_non_empty_strings(values: Any) -> list[str]:
+    return sorted(str(value) for value in (values or []) if value)
+
+
+def _sorted_used_fields(values: Any) -> list[dict[str, Any]]:
+    fields = [field for field in (values or []) if field and field.get("name")]
+    return sorted(fields, key=lambda field: str(field.get("name") or ""))
+
+
+def _combined_annotations(property_annotations: Any, annotation_nodes: Any) -> list[str]:
+    annotations = list(property_annotations or []) + list(annotation_nodes or [])
+    return sorted({annotation for annotation in annotations if annotation})
+
+
+def _snapshot_from_record(record: Any) -> dict[str, Any] | None:
+    signature = record.get("signature")
+    if not signature:
+        return None
+    file_path = record.get("file_path")
+    if is_test_source_path(file_path):
+        return None
+    return {
+        "signature": signature,
+        "name": record.get("name"),
+        "class_fqn": record.get("class_fqn"),
+        "file_path": file_path,
+        "start_line": record.get("start_line"),
+        "end_line": record.get("end_line"),
+        "modifiers": record.get("modifiers") or [],
+        "annotations": _combined_annotations(
+            record.get("property_annotations"),
+            record.get("annotation_nodes"),
+        ),
+        "uses_fields": _sorted_used_fields(record.get("uses_fields")),
+        "calls": _sorted_non_empty_strings(record.get("calls")),
+        "callers": _sorted_non_empty_strings(record.get("callers")),
+    }
+
+
 def fetch_methods_with_context(
     driver,
     *,
@@ -91,36 +130,9 @@ def fetch_methods_with_context(
     snapshots: list[dict[str, Any]] = []
     with driver.session() as session:
         for rec in session.run(cypher, params):
-            signature = rec.get("signature")
-            if not signature:
-                continue
-            file_path = rec.get("file_path")
-            if is_test_source_path(file_path):
-                continue
-            uses_fields = [field for field in (rec.get("uses_fields") or []) if field and field.get("name")]
-            annotations = rec.get("property_annotations") or []
-            annotation_nodes = rec.get("annotation_nodes") or []
-            combined_annotations = sorted({a for a in annotations + annotation_nodes if a})
-            # collect(DISTINCT ...) is unordered; sort for byte-stable bundles.
-            # Rego sink checks are any-match, so detection stays invariant.
-            uses_fields = sorted(uses_fields, key=lambda field: str(field.get("name") or ""))
-            calls = sorted(str(call) for call in (rec.get("calls") or []) if call)
-            callers = sorted(str(caller) for caller in (rec.get("callers") or []) if caller)
-            snapshots.append(
-                {
-                    "signature": signature,
-                    "name": rec.get("name"),
-                    "class_fqn": rec.get("class_fqn"),
-                    "file_path": file_path,
-                    "start_line": rec.get("start_line"),
-                    "end_line": rec.get("end_line"),
-                    "modifiers": rec.get("modifiers") or [],
-                    "annotations": combined_annotations,
-                    "uses_fields": uses_fields,
-                    "calls": calls,
-                    "callers": callers,
-                }
-            )
+            snapshot = _snapshot_from_record(rec)
+            if snapshot is not None:
+                snapshots.append(snapshot)
     return snapshots
 
 
@@ -157,25 +169,7 @@ def fetch_method_snapshot(driver, method_signature: str) -> dict[str, Any] | Non
     )
     with driver.session() as session:
         record = session.run(cypher, method_signature=method_signature).single()
-        if not record:
-            return None
-        uses_fields = [field for field in (record.get("uses_fields") or []) if field and field.get("name")]
-        annotations = record.get("property_annotations") or []
-        annotation_nodes = record.get("annotation_nodes") or []
-        combined_annotations = sorted({a for a in annotations + annotation_nodes if a})
-        return {
-            "signature": record.get("signature"),
-            "name": record.get("name"),
-            "class_fqn": record.get("class_fqn"),
-            "file_path": record.get("file_path"),
-            "start_line": record.get("start_line"),
-            "end_line": record.get("end_line"),
-            "modifiers": record.get("modifiers") or [],
-            "annotations": combined_annotations,
-            "uses_fields": uses_fields,
-            "calls": record.get("calls") or [],
-            "callers": record.get("callers") or [],
-        }
+        return _snapshot_from_record(record) if record else None
 
 
 def resolve_source_path(file_path: str | None) -> Path | None:
@@ -188,6 +182,108 @@ def resolve_source_path(file_path: str | None) -> Path | None:
     if candidate.is_file():
         return candidate
     return None
+
+
+def _source_override_path(source_path_override: str | Path | None) -> str | None:
+    if isinstance(source_path_override, Path):
+        return source_path_override.as_posix()
+    return source_path_override
+
+
+def _resolve_bundle_source_path(
+    resolved_path: Path | None,
+    source_path_override: str | Path | None,
+) -> Path | None:
+    override = _source_override_path(source_path_override)
+    return resolve_source_path(override) if override else resolved_path
+
+
+def _extract_method_source(method_snapshot: dict[str, Any], source_path: Path | None) -> str:
+    if source_path is None:
+        return ""
+    source_code = extract_snippet_by_lines(
+        source_path.as_posix(),
+        method_snapshot.get("start_line"),
+        method_snapshot.get("end_line"),
+        padding=2,
+    )
+    if source_code or not method_snapshot.get("name"):
+        return source_code
+    return extract_code_snippet(source_path.as_posix(), method_snapshot.get("name", ""))
+
+
+def _source_views(source_code: str) -> tuple[str, str]:
+    if not source_code:
+        return source_code, source_code
+    active = strip_java_lexical_noise(source_code, strip_string_literals=False)
+    substring_safe = strip_java_lexical_noise(source_code, strip_string_literals=True)
+    return active, substring_safe
+
+
+def _graph_context(method_snapshot: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "annotations": method_snapshot.get("annotations") or [],
+        "uses_fields": method_snapshot.get("uses_fields") or [],
+        "calls": method_snapshot.get("calls") or [],
+        "callers": method_snapshot.get("callers") or [],
+    }
+
+
+def _build_helper_summaries(
+    *,
+    source_code_active: str,
+    method_snapshot: dict[str, Any],
+    method_index: dict[str, dict[str, Any]] | None,
+) -> dict[str, Any]:
+    if method_index is None:
+        return {}
+    return _HELPER_SUMMARY_BUILDER.build(
+        current_source=source_code_active,
+        method_snapshot=method_snapshot,
+        method_index=method_index,
+    )
+
+
+def _vector_context(search_service: HybridSearchService | None, method_signature: str) -> list[str]:
+    if search_service is None:
+        return []
+    try:
+        return search_service.similar_to_signature(method_signature, top_k=3)
+    except Exception as exc:  # pragma: no cover - optional dependency
+        LOGGER.debug("Vector lookup failed for %s: %s", method_signature, exc)
+        return []
+
+
+def _taint_paths(taint_path_finder: TaintPathFinder | None, method_signature: str) -> list[dict[str, Any]]:
+    if taint_path_finder is None:
+        return []
+    return taint_path_finder.find_reachable_sinks(method_signature)
+
+
+def _record_evidence_span_attributes(
+    span: Any,
+    *,
+    source_code: str,
+    graph_context: dict[str, Any],
+    vector_context: list[str],
+    helper_summaries: dict[str, Any],
+    taint_paths: list[dict[str, Any]],
+    analysis_flags: dict[str, Any],
+) -> None:
+    span.set_attribute("source_code_lines", len(source_code.splitlines()) if source_code else 0)
+    span.set_attribute("source_code_available", bool(source_code))
+    graph_node_count = sum(
+        len(graph_context.get(key) or [])
+        for key in ("annotations", "uses_fields", "calls", "callers")
+    )
+    span.set_attribute("graph_nodes_count", graph_node_count)
+    span.set_attribute("vector_results_count", len(vector_context))
+    span.set_attribute("helper_summaries_count", len(helper_summaries))
+    span.set_attribute("taint_paths_count", len(taint_paths))
+    max_taint_hops = max((path.get("hops", 0) for path in taint_paths), default=0)
+    span.set_attribute("taint_hops_max", max_taint_hops)
+    analysis_flag_count = sum(1 for value in analysis_flags.values() if value)
+    span.set_attribute("analysis_flags_active", analysis_flag_count)
 
 
 def build_evidence_bundle(
@@ -203,65 +299,18 @@ def build_evidence_bundle(
 
         file_path = method_snapshot.get("file_path")
         resolved_path = resolve_source_path(file_path)
-        if isinstance(source_path_override, Path):
-            source_path_override = source_path_override.as_posix()
-        source_path = resolve_source_path(source_path_override) if source_path_override else resolved_path
-        source_code = ""
-        if source_path is not None:
-            source_code = extract_snippet_by_lines(
-                source_path.as_posix(),
-                method_snapshot.get("start_line"),
-                method_snapshot.get("end_line"),
-                padding=2,
-            )
-            if not source_code and method_snapshot.get("name"):
-                source_code = extract_code_snippet(source_path.as_posix(), method_snapshot.get("name", ""))
+        source_path = _resolve_bundle_source_path(resolved_path, source_path_override)
+        source_code = _extract_method_source(method_snapshot, source_path)
+        source_code_active, source_code_substring_safe = _source_views(source_code)
 
-        # Two lexically-cleaned views of the source, plus the raw
-        # original:
-        #   * source_code_active: comments stripped, string and char
-        #     literal contents PRESERVED. The Python regex layer in
-        #     codegraph.policy.analysis matches structurally-anchored
-        #     patterns that intentionally inspect literal contents
-        #     (for example, MessageDigest.getInstance("MD5")), so it
-        #     needs literals retained.
-        #   * source_code_substring_safe: comments AND literal contents
-        #     stripped. The OPA/Rego rules perform naive contains(...)
-        #     matching on input.source_code; this view eliminates the
-        #     entire lexical-FP class for substring rules.
-        #   * source_code (raw) is preserved on the bundle as
-        #     source_code_raw for downstream consumers that need
-        #     human-readable text (LLM citation grounding,
-        #     evidence-card rendering, audit excerpts).
-        if source_code:
-            source_code_active = strip_java_lexical_noise(source_code, strip_string_literals=False)
-            source_code_substring_safe = strip_java_lexical_noise(source_code, strip_string_literals=True)
-        else:
-            source_code_active = source_code
-            source_code_substring_safe = source_code
-
-        graph_context = {
-            "annotations": method_snapshot.get("annotations") or [],
-            "uses_fields": method_snapshot.get("uses_fields") or [],
-            "calls": method_snapshot.get("calls") or [],
-            "callers": method_snapshot.get("callers") or [],
-        }
+        graph_context = _graph_context(method_snapshot)
         analysis_flags = analyze_policy_indicators(source_code_active)
-        helper_summaries = (
-            _HELPER_SUMMARY_BUILDER.build(
-                current_source=source_code_active,
-                method_snapshot=method_snapshot,
-                method_index=method_index or {},
-            )
-            if method_index is not None
-            else {}
+        helper_summaries = _build_helper_summaries(
+            source_code_active=source_code_active,
+            method_snapshot=method_snapshot,
+            method_index=method_index,
         )
-        vector_context: list[str] = []
-        if search_service is not None:
-            try:
-                vector_context = search_service.similar_to_signature(method_snapshot["signature"], top_k=3)
-            except Exception as exc:  # pragma: no cover - optional dependency
-                LOGGER.debug("Vector lookup failed for %s: %s", method_snapshot["signature"], exc)
+        vector_context = _vector_context(search_service, method_snapshot["signature"])
         bundle = build_policy_bundle(
             target_method=method_snapshot["signature"],
             method_name=method_snapshot.get("name"),
@@ -285,30 +334,18 @@ def build_evidence_bundle(
         )
         result = serialize_policy_bundle(bundle)
 
-        taint_paths = (
-            taint_path_finder.find_reachable_sinks(method_snapshot["signature"])
-            if taint_path_finder is not None
-            else []
-        )
+        taint_paths = _taint_paths(taint_path_finder, method_snapshot["signature"])
         result["taint_paths"] = taint_paths
 
-        # Span attributes summarising evidence quality
-        span.set_attribute("source_code_lines", len(source_code.splitlines()) if source_code else 0)
-        span.set_attribute("source_code_available", bool(source_code))
-        graph_node_count = (
-            len(graph_context.get("annotations") or [])
-            + len(graph_context.get("uses_fields") or [])
-            + len(graph_context.get("calls") or [])
-            + len(graph_context.get("callers") or [])
+        _record_evidence_span_attributes(
+            span,
+            source_code=source_code,
+            graph_context=graph_context,
+            vector_context=vector_context,
+            helper_summaries=helper_summaries,
+            taint_paths=taint_paths,
+            analysis_flags=analysis_flags,
         )
-        span.set_attribute("graph_nodes_count", graph_node_count)
-        span.set_attribute("vector_results_count", len(vector_context))
-        span.set_attribute("helper_summaries_count", len(helper_summaries))
-        span.set_attribute("taint_paths_count", len(taint_paths))
-        max_taint_hops = max((p.get("hops", 0) for p in taint_paths), default=0)
-        span.set_attribute("taint_hops_max", max_taint_hops)
-        analysis_flag_count = sum(1 for v in analysis_flags.values() if v)
-        span.set_attribute("analysis_flags_active", analysis_flag_count)
 
         return result
 

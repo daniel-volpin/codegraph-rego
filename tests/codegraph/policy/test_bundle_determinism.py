@@ -8,7 +8,7 @@ any-match) — this only removes run-to-run noise.
 
 import unittest
 
-from codegraph.policy.runtime.bundles import fetch_methods_with_context
+from codegraph.policy.runtime.bundles import fetch_method_snapshot, fetch_methods_with_context
 from tests.codegraph.policy._test_helpers import _FakeDriver
 
 
@@ -50,6 +50,18 @@ class BundleDeterminismTests(unittest.TestCase):
         self.assertEqual(snap_fwd["calls"], snap_rev["calls"])
         self.assertEqual(snap_fwd["callers"], snap_rev["callers"])
         self.assertEqual(snap_fwd["uses_fields"], snap_rev["uses_fields"])
+
+    def test_single_method_snapshot_uses_same_stable_ordering(self) -> None:
+        record = _record(
+            calls=["z.C.c()", "a.A.a()", "m.M.m()"],
+            callers=["q.Q.q()", "b.B.b()"],
+            uses_fields=[{"name": "zeta"}, {"name": "alpha"}, {"name": "mu"}],
+        )
+        snap = fetch_method_snapshot(_FakeDriver([record]), "com.example.Foo.bar()")
+        self.assertIsNotNone(snap)
+        self.assertEqual(snap["calls"], ["a.A.a()", "m.M.m()", "z.C.c()"])
+        self.assertEqual(snap["callers"], ["b.B.b()", "q.Q.q()"])
+        self.assertEqual([f["name"] for f in snap["uses_fields"]], ["alpha", "mu", "zeta"])
 
 
 if __name__ == "__main__":

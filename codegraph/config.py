@@ -194,6 +194,12 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("REMEDIATION_TRACE_PROMPT_ENABLED", "remediation_trace_prompt_enabled"),
         description="When true, enriches the remediation prompt with OPA trace context when available.",
     )
+    opa_timeout_seconds: float = Field(
+        120.0,
+        gt=0.0,
+        validation_alias=AliasChoices("CODEGRAPH_OPA_TIMEOUT", "opa_timeout_seconds"),
+        description="Per-invocation timeout for OPA eval subprocesses.",
+    )
     ui_review_store_path: str = Field(
         "outputs/policy_ui_reviews/reviews.jsonl",
         description="Append-only JSONL store for UI triage/review records.",

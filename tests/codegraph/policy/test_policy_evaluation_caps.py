@@ -1,250 +1,134 @@
-import unittest
-from unittest.mock import patch
+from __future__ import annotations
 
-from tests.codegraph.policy._test_helpers import BundleBuilder, PolicyTestBase
+from collections.abc import Callable, Iterable
+from typing import Any
+
+import pytest
+
+from codegraph.policy import integration
+from tests.codegraph.policy._test_helpers import BundleBuilder
+
+Bundle = dict[str, Any]
+RawViolation = dict[str, Any]
+EvaluateBundle = Callable[[Bundle], list[RawViolation]]
 
 
-class TestPolicyEvaluationCaps(PolicyTestBase):
-    """Tests for policy evaluation limits, caps, and metadata."""
+@pytest.fixture(autouse=True)
+def policy_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(integration.shutil, "which", lambda _name: "/usr/local/bin/opa")
+    monkeypatch.setattr(integration, "load_policy_catalog", lambda: {})
+    monkeypatch.setattr(integration, "load_iso_rules", lambda: {})
+    monkeypatch.setattr(integration, "get_policy_catalog_entries", lambda: [])
+    monkeypatch.setattr(integration, "_resolve_catalog_entry", lambda _violation_id, _catalog: None)
 
-    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
-    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
-    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
-    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
-    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
-    def test_default_behavior_has_no_limit_metadata(
-        self,
-        _mock_which,
-        _mock_resolve_catalog,
-        _mock_load_catalog,
-        _mock_load_rules,
-        _mock_catalog_entries,
-    ) -> None:
-        from codegraph.policy.integration import evaluate_policies
 
-        bundles = [
-            (
-                BundleBuilder()
-                .with_target_method("m1")
-                .with_file_path("f1")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-            (
-                BundleBuilder()
-                .with_target_method("m2")
-                .with_file_path("f2")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-        ]
-        with (
-            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
-            patch(
-                "codegraph.policy.integration._evaluate_bundle",
-                return_value=[{"violation_id": "A", "reason": "r", "severity": "high"}],
-            ),
-        ):
-            result = evaluate_policies()
+def bundle(target_method: str, *, file_path: str | None = None, source_code: str = "") -> Bundle:
+    return (
+        BundleBuilder()
+        .with_target_method(target_method)
+        .with_file_path(file_path or target_method)
+        .with_source_code(source_code)
+        .with_vector_context([])
+        .build()
+    )
 
-        self.assertIn("violations", result)
-        self.assertNotIn("limits", result)
-        self.assertNotIn("truncated", result)
-        self.assertNotIn("violation_counts_by_id", result)
-        self.assertEqual(len(result["violations"]), 2)
 
-    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
-    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
-    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
-    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
-    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
-    def test_caps_total_and_per_violation_id_and_early_stop(
-        self,
-        _mock_which,
-        _mock_resolve_catalog,
-        _mock_load_catalog,
-        _mock_load_rules,
-        _mock_catalog_entries,
-    ) -> None:
-        from codegraph.policy.integration import evaluate_policies
+def violation(violation_id: str, *, reason: str = "r") -> RawViolation:
+    return {"violation_id": violation_id, "reason": reason, "severity": "high"}
 
-        bundles = [
-            (
-                BundleBuilder()
-                .with_target_method("m1")
-                .with_file_path("f1")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-            (
-                BundleBuilder()
-                .with_target_method("m2")
-                .with_file_path("f2")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-            (
-                BundleBuilder()
-                .with_target_method("m3")
-                .with_file_path("f3")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-            (
-                BundleBuilder()
-                .with_target_method("m4")
-                .with_file_path("f4")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-        ]
 
-        def bundle_side_effect(_bundle):
-            # Bundle 1 yields A,B; bundle 2 yields A,C; bundle 3 yields D; bundle 4 should not be called.
-            if _bundle["target_method"] == "m1":
-                return [{"violation_id": "A"}] * 200 + [{"violation_id": "B"}] * 200
-            if _bundle["target_method"] == "m2":
-                return [{"violation_id": "A"}] * 200 + [{"violation_id": "C"}] * 200
-            if _bundle["target_method"] == "m3":
-                return [{"violation_id": "D"}] * 200
-            return [{"violation_id": "Z"}] * 200
+def install_policy_input(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    bundles: list[Bundle],
+    evaluator: EvaluateBundle,
+) -> None:
+    monkeypatch.setattr(integration, "build_policy_input", lambda **_kwargs: {"bundles": bundles})
+    monkeypatch.setattr(integration, "_evaluate_bundle", evaluator)
 
-        with (
-            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
-            patch(
-                "codegraph.policy.integration._evaluate_bundle",
-                side_effect=bundle_side_effect,
-            ) as mock_eval,
-        ):
-            result = evaluate_policies(max_total_violations=100, max_per_violation_id=25)
 
-        self.assertIn("limits", result)
-        self.assertTrue(result.get("truncated"))
-        self.assertLessEqual(len(result["violations"]), 100)
+def violations_by_id(result: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {str(item["violation_id"]): item for item in result["violations"]}
 
-        counts = {}
-        for v in result["violations"]:
-            vid = str(v.get("violation_id"))
-            counts[vid] = counts.get(vid, 0) + 1
-        self.assertTrue(all(count <= 25 for count in counts.values()))
 
-        # Under concurrent evaluation, all bundles are submitted eagerly (no early abort of
-        # in-flight subprocesses). The caps are applied when collecting results, so the output
-        # must still respect both total and per-violation-id limits.
-        self.assertEqual(mock_eval.call_count, len(bundles))
+def count_violation_ids(violations: Iterable[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in violations:
+        key = str(item.get("violation_id"))
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
-    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
-    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
-    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
-    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
-    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
-    def test_policy_results_expose_top_level_code_snippet_fields(
-        self,
-        _mock_which,
-        _mock_resolve_catalog,
-        _mock_load_catalog,
-        _mock_load_rules,
-        _mock_catalog_entries,
-    ) -> None:
-        from codegraph.policy.integration import evaluate_policies
 
-        bundles = [
-            (
-                BundleBuilder()
-                .with_target_method("m1")
-                .with_file_path("f1")
-                .with_source_code("public void m1() {}")
-                .with_vector_context([])
-                .with_line_numbers(10, 12)
-                .with_analysis_flags({"md5_detected": False})
-                .build()
-            )
-        ]
+def test_default_behavior_has_no_limit_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    bundles = [bundle("m1", file_path="f1"), bundle("m2", file_path="f2")]
+    install_policy_input(monkeypatch, bundles=bundles, evaluator=lambda _bundle: [violation("A")])
 
-        with (
-            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
-            patch(
-                "codegraph.policy.integration._evaluate_bundle",
-                return_value=[{"violation_id": "A", "reason": "r", "severity": "high"}],
-            ),
-        ):
-            result = evaluate_policies()
+    result = integration.evaluate_policies()
 
-        violation = result["violations"][0]
-        self.assertEqual(violation["code_snippet"], "public void m1() {}")
-        self.assertTrue(violation["snippet_available"])
-        self.assertEqual(violation["snippet_start_line"], 10)
-        self.assertEqual(violation["snippet_end_line"], 12)
-        self.assertEqual(violation["evidence"]["source_code"], "public void m1() {}")
+    assert "violations" in result
+    assert "limits" not in result
+    assert "truncated" not in result
+    assert "violation_counts_by_id" not in result
+    assert len(result["violations"]) == 2
 
-    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
-    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
-    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
-    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
-    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
-    def test_policy_results_include_remediation_capability_metadata(
-        self,
-        _mock_which,
-        _mock_resolve_catalog,
-        _mock_load_catalog,
-        _mock_load_rules,
-        _mock_catalog_entries,
-    ) -> None:
-        from codegraph.policy.integration import evaluate_policies
 
-        bundles = [
-            (
-                BundleBuilder()
-                .with_target_method("m1")
-                .with_file_path("src/main/java/F1.java")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-            (
-                BundleBuilder()
-                .with_target_method("m2")
-                .with_file_path("src/main/java/F2.java")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-            (
-                BundleBuilder()
-                .with_target_method("m3")
-                .with_file_path("src/main/java/F3.java")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-        ]
+def test_caps_total_and_per_violation_id_are_applied_after_concurrent_eval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundles = [bundle(f"m{idx}", file_path=f"f{idx}") for idx in range(1, 5)]
+    calls: list[str] = []
 
-        with (
-            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
-            patch(
-                "codegraph.policy.integration._evaluate_bundle",
-                side_effect=[
-                    [{"violation_id": "ISO-A.10-WEAK-HASH", "reason": "r1", "severity": "high"}],
-                    [{"violation_id": "ISO-A.10-WEAK-RANDOM", "reason": "r3", "severity": "high"}],
-                    [{"violation_id": "ISO-A.9.4.1", "reason": "r2", "severity": "high"}],
-                ],
-            ),
-        ):
-            result = evaluate_policies()
+    def evaluate(current: Bundle) -> list[RawViolation]:
+        calls.append(str(current["target_method"]))
+        match current["target_method"]:
+            case "m1":
+                return [violation("A")] * 200 + [violation("B")] * 200
+            case "m2":
+                return [violation("A")] * 200 + [violation("C")] * 200
+            case "m3":
+                return [violation("D")] * 200
+            case _:
+                return [violation("Z")] * 200
 
-        violations = result["violations"]
-        supported = next(v for v in violations if v["violation_id"] == "ISO-A.10-WEAK-HASH")
-        random_supported = next(v for v in violations if v["violation_id"] == "ISO-A.10-WEAK-RANDOM")
-        unsupported = next(v for v in violations if v["violation_id"] == "ISO-A.9.4.1")
+    install_policy_input(monkeypatch, bundles=bundles, evaluator=evaluate)
 
-        self.assertEqual(
-            supported["remediation"],
+    result = integration.evaluate_policies(max_total_violations=100, max_per_violation_id=25)
+
+    assert result.get("truncated") is True
+    assert len(result["violations"]) <= 100
+    assert all(count <= 25 for count in count_violation_ids(result["violations"]).values())
+    assert sorted(calls) == ["m1", "m2", "m3", "m4"]
+
+
+def test_policy_results_expose_top_level_code_snippet_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    source_code = "public void m1() {}"
+    method_bundle = (
+        BundleBuilder()
+        .with_target_method("m1")
+        .with_file_path("f1")
+        .with_source_code(source_code)
+        .with_vector_context([])
+        .with_line_numbers(10, 12)
+        .with_analysis_flags({"md5_detected": False})
+        .build()
+    )
+    install_policy_input(monkeypatch, bundles=[method_bundle], evaluator=lambda _bundle: [violation("A")])
+
+    result = integration.evaluate_policies()
+
+    finding = result["violations"][0]
+    assert finding["code_snippet"] == source_code
+    assert finding["snippet_available"] is True
+    assert finding["snippet_start_line"] == 10
+    assert finding["snippet_end_line"] == 12
+    assert finding["evidence"]["source_code"] == source_code
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "expected"),
+    [
+        (
+            "ISO-A.10-WEAK-HASH",
             {
                 "supported": True,
                 "support_tier": "full",
@@ -256,9 +140,9 @@ class TestPolicyEvaluationCaps(PolicyTestBase):
                 "rationale": "Bounded weak-hash replacements such as MD5 or SHA-1 to SHA-256 can be applied with minimal local edits.",
                 "safe_refusal_possible": False,
             },
-        )
-        self.assertEqual(
-            random_supported["remediation"],
+        ),
+        (
+            "ISO-A.10-WEAK-RANDOM",
             {
                 "supported": True,
                 "support_tier": "full",
@@ -270,9 +154,9 @@ class TestPolicyEvaluationCaps(PolicyTestBase):
                 "rationale": "Local randomness upgrades can often be made safely with narrow replacements to SecureRandom-based APIs.",
                 "safe_refusal_possible": True,
             },
-        )
-        self.assertEqual(
-            unsupported["remediation"],
+        ),
+        (
+            "ISO-A.9.4.1",
             {
                 "supported": False,
                 "support_tier": "manual",
@@ -284,95 +168,56 @@ class TestPolicyEvaluationCaps(PolicyTestBase):
                 "rationale": "Access-control findings remain manual-review because endpoint semantics cannot be safely inferred from method-local evidence.",
                 "safe_refusal_possible": False,
             },
-        )
+        ),
+    ],
+)
+def test_policy_results_include_remediation_capability_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    rule_id: str,
+    expected: dict[str, Any],
+) -> None:
+    method_bundle = bundle("m1", file_path="src/main/java/F1.java")
+    install_policy_input(monkeypatch, bundles=[method_bundle], evaluator=lambda _bundle: [violation(rule_id)])
 
-    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
-    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
-    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
-    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
-    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
-    def test_policy_results_can_be_filtered_by_rule_ids(
-        self,
-        _mock_which,
-        _mock_resolve_catalog,
-        _mock_load_catalog,
-        _mock_load_rules,
-        _mock_catalog_entries,
-    ) -> None:
-        from codegraph.policy.integration import evaluate_policies
+    result = integration.evaluate_policies()
 
-        bundles = [
-            (
-                BundleBuilder()
-                .with_target_method("m1")
-                .with_file_path("src/main/java/F1.java")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-            (
-                BundleBuilder()
-                .with_target_method("m2")
-                .with_file_path("src/main/java/F2.java")
-                .with_source_code("")
-                .with_vector_context([])
-                .build()
-            ),
-        ]
-
-        with (
-            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
-            patch(
-                "codegraph.policy.integration._evaluate_bundle",
-                side_effect=[
-                    [{"violation_id": "ISO-A.10-WEAK-HASH", "reason": "hash", "severity": "high"}],
-                    [{"violation_id": "ISO-A.8-SQL-INJECTION", "reason": "sql", "severity": "high"}],
-                ],
-            ),
-        ):
-            result = evaluate_policies(rule_ids=["ISO-A.10-WEAK-HASH"])
-
-        self.assertEqual(len(result["violations"]), 1)
-        self.assertEqual(result["violations"][0]["violation_id"], "ISO-A.10-WEAK-HASH")
-
-    @patch("codegraph.policy.integration.get_policy_catalog_entries", return_value=[])
-    @patch("codegraph.policy.integration.load_iso_rules", return_value={})
-    @patch("codegraph.policy.integration.load_policy_catalog", return_value={})
-    @patch("codegraph.policy.integration._resolve_catalog_entry", return_value=None)
-    @patch("codegraph.policy.integration.shutil.which", return_value="/usr/local/bin/opa")
-    def test_one_failing_bundle_does_not_abort_whole_run(
-        self,
-        _mock_which,
-        _mock_resolve_catalog,
-        _mock_load_catalog,
-        _mock_load_rules,
-        _mock_catalog_entries,
-    ) -> None:
-        """A single OPA failure must not discard the other bundles' violations."""
-        from codegraph.policy.integration import evaluate_policies
-
-        bundles = [
-            BundleBuilder().with_target_method("good").with_file_path("g").with_source_code("").build(),
-            BundleBuilder().with_target_method("bad").with_file_path("b").with_source_code("").build(),
-        ]
-
-        def fake_eval(bundle):
-            if bundle.get("target_method") == "bad":
-                raise RuntimeError("OPA evaluation failed for bad")
-            return [{"violation_id": "A", "reason": "r", "severity": "high"}]
-
-        with (
-            patch("codegraph.policy.integration.build_policy_input", return_value={"bundles": bundles}),
-            patch("codegraph.policy.integration._evaluate_bundle", side_effect=fake_eval),
-        ):
-            result = evaluate_policies()
-
-        # The good bundle's violation survives; the bad bundle is attributed.
-        self.assertEqual(len(result["violations"]), 1)
-        self.assertNotIn("error", result)
-        self.assertEqual(result.get("failed_bundle_count"), 1)
-        self.assertEqual(result["failed_bundles"][0]["target_method"], "bad")
+    assert result["violations"][0]["remediation"] == expected
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_policy_results_can_be_filtered_by_rule_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    bundles = [
+        bundle("m1", file_path="src/main/java/F1.java"),
+        bundle("m2", file_path="src/main/java/F2.java"),
+    ]
+
+    def evaluate(current: Bundle) -> list[RawViolation]:
+        if current["target_method"] == "m1":
+            return [violation("ISO-A.10-WEAK-HASH", reason="hash")]
+        return [violation("ISO-A.8-SQL-INJECTION", reason="sql")]
+
+    install_policy_input(monkeypatch, bundles=bundles, evaluator=evaluate)
+
+    result = integration.evaluate_policies(rule_ids=["ISO-A.10-WEAK-HASH"])
+
+    assert [item["violation_id"] for item in result["violations"]] == ["ISO-A.10-WEAK-HASH"]
+
+
+def test_one_failing_bundle_does_not_abort_whole_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    bundles = [
+        bundle("good", file_path="g"),
+        bundle("bad", file_path="b"),
+    ]
+
+    def evaluate(current: Bundle) -> list[RawViolation]:
+        if current["target_method"] == "bad":
+            raise RuntimeError("OPA evaluation failed for bad")
+        return [violation("A")]
+
+    install_policy_input(monkeypatch, bundles=bundles, evaluator=evaluate)
+
+    result = integration.evaluate_policies()
+
+    assert len(result["violations"]) == 1
+    assert "error" not in result
+    assert result.get("failed_bundle_count") == 1
+    assert result["failed_bundles"][0]["target_method"] == "bad"

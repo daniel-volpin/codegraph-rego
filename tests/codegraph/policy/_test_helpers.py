@@ -10,6 +10,9 @@ class _FakeResult:
     def __iter__(self):
         return iter(self._records)
 
+    def single(self):
+        return self._records[0] if self._records else None
+
 
 class _FakeSession:
     def __init__(self, records):
@@ -21,7 +24,7 @@ class _FakeSession:
     def __exit__(self, exc_type, exc, tb):
         return False
 
-    def run(self, _cypher, _params):
+    def run(self, _cypher, _params=None, **_kwargs):
         return _FakeResult(self._records)
 
 
