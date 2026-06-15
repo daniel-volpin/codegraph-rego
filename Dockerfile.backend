@@ -7,6 +7,12 @@ WORKDIR /app
 RUN pip install uv
 
 # Install OPA so readiness checks and policy evaluation work inside the container too.
+# Pin to the same version as scripts/setup_benchmark_env.sh so benchmark numbers
+# are reproducible regardless of which environment produced them. v1.15.1 is the
+# version recorded in the canonical thesis_final_* provenance manifests, so the
+# container reproduces that evidence. Bumping is an intentional, reviewable
+# change (it can shift policy results) — pinned by tag, not yet by digest.
+ARG OPA_VERSION=v1.15.1
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
@@ -14,7 +20,7 @@ RUN set -eux; \
       aarch64|arm64) opa_arch="arm64" ;; \
       *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
     esac; \
-    python -c "import pathlib, sys, urllib.request; url = f'https://openpolicyagent.org/downloads/latest/opa_linux_{sys.argv[1]}_static'; target = pathlib.Path('/usr/local/bin/opa'); target.write_bytes(urllib.request.urlopen(url).read()); target.chmod(0o755)" "$opa_arch"; \
+    python -c "import pathlib, sys, urllib.request; url = f'https://github.com/open-policy-agent/opa/releases/download/{sys.argv[1]}/opa_linux_{sys.argv[2]}_static'; target = pathlib.Path('/usr/local/bin/opa'); target.write_bytes(urllib.request.urlopen(url).read()); target.chmod(0o755)" "$OPA_VERSION" "$opa_arch"; \
     opa version
 
 # Copy dependency metadata

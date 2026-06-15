@@ -84,3 +84,15 @@ class IngestionServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProcessSingleFileContentGuardTests(unittest.TestCase):
+    def test_unparseable_content_raises_before_touching_neo4j(self) -> None:
+        from codegraph.ingestion.service import process_single_file_content
+
+        # Malformed Java must fail loudly (and before any purge), so a candidate
+        # that does not parse can never silently leave the file purged.
+        with patch("codegraph.ingestion.service._purge_file_entities") as purge:
+            with self.assertRaises(IngestionError):
+                process_single_file_content("Broken.java", "this is not valid java {{{")
+        purge.assert_not_called()

@@ -226,6 +226,7 @@ def main() -> int:
         eval_kind="explanation",
         config_path=args.config,
         output_dir=output_dir,
+        ground_truth_path=context.truth_path.as_posix(),
         seed=int(context.selection_cfg.get("seed") or 7),
         llm={
             "model": getattr(settings, "llm_model", None),

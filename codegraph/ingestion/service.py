@@ -783,6 +783,14 @@ def process_single_file_content(
     if progress_callback:
         progress_callback("parsing", f"Parsing in-memory file: {os.path.basename(file_path)}", 20.0)
 
+    # Fail loudly if the candidate does not parse, BEFORE purging existing entities.
+    # Otherwise a parse failure silently leaves the file purged and the subsequent
+    # lookup fails opaquely as 'method_not_found' (remediation re-ingest path).
+    try:
+        javalang.parse.parse(content)
+    except Exception as exc:
+        raise IngestionError(f"Could not parse content for {file_path}: {exc}") from exc
+
     (
         methods,
         nested_relations,

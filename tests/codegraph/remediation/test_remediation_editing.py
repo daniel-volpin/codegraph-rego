@@ -31,3 +31,43 @@ class RemediationEditingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReplaceMethodShapeValidationTests(unittest.TestCase):
+    SOURCE = (
+        "class Example {\n"
+        "    public void doWork(String input) {\n"
+        '        System.out.println("MD5");\n'
+        "    }\n"
+        "}\n"
+    )
+    TARGET = "com.example.Example.doWork(String)"
+
+    def test_valid_full_method_replacement_succeeds(self) -> None:
+        from codegraph.remediation.editing import replace_method_in_source
+
+        replacement = [
+            "    public void doWork(String input) {",
+            '        System.out.println("SHA-256");',
+            "    }",
+        ]
+        new_source, _, updated = replace_method_in_source(self.SOURCE, replacement, self.TARGET)
+        self.assertIn("SHA-256", new_source)
+        self.assertIn("SHA-256", updated)
+
+    def test_collapsed_replacement_is_rejected(self) -> None:
+        from codegraph.remediation.editing import replace_method_in_source
+
+        # A degenerate single-line replacement must not be spliced in silently.
+        with self.assertRaises(ValueError):
+            replace_method_in_source(self.SOURCE, ['        System.out.println("SHA-256");'], self.TARGET)
+
+    def test_wrong_method_name_replacement_is_rejected(self) -> None:
+        from codegraph.remediation.editing import replace_method_in_source
+
+        replacement = [
+            "    public void somethingElse(String input) {",
+            "    }",
+        ]
+        with self.assertRaises(ValueError):
+            replace_method_in_source(self.SOURCE, replacement, self.TARGET)

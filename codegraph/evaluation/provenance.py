@@ -93,6 +93,29 @@ def _file_sha256(path: Path) -> str | None:
         return None
 
 
+def _git_sha_for_path(path: Path) -> str | None:
+    """Best-effort git SHA of the repo containing ``path`` (pins the OWASP corpus)."""
+    anchor = path if path.is_dir() else path.parent
+    result = _safe_run(["git", "-C", str(anchor), "rev-parse", "HEAD"])
+    if result.get("returncode") == 0:
+        return result.get("stdout") or None
+    return None
+
+
+def _ground_truth_info(ground_truth_path: str | os.PathLike | None) -> dict[str, Any] | None:
+    """Hash the ground-truth labels and pin the corpus commit they were scored against."""
+    if not ground_truth_path:
+        return None
+    path = Path(ground_truth_path)
+    info: dict[str, Any] = {"path": str(path)}
+    if path.exists():
+        info["sha256"] = _file_sha256(path)
+        info["corpus_git_sha"] = _git_sha_for_path(path)
+    else:
+        info["error"] = "ground_truth_not_found"
+    return info
+
+
 def _package_version() -> str | None:
     try:
         from importlib.metadata import PackageNotFoundError, version
@@ -132,6 +155,7 @@ def collect_provenance(
     eval_kind: str,
     config_path: str | os.PathLike | None = None,
     output_dir: str | os.PathLike | None = None,
+    ground_truth_path: str | os.PathLike | None = None,
     seed: int | None = None,
     llm: dict[str, Any] | None = None,
     extra: dict[str, Any] | None = None,
@@ -170,6 +194,7 @@ def collect_provenance(
             "path": str(config_path_obj) if config_path_obj else None,
             "sha256": _file_sha256(config_path_obj) if config_path_obj and config_path_obj.exists() else None,
         },
+        "ground_truth": _ground_truth_info(ground_truth_path),
         "output_dir": str(output_dir) if output_dir else None,
         "seed": seed,
         "llm": dict(llm) if llm else None,

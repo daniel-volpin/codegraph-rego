@@ -9,10 +9,6 @@ from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet
 from codegraph.policy.analysis.state import AssignmentStateAnalyzer
 from codegraph.policy.source_analysis_core import PATH_LDAP_UNTRUSTED_INPUT_PATTERNS, UNTRUSTED_INPUT_PATTERNS
 
-CALL_ASSIGNMENT_RE = re.compile(
-    r"(?:final\s+)?(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>]*\(\)|[A-Za-z_][A-Za-z0-9_$.<>]*)\s*\.\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(",
-    re.DOTALL,
-)
 CALL_ASSIGNMENT_WITH_ARGS_RE = re.compile(
     r"(?:final\s+)?(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>]*\(\)|[A-Za-z_][A-Za-z0-9_$.<>]*)\s*\.\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(([^;]*?)\)\s*;",
     re.DOTALL,

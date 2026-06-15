@@ -326,35 +326,44 @@ def apply_method_edits(
         previous_end = actual_end
 
     updated_snippet = "\n".join(updated_lines)
-    multiline_literal_issue = detect_multiline_literal_issue(updated_lines)
+    validate_method_shape(updated_lines, target_method)
+    return updated_lines, updated_snippet
+
+
+def validate_method_shape(method_lines: list[str], target_method: str) -> None:
+    """Raise ``ValueError`` unless ``method_lines`` is a single method matching ``target_method``.
+
+    Shared by the edit-application and full-method-replacement paths so a malformed
+    candidate (e.g. a body collapsed to one line) fails as a clean REPLACEMENT_ERROR
+    instead of producing broken source that surfaces later as an opaque lookup failure.
+    """
+    multiline_literal_issue = detect_multiline_literal_issue(method_lines)
     if multiline_literal_issue:
         raise ValueError(multiline_literal_issue)
-
-    wrapped_method = f"class RemediationCandidate {{\n{updated_snippet}\n}}"
+    wrapped_method = "class RemediationCandidate {\n" + "\n".join(method_lines) + "\n}"
     try:
         parsed_wrapper = javalang.parse.parse(wrapped_method)
         parsed_methods = [node for _, node in parsed_wrapper.filter(MethodDeclaration)]
     except Exception as exc:
         raise ValueError(f"invalid_java_syntax: {format_java_parse_error(exc)}") from exc
-
     if len(parsed_methods) != 1:
         raise ValueError("invalid_method_shape: expected single method declaration")
     parsed_method = parsed_methods[0]
     if not set(parsed_method.modifiers or set()).intersection({"public", "private", "protected"}):
         raise ValueError("invalid_method_shape: missing access_modifier")
-
     expected_method_name, expected_parameter_count = extract_target_method_identity(target_method)
     if expected_method_name and parsed_method.name != expected_method_name:
         raise ValueError("method_name_mismatch")
     if expected_parameter_count is not None and len(parsed_method.parameters or []) != expected_parameter_count:
         raise ValueError("parameter_count_mismatch")
 
-    return updated_lines, updated_snippet
-
 
 def replace_method_in_source(source: str, updated_method_lines: list[str], target_method: str) -> tuple[str, str, str]:
     source_lines = source.splitlines()
     _, start_line, end_line, original_snippet = extract_method_span(source, target_method)
+    # Reject a malformed replacement (e.g. a collapsed body) before splicing, so it
+    # fails as a clean REPLACEMENT_ERROR rather than corrupting the file.
+    validate_method_shape(updated_method_lines, target_method)
     updated_snippet = "\n".join(updated_method_lines)
     new_lines = source_lines[: start_line - 1] + updated_method_lines + source_lines[end_line:]
     new_source = "\n".join(new_lines)

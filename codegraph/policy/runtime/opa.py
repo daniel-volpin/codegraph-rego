@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
+from codegraph.config import settings
 from codegraph.remediation.capabilities import remediation_capability_dict
 from codegraph.telemetry import get_tracer
 
@@ -21,6 +22,10 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.abspath(os.path.join(_THIS_DIR, os.pardir, os.pardir, os.pardir))
 POLICY_DIR = os.path.join(_PROJECT_ROOT, "policy")
 POLICY_QUERY = "data.iso27001.violations"
+
+
+def _opa_timeout_seconds() -> float:
+    return float(settings.opa_timeout_seconds)
 
 
 def normalize_violation_payload(payload: Any, logger) -> dict[str, Any] | None:
@@ -96,96 +101,100 @@ def build_violation_response(
     }
 
 
-def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, Any]]:
+def _serialize_for_opa(bundle: PolicyBundle | Mapping[str, Any]) -> dict[str, Any]:
     # When the bundle is already a plain dict (produced by build_evidence_bundle),
     # use it directly to preserve extra fields such as ``taint_paths`` that are
     # appended after the PolicyBundle serialization step.
     if isinstance(bundle, PolicyBundle):
-        serialized_bundle = bundle.to_dict()
-    elif isinstance(bundle, dict):
-        serialized_bundle = bundle
-    else:
-        serialized_bundle = serialize_policy_bundle(bundle)
+        return bundle.to_dict()
+    if isinstance(bundle, dict):
+        return bundle
+    return serialize_policy_bundle(bundle)
+
+
+def _opa_eval_command(input_path: str, query: str) -> list[str]:
+    return [
+        "opa",
+        "eval",
+        "-f",
+        "json",
+        "-d",
+        POLICY_DIR,
+        "-i",
+        input_path,
+        query,
+    ]
+
+
+def _write_opa_input(tmp_dir: str, serialized_bundle: Mapping[str, Any]) -> str:
+    input_path = os.path.join(tmp_dir, "input.json")
+    with open(input_path, "w", encoding="utf-8") as file:
+        json.dump(serialized_bundle, file)
+    return input_path
+
+
+def _run_opa_eval(cmd: list[str], target_method: Any, *, package_root: bool = False) -> subprocess.CompletedProcess[str]:
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=_opa_timeout_seconds())
+    except subprocess.TimeoutExpired as exc:
+        scope = "package evaluation" if package_root else "evaluation"
+        raise RuntimeError(f"OPA {scope} timed out for {target_method}") from exc
+
+    if proc.returncode == 0:
+        return proc
+
+    scope = "package evaluation" if package_root else "evaluation"
+    raise RuntimeError(f"OPA {scope} failed for {target_method}: {proc.stderr}")
+
+
+def _parse_opa_stdout(stdout: str, *, package_root: bool = False) -> dict[str, Any]:
+    try:
+        parsed = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        scope = "OPA package output" if package_root else "OPA output"
+        raise RuntimeError(f"Failed to parse {scope}") from exc
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _extract_opa_value(parsed: Mapping[str, Any], default: Any) -> Any:
+    result = parsed.get("result") or []
+    if not result:
+        return default
+    expressions = result[0].get("expressions") or []
+    if not expressions:
+        return default
+    return expressions[0].get("value") or default
+
+
+def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, Any]]:
+    serialized_bundle = _serialize_for_opa(bundle)
 
     with _tracer.start_as_current_span("policy.evaluate") as span:
         span.set_attribute("target_method", str(serialized_bundle.get("target_method") or ""))
-        serialized_str = json.dumps(serialized_bundle)
-        span.set_attribute("bundle_size_bytes", len(serialized_str.encode()))
+        span.set_attribute("bundle_size_bytes", len(json.dumps(serialized_bundle).encode()))
         t0 = time.monotonic()
         with tempfile.TemporaryDirectory() as tmp:
-            input_path = os.path.join(tmp, "input.json")
-            with open(input_path, "w", encoding="utf-8") as file:
-                file.write(serialized_str)
-            cmd = [
-                "opa",
-                "eval",
-                "-f",
-                "json",
-                "-d",
-                POLICY_DIR,
-                "-i",
-                input_path,
-                POLICY_QUERY,
-            ]
-            proc = subprocess.run(cmd, capture_output=True, text=True)
-            span.set_attribute("opa_returncode", proc.returncode)
-            span.set_attribute("opa_duration_ms", round((time.monotonic() - t0) * 1000))
-            if proc.returncode != 0:
-                span.set_attribute("opa_error", proc.stderr[:200] if proc.stderr else "")
-                raise RuntimeError(f"OPA evaluation failed for {serialized_bundle.get('target_method')}: {proc.stderr}")
+            input_path = _write_opa_input(tmp, serialized_bundle)
+            cmd = _opa_eval_command(input_path, POLICY_QUERY)
             try:
-                out = json.loads(proc.stdout)
-            except json.JSONDecodeError as exc:
-                span.set_attribute("opa_error", "Failed to parse OPA output")
-                raise RuntimeError("Failed to parse OPA output") from exc
-            result = out.get("result") or []
-            if not result:
-                span.set_attribute("violation_count", 0)
-                return []
-            expressions = result[0].get("expressions") or []
-            if not expressions:
-                span.set_attribute("violation_count", 0)
-                return []
-            violations = expressions[0].get("value") or []
+                proc = _run_opa_eval(cmd, serialized_bundle.get("target_method"))
+                out = _parse_opa_stdout(proc.stdout)
+            except RuntimeError as exc:
+                span.set_attribute("opa_error", str(exc)[:200])
+                raise
+            finally:
+                span.set_attribute("opa_duration_ms", round((time.monotonic() - t0) * 1000))
+            span.set_attribute("opa_returncode", proc.returncode)
+            violations = _extract_opa_value(out, [])
             span.set_attribute("violation_count", len(violations))
             return violations
 
 
 def evaluate_package_root(bundle: PolicyBundle | Mapping[str, Any], package: str = "data.iso27001") -> dict[str, Any]:
-    if isinstance(bundle, PolicyBundle):
-        serialized_bundle = bundle.to_dict()
-    elif isinstance(bundle, dict):
-        serialized_bundle = bundle
-    else:
-        serialized_bundle = serialize_policy_bundle(bundle)
+    serialized_bundle = _serialize_for_opa(bundle)
     with tempfile.TemporaryDirectory() as tmp:
-        input_path = os.path.join(tmp, "input.json")
-        with open(input_path, "w", encoding="utf-8") as file:
-            json.dump(serialized_bundle, file)
-        cmd = [
-            "opa",
-            "eval",
-            "-f",
-            "json",
-            "-d",
-            POLICY_DIR,
-            "-i",
-            input_path,
-            package,
-        ]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"OPA package evaluation failed for {serialized_bundle.get('target_method')}: {proc.stderr}"
-            )
-        try:
-            out = json.loads(proc.stdout)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("Failed to parse OPA package output") from exc
-        result = out.get("result") or []
-        if not result:
-            return {}
-        expressions = result[0].get("expressions") or []
-        if not expressions:
-            return {}
-        return expressions[0].get("value") or {}
+        input_path = _write_opa_input(tmp, serialized_bundle)
+        cmd = _opa_eval_command(input_path, package)
+        proc = _run_opa_eval(cmd, serialized_bundle.get("target_method"), package_root=True)
+        out = _parse_opa_stdout(proc.stdout, package_root=True)
+        return _extract_opa_value(out, {})

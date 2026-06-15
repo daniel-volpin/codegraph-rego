@@ -117,15 +117,24 @@ Every eval run writes a `provenance.json` next to its other artifacts
 - `opa.raw` (output of `opa version`)
 - `neo4j.uri` with credentials redacted
 - `config.path` + `config.sha256`
+- `ground_truth.path`, `ground_truth.sha256`, and
+  `ground_truth.corpus_git_sha` when a benchmark ground-truth file is provided
 - `uv_lock_sha256`, `pyproject_sha256`
 - `seed`
 - `llm` block (model, temperature, max_tokens) when applicable
 
 Cite the artifact directory **plus the SHA recorded in
-`provenance.json`** when referring to v2/v3 numbers. v1 numbers are
+`provenance.json`** when referring to canonical numbers. v1 numbers are
 addressable via the `thesis-final-v1` git tag.
 
-Latest PR #107 reruns (2026-05-03):
+Canonical thesis outputs that are intentionally versioned under
+`outputs/thesis_final_*` are protected by `outputs/canonical_manifest.sha256`.
+If a metric-affecting rerun is deliberate, regenerate the manifest with
+`scripts/evaluation/generate_canonical_manifest.py` and commit the updated
+artifacts and manifest together. Do not update the manifest for incidental
+local reruns.
+
+Canonical thesis runs:
 
 - detection v2: `outputs/thesis_final_detection_full_v2/`, provenance
   SHA `7ad90a2`, precision/recall/F1 all `0.9528` with bootstrap 95%
@@ -137,6 +146,9 @@ Latest PR #107 reruns (2026-05-03):
 - remediation v3: `outputs/thesis_final_remediation_v3/`, provenance
   SHA `7ad90a2`, fully verified success rate `0.72` (`18/25`),
   attempted-only calibration Brier `0.094698` / ECE `0.083900`.
+- remediation v4: `outputs/thesis_final_remediation_v4/`, provenance
+  SHA `80d0084`, fully verified success rate `1.00` (`25/25`),
+  Brier `0.005723` / ECE `0.069612`.
 
 ## Remediation IR (`RepairIntent`)
 

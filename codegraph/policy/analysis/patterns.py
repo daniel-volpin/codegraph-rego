@@ -77,7 +77,6 @@ CMDI_PATTERNS = (
     re.compile(r"new\s+ProcessBuilder\s*\(", re.IGNORECASE),
     re.compile(r"\.command\s*\(", re.IGNORECASE),
 )
-COMMAND_VARIABLE_EXEC_PATTERN = re.compile(r"\.exec\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:,|\))", re.IGNORECASE)
 COMMAND_LIST_ADD_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)\s*;", re.DOTALL)
 COMMAND_ARRAY_ASSIGNMENT_RE = re.compile(
     r"(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>\[\]]*\[\]\s*)?\{(.*?)\}\s*;",
@@ -177,7 +176,6 @@ DIRECT_SQL_UNTRUSTED_PATTERNS = (
 )
 STRING_BUILDER_RE = re.compile(r"String(?:Builder|Buffer)", re.IGNORECASE)
 APPEND_CALL_RE = re.compile(r"\.append\s*\(", re.IGNORECASE)
-ARRAY_LITERAL_RE = re.compile(r"\{[^{}]*[A-Za-z_][A-Za-z0-9_]*[^{}]*\}")
 STRING_CONCAT_PATTERNS = (
     re.compile(r'"[^"\n]*"\s*\+\s*[A-Za-z_(]', re.IGNORECASE),
     re.compile(r"[A-Za-z_][A-Za-z0-9_.)]*\s*\+\s*\"[^\n]*\"", re.IGNORECASE),

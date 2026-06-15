@@ -62,6 +62,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Clear Neo4j before ingesting benchmark subset",
     )
+    parser.add_argument(
+        "--require-complete-corpus",
+        action="store_true",
+        help=(
+            "Thesis/canonical mode: fail fast if any requested testcase source is "
+            "missing from the staged corpus, so thesis metrics can never be reported "
+            "from a partial checkout."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -197,12 +206,14 @@ def main() -> int:
         eval_kind="detection",
         config_path=args.config,
         output_dir=output_dir,
+        ground_truth_path=context.truth_path.as_posix(),
         seed=ci_seed,
         llm=None,  # detection eval does not call the LLM.
         extra={
             "mapping_path": str(args.mapping),
             "table_format": args.table_format,
             "reset_neo4j": bool(args.reset_neo4j),
+            "require_complete_corpus": bool(args.require_complete_corpus),
         },
     )
     write_provenance(provenance, output_dir)
@@ -212,6 +223,7 @@ def main() -> int:
         java_relative_root=context.selection_cfg["java_relative_root"],
         testcase_ids=sampled_union,
         workdir=args.workdir,
+        require_complete=bool(args.require_complete_corpus),
     ) as workspace:
         eval_result = ingest_and_evaluate_subset(
             java_root=workspace.java_root,

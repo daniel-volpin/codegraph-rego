@@ -232,6 +232,124 @@ class ApplyFixTests(RemediationTestBase):
                         (src_path.as_posix(), original_content),
                     ],
                 )
+    def _build_remediation_for_apply(self, svc_mod, src_path, updated_content, target_method, *, compile_result):
+        context = (
+            ViolationContextBuilder()
+            .with_target_method(target_method)
+            .with_file_path(src_path.as_posix())
+            .with_source_code('public void doPost(...) { MessageDigest.getInstance("MD5"); }')
+            .with_exact_method_source('public void doPost(...) { MessageDigest.getInstance("MD5"); }')
+            .build()
+        )
+        proposal_response = (
+            ProposalResponseBuilder()
+            .with_edits(
+                original_lines=['public void doPost(...) { MessageDigest.getInstance("MD5"); }'],
+                replacement_lines=["public void doPost(...) { /* sha-256 */ }"],
+            )
+            .build()
+        )
+        remediation = svc_mod.RemediationService(llm_client=lambda *_a, **_k: "")
+        remediation.get_violation_context = lambda *_a, **_k: context  # type: ignore[method-assign]
+        remediation._resolve_file_path = lambda *_a, **_k: src_path  # type: ignore[method-assign]
+        remediation.propose_method_edits = lambda *_a, **_k: proposal_response  # type: ignore[method-assign]
+        remediation._replace_method_in_source = (  # type: ignore[method-assign]
+            lambda *_a, **_k: (updated_content, "void a() {}", "void a() { /* UPDATED */ }")
+        )
+        remediation._prepare_temp_workspace = (  # type: ignore[method-assign]
+            lambda tmp_root, _resolved: (tmp_root, Path(tmp_root) / "Example.java", Path(tmp_root))
+        )
+        remediation._compile_project = lambda *_a, **_k: compile_result  # type: ignore[method-assign]
+        return remediation
+
+    def test_apply_mode_does_not_write_when_build_skipped(self):
+        """Fail-closed gate: a skipped build must not authorize a live apply (REM-F3)."""
+        svc_mod = self.service
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "Example.java"
+            original_content = "class Example { void a() {} }\n"
+            updated_content = "class Example { void a() { /* UPDATED */ } }\n"
+            src_path.write_text(original_content, encoding="utf-8")
+            target_method = "org.example.Foo.doPost(HttpServletRequest,HttpServletResponse)"
+            remediation = self._build_remediation_for_apply(
+                svc_mod,
+                src_path,
+                updated_content,
+                target_method,
+                compile_result={
+                    "attempted": False,
+                    "success": False,
+                    "output_snippet": None,
+                    "skipped_reason": "No build system detected",
+                },
+            )
+
+            class PassPolicyEvaluator:
+                def evaluate(self, _m, *, source_path_override=None):
+                    return {"violations": []}
+
+            with (
+                patch.object(apply_flow_mod, "process_single_file_content", side_effect=lambda *_a, **_k: None),
+                patch.object(apply_flow_mod, "PolicyEvaluator", PassPolicyEvaluator),
+            ):
+                out = remediation.apply_fix(
+                    "ISO-A.10-WEAK-HASH",
+                    target_method=target_method,
+                    file_path=src_path.as_posix(),
+                    mode="apply",
+                    max_attempts=1,
+                )
+            self.assertNotEqual(out.get("status"), "OK")
+            self.assertEqual(out.get("status"), "VERIFICATION_ERROR")
+            # The live file must be restored to its original content.
+            self.assertEqual(src_path.read_text(encoding="utf-8"), original_content)
+
+    def test_rollback_failure_downgrades_status(self):
+        """A failed restore must not be reported as a clean success (REM-F9)."""
+        svc_mod = self.service
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "Example.java"
+            original_content = "class Example { void a() {} }\n"
+            updated_content = "class Example { void a() { /* UPDATED */ } }\n"
+            src_path.write_text(original_content, encoding="utf-8")
+            target_method = "org.example.Foo.doPost(HttpServletRequest,HttpServletResponse)"
+            remediation = self._build_remediation_for_apply(
+                svc_mod,
+                src_path,
+                updated_content,
+                target_method,
+                compile_result={
+                    "attempted": False,
+                    "success": False,
+                    "output_snippet": None,
+                    "skipped_reason": "test",
+                },
+            )
+
+            class PassPolicyEvaluator:
+                def evaluate(self, _m, *, source_path_override=None):
+                    return {"violations": []}
+
+            calls: list[int] = []
+
+            def reingest(_path: str, _content: str) -> None:
+                calls.append(1)
+                if len(calls) == 2:  # the restore call in the finally block
+                    raise RuntimeError("restore boom")
+
+            with (
+                patch.object(apply_flow_mod, "process_single_file_content", side_effect=reingest),
+                patch.object(apply_flow_mod, "PolicyEvaluator", PassPolicyEvaluator),
+            ):
+                out = remediation.apply_fix(
+                    "ISO-A.10-WEAK-HASH",
+                    target_method=target_method,
+                    file_path=src_path.as_posix(),
+                    mode="dry_run",
+                    max_attempts=1,
+                )
+            self.assertEqual(out.get("status"), "VERIFICATION_ERROR")
+            self.assertIn("Rollback failed", out.get("error", ""))
 
 
 if __name__ == "__main__":
