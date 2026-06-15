@@ -114,16 +114,19 @@ def build_violation_response(
     }
 
 
-def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, Any]]:
+def _serialize_for_opa(bundle: PolicyBundle | Mapping[str, Any]) -> dict[str, Any]:
     # When the bundle is already a plain dict (produced by build_evidence_bundle),
     # use it directly to preserve extra fields such as ``taint_paths`` that are
     # appended after the PolicyBundle serialization step.
     if isinstance(bundle, PolicyBundle):
-        serialized_bundle = bundle.to_dict()
-    elif isinstance(bundle, dict):
-        serialized_bundle = bundle
-    else:
-        serialized_bundle = serialize_policy_bundle(bundle)
+        return bundle.to_dict()
+    if isinstance(bundle, dict):
+        return bundle
+    return serialize_policy_bundle(bundle)
+
+
+def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, Any]]:
+    serialized_bundle = _serialize_for_opa(bundle)
 
     with _tracer.start_as_current_span("policy.evaluate") as span:
         span.set_attribute("target_method", str(serialized_bundle.get("target_method") or ""))
@@ -177,12 +180,7 @@ def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, 
 
 
 def evaluate_package_root(bundle: PolicyBundle | Mapping[str, Any], package: str = "data.iso27001") -> dict[str, Any]:
-    if isinstance(bundle, PolicyBundle):
-        serialized_bundle = bundle.to_dict()
-    elif isinstance(bundle, dict):
-        serialized_bundle = bundle
-    else:
-        serialized_bundle = serialize_policy_bundle(bundle)
+    serialized_bundle = _serialize_for_opa(bundle)
     with tempfile.TemporaryDirectory() as tmp:
         input_path = os.path.join(tmp, "input.json")
         with open(input_path, "w", encoding="utf-8") as file:
