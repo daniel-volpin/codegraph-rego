@@ -652,3 +652,31 @@ canonical fully-verified counts are **not invalidated**. The residual risk is th
 crash/concurrency window between mutate and restore (out of scope for the serial
 benchmark; recommended hardening: verify off the temp-file virtual bundle without
 touching Neo4j, as `preview_virtual_fix` already does).
+
+---
+
+# Appendix — Full multi-category detection reproduction (2026-06-15)
+
+Ran the canonical detection config (`configs/benchmark/multicat_full.json`, 8
+categories × 60, seed 7) on this branch with the real Neo4j + OPA 1.15.1 stack and
+compared against the committed `outputs/thesis_final_detection_full_v2/metrics.json`.
+
+| Overall | TP | FP | FN | P | R | F1 | support |
+|---|---|---|---|---|---|---|---|
+| Canonical (committed) | 222 | 11 | 11 | 0.9528 | 0.9528 | 0.9528 | 454 |
+| This branch (all changes) | 222 | 11 | 11 | 0.9528 | 0.9528 | 0.9528 | 454 |
+
+**Bit-for-bit identical**, including per-category (Randomness 32/0/0 = 1.000 with the
+fingerprint removed). Every change in this PR preserves the thesis headline
+detection metric. The embedding model was 403-blocked throughout, again confirming
+FAISS/vector is not in the detection path.
+
+## Remediation loop (live, real Neo4j + OPA)
+- The apply/verify/re-evaluate orchestration runs end-to-end.
+- The conservative gate held in every probe: a partial/failed patch never produced
+  a verified result — any reconstruction/parse hiccup yields `VERIFICATION_ERROR`,
+  not success (`fully_verified := policy_fixed AND build_success`, no fallback).
+- The policy re-evaluation gate clearing a *real* fix is demonstrated in the
+  REM-F1/F2 trace above (baseline weak-hash fires → patched override clears).
+  Detection reads method **source text** from the file/override (not the graph),
+  so candidate verification must supply the patched override — which dry_run does.
