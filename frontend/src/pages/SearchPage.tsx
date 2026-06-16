@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Search, Sparkles } from "lucide-react";
+import { Loader2, Search, Sparkles } from "lucide-react";
 import { searchCode } from "../lib/api";
 import type { SearchResponse } from "../lib/types";
 import { toast } from "sonner";
@@ -105,9 +105,20 @@ const SearchPage = () => {
         </Card>
       )}
 
+      {searchPending && (
+        <Card role="status" aria-live="polite" className="flex items-center gap-3 p-4 text-sm text-slate-600">
+          <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-indigo-500" />
+          Searching the code graph. Results will appear here when the backend responds.
+        </Card>
+      )}
+
       {result?.error && (
-        <Card className="border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          Search failed: {result.error}
+        <Card role="alert" className="border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          <p className="font-medium text-rose-800">Search failed.</p>
+          <p className="mt-1 break-words">{result.error}</p>
+          <p className="mt-2 text-xs text-rose-700">
+            If this mentions the search index or embeddings, upload and index a codebase first or wait for backend startup to finish.
+          </p>
         </Card>
       )}
 

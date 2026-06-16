@@ -336,6 +336,9 @@ const PolicyPage = () => {
         >
           <p className="font-medium text-rose-900">Policy evaluation failed.</p>
           <p className="mt-1 break-words">{evaluationError}</p>
+          <p className="mt-2 text-xs text-rose-700">
+            Check the health indicator for missing backend dependencies, then rerun the evaluation.
+          </p>
         </Card>
       )}
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, ChevronDown, Copy, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Copy, Loader2, Sparkles } from "lucide-react";
 import Markdown from "react-markdown";
 import { toast } from "sonner";
 import { Button } from "../../ui/button";
@@ -105,6 +105,11 @@ const ArtifactSkeleton = ({ lines = 3 }: { lines?: number }) => (
   </div>
 );
 
+const remediationArtifactStatus = (status: string | null | undefined): "idle" | "ready" | "error" => {
+  if (!status) return "idle";
+  return status === "OK" ? "ready" : "error";
+};
+
 const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
   const findingId = selectedFinding?.id ?? null;
   const explainResult = useExplainResult(findingId);
@@ -119,21 +124,15 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
 
   const explainStatus: "idle" | "running" | "ready" | "error" =
     pendingAction === "explain" ? "running"
-    : explainResult?.status === "OK" ? "ready"
-    : explainResult?.status === "ERROR" ? "error"
-    : "idle";
+    : remediationArtifactStatus(explainResult?.status);
 
   const previewStatus: "idle" | "running" | "ready" | "error" =
     pendingAction === "preview" ? "running"
-    : previewResult?.status === "OK" ? "ready"
-    : previewResult?.status === "ERROR" ? "error"
-    : "idle";
+    : remediationArtifactStatus(previewResult?.status);
 
   const verifyStatus: "idle" | "running" | "ready" | "error" =
     pendingAction === "apply" ? "running"
-    : applyResult?.status === "OK" ? "ready"
-    : applyResult?.status === "ERROR" ? "error"
-    : "idle";
+    : remediationArtifactStatus(applyResult?.status);
 
   const confidenceSurface = deriveConfidenceSurface(
     applyResult?.confidence ?? previewResult?.confidence ?? null,
@@ -146,20 +145,24 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
       : verificationOutcome
         ? `Verification completed with status ${verificationOutcome}.`
         : "Verification completed.";
+  const previewFailed = previewResult?.status && previewResult.status !== "OK";
+  const applyFailed = applyResult?.status && applyResult.status !== "OK";
+  const explainFailed = explainResult?.status && explainResult.status !== "OK";
   const statusMessage =
     applyResult?.status === "OK"
       ? `${verificationPrefix} ${applyResult.verification?.new_violations?.length ?? 0} new violations.`
-      : applyResult?.status === "ERROR" && applyResult.error
-        ? `Verification failed. ${applyResult.error}`
+      : applyFailed && applyResult?.error
+        ? `Verification issue. ${applyResult.error}`
         : previewResult?.status === "OK"
           ? "Preview ready."
-          : previewResult?.status === "ERROR" && previewResult.error
-            ? `Preview failed. ${previewResult.error}`
+          : previewFailed && previewResult?.error
+            ? `Preview issue. ${previewResult.error}`
             : explainResult?.status === "OK"
               ? "Explanation ready."
-              : explainResult?.status === "ERROR" && explainResult.error
-                ? `Explanation failed. ${explainResult.error}`
+              : explainFailed && explainResult?.error
+                ? `Explanation issue. ${explainResult.error}`
                 : "";
+  const applySucceeded = applyResult?.status === "OK";
 
   return (
     <Card
@@ -319,7 +322,7 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
                   )}
                 </div>
               )}
-              {explainResult?.status === "ERROR" && explainResult.error && (
+              {explainFailed && explainResult?.error && (
                 <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
                   {explainResult.error}
                 </div>
@@ -372,10 +375,17 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
 
               {applyResult && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                  <div className="flex items-center gap-2 text-slate-900">
-                    <CheckCircle2 aria-hidden="true" className="h-4 w-4" />
-                    <p className="font-medium">Verification summary</p>
+                  <div className={`flex items-center gap-2 ${applySucceeded ? "text-slate-900" : "text-rose-900"}`}>
+                    {applySucceeded ? (
+                      <CheckCircle2 aria-hidden="true" className="h-4 w-4" />
+                    ) : (
+                      <AlertTriangle aria-hidden="true" className="h-4 w-4" />
+                    )}
+                    <p className="font-medium">{applySucceeded ? "Verification summary" : "Verification issue"}</p>
                   </div>
+                  {!applySucceeded && applyResult.error && (
+                    <p className="mt-2 break-words text-rose-700">{applyResult.error}</p>
+                  )}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Badge variant="secondary">
                       Overall {applyResult.verification?.overall_status ?? "—"}
