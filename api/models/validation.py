@@ -168,6 +168,8 @@ class RemediationPreviewResponse(BaseModel):
     verification: dict | None = None
     generation: RemediationGenerationResponse | None = None
     confidence: dict | None = None
+    shadow_lifecycle: dict | None = None
+    shadow_comparison: dict | None = None
     error: str | None = None
 
 
@@ -192,4 +194,6 @@ class RemediationApplyResponse(BaseModel):
     metadata: dict | None = None
     generation: RemediationGenerationResponse | None = None
     confidence: dict | None = None
+    shadow_lifecycle: dict | None = None
+    shadow_comparison: dict | None = None
     error: str | None = None

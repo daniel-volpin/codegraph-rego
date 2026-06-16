@@ -273,6 +273,8 @@ def build_remediation_result(
     confidence_score = _safe_float((confidence or {}).get("score")) if confidence else None
     confidence_band = (confidence or {}).get("band") if confidence else None
     fully_verified = policy_fixed and build_pass is True
+    shadow_lifecycle = apply_result.get("shadow_lifecycle")
+    shadow_comparison = apply_result.get("shadow_comparison")
     evidence = violation.get("evidence") or {}
     return {
         "case_id": case_id,
@@ -302,6 +304,8 @@ def build_remediation_result(
         "confidence": confidence,
         "confidence_score": confidence_score,
         "confidence_band": confidence_band,
+        "shadow_lifecycle": shadow_lifecycle,
+        "shadow_comparison": shadow_comparison,
     }
 
 
@@ -340,6 +344,76 @@ def build_skipped_result(
         "confidence": None,
         "confidence_score": None,
         "confidence_band": None,
+        "shadow_lifecycle": None,
+        "shadow_comparison": None,
+    }
+
+
+def build_shadow_metrics_payload(results: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    artifact_kind_distribution: dict[str, int] = {}
+    recommended_disposition_distribution: dict[str, int] = {}
+    pattern_selection_distribution: dict[str, int] = {}
+    reason_code_distribution: dict[str, int] = {}
+    validator_state_counts: dict[str, int] = {}
+    pipeline_verified = 0
+    assurance_verified = 0
+    auto_apply_eligible = 0
+    evidence_sufficient = 0
+    forbidden_near_miss_patch_count = 0
+    deterministic_repro_failures = 0
+    shadow_path_exceptions = 0
+    total = 0
+
+    for item in results:
+        lifecycle = item.get("shadow_lifecycle")
+        if not isinstance(lifecycle, Mapping):
+            continue
+        total += 1
+        artifact_kind = str(lifecycle.get("artifact_kind") or "unknown")
+        artifact_kind_distribution[artifact_kind] = artifact_kind_distribution.get(artifact_kind, 0) + 1
+        recommended = str(lifecycle.get("recommended_disposition") or "unknown")
+        recommended_disposition_distribution[recommended] = recommended_disposition_distribution.get(recommended, 0) + 1
+        pattern = str(lifecycle.get("repair_pattern_id") or "none")
+        pattern_selection_distribution[pattern] = pattern_selection_distribution.get(pattern, 0) + 1
+        if lifecycle.get("pipeline_verified") is True:
+            pipeline_verified += 1
+        if lifecycle.get("assurance_verified") is True:
+            assurance_verified += 1
+        if lifecycle.get("auto_apply_eligible") is True:
+            auto_apply_eligible += 1
+        if lifecycle.get("evidence_complete") is True:
+            evidence_sufficient += 1
+        if lifecycle.get("shadow_error") is not None:
+            shadow_path_exceptions += 1
+        for reason_code in lifecycle.get("reason_codes") or []:
+            reason_code_distribution[str(reason_code)] = reason_code_distribution.get(str(reason_code), 0) + 1
+        for validator in (lifecycle.get("pipeline_checks") or []) + (lifecycle.get("semantic_validators") or []):
+            state = str((validator or {}).get("state") or "UNKNOWN")
+            validator_state_counts[state] = validator_state_counts.get(state, 0) + 1
+        if artifact_kind == "patch":
+            comparison = item.get("shadow_comparison") or {}
+            llm_outcome = ((comparison or {}).get("llm") or {}) if isinstance(comparison, Mapping) else {}
+            if (llm_outcome.get("produced_edits") is False) and lifecycle.get("assurance_verified") is not True:
+                forbidden_near_miss_patch_count += 1
+        repro_key = lifecycle.get("reproducibility_key")
+        if not isinstance(repro_key, str) or not repro_key:
+            deterministic_repro_failures += 1
+
+    denominator = total or 1
+    return {
+        "shadow_cases": total,
+        "artifact_kind_distribution": artifact_kind_distribution,
+        "recommended_disposition_distribution": recommended_disposition_distribution,
+        "pattern_selection_distribution": pattern_selection_distribution,
+        "reason_code_distribution": reason_code_distribution,
+        "validator_state_counts": validator_state_counts,
+        "pipeline_verified_rate": round(pipeline_verified / denominator, 4) if total else 0.0,
+        "assurance_verified_rate": round(assurance_verified / denominator, 4) if total else 0.0,
+        "auto_apply_eligible_rate": round(auto_apply_eligible / denominator, 4) if total else 0.0,
+        "evidence_sufficiency_rate": round(evidence_sufficient / denominator, 4) if total else 0.0,
+        "forbidden_near_miss_patch_count": forbidden_near_miss_patch_count,
+        "deterministic_reproducibility_failures": deterministic_repro_failures,
+        "shadow_path_exceptions": shadow_path_exceptions,
     }
 
 
@@ -383,6 +457,7 @@ def build_metrics_payload(
         "legacy_build_command_arg": legacy_build_command_arg,
         "final_status_counts": status_counts,
         "untracked_status_counts": untracked_status_counts(results),
+        "shadow_assurance": build_shadow_metrics_payload(results),
         "results_jsonl": "results.jsonl",
         "cases_dir": "cases",
         "results": list(results),
@@ -541,6 +616,9 @@ def write_final_artifacts(
     table_format: str,
 ) -> None:
     write_json(output_dir / "remediation_metrics.json", metrics)
+    shadow_assurance = metrics.get("shadow_assurance")
+    if shadow_assurance is not None:
+        write_json(output_dir / "shadow_assurance.json", shadow_assurance)
     calibration = metrics.get("confidence_calibration")
     if calibration is not None:
         write_json(output_dir / "confidence_calibration.json", calibration)

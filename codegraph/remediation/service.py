@@ -69,6 +69,7 @@ from codegraph.remediation.editing import (
 )
 from codegraph.remediation.metrics import summarize_retry_error
 from codegraph.remediation.planning import build_remediation_plan
+from codegraph.remediation.shadow import maybe_attach_shadow_result
 from codegraph.remediation.validation import (
     extract_json_block,
 )
@@ -214,7 +215,7 @@ class RemediationService:
         rule_id = context.get("rule_id")
         capability = get_remediation_capability(rule_id, supported_rule_ids=self._FIX_STRATEGIES.keys())
         if not capability.supported:
-            return {
+            result = {
                 "status": "INVALID",
                 "error": capability.reason_code,
                 "violation_id": violation_id,
@@ -222,6 +223,7 @@ class RemediationService:
                 "target_method": context.get("target_method"),
                 "file_path": context.get("file_path"),
             }
+            return maybe_attach_shadow_result(self, context=context, authoritative_result=result)
 
         preflight_reason = self._preflight_fixability_reason(context)
         if preflight_reason:
@@ -237,7 +239,7 @@ class RemediationService:
                 structured_valid=True,
                 attempt_count=1,
             )
-            return response
+            return maybe_attach_shadow_result(self, context=context, authoritative_result=response)
 
         llm_output = self.propose_method_edits(context)
         updated_source = llm_output.get("replacement_method_code")
@@ -259,12 +261,12 @@ class RemediationService:
                 reason=reason or "no safe minimal fix available",
             )
             response["confidence"] = confidence
-            return response
+            return maybe_attach_shadow_result(self, context=context, authoritative_result=response)
 
         original_source = resolve_context_source_code(context)
         diff = _unified_diff(original_source, updated_source or "", label="method")
         if not updated_source:
-            return {
+            result = {
                 "status": "GENERATION_ERROR",
                 "error": schema_error or "generation_error: missing edits",
                 "violation_id": violation_id,
@@ -274,6 +276,7 @@ class RemediationService:
                 "generation": generation,
                 "confidence": confidence,
             }
+            return maybe_attach_shadow_result(self, context=context, authoritative_result=result)
 
         base_graph = (context.get("evidence") or {}).get("graph_context") or {}
         virtual_graph = self.build_virtual_graph_context(updated_source, base_graph=base_graph)
@@ -287,7 +290,7 @@ class RemediationService:
                 LOGGER.exception("OPA evaluation failed for virtual fix", extra=_err)
             else:
                 LOGGER.error("OPA evaluation failed for virtual fix", extra=_err)
-            return {
+            result = {
                 "status": "VERIFICATION_ERROR",
                 "error": str(exc),
                 "violation_id": violation_id,
@@ -298,6 +301,7 @@ class RemediationService:
                 "generation": generation,
                 "confidence": confidence,
             }
+            return maybe_attach_shadow_result(self, context=context, authoritative_result=result)
 
         normalized_output: list[dict[str, Any]] = []
         for raw in opa_raw:
@@ -312,7 +316,7 @@ class RemediationService:
             normalized_output,
         )
         opa_status = verification.get("target_rule_status")
-        return {
+        result = {
             "status": "OK",
             "violation_id": violation_id,
             "rule_id": context.get("rule_id"),
@@ -326,6 +330,7 @@ class RemediationService:
             "generation": generation,
             "confidence": confidence,
         }
+        return maybe_attach_shadow_result(self, context=context, authoritative_result=result)
 
     def apply_fix(
         self,

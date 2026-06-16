@@ -30,6 +30,7 @@ from codegraph.remediation.result_models import (
     generation_error_result,
     partial_error_result,
 )
+from codegraph.remediation.shadow import maybe_attach_shadow_result
 from codegraph.remediation.validation import extract_assistant_content
 from codegraph.remediation.verification import build_verification_summary
 from codegraph.telemetry import get_tracer
@@ -407,7 +408,7 @@ def _execute_apply_fix_inner(
     rule_id = context.get("rule_id")
     capability = get_remediation_capability(rule_id, supported_rule_ids=service._FIX_STRATEGIES.keys())
     if not capability.supported:
-        return early_error_result(
+        result = early_error_result(
             "INVALID",
             violation_id=violation_id,
             error=capability.reason_code,
@@ -415,6 +416,7 @@ def _execute_apply_fix_inner(
             target_method=context.get("target_method") or target_method,
             file_path=context.get("file_path") or file_path,
         )
+        return maybe_attach_shadow_result(service, context=context, authoritative_result=result, build_command=build_command)
 
     target_method = target_method or context.get("target_method")
     file_path = file_path or context.get("file_path")
@@ -443,7 +445,7 @@ def _execute_apply_fix_inner(
             structured_valid=True,
             attempt_count=1,
         )
-        return response
+        return maybe_attach_shadow_result(service, context=context, authoritative_result=response, build_command=build_command)
 
     resolved_path = service._resolve_file_path(file_path)
     if resolved_path is None:
@@ -625,7 +627,7 @@ def _execute_apply_fix_inner(
         "attempt_count": attempt_count,
         "mode": mode,
     }
-    return apply_result(
+    result = apply_result(
         status,
         violation_id=violation_id,
         rule_id=context.get("rule_id"),
@@ -645,3 +647,4 @@ def _execute_apply_fix_inner(
             after_trace_raw=after_trace_raw,
         ),
     )
+    return maybe_attach_shadow_result(service, context=context, authoritative_result=result, build_command=build_command)

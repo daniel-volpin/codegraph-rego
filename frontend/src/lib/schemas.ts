@@ -279,6 +279,8 @@ export const RemediationPreviewResponseSchema = z
     verification: RemediationVerificationSummarySchema.nullable().optional(),
     generation: RemediationGenerationResultSchema.nullable().optional(),
     confidence: RemediationConfidenceSchema.nullable().optional(),
+    shadow_lifecycle: z.record(z.string(), z.unknown()).nullable().optional(),
+    shadow_comparison: z.record(z.string(), z.unknown()).nullable().optional(),
     error: z.string().nullable().optional(),
   })
   .loose();
@@ -300,6 +302,8 @@ export const RemediationApplyResponseSchema = z
     metadata: z.record(z.string(), z.unknown()).nullable().optional(),
     generation: RemediationGenerationResultSchema.nullable().optional(),
     confidence: RemediationConfidenceSchema.nullable().optional(),
+    shadow_lifecycle: z.record(z.string(), z.unknown()).nullable().optional(),
+    shadow_comparison: z.record(z.string(), z.unknown()).nullable().optional(),
     error: z.string().nullable().optional(),
   })
   .loose();
