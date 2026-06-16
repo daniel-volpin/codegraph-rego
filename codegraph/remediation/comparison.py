@@ -21,6 +21,7 @@ from codegraph.remediation.repair_intent import (
     RepairIntentKind,
     plan_repair_intent,
 )
+from codegraph.remediation.result_models import ArtifactKind, ShadowRemediationLifecycle
 
 LOGGER = logging.getLogger(__name__)
 
@@ -205,6 +206,26 @@ def build_llm_outcome(apply_result: dict[str, Any]) -> CandidateOutcome:
         compilation_success=comp_success,
         policy_resolved=pol_resolved,
         predicate_trace=pred_trace,
+    )
+
+
+def build_shadow_lifecycle_outcome(lifecycle: ShadowRemediationLifecycle) -> CandidateOutcome:
+    produced_edits = lifecycle.artifact_kind == ArtifactKind.PATCH and lifecycle.patch_artifact is not None
+    refused = lifecycle.disposition == "abstain" or lifecycle.artifact_kind == ArtifactKind.NONE
+    error = None
+    if lifecycle.shadow_error is not None:
+        error = lifecycle.shadow_error.message
+    elif lifecycle.reason_codes:
+        error = ",".join(code.value for code in lifecycle.reason_codes)
+    return CandidateOutcome(
+        source="deterministic",
+        produced_edits=produced_edits,
+        refused=refused,
+        error=error,
+        edit_count=len(lifecycle.patch_artifact.edits) if lifecycle.patch_artifact else 0,
+        diff_snippet=lifecycle.patch_artifact.diff if lifecycle.patch_artifact else None,
+        compilation_success=lifecycle.pipeline_verified,
+        policy_resolved=lifecycle.assurance_verified,
     )
 
 

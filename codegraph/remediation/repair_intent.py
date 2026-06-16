@@ -46,6 +46,7 @@ class RepairIntentKind(StrEnum):
     CONSTRUCTOR_REPLACEMENT = "constructor_replacement"
     METHOD_CALL_REPLACEMENT = "method_call_replacement"
     IMPORT_ADJUSTMENT = "import_adjustment"
+    STRUCTURED_EDIT = "structured_edit"
     NO_REPAIR = "no_repair"
 
 
@@ -143,8 +144,18 @@ class ImportAdjustmentOp(BaseModel):
     add_import: str | None = None
 
 
+class StructuredEditOp(BaseModel):
+    """Direct structured edit used by bounded deterministic plugins."""
+
+    op_type: Literal["structured_edit"] = "structured_edit"
+    start_line: int
+    end_line: int
+    original_lines: list[str]
+    replacement_lines: list[str]
+
+
 RepairOperation = Annotated[
-    LiteralReplacementOp | ConstructorReplacementOp | MethodCallReplacementOp | ImportAdjustmentOp,
+    LiteralReplacementOp | ConstructorReplacementOp | MethodCallReplacementOp | ImportAdjustmentOp | StructuredEditOp,
     Field(discriminator="op_type"),
 ]
 

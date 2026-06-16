@@ -23,6 +23,7 @@ from codegraph.remediation.repair_intent import (
     MethodCallReplacementOp,
     RepairIntent,
     RepairIntentKind,
+    StructuredEditOp,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -80,6 +81,8 @@ def compile_repair_intent(
             edits.extend(_compile_constructor_replacement(op, source_lines))
         elif isinstance(op, MethodCallReplacementOp):
             edits.extend(_compile_method_call_replacement(op, source_lines))
+        elif isinstance(op, StructuredEditOp):
+            edits.extend(_compile_structured_edit(op, source_lines))
         elif isinstance(op, ImportAdjustmentOp):
             # Import adjustments are informational in v1 — they declare
             # intent but do not produce method-local edits.
@@ -208,6 +211,27 @@ def _compile_method_call_replacement(
             "end_line": line_idx + 1,
             "original_lines": [original_line],
             "replacement_lines": [replaced_line],
+        }
+    ]
+
+
+def _compile_structured_edit(
+    op: StructuredEditOp,
+    source_lines: list[str],
+) -> list[dict[str, Any]]:
+    if op.start_line < 1 or op.end_line < op.start_line:
+        raise CompileError("structured_edit: invalid span")
+    if op.end_line > len(source_lines):
+        raise CompileError("structured_edit: span exceeds method length")
+    actual_original = source_lines[op.start_line - 1 : op.end_line]
+    if actual_original != op.original_lines:
+        raise CompileError("structured_edit: original lines do not match source")
+    return [
+        {
+            "start_line": op.start_line,
+            "end_line": op.end_line,
+            "original_lines": list(op.original_lines),
+            "replacement_lines": list(op.replacement_lines),
         }
     ]
 

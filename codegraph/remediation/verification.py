@@ -4,13 +4,21 @@ import shlex
 import shutil
 import subprocess
 import time
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from codegraph.remediation.result_models import ValidatorResult, ValidatorState
 from codegraph.telemetry import get_tracer
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _tracer = get_tracer("codegraph.remediation.verification")
+
+
+class BuildRequirement(StrEnum):
+    ALWAYS = "always"
+    IF_BUILD_SYSTEM_PRESENT = "if_build_system_present"
+    NEVER = "never"
 
 
 def violation_key(violation: dict[str, Any]) -> str:
@@ -203,3 +211,38 @@ def build_virtual_bundle(
         "graph_context": graph_context,
         "vector_context": evidence.get("vector_context") or [],
     }
+
+
+def pipeline_verified(validators: list[ValidatorResult]) -> bool:
+    required = [validator for validator in validators if validator.required]
+    if not required:
+        return False
+    return all(validator.state == ValidatorState.PASS for validator in required)
+
+
+def build_build_validator(
+    *,
+    build_requirement: BuildRequirement,
+    build_root: Path | None,
+    compilation: dict[str, Any],
+) -> ValidatorResult:
+    build_required = build_requirement == BuildRequirement.ALWAYS or (
+        build_requirement == BuildRequirement.IF_BUILD_SYSTEM_PRESENT and build_root is not None
+    )
+    if not build_required:
+        return ValidatorResult(
+            validator_id="pipeline.build",
+            state=ValidatorState.NOT_APPLICABLE,
+            required=False,
+            message="Build verification not required for this contract.",
+        )
+    if compilation.get("attempted") and compilation.get("success"):
+        return ValidatorResult(validator_id="pipeline.build", state=ValidatorState.PASS, required=True)
+    message = compilation.get("skipped_reason") or compilation.get("output_snippet") or "Build verification failed"
+    state = ValidatorState.FAIL if compilation.get("attempted") else ValidatorState.UNKNOWN
+    return ValidatorResult(
+        validator_id="pipeline.build",
+        state=state,
+        required=True,
+        message=str(message),
+    )

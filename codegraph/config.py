@@ -194,6 +194,20 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("REMEDIATION_TRACE_PROMPT_ENABLED", "remediation_trace_prompt_enabled"),
         description="When true, enriches the remediation prompt with OPA trace context when available.",
     )
+    remediation_shadow_lifecycle_enabled: bool = Field(
+        False,
+        validation_alias=AliasChoices(
+            "REMEDIATION_SHADOW_LIFECYCLE_ENABLED", "remediation_shadow_lifecycle_enabled"
+        ),
+        description="Enable the additive shadow remediation lifecycle without affecting authoritative remediation.",
+    )
+    remediation_shadow_sql_plugin_enabled: bool = Field(
+        False,
+        validation_alias=AliasChoices(
+            "REMEDIATION_SHADOW_SQL_PLUGIN_ENABLED", "remediation_shadow_sql_plugin_enabled"
+        ),
+        description="Register the bounded SQL remediation shadow plugin when shadow lifecycle is enabled.",
+    )
     opa_timeout_seconds: float = Field(
         120.0,
         gt=0.0,
