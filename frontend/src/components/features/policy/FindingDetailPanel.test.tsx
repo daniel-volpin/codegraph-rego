@@ -178,4 +178,31 @@ describe("FindingDetailPanel", () => {
     expect(screen.getByText(/remaining violations:/i)).toBeInTheDocument();
     expect(screen.getByText(/decision:/i)).toBeInTheDocument();
   });
+
+  it("shows non-OK remediation outcomes as issues", () => {
+    hookState.applyResult = {
+      status: "GENERATION_ERROR",
+      error: "Model refused to produce a bounded method-local change.",
+      generation: {
+        decision: "no_fix",
+        reason: "No safe replacement was evident from the local context.",
+      },
+      verification: {
+        overall_status: "NOT_RUN",
+        target_rule_status: "NOT_RUN",
+        remaining_violations: [],
+        new_violations: [],
+      },
+      compilation: {
+        attempted: false,
+        success: false,
+      },
+    };
+
+    renderWithProviders(<FindingDetailPanel selectedFinding={finding} />);
+
+    expect(screen.getAllByText(/verification issue/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/model refused to produce/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/error/i).length).toBeGreaterThan(0);
+  });
 });

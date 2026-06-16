@@ -132,7 +132,11 @@ export async function searchCode(query: string, signal?: AbortSignal): Promise<S
     signal,
   });
 
-  return parseApiResponse(response, SearchResponseSchema);
+  const data = await parseApiResponse(response, SearchResponseSchema);
+  if (!response.ok) {
+    throw new ApiError(data.error || response.statusText || "Search failed", response.status, data);
+  }
+  return data;
 }
 
 export interface PolicyEvaluateOptions {
@@ -171,7 +175,11 @@ export async function evaluatePolicies(
     },
   );
 
-  return parseApiResponse(response, PolicyEvaluateResponseSchema);
+  const data = await parseApiResponse(response, PolicyEvaluateResponseSchema);
+  if (!response.ok) {
+    throw new ApiError(data.error || response.statusText || "Policy evaluation failed", response.status, data);
+  }
+  return data;
 }
 
 export async function evaluatePoliciesWithLLM(
@@ -202,7 +210,11 @@ export async function evaluatePoliciesWithLLM(
     signal,
   });
 
-  return parseApiResponse(response, PolicyEvaluateResponseSchema);
+  const data = await parseApiResponse(response, PolicyEvaluateResponseSchema);
+  if (!response.ok) {
+    throw new ApiError(data.error || response.statusText || "Policy evaluation failed", response.status, data);
+  }
+  return data;
 }
 
 export async function fetchPolicyCatalog(

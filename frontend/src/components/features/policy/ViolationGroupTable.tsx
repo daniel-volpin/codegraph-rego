@@ -60,7 +60,7 @@ const ViolationGroupTable = ({
                       aria-sort={canSort ? ariaSort : undefined}
                       className={`px-3 py-2 font-semibold overflow-hidden ${colWidthClass(header.column.id)}`}
                     >
-                      {header.isPlaceholder ? null : (
+                      {header.isPlaceholder ? null : canSort ? (
                         <button
                           type="button"
                           className="inline-flex items-center gap-1"
@@ -68,6 +68,8 @@ const ViolationGroupTable = ({
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
                         </button>
+                      ) : (
+                        flexRender(header.column.columnDef.header, header.getContext())
                       )}
                     </th>
                   );

@@ -17,26 +17,35 @@ const HealthStatus = ({ variant = "panel" }: HealthStatusProps) => {
   const items = data
     ? [
         { key: "startup", label: "startup", healthy: data.startup_ready },
-        { key: "neo4j", label: "neo4j", healthy: data.neo4j },
-        { key: "faiss_index", label: "faiss", healthy: data.faiss_index },
-        { key: "signature_map", label: "sigmap", healthy: data.signature_map },
-        { key: "embedding_model", label: "embed", healthy: data.embedding_model },
-        { key: "opa", label: "opa", healthy: data.opa },
+        { key: "neo4j", label: "graph", healthy: data.neo4j },
+        { key: "faiss_index", label: "search index", healthy: data.faiss_index },
+        { key: "signature_map", label: "signatures", healthy: data.signature_map },
+        { key: "embedding_model", label: "embeddings", healthy: data.embedding_model },
+        { key: "opa", label: "OPA", healthy: data.opa },
       ]
     : [];
   const failedLabels = items.filter((item) => !item.healthy).map((item) => item.label);
-  const startupErrors = data?.startup?.errors ? Object.values(data.startup.errors) : [];
-  const detailSummary = [...failedLabels, ...startupErrors].filter(Boolean).join(" | ");
+  const detailSummary = failedLabels.length > 0
+    ? `Waiting on ${failedLabels.join(", ")}. The UI remains usable; affected workflows show inline errors.`
+    : "All runtime checks healthy.";
 
   if (variant === "header") {
     if (isLoading) return <div className="text-xs text-slate-500">Checking services…</div>;
     if (isError || !data) {
-      return <button onClick={() => refetch()} className="text-xs text-rose-600">Health unavailable</button>;
+      return (
+        <button
+          onClick={() => refetch()}
+          className="text-xs text-rose-600"
+          title="Backend health could not be reached. Check the API base URL and backend process."
+        >
+          Health unavailable
+        </button>
+      );
     }
     return (
       <div
         className="flex items-center gap-3"
-        title={detailSummary || "All runtime checks healthy"}
+        title={detailSummary}
       >
         <span className={`text-xs font-medium ${data.status === "ok" ? "text-emerald-700" : "text-amber-700"}`}>
           {data.status === "ok" ? "Healthy" : "Degraded"}
@@ -52,7 +61,7 @@ const HealthStatus = ({ variant = "panel" }: HealthStatusProps) => {
   }
 
   return (
-    <div className="text-xs text-slate-500">
+    <div className="text-xs text-slate-500" title={isError || !data ? "Backend health could not be reached." : detailSummary}>
       {isLoading ? "Checking services…" : isError || !data ? "Health unavailable" : data.status === "ok" ? "Healthy" : "Degraded"}
     </div>
   );

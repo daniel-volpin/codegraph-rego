@@ -106,6 +106,8 @@ const UploadPage = () => {
     }
     const activityStatus = status.error
       ? "error"
+      : status.phase === "idle"
+        ? "idle"
       : status.complete
         ? "success"
         : "running";
@@ -162,6 +164,13 @@ const UploadPage = () => {
     : status?.complete
       ? "success"
       : "warning";
+  const statusLabel = status?.error || status?.phase === "error"
+    ? "Failed"
+    : status?.phase === "idle"
+      ? "Idle"
+      : status?.complete
+        ? "Complete"
+        : "Running";
 
   return (
     <div className="space-y-4">
@@ -190,7 +199,9 @@ const UploadPage = () => {
             <p className="text-xl font-semibold text-slate-900">
               {selectedName ? "File selected" : "Click to select ZIP archive"}
             </p>
-            <p className="mt-1 text-sm text-slate-500">or drag and drop file here</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Drag and drop a .zip file with Java sources, ideally under src/main/java.
+            </p>
             {selectedName && (
               <Badge variant="secondary" className="mt-4 max-w-full truncate px-3 py-1 text-xs">
                 {selectedName}
@@ -211,7 +222,7 @@ const UploadPage = () => {
         <Card className="p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="text-sm font-medium text-slate-800">{status.message || "Processing upload"}</p>
-            <Badge variant={statusTone}>{status.complete ? "Complete" : "Running"}</Badge>
+            <Badge variant={statusTone}>{statusLabel}</Badge>
           </div>
           <div
             role="progressbar"

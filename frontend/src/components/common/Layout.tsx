@@ -8,6 +8,7 @@ import HealthStatus from "./HealthStatus";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogOverlay,
   DialogPortal,
   DialogTitle,
@@ -57,6 +58,9 @@ const Layout = ({ children }: PropsWithChildren) => {
             onOpenAutoFocus={(event) => event.preventDefault()}
           >
             <DialogTitle className="sr-only">Primary navigation</DialogTitle>
+            <DialogDescription className="sr-only">
+              Navigate between CodeGraph workspace pages.
+            </DialogDescription>
             <SidebarNav
               mode="drawer"
               onClose={() => setDrawerOpen(false)}

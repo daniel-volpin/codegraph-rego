@@ -11,6 +11,14 @@ const routeLabels: Record<string, string> = {
 const Breadcrumbs = () => {
   const location = useLocation();
   const label = routeLabels[location.pathname] ?? "Page";
+  if (location.pathname === "/") {
+    return (
+      <div className="text-sm text-slate-500">
+        <span className="font-medium text-slate-900">{label}</span>
+      </div>
+    );
+  }
+
   return (
     <div className="text-sm text-slate-500">
       <Link className="hover:text-slate-900" to="/">Dashboard</Link>
