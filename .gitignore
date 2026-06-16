@@ -134,6 +134,8 @@ frontend/.vite/
 frontend/.env
 frontend/.env.*
 frontend/.turbo
+frontend/playwright-report/
+frontend/test-results/
 
 # General Node.js (if any root-level node project)
 node_modules/

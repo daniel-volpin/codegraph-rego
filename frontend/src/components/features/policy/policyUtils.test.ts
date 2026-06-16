@@ -33,17 +33,17 @@ describe("policyUtils", () => {
       severity: "high",
       reason: "Weak hash usage detected",
       code_snippet: "public void hash(String input) {\n  md5(input);\n}",
-              remediation: {
-                supported: true,
-                support_tier: "full",
-                reason_code: "supported_rule_for_auto_fix",
-                preview_available: true,
-                verify_available: true,
-                ui_apply_mode: "dry_run",
-                rationale: "Bounded replacement is supported.",
-                safe_refusal_possible: false,
-              },
-            });
+      remediation: {
+        supported: true,
+        support_tier: "full",
+        reason_code: "supported_rule_for_auto_fix",
+        preview_available: true,
+        verify_available: true,
+        ui_apply_mode: "dry_run",
+        rationale: "Bounded replacement is supported.",
+        safe_refusal_possible: false,
+      },
+    });
 
     expect(row.id).toBe(
       "ISO-A.10-WEAK-HASH:com.acme.Demo.hash(String):/tmp/uploaded_code/app/src/main/java/com/acme/Demo.java",

@@ -5,6 +5,8 @@ import { Input } from "../components/ui/input";
 import { getRuntimeApiBase } from "../lib/runtimeConfig";
 
 const API_BASE = getRuntimeApiBase();
+const CODE_TOKEN_CLASS = "rounded bg-slate-100 px-1 py-0.5 text-slate-700";
+const CODE_TOKEN_SMALL_CLASS = `${CODE_TOKEN_CLASS} text-xs`;
 
 interface TracingSurface {
   enabled: boolean;
@@ -44,7 +46,6 @@ const SettingsPage = () => {
         </p>
       </Card>
 
-      {/* ── API Configuration ─────────────────────── */}
       <Card className="space-y-4 p-5">
         <div className="flex items-center gap-2">
           <SettingsIcon className="h-5 w-5 text-slate-400" />
@@ -57,14 +58,13 @@ const SettingsPage = () => {
             <Input type="text" value={API_BASE} readOnly className="font-mono text-sm bg-slate-50" />
           </label>
           <p className="text-xs text-muted-foreground">
-            Resolved in order from <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">/config.json</code>,
-            then <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">&lt;meta name="api-base" /&gt;</code>,
-            then <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">VITE_API_BASE_URL</code>.
+            Resolved in order from <code className={CODE_TOKEN_SMALL_CLASS}>/config.json</code>,
+            then <code className={CODE_TOKEN_SMALL_CLASS}>&lt;meta name="api-base" /&gt;</code>,
+            then <code className={CODE_TOKEN_SMALL_CLASS}>VITE_API_BASE_URL</code>.
           </p>
         </div>
       </Card>
 
-      {/* ── Observability ─────────────────────────── */}
       <Card className="space-y-4 p-5" data-testid="observability-card">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -91,7 +91,7 @@ const SettingsPage = () => {
               {tracing.endpoint ? (
                 <>
                   {" "}
-                  · target <code className="rounded bg-slate-100 px-1 py-0.5">{tracing.endpoint}</code>
+                  - target <code className={CODE_TOKEN_CLASS}>{tracing.endpoint}</code>
                 </>
               ) : null}
             </p>
@@ -102,22 +102,21 @@ const SettingsPage = () => {
             </p>
             <p className="mt-1 text-sm text-slate-700">
               LCP / INP / CLS / FCP / TTFB are reported via the observability event bus
-              (<code className="rounded bg-slate-100 px-1 py-0.5">codegraph:metric</code>).
+              (<code className={CODE_TOKEN_CLASS}>codegraph:metric</code>).
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              Wire a subscriber on <code className="rounded bg-slate-100 px-1 py-0.5">window</code> or
+              Wire a subscriber on <code className={CODE_TOKEN_CLASS}>window</code> or
               attach an OTLP collector to forward these to your backend.
             </p>
           </div>
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Set <code className="rounded bg-slate-100 px-1 py-0.5">VITE_OTEL_EXPORTER_OTLP_ENDPOINT</code> at build time
+          Set <code className={CODE_TOKEN_CLASS}>VITE_OTEL_EXPORTER_OTLP_ENDPOINT</code> at build time
           to ship browser spans to a Tempo / Jaeger / Honeycomb collector via OTLP/HTTP.
         </p>
       </Card>
 
-      {/* ── Useful Links ──────────────────────────── */}
       <Card className="space-y-3 p-5">
         <h2 className="text-base font-semibold text-slate-900">Quick Links</h2>
         <div className="grid gap-2 sm:grid-cols-2">

@@ -5,6 +5,7 @@ import { Switch } from "../../ui/switch";
 import type { PolicyViewPreset } from "./policyUtils";
 
 const VIEW_MODE_DESCRIPTION_ID = "framework-demo-switch-description";
+const MODULE_FILTER_SELECT_ID = "policy-module-filter";
 
 interface ControlsPanelProps {
   viewPreset: PolicyViewPreset;
@@ -57,9 +58,15 @@ const ControlsPanel = ({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-slate-600">Module filter</label>
+          <label
+            htmlFor={MODULE_FILTER_SELECT_ID}
+            className="block text-xs font-medium text-slate-600"
+          >
+            Module filter
+          </label>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
             <select
+              id={MODULE_FILTER_SELECT_ID}
               value={moduleFilter}
               onChange={(event) => onModuleFilterChange(event.target.value)}
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"

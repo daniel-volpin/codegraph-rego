@@ -81,7 +81,6 @@ const SearchPage = () => {
         </form>
       </Card>
 
-      {/* ── Empty state: show before any search ─────────── */}
       {!result && !searchPending && (
         <Card className="px-6 py-10 text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-indigo-50">
