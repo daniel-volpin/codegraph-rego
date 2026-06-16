@@ -38,6 +38,14 @@ class LifecycleReasonCode(StrEnum):
     SAFETY_GATE_REJECTION = "safety_gate_rejection"
 
 
+class NearMissKind(StrEnum):
+    DYNAMIC_IDENTIFIER = "dynamic_identifier"
+    DYNAMIC_ORDER_BY = "dynamic_order_by"
+    DYNAMIC_OPERATOR = "dynamic_operator"
+    DYNAMIC_CLAUSE = "dynamic_clause"
+    RESIDUAL_DYNAMIC_SQL = "residual_dynamic_sql"
+
+
 class TransformationStrategy(StrEnum):
     TYPED_STRUCTURED_EDITS = "typed_structured_edits"
     AST_AWARE = "ast_aware"
@@ -100,6 +108,7 @@ class ShadowRemediationLifecycle(BaseModel):
     patch_artifact: PatchArtifact | None = None
     executable_scaffold: ExecutableScaffoldArtifact | None = None
     structured_repair_plan: StructuredRepairPlanArtifact | None = None
+    near_miss_classification: NearMissKind | None = None
     reason_codes: list[LifecycleReasonCode] = Field(default_factory=list)
     pipeline_checks: list[ValidatorResult] = Field(default_factory=list)
     semantic_validators: list[ValidatorResult] = Field(default_factory=list)

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
+import json
 import logging
 import tempfile
 from pathlib import Path
 from typing import Any
+
+import javalang  # type: ignore[import-untyped]
 
 from codegraph.config import settings
 from codegraph.policy.integration import PolicyEvaluator
@@ -15,6 +19,7 @@ from codegraph.remediation.result_models import (
     ArtifactKind,
     Disposition,
     LifecycleReasonCode,
+    NearMissKind,
     PatchArtifact,
     ShadowError,
     ShadowRemediationLifecycle,
@@ -43,6 +48,40 @@ def _diff(before: str, after: str, label: str) -> str:
 def _language_from_context(context: dict[str, Any]) -> str:
     file_path = str(context.get("file_path") or "")
     return "java" if file_path.endswith(".java") else "unknown"
+
+
+def _normalize_file_path(file_path: str) -> str:
+    path = Path(file_path)
+    parts = list(path.parts)
+    for marker in ("src", "uploaded_code"):
+        if marker in parts:
+            return Path(*parts[parts.index(marker) :]).as_posix()
+    return path.name or path.as_posix().lstrip("/")
+
+
+def _shadow_reproducibility_key(context: dict[str, Any], payload: dict[str, Any]) -> str:
+    normalized = {
+        "rule_id": str(context.get("rule_id") or "unknown"),
+        "file_path": _normalize_file_path(str(context.get("file_path") or "unknown")),
+        "target_method": str(context.get("target_method") or "unknown"),
+        "source": str(context.get("exact_method_source") or ""),
+        "payload": payload,
+    }
+    encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _java_parse_validator(updated_source_code: str) -> ValidatorResult:
+    try:
+        javalang.parse.parse(updated_source_code)
+    except Exception as exc:
+        return ValidatorResult(
+            validator_id="pipeline.java_parse",
+            state=ValidatorState.FAIL,
+            required=True,
+            message=str(exc),
+        )
+    return ValidatorResult(validator_id="pipeline.java_parse", state=ValidatorState.PASS, required=True)
 
 
 def _shadow_registry():
@@ -82,6 +121,18 @@ def maybe_attach_shadow_result(
 
 def build_shadow_error_lifecycle(context: dict[str, Any], message: str) -> ShadowRemediationLifecycle:
     strategy = TransformationStrategy.BOUNDED_DETERMINISTIC_TEXT
+    payload = {
+        "plugin_id": "shadow-runtime",
+        "plugin_version": "1.0.0",
+        "supported_rule_id": str(context.get("rule_id") or "unknown"),
+        "language": _language_from_context(context),
+        "transformation_strategy": strategy.value,
+        "artifact_kind": ArtifactKind.NONE.value,
+        "disposition": Disposition.ABSTAIN.value,
+        "recommended_disposition": Disposition.ABSTAIN.value,
+        "reason_codes": [LifecycleReasonCode.TRANSFORMATION_FAILURE.value],
+        "shadow_error": ShadowError(code="shadow_exception", message=message).model_dump(mode="json"),
+    }
     return ShadowRemediationLifecycle(
         plugin_id="shadow-runtime",
         plugin_version="1.0.0",
@@ -92,7 +143,7 @@ def build_shadow_error_lifecycle(context: dict[str, Any], message: str) -> Shado
         disposition=Disposition.ABSTAIN,
         recommended_disposition=Disposition.ABSTAIN,
         reason_codes=[LifecycleReasonCode.TRANSFORMATION_FAILURE],
-        reproducibility_key=f"shadow-error:{context.get('violation', {}).get('violation_id', 'unknown')}",
+        reproducibility_key=_shadow_reproducibility_key(context, payload),
         shadow_error=ShadowError(code="shadow_exception", message=message),
     )
 
@@ -170,9 +221,10 @@ def run_shadow_lifecycle(
                     [
                         ValidatorResult(validator_id="pipeline.target_file_anchor", state=ValidatorState.PASS, required=True),
                         ValidatorResult(validator_id="pipeline.patch_apply", state=ValidatorState.PASS, required=True),
-                        ValidatorResult(validator_id="pipeline.java_parse", state=ValidatorState.PASS, required=True),
                     ]
                 )
+                if proposal.patch_pattern is not None and proposal.patch_pattern.pipeline_verification.require_parse:
+                    pipeline_checks.append(_java_parse_validator(updated_source_code))
             except Exception as exc:
                 pipeline_checks.extend(
                     [
@@ -266,6 +318,32 @@ def run_shadow_lifecycle(
         if proposal.patch_pattern is not None
         else TransformationStrategy.TYPED_STRUCTURED_EDITS
     )
+    near_miss_raw = proposal.details.get("near_miss_classification")
+    near_miss_classification = NearMissKind(near_miss_raw) if isinstance(near_miss_raw, str) and near_miss_raw else None
+    lifecycle_payload = {
+        "plugin_id": plugin.descriptor.plugin_id,
+        "plugin_version": plugin.descriptor.plugin_version,
+        "supported_rule_id": str(context.get("rule_id") or ""),
+        "language": _language_from_context(context),
+        "repair_pattern_id": proposal.patch_pattern.pattern_id if proposal.patch_pattern else None,
+        "repair_pattern_version": proposal.patch_pattern.pattern_version if proposal.patch_pattern else None,
+        "transformation_strategy": transformation_strategy.value,
+        "artifact_kind": proposal.artifact_kind.value,
+        "disposition": proposal.disposition.value,
+        "recommended_disposition": recommended_disposition.value,
+        "pipeline_verified": pipeline_ok,
+        "assurance_verified": assurance_ok,
+        "auto_apply_eligible": auto_apply_eligible,
+        "evidence_complete": proposal.evidence_complete,
+        "project_policy_dependency_resolved": proposal.project_policy_dependency_resolved,
+        "patch_artifact": patch_artifact.model_dump(mode="json") if patch_artifact is not None else None,
+        "executable_scaffold": proposal.executable_scaffold.model_dump(mode="json") if proposal.executable_scaffold is not None else None,
+        "structured_repair_plan": proposal.structured_repair_plan.model_dump(mode="json") if proposal.structured_repair_plan is not None else None,
+        "near_miss_classification": near_miss_classification.value if near_miss_classification else None,
+        "reason_codes": [code.value for code in list(dict.fromkeys(reason_codes))],
+        "pipeline_checks": [validator.model_dump(mode="json") for validator in pipeline_checks],
+        "semantic_validators": [validator.model_dump(mode="json") for validator in semantic_validators],
+    }
     return ShadowRemediationLifecycle(
         plugin_id=plugin.descriptor.plugin_id,
         plugin_version=plugin.descriptor.plugin_version,
@@ -285,8 +363,9 @@ def run_shadow_lifecycle(
         patch_artifact=patch_artifact,
         executable_scaffold=proposal.executable_scaffold,
         structured_repair_plan=proposal.structured_repair_plan,
+        near_miss_classification=near_miss_classification,
         reason_codes=list(dict.fromkeys(reason_codes)),
         pipeline_checks=pipeline_checks,
         semantic_validators=semantic_validators,
-        reproducibility_key=str(proposal.details.get("reproducibility_key") or f"{plugin.descriptor.plugin_id}:none"),
+        reproducibility_key=_shadow_reproducibility_key(context, lifecycle_payload),
     )

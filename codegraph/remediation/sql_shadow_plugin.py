@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, cast
 
@@ -35,6 +36,7 @@ from codegraph.remediation.result_models import (
     ArtifactKind,
     Disposition,
     LifecycleReasonCode,
+    NearMissKind,
     PatchArtifact,
     StructuredRepairPlanArtifact,
     TransformationStrategy,
@@ -70,6 +72,108 @@ def _normalize_file_path(file_path: str) -> str:
     return path.name or path.as_posix().lstrip("/")
 
 
+def _java_string_literal(value: str) -> str:
+    escaped = json.dumps(value, ensure_ascii=True)
+    return escaped
+
+
+def _type_name(type_node: Any) -> str:
+    name = str(getattr(type_node, "name", type_node))
+    sub_type = getattr(type_node, "sub_type", None)
+    while sub_type is not None:
+        name = f"{name}.{getattr(sub_type, 'name', sub_type)}"
+        sub_type = getattr(sub_type, "sub_type", None)
+    return name
+
+
+def _block_for_statement(method_lines: list[str], start_line: int) -> tuple[int, list[str]]:
+    end_line = start_line
+    collected: list[str] = []
+    for idx in range(start_line - 1, len(method_lines)):
+        collected.append(method_lines[idx])
+        end_line = idx + 1
+        if ";" in method_lines[idx]:
+            break
+    return end_line, collected
+
+
+def _line_indent(line: str) -> str:
+    match = re.match(r"\s*", line)
+    return match.group(0) if match else ""
+
+
+def _statement_text(lines: list[str]) -> str:
+    return "\n".join(lines)
+
+
+def _replace_execute_invocation_text(statement_text: str, statement_var: str, execute_method: str) -> str:
+    pattern = re.compile(
+        rf"(?P<prefix>\breturn\s+)?{re.escape(statement_var)}\s*\.\s*(?P<member>{execute_method})\s*\((?P<args>.*?)\)",
+        re.DOTALL,
+    )
+    match = pattern.search(statement_text)
+    if match is None:
+        return statement_text
+    prefix = match.group("prefix") or ""
+    replacement = f"{prefix}{statement_var}.{match.group('member')}()"
+    return f"{statement_text[:match.start()]}{replacement}{statement_text[match.end():]}"
+
+
+def _binding_index_value(node: Any) -> int | None:
+    literal_value = getattr(node, "value", None)
+    if literal_value is None:
+        return None
+    try:
+        return int(str(literal_value))
+    except ValueError:
+        return None
+
+
+def _binding_expression_text(node: Any) -> str | None:
+    if isinstance(node, MemberReference):
+        if node.qualifier:
+            return f"{node.qualifier}.{node.member}"
+        return str(node.member)
+    return None
+
+
+def _count_sql_placeholders(sql_literal: str) -> tuple[int, list[tuple[int, NearMissKind | None]]]:
+    count = 0
+    positions: list[tuple[int, NearMissKind | None]] = []
+    in_single_quote = False
+    idx = 0
+    while idx < len(sql_literal):
+        char = sql_literal[idx]
+        if char == "'":
+            if in_single_quote and idx + 1 < len(sql_literal) and sql_literal[idx + 1] == "'":
+                idx += 2
+                continue
+            in_single_quote = not in_single_quote
+        elif char == "?" and not in_single_quote:
+            count += 1
+            positions.append((idx, None))
+        idx += 1
+    return count, positions
+
+
+def _actual_edit_scope(original_source: str, updated_source: str) -> dict[str, Any]:
+    original_lines = original_source.splitlines()
+    updated_lines = updated_source.splitlines()
+    matcher = SequenceMatcher(a=original_lines, b=updated_lines)
+    changed_lines: list[int] = []
+    for tag, _i1, _i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        changed_lines.extend(range(j1 + 1, j2 + 1))
+    if not changed_lines:
+        return {"changed_line_count": 0, "changed_lines": [], "changed_span": 0}
+    return {
+        "changed_line_count": len(changed_lines),
+        "changed_lines": changed_lines,
+        "changed_span": changed_lines[-1] - changed_lines[0] + 1,
+    }
+
+
 class JdbcSqlShadowPlugin:
     descriptor = PluginDescriptor(
         plugin_id="jdbc-sql-shadow",
@@ -88,6 +192,7 @@ class JdbcSqlShadowPlugin:
                 transformation_strategy=TransformationStrategy.TYPED_STRUCTURED_EDITS,
                 max_edit_scope_lines=4,
                 mandatory_semantic_validators=[
+                    "sql.prepared_statement_declared",
                     "sql.constant_structure",
                     "sql.placeholder_count",
                     "sql.binding_order",
@@ -103,7 +208,7 @@ class JdbcSqlShadowPlugin:
                     require_parse=True,
                     require_policy_recheck=True,
                 ),
-                auto_apply_capable=True,
+                auto_apply_capable=False,
             ),
             RepairPatternContract(
                 pattern_id="SQL-VAL-002",
@@ -116,6 +221,7 @@ class JdbcSqlShadowPlugin:
                 transformation_strategy=TransformationStrategy.TYPED_STRUCTURED_EDITS,
                 max_edit_scope_lines=4,
                 mandatory_semantic_validators=[
+                    "sql.prepared_statement_declared",
                     "sql.constant_structure",
                     "sql.placeholder_count",
                     "sql.binding_order",
@@ -131,7 +237,7 @@ class JdbcSqlShadowPlugin:
                     require_parse=True,
                     require_policy_recheck=True,
                 ),
-                auto_apply_capable=True,
+                auto_apply_capable=False,
             ),
         ],
     )
@@ -164,6 +270,7 @@ class JdbcSqlShadowPlugin:
         normalized_file_path = _normalize_file_path(file_path)
         if not source.strip():
             return self._plan_fallback(
+                context=context,
                 summary="Exact method source is required for bounded SQL repair.",
                 reason=LifecycleReasonCode.INSUFFICIENT_EVIDENCE,
             )
@@ -171,6 +278,7 @@ class JdbcSqlShadowPlugin:
         method, line_offset = self._parse_method(source)
         if method is None:
             return self._plan_fallback(
+                context=context,
                 summary="Method snippet could not be parsed for deterministic SQL transformation.",
                 reason=LifecycleReasonCode.INSUFFICIENT_EVIDENCE,
             )
@@ -179,13 +287,19 @@ class JdbcSqlShadowPlugin:
         match = self._find_sql_candidate(method, source.splitlines(), symbol_types, line_offset)
         if match is None:
             return self._plan_fallback(
+                context=context,
                 summary="SQL query shape is outside the bounded JDBC parameterization patterns.",
                 reason=LifecycleReasonCode.UNSUPPORTED_REPAIR_PATTERN,
             )
         if match.get("reason_code") is not None:
             reason_code = match["reason_code"]
             summary = str(match.get("summary") or "SQL remediation candidate was rejected.")
-            return self._plan_fallback(summary=summary, reason=reason_code)
+            return self._plan_fallback(
+                context=context,
+                summary=summary,
+                reason=reason_code,
+                near_miss_classification=match.get("near_miss_classification"),
+            )
 
         method_lines = source.splitlines()
         operations: list[RepairOperation] = []
@@ -245,71 +359,204 @@ class JdbcSqlShadowPlugin:
                     message="Patch proposals must include both patch_pattern and repair_intent.",
                 )
             ]
-        details = proposal.details
-        bindings = list(details.get("bindings") or [])
-        placeholder_count = int(details.get("placeholder_count") or 0)
-        statement_var = str(details.get("statement_var") or "stmt")
         method_source = updated_method_source or ""
+        if not method_source.strip():
+            return [
+                ValidatorResult(
+                    validator_id="sql.prepared_statement_declared",
+                    state=ValidatorState.ERROR,
+                    required=True,
+                    message="Updated method source is required for semantic validation.",
+                )
+            ]
 
+        evidence = self._semantic_evidence_from_method_source(method_source)
+        original_source = str(context.get("exact_method_source") or "")
+        scope = _actual_edit_scope(original_source, method_source)
+
+        if evidence.get("parse_error"):
+            validators = [
+                ValidatorResult(
+                    validator_id="sql.prepared_statement_declared",
+                    state=ValidatorState.FAIL,
+                    required=True,
+                    message=str(evidence["parse_error"]),
+                ),
+                ValidatorResult(
+                    validator_id="sql.edit_scope",
+                    state=ValidatorState.FAIL if scope["changed_line_count"] == 0 else ValidatorState.PASS,
+                    required=True,
+                    details=scope,
+                ),
+            ]
+            validators.append(
+                ValidatorResult(
+                    validator_id="sql.proposal_consistency",
+                    state=ValidatorState.NOT_APPLICABLE,
+                    required=False,
+                )
+            )
+            return validators
+
+        derived_bindings = list(evidence.get("bindings") or [])
+        derived_binding_indexes = [binding["index"] for binding in derived_bindings]
+        placeholder_count = int(evidence.get("placeholder_count") or 0)
+        unresolved_symbols = list(evidence.get("unresolved_symbols") or [])
+        invalid_placeholder_contexts = list(evidence.get("invalid_placeholder_contexts") or [])
         max_edit_scope_lines = proposal.patch_pattern.max_edit_scope_lines
-        operation_count = len(proposal.repair_intent.operations)
         validators = [
             ValidatorResult(
-                validator_id="sql.constant_structure",
-                state=ValidatorState.PASS if "+" not in str(details.get("parameterized_sql") or "") else ValidatorState.FAIL,
+                validator_id="sql.prepared_statement_declared",
+                state=ValidatorState.PASS if evidence.get("prepared_statement_var") else ValidatorState.FAIL,
                 required=True,
-                details={"sql": details.get("parameterized_sql")},
+                details={
+                    "prepared_statement_var": evidence.get("prepared_statement_var"),
+                    "sql_variable": evidence.get("sql_variable"),
+                },
+            ),
+            ValidatorResult(
+                validator_id="sql.constant_structure",
+                state=ValidatorState.PASS if evidence.get("sql_literal") and not evidence.get("dynamic_sql_source") else ValidatorState.FAIL,
+                required=True,
+                details={"sql_literal": evidence.get("sql_literal")},
             ),
             ValidatorResult(
                 validator_id="sql.placeholder_count",
-                state=ValidatorState.PASS if placeholder_count == len(bindings) else ValidatorState.FAIL,
+                state=ValidatorState.PASS if placeholder_count == len(derived_bindings) else ValidatorState.FAIL,
                 required=True,
-                details={"placeholders": placeholder_count, "bindings": len(bindings)},
+                details={"placeholders": placeholder_count, "bindings": len(derived_bindings)},
             ),
             ValidatorResult(
                 validator_id="sql.binding_order",
-                state=ValidatorState.PASS if [binding["index"] for binding in bindings] == list(range(1, len(bindings) + 1)) else ValidatorState.FAIL,
+                state=(
+                    ValidatorState.PASS
+                    if derived_binding_indexes == list(range(1, len(derived_bindings) + 1))
+                    else ValidatorState.FAIL
+                ),
                 required=True,
+                details={"binding_indexes": derived_binding_indexes},
             ),
             ValidatorResult(
                 validator_id="sql.binding_types",
-                state=ValidatorState.PASS if all(binding.get("binding_method") in self._BINDING_METHODS.values() for binding in bindings) else ValidatorState.FAIL,
+                state=(
+                    ValidatorState.PASS
+                    if derived_bindings and all(binding["binding_method"] in self._BINDING_METHODS.values() for binding in derived_bindings)
+                    else ValidatorState.FAIL
+                ),
                 required=True,
+                details={"bindings": derived_bindings},
             ),
             ValidatorResult(
                 validator_id="sql.executed_prepared_statement",
                 state=(
                     ValidatorState.PASS
-                    if (
-                        f"{statement_var}.executeQuery()" in method_source
-                        or f"{statement_var}.executeUpdate()" in method_source
-                    )
+                    if evidence.get("executed_statement_var") == evidence.get("prepared_statement_var")
+                    and evidence.get("executed_method") in {"executeQuery", "executeUpdate"}
                     else ValidatorState.FAIL
                 ),
                 required=True,
+                details={
+                    "executed_statement_var": evidence.get("executed_statement_var"),
+                    "executed_method": evidence.get("executed_method"),
+                },
             ),
             ValidatorResult(
                 validator_id="sql.dynamic_sink_removed",
-                state=ValidatorState.PASS if not re.search(r"execute(?:Query|Update)\s*\([^)]*\+", method_source) else ValidatorState.FAIL,
+                state=(
+                    ValidatorState.PASS
+                    if not evidence.get("statement_declarations") and not evidence.get("dynamic_execute_calls")
+                    else ValidatorState.FAIL
+                ),
                 required=True,
+                details={
+                    "statement_declarations": evidence.get("statement_declarations"),
+                    "dynamic_execute_calls": evidence.get("dynamic_execute_calls"),
+                },
             ),
             ValidatorResult(
                 validator_id="sql.no_forbidden_dynamic_clause",
-                state=ValidatorState.PASS if not any(keyword in str(details.get("rejected_context") or "") for keyword in ["identifier", "order_by", "operator", "clause"]) else ValidatorState.FAIL,
+                state=ValidatorState.PASS if not invalid_placeholder_contexts and not evidence.get("dynamic_sql_source") else ValidatorState.FAIL,
                 required=True,
+                details={
+                    "invalid_placeholder_contexts": invalid_placeholder_contexts,
+                    "dynamic_sql_source": evidence.get("dynamic_sql_source"),
+                },
             ),
             ValidatorResult(
                 validator_id="sql.edit_scope",
-                state=ValidatorState.PASS if operation_count <= max_edit_scope_lines else ValidatorState.FAIL,
+                state=(
+                    ValidatorState.PASS
+                    if 0 < scope["changed_line_count"] <= max_edit_scope_lines
+                    else ValidatorState.FAIL
+                ),
                 required=True,
+                details=scope,
             ),
             ValidatorResult(
                 validator_id="sql.no_invented_symbols",
-                state=ValidatorState.PASS if not details.get("invented_symbols") else ValidatorState.FAIL,
+                state=ValidatorState.PASS if not unresolved_symbols else ValidatorState.FAIL,
                 required=True,
+                details={"unresolved_symbols": unresolved_symbols},
             ),
         ]
+
+        proposal_bindings = list(proposal.details.get("bindings") or [])
+        validators.append(
+            ValidatorResult(
+                validator_id="sql.proposal_consistency",
+                state=(
+                    ValidatorState.PASS
+                    if proposal.details.get("parameterized_sql") == evidence.get("sql_literal")
+                    and proposal_bindings == derived_bindings
+                    else ValidatorState.FAIL
+                ),
+                required=False,
+                details={
+                    "proposal_sql": proposal.details.get("parameterized_sql"),
+                    "derived_sql": evidence.get("sql_literal"),
+                },
+            )
+        )
         return validators
+
+    def _semantic_evidence_from_method_source(self, method_source: str) -> dict[str, Any]:
+        method, line_offset = self._parse_method(method_source)
+        if method is None:
+            return {"parse_error": "Patched method source could not be parsed for semantic validation."}
+
+        declared_symbols = self._collect_declared_symbols(method)
+        string_literals = self._collect_string_literals(method)
+        prepared_statement = self._find_prepared_statement(method, string_literals, line_offset)
+        if prepared_statement is None:
+            return {
+                "prepared_statement_var": None,
+                "statement_declarations": self._find_statement_declarations(method),
+                "dynamic_execute_calls": self._find_dynamic_execute_calls(method),
+                "unresolved_symbols": [],
+                "dynamic_sql_source": True,
+                "invalid_placeholder_contexts": [],
+                "bindings": [],
+                "placeholder_count": 0,
+            }
+
+        bindings, unresolved_symbols = self._find_bindings(method, prepared_statement["statement_var"], declared_symbols)
+        executed_statement_var, executed_method = self._find_executed_statement(method)
+        placeholder_count, invalid_placeholder_contexts = self._validate_sql_literal(prepared_statement["sql_literal"])
+        unresolved_symbols.extend(symbol for symbol in prepared_statement["unresolved_symbols"] if symbol not in unresolved_symbols)
+        return {
+            "prepared_statement_var": prepared_statement["statement_var"],
+            "sql_variable": prepared_statement["sql_variable"],
+            "sql_literal": prepared_statement["sql_literal"],
+            "statement_declarations": self._find_statement_declarations(method),
+            "dynamic_execute_calls": self._find_dynamic_execute_calls(method),
+            "dynamic_sql_source": prepared_statement["dynamic_sql_source"],
+            "bindings": bindings,
+            "placeholder_count": placeholder_count,
+            "invalid_placeholder_contexts": invalid_placeholder_contexts,
+            "executed_statement_var": executed_statement_var,
+            "executed_method": executed_method,
+            "unresolved_symbols": unresolved_symbols,
+        }
 
     def _parse_method(self, source: str) -> tuple[MethodDeclaration | None, int]:
         wrapped = f"class ShadowSqlPlugin {{\n{source}\n}}"
@@ -324,13 +571,158 @@ class JdbcSqlShadowPlugin:
         symbol_types: dict[str, str] = {}
         for parameter in getattr(method, "parameters", []) or []:
             if getattr(parameter, "name", None) and getattr(parameter, "type", None):
-                symbol_types[str(parameter.name)] = str(getattr(parameter.type, "name", parameter.type))
+                symbol_types[str(parameter.name)] = _type_name(parameter.type)
         for _, node in method:
             if isinstance(node, LocalVariableDeclaration):
-                type_name = str(getattr(node.type, "name", node.type))
+                type_name = _type_name(node.type)
                 for declarator in node.declarators:
                     symbol_types[str(declarator.name)] = type_name
         return symbol_types
+
+    def _collect_declared_symbols(self, method: MethodDeclaration) -> set[str]:
+        declared_symbols = {str(parameter.name) for parameter in getattr(method, "parameters", []) or [] if getattr(parameter, "name", None)}
+        for _, node in method:
+            if isinstance(node, LocalVariableDeclaration):
+                for declarator in node.declarators:
+                    declared_symbols.add(str(declarator.name))
+        return declared_symbols
+
+    def _collect_string_literals(self, method: MethodDeclaration) -> dict[str, str]:
+        string_literals: dict[str, str] = {}
+        for _, node in method:
+            if not isinstance(node, LocalVariableDeclaration):
+                continue
+            if _type_name(node.type) not in {"String", "java.lang.String"}:
+                continue
+            for declarator in node.declarators:
+                initializer = declarator.initializer
+                if isinstance(initializer, Literal):
+                    string_literals[str(declarator.name)] = _decode_java_string(str(initializer.value))
+        return string_literals
+
+    def _find_prepared_statement(
+        self,
+        method: MethodDeclaration,
+        string_literals: dict[str, str],
+        line_offset: int,
+    ) -> dict[str, Any] | None:
+        for _, node in method:
+            if not isinstance(node, LocalVariableDeclaration):
+                continue
+            if not _type_name(node.type).endswith("PreparedStatement"):
+                continue
+            for declarator in node.declarators:
+                initializer = declarator.initializer
+                if not isinstance(initializer, MethodInvocation) or initializer.member != "prepareStatement":
+                    continue
+                if len(initializer.arguments or []) != 1:
+                    continue
+                sql_argument = initializer.arguments[0]
+                unresolved_symbols: list[str] = []
+                sql_literal: str | None = None
+                sql_variable: str | None = None
+                dynamic_sql_source = False
+                if isinstance(sql_argument, Literal):
+                    sql_literal = _decode_java_string(str(sql_argument.value))
+                elif isinstance(sql_argument, MemberReference):
+                    sql_variable = _member_ref_text(sql_argument)
+                    if sql_variable is None or sql_variable not in string_literals:
+                        dynamic_sql_source = True
+                        if sql_variable is not None:
+                            unresolved_symbols.append(sql_variable)
+                    else:
+                        sql_literal = string_literals[sql_variable]
+                else:
+                    dynamic_sql_source = True
+                return {
+                    "statement_var": str(declarator.name),
+                    "sql_variable": sql_variable,
+                    "sql_literal": sql_literal,
+                    "dynamic_sql_source": dynamic_sql_source or sql_literal is None,
+                    "unresolved_symbols": unresolved_symbols,
+                    "line": (node.position.line - line_offset) if node.position else None,
+                }
+        return None
+
+    def _find_statement_declarations(self, method: MethodDeclaration) -> list[str]:
+        declarations: list[str] = []
+        for _, node in method:
+            if not isinstance(node, LocalVariableDeclaration):
+                continue
+            if _type_name(node.type).endswith("Statement") and not _type_name(node.type).endswith("PreparedStatement"):
+                for declarator in node.declarators:
+                    declarations.append(str(declarator.name))
+        return declarations
+
+    def _find_dynamic_execute_calls(self, method: MethodDeclaration) -> list[str]:
+        calls: list[str] = []
+        for _, node in method:
+            if isinstance(node, MethodInvocation) and node.member in {"executeQuery", "executeUpdate"} and len(node.arguments or []) > 0:
+                calls.append(str(node.qualifier or "unknown"))
+        return calls
+
+    def _find_bindings(
+        self,
+        method: MethodDeclaration,
+        statement_var: str,
+        declared_symbols: set[str],
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        bindings: list[dict[str, Any]] = []
+        unresolved_symbols: list[str] = []
+        for _, node in method:
+            if not isinstance(node, MethodInvocation) or node.qualifier != statement_var:
+                continue
+            if not node.member.startswith("set") or len(node.arguments or []) != 2:
+                continue
+            index = _binding_index_value(node.arguments[0])
+            expression = _binding_expression_text(node.arguments[1])
+            if expression is None:
+                unresolved_symbols.append(f"unsupported:{node.member}")
+                continue
+            if "." in expression:
+                unresolved_symbols.append(expression)
+            elif expression not in declared_symbols:
+                unresolved_symbols.append(expression)
+            bindings.append(
+                {
+                    "index": index,
+                    "expression": expression,
+                    "binding_method": str(node.member),
+                }
+            )
+        bindings.sort(key=lambda binding: (binding["index"] is None, binding["index"] or 0, binding["expression"]))
+        return bindings, unresolved_symbols
+
+    def _find_executed_statement(self, method: MethodDeclaration) -> tuple[str | None, str | None]:
+        executed_calls: list[tuple[int, str | None, str]] = []
+        for _, node in method:
+            if not isinstance(node, MethodInvocation) or node.member not in {"executeQuery", "executeUpdate"}:
+                continue
+            if len(node.arguments or []) != 0:
+                continue
+            line = node.position.line if node.position is not None else 0
+            executed_calls.append((line, str(node.qualifier) if node.qualifier else None, str(node.member)))
+        if not executed_calls:
+            return None, None
+        executed_calls.sort(key=lambda item: item[0])
+        _line, qualifier, member = executed_calls[-1]
+        return qualifier, member
+
+    def _validate_sql_literal(self, sql_literal: str | None) -> tuple[int, list[dict[str, Any]]]:
+        if sql_literal is None:
+            return 0, [{"classification": NearMissKind.RESIDUAL_DYNAMIC_SQL.value, "position": None}]
+        placeholder_count, placeholders = _count_sql_placeholders(sql_literal)
+        invalid_contexts: list[dict[str, Any]] = []
+        for position, _ in placeholders:
+            value_context, near_miss = self._classify_value_context(sql_literal[:position], sql_literal[position + 1 :])
+            if value_context is None:
+                invalid_contexts.append(
+                    {
+                        "classification": (near_miss or NearMissKind.RESIDUAL_DYNAMIC_SQL).value,
+                        "position": position,
+                    }
+                )
+        return placeholder_count, invalid_contexts
 
     def _find_sql_candidate(
         self,
@@ -405,40 +797,46 @@ class JdbcSqlShadowPlugin:
             parameterized_sql = str(pattern["parameterized_sql"])
             bindings = list(pattern["bindings"])
             execute_method = str(node.member)
-            statement_original = method_lines[statement_line - 1]
-            execute_original = method_lines[execute_line - 1]
+            statement_end_line, statement_original_lines = _block_for_statement(method_lines, statement_line)
+            execute_end_line, execute_original_lines = _block_for_statement(method_lines, execute_line)
             edits: list[dict[str, Any]] = []
 
             if query_line is not None:
-                query_original = method_lines[query_line - 1]
-                query_replacement = re.sub(r"=.*;", f' = "{parameterized_sql}";', query_original, count=1)
+                query_end_line, query_original_lines = _block_for_statement(method_lines, query_line)
+                query_replacement_lines = [
+                    f"{_line_indent(query_original_lines[0])}String {query_var_name} = {_java_string_literal(parameterized_sql)};"
+                ]
+                if query_replacement_lines == query_original_lines:
+                    return {
+                        "reason_code": LifecycleReasonCode.TRANSFORMATION_FAILURE,
+                        "summary": "Query literal replacement produced no source change.",
+                    }
                 edits.append(
                     {
                         "start_line": query_line,
-                        "end_line": query_line,
-                        "original_lines": [query_original],
-                        "replacement_lines": [query_replacement],
+                        "end_line": query_end_line,
+                        "original_lines": query_original_lines,
+                        "replacement_lines": query_replacement_lines,
                     }
                 )
-                statement_replacement = re.sub(
-                    r"\bStatement\b\s+" + re.escape(statement_var) + r"\s*=\s*.+createStatement\s*\(\s*\)\s*;",
-                    f"java.sql.PreparedStatement {statement_var} = {connection_expr}.prepareStatement({query_var_name});",
-                    statement_original,
-                    count=1,
-                )
+                statement_replacement_lines = [
+                    f"{_line_indent(statement_original_lines[0])}java.sql.PreparedStatement {statement_var} = {connection_expr}.prepareStatement({query_var_name});"
+                ]
             else:
-                statement_replacement = re.sub(
-                    r"\bStatement\b\s+" + re.escape(statement_var) + r"\s*=\s*.+createStatement\s*\(\s*\)\s*;",
-                    f'java.sql.PreparedStatement {statement_var} = {connection_expr}.prepareStatement("{parameterized_sql}");',
-                    statement_original,
-                    count=1,
-                )
+                statement_replacement_lines = [
+                    f"{_line_indent(statement_original_lines[0])}java.sql.PreparedStatement {statement_var} = {connection_expr}.prepareStatement({_java_string_literal(parameterized_sql)});"
+                ]
+            if statement_replacement_lines == statement_original_lines:
+                return {
+                    "reason_code": LifecycleReasonCode.TRANSFORMATION_FAILURE,
+                    "summary": "PreparedStatement declaration replacement produced no source change.",
+                }
             edits.append(
                 {
                     "start_line": statement_line,
-                    "end_line": statement_line,
-                    "original_lines": [statement_original],
-                    "replacement_lines": [statement_replacement],
+                    "end_line": statement_end_line,
+                    "original_lines": statement_original_lines,
+                    "replacement_lines": statement_replacement_lines,
                 }
             )
 
@@ -446,30 +844,36 @@ class JdbcSqlShadowPlugin:
                 f'{statement_var}.{binding["binding_method"]}({binding["index"]}, {binding["expression"]});'
                 for binding in bindings
             ]
-            execute_replacement = re.sub(
-                r"execute(?:Query|Update)\s*\([^)]*\)",
-                f"{execute_method}()",
-                execute_original,
-                count=1,
+            execute_indent = _line_indent(execute_original_lines[0])
+            indented_binding_lines = [f"{execute_indent}{line}" for line in binding_lines]
+            execute_replacement = _replace_execute_invocation_text(
+                _statement_text(execute_original_lines),
+                statement_var,
+                execute_method,
             )
+            execute_replacement_lines = execute_replacement.splitlines()
+            if execute_replacement_lines == execute_original_lines:
+                return {
+                    "reason_code": LifecycleReasonCode.TRANSFORMATION_FAILURE,
+                    "summary": "Statement execution replacement produced no source change.",
+                }
             edits.append(
                 {
                     "start_line": execute_line,
-                    "end_line": execute_line,
-                    "original_lines": [execute_original],
-                    "replacement_lines": [*binding_lines, execute_replacement],
+                    "end_line": execute_end_line,
+                    "original_lines": execute_original_lines,
+                    "replacement_lines": [*indented_binding_lines, *execute_replacement_lines],
                 }
             )
             return {
                 "pattern_id": "SQL-VAL-001" if query_line is not None else "SQL-VAL-002",
                 "edits": edits,
                 "bindings": bindings,
-                "placeholder_count": parameterized_sql.count("?"),
+                "placeholder_count": self._validate_sql_literal(parameterized_sql)[0],
                 "parameterized_sql": parameterized_sql,
                 "statement_var": statement_var,
                 "connection_expr": connection_expr,
-                "rejected_context": None,
-                "invented_symbols": False,
+                "near_miss_classification": None,
                 "repro_inputs": {
                     "statement_var": statement_var,
                     "connection_expr": connection_expr,
@@ -522,12 +926,12 @@ class JdbcSqlShadowPlugin:
                 if isinstance(candidate, Literal):
                     next_literal = _decode_java_string(str(candidate.value))
                     break
-            value_context = self._classify_value_context(previous_literal, next_literal)
+            value_context, near_miss = self._classify_value_context(previous_literal, next_literal)
             if value_context is None:
                 return {
                     "reason_code": LifecycleReasonCode.UNSUPPORTED_REPAIR_PATTERN,
                     "summary": "SQL expression uses dynamic identifiers, clauses, or operators outside bounded value positions.",
-                    "rejected_context": f"prev={previous_literal!r};next={next_literal!r}",
+                    "near_miss_classification": near_miss,
                 }
             if value_context == "quoted" and output_parts:
                 output_parts[-1] = output_parts[-1][:-1]
@@ -546,41 +950,70 @@ class JdbcSqlShadowPlugin:
             return {
                 "reason_code": LifecycleReasonCode.UNSUPPORTED_REPAIR_PATTERN,
                 "summary": "Residual dynamic SQL fragments remain after parameterization.",
+                "near_miss_classification": NearMissKind.RESIDUAL_DYNAMIC_SQL,
             }
         return {
             "parameterized_sql": parameterized_sql,
             "bindings": bindings,
         }
 
-    def _classify_value_context(self, previous_literal: str, next_literal: str) -> str | None:
+    def _classify_value_context(self, previous_literal: str, next_literal: str) -> tuple[str | None, NearMissKind | None]:
         prev = previous_literal.rstrip()
         nxt = next_literal.lstrip()
-        if re.search(r"(?:from|join|into|update|table|order\s+by|group\s+by|select)\s*$", prev, re.IGNORECASE):
-            return None
+        if re.search(r"(?:order\s+by|group\s+by)\s*$", prev, re.IGNORECASE):
+            return None, NearMissKind.DYNAMIC_ORDER_BY
+        if re.search(r"(?:from|join|into|update|table|select)\s*$", prev, re.IGNORECASE):
+            return None, NearMissKind.DYNAMIC_IDENTIFIER
         if re.search(r"(?:where|and|or)\s*$", prev, re.IGNORECASE):
-            return None
+            return None, NearMissKind.DYNAMIC_CLAUSE
         if re.search(r"(?:=|<>|!=|<=|>=|<|>|like)\s*'$", prev, re.IGNORECASE):
-            return "quoted" if nxt.startswith("'") else None
+            return ("quoted", None) if nxt.startswith("'") else (None, NearMissKind.DYNAMIC_OPERATOR)
         if re.search(r"(?:=|<>|!=|<=|>=|<|>|like)\s*$", prev, re.IGNORECASE):
-            return "unquoted"
-        return None
+            return "unquoted", None
+        return None, NearMissKind.DYNAMIC_OPERATOR
 
-    def _plan_fallback(self, *, summary: str, reason: LifecycleReasonCode) -> PluginProposal:
+    def _plan_fallback(
+        self,
+        *,
+        context: dict[str, Any],
+        summary: str,
+        reason: LifecycleReasonCode,
+        near_miss_classification: NearMissKind | None = None,
+    ) -> PluginProposal:
+        structured_repair_plan = StructuredRepairPlanArtifact(
+            summary=summary,
+            steps=[
+                "Replace Statement-based execution with PreparedStatement in the same method.",
+                "Convert dynamic value concatenation into placeholders with ordered bindings.",
+                "Re-run policy verification and build checks before promoting the change.",
+            ],
+            assumptions=["Current method-local evidence was insufficient for a deterministic patch."],
+        )
+        payload = {
+            "artifact_kind": ArtifactKind.STRUCTURED_REPAIR_PLAN.value,
+            "disposition": Disposition.MANUAL_EXECUTION_REQUIRED.value,
+            "reason_codes": [reason.value],
+            "near_miss_classification": near_miss_classification.value if near_miss_classification else None,
+            "structured_repair_plan": structured_repair_plan.model_dump(mode="json"),
+        }
         return PluginProposal(
             artifact_kind=ArtifactKind.STRUCTURED_REPAIR_PLAN,
             disposition=Disposition.MANUAL_EXECUTION_REQUIRED,
-            structured_repair_plan=StructuredRepairPlanArtifact(
-                summary=summary,
-                steps=[
-                    "Replace Statement-based execution with PreparedStatement in the same method.",
-                    "Convert dynamic value concatenation into placeholders with ordered bindings.",
-                    "Re-run policy verification and build checks before promoting the change.",
-                ],
-                assumptions=["Current method-local evidence was insufficient for a deterministic patch."],
-            ),
+            structured_repair_plan=structured_repair_plan,
             reason_codes=[reason],
             evidence_complete=reason != LifecycleReasonCode.INSUFFICIENT_EVIDENCE,
             project_policy_dependency_resolved=True,
+            details={
+                "near_miss_classification": near_miss_classification.value if near_miss_classification else None,
+                "reproducibility_key": self._reproducibility_key(
+                    file_path=str(context.get("file_path") or "unknown"),
+                    target_method=str(context.get("target_method") or "unknown"),
+                    source=str(context.get("exact_method_source") or ""),
+                    pattern_id="abstain",
+                    pattern_version="1.0.0",
+                    details=payload,
+                ),
+            },
         )
 
     def _reproducibility_key(

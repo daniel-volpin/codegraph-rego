@@ -7,11 +7,70 @@ from codegraph.evaluation.remediation_runtime import (
     RemediationRuntime,
     build_metrics_payload,
     build_remediation_result,
+    build_shadow_metrics_payload,
     write_final_artifacts,
 )
 
 
 class TestRemediationRuntime(unittest.TestCase):
+    def test_shadow_metrics_count_near_misses_from_explicit_labels_or_classification_only(self) -> None:
+        metrics = build_shadow_metrics_payload(
+            [
+                {
+                    "shadow_lifecycle": {
+                        "artifact_kind": "patch",
+                        "recommended_disposition": "review_required",
+                        "repair_pattern_id": "SQL-VAL-001",
+                        "pipeline_verified": False,
+                        "assurance_verified": False,
+                        "auto_apply_eligible": False,
+                        "evidence_complete": True,
+                        "pipeline_checks": [],
+                        "semantic_validators": [],
+                        "reason_codes": [],
+                        "reproducibility_key": "a",
+                    },
+                    "shadow_comparison": {
+                        "llm": {"produced_edits": False},
+                    },
+                },
+                {
+                    "shadow_lifecycle": {
+                        "artifact_kind": "structured_repair_plan",
+                        "recommended_disposition": "manual_execution_required",
+                        "repair_pattern_id": "none",
+                        "pipeline_verified": False,
+                        "assurance_verified": False,
+                        "auto_apply_eligible": False,
+                        "evidence_complete": False,
+                        "near_miss_classification": "dynamic_order_by",
+                        "pipeline_checks": [],
+                        "semantic_validators": [],
+                        "reason_codes": [],
+                        "reproducibility_key": "b",
+                    }
+                },
+                {
+                    "shadow_lifecycle": {
+                        "artifact_kind": "structured_repair_plan",
+                        "recommended_disposition": "manual_execution_required",
+                        "repair_pattern_id": "none",
+                        "pipeline_verified": False,
+                        "assurance_verified": False,
+                        "auto_apply_eligible": False,
+                        "evidence_complete": False,
+                        "pipeline_checks": [],
+                        "semantic_validators": [],
+                        "reason_codes": [],
+                        "reproducibility_key": "c",
+                    },
+                    "shadow_fixture_labels": ["forbidden_near_miss"],
+                },
+            ]
+        )
+
+        self.assertEqual(metrics["forbidden_near_miss_patch_count"], 2)
+
     def test_runtime_writes_incremental_progress_and_case_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir) / "eval"

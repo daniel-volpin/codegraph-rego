@@ -390,11 +390,12 @@ def build_shadow_metrics_payload(results: Sequence[Mapping[str, Any]]) -> dict[s
         for validator in (lifecycle.get("pipeline_checks") or []) + (lifecycle.get("semantic_validators") or []):
             state = str((validator or {}).get("state") or "UNKNOWN")
             validator_state_counts[state] = validator_state_counts.get(state, 0) + 1
-        if artifact_kind == "patch":
-            comparison = item.get("shadow_comparison") or {}
-            llm_outcome = ((comparison or {}).get("llm") or {}) if isinstance(comparison, Mapping) else {}
-            if (llm_outcome.get("produced_edits") is False) and lifecycle.get("assurance_verified") is not True:
+        fixture_labels = item.get("shadow_fixture_labels")
+        if isinstance(fixture_labels, Sequence) and not isinstance(fixture_labels, (str, bytes)):
+            if "forbidden_near_miss" in fixture_labels:
                 forbidden_near_miss_patch_count += 1
+        elif lifecycle.get("near_miss_classification") is not None:
+            forbidden_near_miss_patch_count += 1
         repro_key = lifecycle.get("reproducibility_key")
         if not isinstance(repro_key, str) or not repro_key:
             deterministic_repro_failures += 1
