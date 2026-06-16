@@ -175,6 +175,7 @@ class TestRepairIntentSchemaCreation(unittest.TestCase):
             "constructor_replacement",
             "method_call_replacement",
             "import_adjustment",
+            "structured_edit",
             "no_repair",
         }
         self.assertEqual(set(RepairIntentKind), expected)
