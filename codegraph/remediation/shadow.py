@@ -5,8 +5,9 @@ import hashlib
 import json
 import logging
 import tempfile
+from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import javalang  # type: ignore[import-untyped]
 
@@ -31,6 +32,62 @@ from codegraph.remediation.sql_shadow_plugin import JdbcSqlShadowPlugin
 from codegraph.remediation.verification import build_build_validator, build_verification_summary, pipeline_verified
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _enforce_declared_mandatory_semantic_validators(
+    pattern: Any,
+    semantic_validators: list[ValidatorResult],
+) -> tuple[list[ValidatorResult], bool]:
+    if pattern is None:
+        return semantic_validators, False
+
+    enforced_validators = list(semantic_validators)
+    emitted_counts = Counter(validator.validator_id for validator in semantic_validators)
+    contract_ok = True
+
+    for validator_id, count in emitted_counts.items():
+        if count <= 1:
+            continue
+        contract_ok = False
+        enforced_validators.append(
+            ValidatorResult(
+                validator_id=f"semantic.contract.duplicate:{validator_id}",
+                state=ValidatorState.ERROR,
+                required=True,
+                message=f"Semantic validator '{validator_id}' was emitted {count} times.",
+                details={"duplicate_validator_id": validator_id, "duplicate_count": count},
+            )
+        )
+
+    declared_mandatory_ids = list(pattern.mandatory_semantic_validators)
+    if not declared_mandatory_ids:
+        required = [validator for validator in semantic_validators if validator.required]
+        return enforced_validators, bool(required) and contract_ok and all(
+            validator.state == ValidatorState.PASS for validator in required
+        )
+
+    emitted_by_id = {validator.validator_id: validator for validator in semantic_validators}
+    for validator_id in declared_mandatory_ids:
+        count = emitted_counts.get(validator_id, 0)
+        if count == 0:
+            contract_ok = False
+            enforced_validators.append(
+                ValidatorResult(
+                    validator_id=f"semantic.contract.missing:{validator_id}",
+                    state=ValidatorState.ERROR,
+                    required=True,
+                    message=f"Declared mandatory semantic validator '{validator_id}' was not emitted.",
+                    details={"declared_mandatory_validator_id": validator_id},
+                )
+            )
+            continue
+        if count != 1:
+            contract_ok = False
+            continue
+        if emitted_by_id[validator_id].state != ValidatorState.PASS:
+            contract_ok = False
+
+    return enforced_validators, contract_ok
 
 
 def _diff(before: str, after: str, label: str) -> str:
@@ -224,7 +281,10 @@ def run_shadow_lifecycle(
                     ]
                 )
                 if proposal.patch_pattern is not None and proposal.patch_pattern.pipeline_verification.require_parse:
-                    pipeline_checks.append(_java_parse_validator(updated_source_code))
+                    updated_source_code_nonnull = updated_source_code
+                    if updated_source_code_nonnull is None:
+                        raise ValueError("shadow patch application produced no updated source code")
+                    pipeline_checks.append(_java_parse_validator(cast(str, updated_source_code_nonnull)))
             except Exception as exc:
                 pipeline_checks.extend(
                     [
@@ -298,6 +358,12 @@ def run_shadow_lifecycle(
             proposal=proposal,
             updated_method_source=updated_method_source,
         )
+        semantic_validators, declared_mandatory_contract_ok = _enforce_declared_mandatory_semantic_validators(
+            proposal.patch_pattern,
+            semantic_validators,
+        )
+    else:
+        declared_mandatory_contract_ok = False
 
     if any(validator.required and validator.state != ValidatorState.PASS for validator in pipeline_checks):
         reason_codes.append(LifecycleReasonCode.PIPELINE_VERIFICATION_FAILURE)
@@ -307,8 +373,11 @@ def run_shadow_lifecycle(
         reason_codes.append(LifecycleReasonCode.UNRESOLVED_PROJECT_POLICY_DEPENDENCY)
 
     pipeline_ok = pipeline_verified(pipeline_checks)
-    mandatory_semantic_pass = bool(semantic_validators) and all(
-        validator.state == ValidatorState.PASS for validator in semantic_validators if validator.required
+    required_semantic_validators = [validator for validator in semantic_validators if validator.required]
+    mandatory_semantic_pass = (
+        declared_mandatory_contract_ok
+        and bool(required_semantic_validators)
+        and all(validator.state == ValidatorState.PASS for validator in required_semantic_validators)
     )
     assurance_ok = pipeline_ok and proposal.evidence_complete and proposal.project_policy_dependency_resolved and mandatory_semantic_pass
     auto_apply_eligible = bool(proposal.patch_pattern and proposal.patch_pattern.auto_apply_capable and assurance_ok)

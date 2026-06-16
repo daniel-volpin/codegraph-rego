@@ -13,13 +13,308 @@ from codegraph.remediation.plugin_types import (
     RepairPatternContract,
 )
 from codegraph.remediation.repair_intent import RepairIntent, RepairIntentKind, SourceSpan, StructuredEditOp
-from codegraph.remediation.result_models import ArtifactKind, Disposition, TransformationStrategy
+from codegraph.remediation.result_models import (
+    ArtifactKind,
+    Disposition,
+    TransformationStrategy,
+    ValidatorResult,
+    ValidatorState,
+)
 from codegraph.remediation.service import RemediationService
 from codegraph.remediation.shadow import maybe_attach_shadow_result
+from codegraph.remediation.sql_shadow_plugin import JdbcSqlShadowPlugin
 from codegraph.remediation.verification import BuildRequirement
 
 
 class ShadowIntegrationTests(unittest.TestCase):
+    def test_no_build_binding_type_mismatch_blocks_assurance(self) -> None:
+        sql_plugin = JdbcSqlShadowPlugin()
+
+        class WrongSetterPlugin:
+            descriptor = sql_plugin.descriptor
+
+            def propose(self, context: dict[str, object]) -> PluginProposal:
+                return PluginProposal(
+                    artifact_kind=ArtifactKind.PATCH,
+                    disposition=Disposition.REVIEW_REQUIRED,
+                    repair_intent=RepairIntent(
+                        kind=RepairIntentKind.STRUCTURED_EDIT,
+                        rule_id="ISO-A.8-SQL-INJECTION",
+                        support_tier="manual",
+                        target=SourceSpan(file_path=str(context["file_path"]), method_signature=str(context["target_method"])),
+                        operations=[
+                            StructuredEditOp(
+                                start_line=2,
+                                end_line=4,
+                                original_lines=[],
+                                replacement_lines=[],
+                            )
+                        ],
+                    ),
+                    patch_pattern=self.descriptor.patterns[0],
+                    evidence_complete=True,
+                    project_policy_dependency_resolved=True,
+                    details={
+                        "patch_artifact": {
+                            "target_file": str(context["file_path"]),
+                            "anchor_method": str(context["target_method"]),
+                            "edits": [
+                                {
+                                    "start_line": 2,
+                                    "end_line": 4,
+                                    "original_lines": [],
+                                    "replacement_lines": [],
+                                }
+                            ],
+                        },
+                    },
+                )
+
+            def evaluate_semantics(self, *, context, proposal, updated_method_source):
+                return sql_plugin.evaluate_semantics(
+                    context=context,
+                    proposal=proposal,
+                    updated_method_source=updated_method_source,
+                )
+
+        service = RemediationService(llm_client=lambda _messages, **_kwargs: "")
+        authoritative = {"status": "INVALID", "violation_id": "v1", "error": "unsupported"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            java_file = Path(tmp) / "Foo.java"
+            java_file.write_text(
+                """
+class Foo {
+  public java.sql.ResultSet find(java.sql.Connection conn, int age) throws Exception {
+    String sql = \"SELECT * FROM users WHERE age = \" + age;
+    java.sql.Statement stmt = conn.createStatement();
+    return stmt.executeQuery(sql);
+  }
+}
+""".strip(),
+                encoding="utf-8",
+            )
+            context = {
+                "rule_id": "ISO-A.8-SQL-INJECTION",
+                "violation": {"violation_id": "v1"},
+                "file_path": java_file.as_posix(),
+                "target_method": "Foo.find(Connection,int)",
+                "exact_method_source": """
+public java.sql.ResultSet find(java.sql.Connection conn, int age) throws Exception {
+    String sql = \"SELECT * FROM users WHERE age = \" + age;
+    java.sql.Statement stmt = conn.createStatement();
+    return stmt.executeQuery(sql);
+}
+""".strip(),
+                "baseline_violations": [{"violation_id": "ISO-A.8-SQL-INJECTION"}],
+            }
+
+            with (
+                patch("codegraph.remediation.shadow.settings", SimpleNamespace(remediation_shadow_lifecycle_enabled=True, remediation_shadow_sql_plugin_enabled=True)),
+                patch("codegraph.remediation.shadow._shadow_registry", return_value=SimpleNamespace(resolve=lambda **_kwargs: WrongSetterPlugin())),
+                patch("codegraph.remediation.shadow.PolicyEvaluator") as evaluator_cls,
+                patch.object(
+                    service,
+                    "_extract_method_span",
+                    return_value=(
+                        [
+                            "public java.sql.ResultSet find(java.sql.Connection conn, int age) throws Exception {",
+                            '    String sql = "SELECT * FROM users WHERE age = " + age;',
+                            "    java.sql.Statement stmt = conn.createStatement();",
+                            "    return stmt.executeQuery(sql);",
+                            "}",
+                        ],
+                        1,
+                        5,
+                        context["exact_method_source"],
+                    ),
+                ),
+                patch.object(
+                    service,
+                    "_apply_method_edits",
+                    return_value=(
+                        [
+                            "public java.sql.ResultSet find(java.sql.Connection conn, int age) throws Exception {",
+                            '    String sql = "SELECT * FROM users WHERE age = ?";',
+                            "    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);",
+                            "    stmt.setString(1, age);",
+                            "    return stmt.executeQuery();",
+                            "}",
+                        ],
+                        "public java.sql.ResultSet find(java.sql.Connection conn, int age) throws Exception {\n    String sql = \"SELECT * FROM users WHERE age = ?\";\n    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);\n    stmt.setString(1, age);\n    return stmt.executeQuery();\n}",
+                    ),
+                ),
+                patch.object(
+                    service,
+                    "_replace_method_in_source",
+                    return_value=(
+                        "class Foo {\npublic java.sql.ResultSet find(java.sql.Connection conn, int age) throws Exception {\n    String sql = \"SELECT * FROM users WHERE age = ?\";\n    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);\n    stmt.setString(1, age);\n    return stmt.executeQuery();\n}\n}",
+                        None,
+                        None,
+                    ),
+                ),
+            ):
+                evaluator_cls.return_value.evaluate.return_value = {"violations": []}
+                result = maybe_attach_shadow_result(service, context=context, authoritative_result=authoritative)
+
+        self.assertTrue(result["shadow_lifecycle"]["pipeline_verified"])
+        self.assertFalse(result["shadow_lifecycle"]["assurance_verified"])
+        self.assertFalse(result["shadow_lifecycle"]["auto_apply_eligible"])
+        binding_type_checks = [
+            check
+            for check in result["shadow_lifecycle"]["semantic_validators"]
+            if check["validator_id"] == "sql.binding_types"
+        ]
+        self.assertEqual(binding_type_checks[0]["state"], "FAIL")
+
+    def test_policy_recheck_is_universally_required_for_patch_lifecycle(self) -> None:
+        class PolicyRecheckPlugin:
+            descriptor = PluginDescriptor(
+                plugin_id="policy-recheck",
+                plugin_version="1.0.0",
+                supported_languages=["java"],
+                supported_rule_ids=["ISO-A.8-SQL-INJECTION"],
+                patterns=[
+                    RepairPatternContract(
+                        pattern_id="PATCH",
+                        pattern_version="1.0.0",
+                        transformation_strategy=TransformationStrategy.TYPED_STRUCTURED_EDITS,
+                        max_edit_scope_lines=1,
+                        mandatory_semantic_validators=["sql.ok"],
+                        pipeline_verification=PipelineVerificationContract(require_parse=True, build_requirement=BuildRequirement.NEVER),
+                        auto_apply_capable=False,
+                    )
+                ],
+            )
+
+            def propose(self, context: dict[str, object]) -> PluginProposal:
+                return PluginProposal(
+                    artifact_kind=ArtifactKind.PATCH,
+                    disposition=Disposition.REVIEW_REQUIRED,
+                    repair_intent=RepairIntent(
+                        kind=RepairIntentKind.STRUCTURED_EDIT,
+                        rule_id="ISO-A.8-SQL-INJECTION",
+                        support_tier="manual",
+                        target=SourceSpan(file_path=str(context["file_path"]), method_signature=str(context["target_method"])),
+                        operations=[
+                            StructuredEditOp(
+                                start_line=2,
+                                end_line=2,
+                                original_lines=['    String sql = "SELECT * FROM users WHERE name = " + name;'],
+                                replacement_lines=['    String sql = "SELECT * FROM users WHERE name = ?";'],
+                            )
+                        ],
+                    ),
+                    patch_pattern=self.descriptor.patterns[0],
+                    evidence_complete=True,
+                    project_policy_dependency_resolved=True,
+                    details={
+                        "patch_artifact": {
+                            "target_file": str(context["file_path"]),
+                            "anchor_method": str(context["target_method"]),
+                            "edits": [
+                                {
+                                    "start_line": 2,
+                                    "end_line": 2,
+                                    "original_lines": ['    String sql = "SELECT * FROM users WHERE name = " + name;'],
+                                    "replacement_lines": ['    String sql = "SELECT * FROM users WHERE name = ?";'],
+                                }
+                            ],
+                        },
+                    },
+                )
+
+            def evaluate_semantics(self, *, context, proposal, updated_method_source):
+                return [ValidatorResult(validator_id="sql.ok", state=ValidatorState.PASS, required=True)]
+
+        service = RemediationService(llm_client=lambda _messages, **_kwargs: "")
+        authoritative = {"status": "INVALID", "violation_id": "v1", "error": "unsupported"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            java_file = Path(tmp) / "Foo.java"
+            java_file.write_text(
+                """
+class Foo {
+  public java.sql.ResultSet find(java.sql.Connection conn, String name) throws Exception {
+    String sql = \"SELECT * FROM users WHERE name = \" + name;
+    java.sql.Statement stmt = conn.createStatement();
+    return stmt.executeQuery(sql);
+  }
+}
+""".strip(),
+                encoding="utf-8",
+            )
+            context = {
+                "rule_id": "ISO-A.8-SQL-INJECTION",
+                "violation": {"violation_id": "v1"},
+                "file_path": java_file.as_posix(),
+                "target_method": "Foo.find(Connection,String)",
+                "exact_method_source": """
+public java.sql.ResultSet find(java.sql.Connection conn, String name) throws Exception {
+    String sql = \"SELECT * FROM users WHERE name = \" + name;
+    java.sql.Statement stmt = conn.createStatement();
+    return stmt.executeQuery(sql);
+}
+""".strip(),
+                "baseline_violations": [{"violation_id": "ISO-A.8-SQL-INJECTION"}],
+            }
+
+            with (
+                patch("codegraph.remediation.shadow.settings", SimpleNamespace(remediation_shadow_lifecycle_enabled=True, remediation_shadow_sql_plugin_enabled=True)),
+                patch("codegraph.remediation.shadow._shadow_registry", return_value=SimpleNamespace(resolve=lambda **_kwargs: PolicyRecheckPlugin())),
+                patch("codegraph.remediation.shadow.PolicyEvaluator") as evaluator_cls,
+                patch.object(
+                    service,
+                    "_extract_method_span",
+                    return_value=(
+                        [
+                            "public java.sql.ResultSet find(java.sql.Connection conn, String name) throws Exception {",
+                            '    String sql = "SELECT * FROM users WHERE name = " + name;',
+                            "    java.sql.Statement stmt = conn.createStatement();",
+                            "    return stmt.executeQuery(sql);",
+                            "}",
+                        ],
+                        1,
+                        5,
+                        context["exact_method_source"],
+                    ),
+                ),
+                patch.object(
+                    service,
+                    "_apply_method_edits",
+                    return_value=(
+                        [
+                            "public java.sql.ResultSet find(java.sql.Connection conn, String name) throws Exception {",
+                            '    String sql = "SELECT * FROM users WHERE name = ?";',
+                            "    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);",
+                            "    stmt.setString(1, name);",
+                            "    return stmt.executeQuery();",
+                            "}",
+                        ],
+                        "public java.sql.ResultSet find(java.sql.Connection conn, String name) throws Exception {\n    String sql = \"SELECT * FROM users WHERE name = ?\";\n    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);\n    stmt.setString(1, name);\n    return stmt.executeQuery();\n}",
+                    ),
+                ),
+                patch.object(
+                    service,
+                    "_replace_method_in_source",
+                    return_value=(
+                        "class Foo {\npublic java.sql.ResultSet find(java.sql.Connection conn, String name) throws Exception {\n    String sql = \"SELECT * FROM users WHERE name = ?\";\n    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);\n    stmt.setString(1, name);\n    return stmt.executeQuery();\n}\n}",
+                        None,
+                        None,
+                    ),
+                ),
+            ):
+                evaluator_cls.return_value.evaluate.return_value = {"error": "opa failed"}
+                result = maybe_attach_shadow_result(service, context=context, authoritative_result=authoritative)
+
+        recheck_checks = [
+            check
+            for check in result["shadow_lifecycle"]["pipeline_checks"]
+            if check["validator_id"] == "pipeline.policy_recheck_completed"
+        ]
+        self.assertEqual(recheck_checks[0]["state"], "FAIL")
+        self.assertFalse(result["shadow_lifecycle"]["pipeline_verified"])
+        self.assertFalse(result["shadow_lifecycle"]["assurance_verified"])
     def test_java_parse_validator_fails_for_invalid_generated_java(self) -> None:
         class InvalidJavaPlugin:
             descriptor = PluginDescriptor(

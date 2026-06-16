@@ -206,7 +206,6 @@ class JdbcSqlShadowPlugin:
                 pipeline_verification=PipelineVerificationContract(
                     build_requirement=BuildRequirement.IF_BUILD_SYSTEM_PRESENT,
                     require_parse=True,
-                    require_policy_recheck=True,
                 ),
                 auto_apply_capable=False,
             ),
@@ -235,7 +234,6 @@ class JdbcSqlShadowPlugin:
                 pipeline_verification=PipelineVerificationContract(
                     build_requirement=BuildRequirement.IF_BUILD_SYSTEM_PRESENT,
                     require_parse=True,
-                    require_policy_recheck=True,
                 ),
                 auto_apply_capable=False,
             ),
@@ -404,6 +402,26 @@ class JdbcSqlShadowPlugin:
         unresolved_symbols = list(evidence.get("unresolved_symbols") or [])
         invalid_placeholder_contexts = list(evidence.get("invalid_placeholder_contexts") or [])
         max_edit_scope_lines = proposal.patch_pattern.max_edit_scope_lines
+        binding_type_state = ValidatorState.FAIL
+        if derived_bindings:
+            has_unresolved_binding_metadata = any(
+                binding.get("expression") is None
+                or binding.get("binding_method") is None
+                or binding.get("declared_type") is None
+                or binding.get("expected_binding_method") is None
+                for binding in derived_bindings
+            )
+            has_incompatible_binding_type = any(
+                binding.get("binding_method") != binding.get("expected_binding_method")
+                for binding in derived_bindings
+                if binding.get("binding_method") is not None and binding.get("expected_binding_method") is not None
+            )
+            if has_unresolved_binding_metadata:
+                binding_type_state = ValidatorState.UNKNOWN
+            elif has_incompatible_binding_type:
+                binding_type_state = ValidatorState.FAIL
+            else:
+                binding_type_state = ValidatorState.PASS
         validators = [
             ValidatorResult(
                 validator_id="sql.prepared_statement_declared",
@@ -438,11 +456,7 @@ class JdbcSqlShadowPlugin:
             ),
             ValidatorResult(
                 validator_id="sql.binding_types",
-                state=(
-                    ValidatorState.PASS
-                    if derived_bindings and all(binding["binding_method"] in self._BINDING_METHODS.values() for binding in derived_bindings)
-                    else ValidatorState.FAIL
-                ),
+                state=binding_type_state,
                 required=True,
                 details={"bindings": derived_bindings},
             ),
@@ -524,7 +538,7 @@ class JdbcSqlShadowPlugin:
         if method is None:
             return {"parse_error": "Patched method source could not be parsed for semantic validation."}
 
-        declared_symbols = self._collect_declared_symbols(method)
+        symbol_types = self._collect_symbol_types(method)
         string_literals = self._collect_string_literals(method)
         prepared_statement = self._find_prepared_statement(method, string_literals, line_offset)
         if prepared_statement is None:
@@ -539,7 +553,7 @@ class JdbcSqlShadowPlugin:
                 "placeholder_count": 0,
             }
 
-        bindings, unresolved_symbols = self._find_bindings(method, prepared_statement["statement_var"], declared_symbols)
+        bindings, unresolved_symbols = self._find_bindings(method, prepared_statement["statement_var"], symbol_types)
         executed_statement_var, executed_method = self._find_executed_statement(method)
         placeholder_count, invalid_placeholder_contexts = self._validate_sql_literal(prepared_statement["sql_literal"])
         unresolved_symbols.extend(symbol for symbol in prepared_statement["unresolved_symbols"] if symbol not in unresolved_symbols)
@@ -665,7 +679,7 @@ class JdbcSqlShadowPlugin:
         self,
         method: MethodDeclaration,
         statement_var: str,
-        declared_symbols: set[str],
+        symbol_types: dict[str, str],
     ) -> tuple[list[dict[str, Any]], list[str]]:
         bindings: list[dict[str, Any]] = []
         unresolved_symbols: list[str] = []
@@ -676,21 +690,32 @@ class JdbcSqlShadowPlugin:
                 continue
             index = _binding_index_value(node.arguments[0])
             expression = _binding_expression_text(node.arguments[1])
+            binding_method = str(node.member) if getattr(node, "member", None) else None
+            declared_type = symbol_types.get(expression) if expression is not None else None
+            expected_binding_method = self._BINDING_METHODS.get(declared_type) if declared_type is not None else None
             if expression is None:
-                unresolved_symbols.append(f"unsupported:{node.member}")
-                continue
-            if "." in expression:
+                unresolved_symbols.append(f"unsupported:{binding_method or 'unknown'}")
+            elif "." in expression:
                 unresolved_symbols.append(expression)
-            elif expression not in declared_symbols:
+            elif declared_type is None:
                 unresolved_symbols.append(expression)
             bindings.append(
                 {
                     "index": index,
                     "expression": expression,
-                    "binding_method": str(node.member),
+                    "binding_method": binding_method,
+                    "binding_type": declared_type,
+                    "declared_type": declared_type,
+                    "expected_binding_method": expected_binding_method,
                 }
             )
-        bindings.sort(key=lambda binding: (binding["index"] is None, binding["index"] or 0, binding["expression"]))
+        bindings.sort(
+            key=lambda binding: (
+                binding["index"] is None,
+                binding["index"] or 0,
+                str(binding.get("expression") or ""),
+            )
+        )
         return bindings, unresolved_symbols
 
     def _find_executed_statement(self, method: MethodDeclaration) -> tuple[str | None, str | None]:
@@ -942,7 +967,9 @@ class JdbcSqlShadowPlugin:
                     "index": len(bindings) + 1,
                     "expression": expression,
                     "binding_type": binding_type,
+                    "declared_type": binding_type,
                     "binding_method": binding_method,
+                    "expected_binding_method": binding_method,
                 }
             )
         parameterized_sql = "".join(output_parts)

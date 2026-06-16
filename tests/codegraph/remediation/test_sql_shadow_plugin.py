@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from typing import cast
 from unittest.mock import patch
 
+from codegraph.remediation.plugin_types import RepairPatternContract
 from codegraph.remediation.result_models import ArtifactKind, LifecycleReasonCode
 from codegraph.remediation.sql_shadow_plugin import JdbcSqlShadowPlugin
 
@@ -37,7 +39,9 @@ public ResultSet findByName(Connection conn, String name) throws Exception {
         )
 
         self.assertEqual(proposal.artifact_kind, ArtifactKind.PATCH)
-        self.assertEqual(proposal.patch_pattern.pattern_id, "SQL-VAL-001")
+        self.assertIsNotNone(proposal.patch_pattern)
+        patch_pattern = cast(RepairPatternContract, proposal.patch_pattern)
+        self.assertEqual(patch_pattern.pattern_id, "SQL-VAL-001")
         patch = proposal.details["patch_artifact"]
         replacement = patch["edits"][2]["replacement_lines"]
         self.assertIn("stmt.setString(1, name);", replacement[0])
@@ -78,7 +82,9 @@ public int update(Connection conn, boolean active, long id) throws Exception {
         )
 
         self.assertEqual(proposal.artifact_kind, ArtifactKind.PATCH)
-        self.assertEqual(proposal.patch_pattern.pattern_id, "SQL-VAL-002")
+        self.assertIsNotNone(proposal.patch_pattern)
+        patch_pattern = cast(RepairPatternContract, proposal.patch_pattern)
+        self.assertEqual(patch_pattern.pattern_id, "SQL-VAL-002")
         patch = proposal.details["patch_artifact"]
         self.assertIn("prepareStatement(\"UPDATE users SET active = ? WHERE id = ?\")", patch["edits"][0]["replacement_lines"][0])
         self.assertIn("stmt.setBoolean(1, active);", patch["edits"][1]["replacement_lines"][0])
@@ -462,6 +468,165 @@ public ResultSet find(Connection conn, String name, int age) throws Exception {
 
         states = {validator.validator_id: validator.state for validator in validators}
         self.assertEqual(states["sql.placeholder_count"].value, "FAIL")
+
+    def test_semantic_validators_pass_for_matching_declared_type_and_setter(self) -> None:
+        proposal = self.plugin.propose(
+            _context(
+                file_path="src/main/java/com/example/Foo.java",
+                target_method="com.example.Foo.find(String,int)",
+                source="""
+public ResultSet find(Connection conn, String name, int age) throws Exception {
+    String sql = "SELECT * FROM users WHERE name = '" + name + "' AND age = " + age;
+    Statement stmt = conn.createStatement();
+    return stmt.executeQuery(sql);
+}
+""".strip(),
+            )
+        )
+
+        validators = self.plugin.evaluate_semantics(
+            context={"exact_method_source": proposal.details["patch_artifact"]["anchor_method"]},
+            proposal=proposal,
+            updated_method_source="""
+public ResultSet find(Connection conn, String name, int age) throws Exception {
+    String sql = "SELECT * FROM users WHERE name = ? AND age = ?";
+    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);
+    stmt.setString(1, name);
+    stmt.setInt(2, age);
+    return stmt.executeQuery();
+}
+""".strip(),
+        )
+
+        states = {validator.validator_id: validator.state for validator in validators}
+        self.assertEqual(states["sql.binding_types"].value, "PASS")
+
+    def test_semantic_validators_fail_for_set_string_on_int_symbol(self) -> None:
+        proposal = self.plugin.propose(
+            _context(
+                file_path="src/main/java/com/example/Foo.java",
+                target_method="com.example.Foo.find(int)",
+                source="""
+public ResultSet find(Connection conn, int age) throws Exception {
+    String sql = "SELECT * FROM users WHERE age = " + age;
+    Statement stmt = conn.createStatement();
+    return stmt.executeQuery(sql);
+}
+""".strip(),
+            )
+        )
+
+        validators = self.plugin.evaluate_semantics(
+            context={},
+            proposal=proposal,
+            updated_method_source="""
+public ResultSet find(Connection conn, int age) throws Exception {
+    String sql = "SELECT * FROM users WHERE age = ?";
+    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);
+    stmt.setString(1, age);
+    return stmt.executeQuery();
+}
+""".strip(),
+        )
+
+        states = {validator.validator_id: validator.state for validator in validators}
+        self.assertEqual(states["sql.binding_types"].value, "FAIL")
+
+    def test_semantic_validators_fail_for_set_int_on_string_symbol(self) -> None:
+        proposal = self.plugin.propose(
+            _context(
+                file_path="src/main/java/com/example/Foo.java",
+                target_method="com.example.Foo.find(String)",
+                source="""
+public ResultSet find(Connection conn, String name) throws Exception {
+    String sql = "SELECT * FROM users WHERE name = '" + name + "'";
+    Statement stmt = conn.createStatement();
+    return stmt.executeQuery(sql);
+}
+""".strip(),
+            )
+        )
+
+        validators = self.plugin.evaluate_semantics(
+            context={},
+            proposal=proposal,
+            updated_method_source="""
+public ResultSet find(Connection conn, String name) throws Exception {
+    String sql = "SELECT * FROM users WHERE name = ?";
+    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);
+    stmt.setInt(1, name);
+    return stmt.executeQuery();
+}
+""".strip(),
+        )
+
+        states = {validator.validator_id: validator.state for validator in validators}
+        self.assertEqual(states["sql.binding_types"].value, "FAIL")
+
+    def test_semantic_validators_do_not_pass_when_symbol_type_is_unresolved(self) -> None:
+        proposal = self.plugin.propose(
+            _context(
+                file_path="src/main/java/com/example/Foo.java",
+                target_method="com.example.Foo.find(String)",
+                source="""
+public ResultSet find(Connection conn, String name) throws Exception {
+    String sql = "SELECT * FROM users WHERE name = '" + name + "'";
+    Statement stmt = conn.createStatement();
+    return stmt.executeQuery(sql);
+}
+""".strip(),
+            )
+        )
+
+        validators = self.plugin.evaluate_semantics(
+            context={},
+            proposal=proposal,
+            updated_method_source="""
+public ResultSet find(Connection conn, String name) throws Exception {
+    String sql = "SELECT * FROM users WHERE name = ?";
+    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);
+    stmt.setString(1, missingName);
+    return stmt.executeQuery();
+}
+""".strip(),
+        )
+
+        states = {validator.validator_id: validator.state for validator in validators}
+        self.assertIn(states["sql.binding_types"].value, {"UNKNOWN", "FAIL"})
+        self.assertNotEqual(states["sql.binding_types"].value, "PASS")
+
+    def test_semantic_validators_accept_wrapper_and_primitive_equivalents(self) -> None:
+        proposal = self.plugin.propose(
+            _context(
+                file_path="src/main/java/com/example/Foo.java",
+                target_method="com.example.Foo.find(Integer,Boolean,Long)",
+                source="""
+public ResultSet find(Connection conn, Integer age, Boolean active, Long id) throws Exception {
+    String sql = "SELECT * FROM users WHERE age = " + age + " AND active = " + active + " AND id = " + id;
+    Statement stmt = conn.createStatement();
+    return stmt.executeQuery(sql);
+}
+""".strip(),
+            )
+        )
+
+        validators = self.plugin.evaluate_semantics(
+            context={},
+            proposal=proposal,
+            updated_method_source="""
+public ResultSet find(Connection conn, Integer age, Boolean active, Long id) throws Exception {
+    String sql = "SELECT * FROM users WHERE age = ? AND active = ? AND id = ?";
+    java.sql.PreparedStatement stmt = conn.prepareStatement(sql);
+    stmt.setInt(1, age);
+    stmt.setBoolean(2, active);
+    stmt.setLong(3, id);
+    return stmt.executeQuery();
+}
+""".strip(),
+        )
+
+        states = {validator.validator_id: validator.state for validator in validators}
+        self.assertEqual(states["sql.binding_types"].value, "PASS")
 
     def test_semantic_validators_fail_for_residual_dynamic_sql_concatenation(self) -> None:
         proposal = self.plugin.propose(

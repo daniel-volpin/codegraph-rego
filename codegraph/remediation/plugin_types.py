@@ -19,7 +19,6 @@ from codegraph.remediation.verification import BuildRequirement
 class PipelineVerificationContract(BaseModel):
     build_requirement: BuildRequirement = BuildRequirement.IF_BUILD_SYSTEM_PRESENT
     require_parse: bool = True
-    require_policy_recheck: bool = True
 
 
 class RepairPatternContract(BaseModel):
