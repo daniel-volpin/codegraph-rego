@@ -267,21 +267,30 @@ def _record_evidence_span_attributes(
     span.set_attribute("analysis_flags_active", analysis_flag_count)
 
 
-def build_evidence_bundle(
+def build_evidence_bundle_from_source(
     method_snapshot: dict[str, Any],
+    source_code: str,
+    *,
     search_service: HybridSearchService | None = None,
     method_index: dict[str, dict[str, Any]] | None = None,
-    source_path_override: str | Path | None = None,
     taint_path_finder: TaintPathFinder | None = None,
+    bundle_file_path: str | None = None,
+    vector_context: list[str] | None = None,
 ) -> dict[str, Any]:
+    """Canonical source-text -> policy-input construction.
+
+    This is the single owner of the evidence semantics Rego evaluates
+    against: lexical source views, analysis flags, helper summaries, and
+    taint-path shape. Every evaluation path — on-disk methods and virtual
+    remediation candidates alike — must go through here so the policy
+    input cannot fork. Pure with respect to the workspace and graph; the
+    only optional I/O is the vector lookup when ``vector_context`` is not
+    supplied.
+    """
     with _tracer.start_as_current_span("evidence.build") as span:
         span.set_attribute("method_signature", str(method_snapshot.get("signature") or ""))
         span.set_attribute("file_path", str(method_snapshot.get("file_path") or ""))
 
-        file_path = method_snapshot.get("file_path")
-        resolved_path = resolve_source_path(file_path)
-        source_path = _resolve_bundle_source_path(resolved_path, source_path_override)
-        source_code = _extract_method_source(method_snapshot, source_path)
         source_code_active, source_code_substring_safe = _source_views(source_code)
 
         graph_context = _graph_context(method_snapshot)
@@ -291,12 +300,13 @@ def build_evidence_bundle(
             method_snapshot=method_snapshot,
             method_index=method_index,
         )
-        vector_context = _vector_context(search_service, method_snapshot["signature"])
+        if vector_context is None:
+            vector_context = _vector_context(search_service, method_snapshot["signature"])
         bundle = build_policy_bundle(
             target_method=method_snapshot["signature"],
             method_name=method_snapshot.get("name"),
             class_fqn=method_snapshot.get("class_fqn"),
-            file_path=resolved_path.as_posix() if resolved_path else file_path,
+            file_path=bundle_file_path if bundle_file_path is not None else method_snapshot.get("file_path"),
             start_line=method_snapshot.get("start_line"),
             end_line=method_snapshot.get("end_line"),
             modifiers=method_snapshot.get("modifiers") or [],
@@ -329,6 +339,28 @@ def build_evidence_bundle(
         )
 
         return result
+
+
+def build_evidence_bundle(
+    method_snapshot: dict[str, Any],
+    search_service: HybridSearchService | None = None,
+    method_index: dict[str, dict[str, Any]] | None = None,
+    source_path_override: str | Path | None = None,
+    taint_path_finder: TaintPathFinder | None = None,
+) -> dict[str, Any]:
+    """On-disk variant: extract the method source, then delegate to the core."""
+    file_path = method_snapshot.get("file_path")
+    resolved_path = resolve_source_path(file_path)
+    source_path = _resolve_bundle_source_path(resolved_path, source_path_override)
+    source_code = _extract_method_source(method_snapshot, source_path)
+    return build_evidence_bundle_from_source(
+        method_snapshot,
+        source_code,
+        search_service=search_service,
+        method_index=method_index,
+        taint_path_finder=taint_path_finder,
+        bundle_file_path=resolved_path.as_posix() if resolved_path else file_path,
+    )
 
 
 def build_policy_input(
