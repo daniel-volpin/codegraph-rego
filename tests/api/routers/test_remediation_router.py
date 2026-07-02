@@ -2,7 +2,18 @@ import json
 import unittest
 from unittest.mock import patch
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from api.models.validation import RemediationApplyRequest, RemediationPreviewRequest
+
+
+def _build_app() -> FastAPI:
+    from api.routers.remediation import router as remediation_router
+
+    app = FastAPI()
+    app.include_router(remediation_router)
+    return app
 
 
 class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
@@ -126,6 +137,83 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 500)
         payload = json.loads(response.body)
         self.assertEqual(payload["status"], "BUILD_ERROR")
+
+
+class TestRemediationApplyRequestValidation(unittest.TestCase):
+    """Request-contract guard: invalid mode/max_attempts must 422 at the
+    framework boundary without ever invoking the remediation service."""
+
+    _OK_RESULT = {"status": "OK", "violation_id": "ISO-A.10-WEAK-HASH"}
+
+    def _post_apply(self, mock_apply, payload: dict):
+        mock_apply.return_value = dict(self._OK_RESULT)
+        client = TestClient(_build_app())
+        return client.post("/remediation/apply", json={"violation_id": "ISO-A.10-WEAK-HASH", **payload})
+
+    @patch("api.routers.remediation.apply_remediation")
+    def test_defaults_are_dry_run_with_two_attempts(self, mock_apply):
+        response = self._post_apply(mock_apply, {})
+
+        self.assertEqual(response.status_code, 200)
+        _, kwargs = mock_apply.call_args
+        self.assertEqual(kwargs["mode"], "dry_run")
+        self.assertEqual(kwargs["max_attempts"], 2)
+
+    @patch("api.routers.remediation.apply_remediation")
+    def test_dry_run_mode_is_accepted(self, mock_apply):
+        response = self._post_apply(mock_apply, {"mode": "dry_run"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_apply.call_args.kwargs["mode"], "dry_run")
+
+    @patch("api.routers.remediation.apply_remediation")
+    def test_apply_mode_is_accepted(self, mock_apply):
+        response = self._post_apply(mock_apply, {"mode": "apply"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_apply.call_args.kwargs["mode"], "apply")
+
+    @patch("api.routers.remediation.apply_remediation")
+    def test_unknown_mode_is_rejected_without_invoking_service(self, mock_apply):
+        response = self._post_apply(mock_apply, {"mode": "preview"})
+
+        self.assertEqual(response.status_code, 422)
+        mock_apply.assert_not_called()
+
+    @patch("api.routers.remediation.apply_remediation")
+    def test_miscapitalized_mode_is_rejected_without_invoking_service(self, mock_apply):
+        response = self._post_apply(mock_apply, {"mode": "Apply"})
+
+        self.assertEqual(response.status_code, 422)
+        mock_apply.assert_not_called()
+
+    @patch("api.routers.remediation.apply_remediation")
+    def test_max_attempts_zero_is_rejected_without_invoking_service(self, mock_apply):
+        response = self._post_apply(mock_apply, {"max_attempts": 0})
+
+        self.assertEqual(response.status_code, 422)
+        mock_apply.assert_not_called()
+
+    @patch("api.routers.remediation.apply_remediation")
+    def test_max_attempts_above_cap_is_rejected_without_invoking_service(self, mock_apply):
+        response = self._post_apply(mock_apply, {"max_attempts": 6})
+
+        self.assertEqual(response.status_code, 422)
+        mock_apply.assert_not_called()
+
+    @patch("api.routers.remediation.apply_remediation")
+    def test_max_attempts_lower_bound_is_accepted(self, mock_apply):
+        response = self._post_apply(mock_apply, {"max_attempts": 1})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_apply.call_args.kwargs["max_attempts"], 1)
+
+    @patch("api.routers.remediation.apply_remediation")
+    def test_max_attempts_upper_bound_is_accepted(self, mock_apply):
+        response = self._post_apply(mock_apply, {"max_attempts": 5})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_apply.call_args.kwargs["max_attempts"], 5)
 
 
 if __name__ == "__main__":

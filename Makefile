@@ -1,4 +1,4 @@
-.PHONY: install backend-dev dev test lint format neo4j-up neo4j-down docker-up docker-down clean help
+.PHONY: install backend-dev dev test policy-check policy-fmt lint format neo4j-up neo4j-down docker-up docker-down clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -38,8 +38,11 @@ dev: ## Run the application in development mode (backend + frontend)
 test: ## Run backend tests
 	@uv run python -m pytest -q
 
-policy-check: ## Validate OPA/Rego policies
+policy-check: ## Validate OPA/Rego policies (check-only; fails on format drift)
 	@opa check --strict policy/
+	@opa fmt --list --fail policy/
+
+policy-fmt: ## Format OPA/Rego policies in place
 	@opa fmt -w policy/
 
 lint: ## Run linting (ruff for backend, eslint for frontend)

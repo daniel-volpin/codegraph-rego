@@ -37,13 +37,17 @@ Real-world apps are secondary workflow case studies, not the primary evidence su
 
 ## Validation Defaults
 
+These mirror what CI enforces (`.github/workflows/ci.yml`):
+
 ```bash
 .venv/bin/ruff check .
 UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest -q
-cd frontend && yarn build
+make policy-check   # opa check --strict + format-drift gate; needs OPA on PATH
+cd frontend && yarn lint && yarn test && yarn build
 ```
 
 Use `.venv/bin/python -m pytest`, not system `python3`.
+`make policy-check` is check-only; use `make policy-fmt` to rewrite Rego formatting.
 
 ## Important Docs
 

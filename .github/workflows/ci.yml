@@ -35,6 +35,7 @@ jobs:
           filters: |
             backend:
               - '.github/workflows/ci.yml'
+              - 'Makefile'
               - 'app.py'
               - 'pyproject.toml'
               - 'uv.lock'
@@ -98,7 +99,7 @@ jobs:
         run: make policy-check
 
       - name: Run backend lint
-        run: uv run ruff check codegraph api scripts tests
+        run: uv run ruff check .
 
       - name: Run backend tests
         run: uv run python -m pytest -q
@@ -129,6 +130,9 @@ jobs:
 
       - name: Run frontend lint
         run: yarn lint
+
+      - name: Run frontend unit tests
+        run: yarn test
 
       - name: Build frontend
         run: yarn build

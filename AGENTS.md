@@ -54,7 +54,8 @@ Keep this file short. Detailed project context lives in `CLAUDE.md` and `copilot
 
 ## Validation Defaults
 
-- Python changes: run relevant `pytest` targets plus `ruff check`.
-- Frontend changes: run `cd frontend && yarn build`.
+- Python changes: run relevant `pytest` targets plus `ruff check .`.
+- Policy (`policy/`) changes: run `make policy-check` (check-only: `opa check --strict` plus format-drift gate; `make policy-fmt` rewrites formatting).
+- Frontend changes: run `cd frontend && yarn lint && yarn test && yarn build`.
 - Benchmark-sensitive changes: run at least one smoke or focused benchmark command.
 - Cite final results from files under `outputs/`.
