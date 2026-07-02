@@ -117,7 +117,11 @@ const ViolationFinding = memo(function ViolationFinding({
               {finding.filePath}
             </p>
             <div className="mt-2">
-              <Badge variant="secondary">{finding.module}</Badge>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">{finding.module}</Badge>
+                <Badge variant="secondary">Control {finding.controlLabel}</Badge>
+                <Badge variant="secondary">{finding.cweLabel}</Badge>
+              </div>
             </div>
           </div>
         </div>

@@ -21,6 +21,7 @@ interface ViolationGroupTableProps {
   expandedFindingByGroup: Record<string, string | null>;
   onToggleFinding: (groupId: string, findingId: string) => void;
   hasEvaluationResult: boolean;
+  emptyMessage?: string;
 }
 
 const ViolationGroupTable = ({
@@ -32,6 +33,7 @@ const ViolationGroupTable = ({
   expandedFindingByGroup,
   onToggleFinding,
   hasEvaluationResult,
+  emptyMessage,
 }: ViolationGroupTableProps) => {
   const rows = table.getRowModel().rows;
 
@@ -130,9 +132,10 @@ const ViolationGroupTable = ({
                 <td colSpan={columnCount} className="py-12 text-center">
                   <Scale aria-hidden="true" className="mx-auto h-10 w-10 text-slate-300" />
                   <p className="mt-3 text-sm text-slate-500">
-                    {hasEvaluationResult
+                    {emptyMessage ??
+                    (hasEvaluationResult
                       ? "No rule groups matched the current policy scan."
-                      : "No rule groups loaded yet. Run a policy evaluation to see results."}
+                      : "No rule groups loaded yet. Run a policy evaluation to see results.")}
                   </p>
                 </td>
               </tr>

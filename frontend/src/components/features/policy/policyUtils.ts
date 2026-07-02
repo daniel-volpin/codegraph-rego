@@ -25,6 +25,9 @@ export interface ViolationRow {
   id: string;
   ruleId: string;
   severity: string;
+  controlLabel: string;
+  cweLabel: string;
+  citation: string;
   module: string;
   targetMethod: string;
   filePath: string;
@@ -87,6 +90,48 @@ const extractMethodNameFromSignature = (targetMethod: string) => {
   return match ? match[1] : "";
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const stringValue = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() ? value.trim() : null;
+
+const stringListValue = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+
+const firstPresentString = (...values: unknown[]) => {
+  for (const value of values) {
+    const text = stringValue(value);
+    if (text) return text;
+  }
+  return null;
+};
+
+const controlMetadataFor = (item: RawViolation) =>
+  isRecord(item.control_metadata) ? item.control_metadata : null;
+
+const citationFor = (item: RawViolation, filePath: string) => {
+  const startLine = typeof item.snippet_start_line === "number" ? item.snippet_start_line : null;
+  const endLine = typeof item.snippet_end_line === "number" ? item.snippet_end_line : null;
+  if (startLine != null && endLine != null) return `${filePath}:${startLine}-${endLine}`;
+  if (startLine != null) return `${filePath}:${startLine}`;
+  return filePath;
+};
+
+const labelsForViolation = (item: RawViolation, ruleId: string) => {
+  const metadata = controlMetadataFor(item);
+  const controlIds = stringListValue(metadata?.control_ids ?? metadata?.iso_controls);
+  const cwes = stringListValue(metadata?.cwes);
+  const controlLabel =
+    controlIds.length > 0
+      ? controlIds.join(", ")
+      : firstPresentString(metadata?.control, metadata?.control_id, metadata?.category_id, ruleId) ?? ruleId;
+  const cweLabel = cwes.length > 0 ? cwes.join(", ") : "CWE not provided";
+  return { controlLabel, cweLabel };
+};
+
 export const trimSnippetToMethod = (snippet: string, targetMethod: string) => {
   if (!snippet.trim()) return "";
   const methodName = extractMethodNameFromSignature(targetMethod);
@@ -134,6 +179,7 @@ export const normalizeViolation = (item: RawViolation): ViolationRow => {
   const targetMethod = item.target_method ?? "—";
   const filePath = item.file_path ?? "—";
   const severity = (item.severity ?? "MEDIUM").toUpperCase();
+  const { controlLabel, cweLabel } = labelsForViolation(item, ruleId);
   // `remediation` is optional on the wire; fall back to schema defaults.
   const remediation = item.remediation ?? DEFAULT_REMEDIATION;
   const rawSnippet =
@@ -142,6 +188,9 @@ export const normalizeViolation = (item: RawViolation): ViolationRow => {
     id: `${ruleId}:${targetMethod}:${filePath}`,
     ruleId,
     severity,
+    controlLabel,
+    cweLabel,
+    citation: citationFor(item, filePath),
     module: deriveModuleLabel(filePath),
     targetMethod,
     filePath,
