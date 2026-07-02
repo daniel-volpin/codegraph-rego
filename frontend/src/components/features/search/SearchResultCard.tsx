@@ -48,9 +48,12 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = ({
   };
 
   return (
-    <Card className="p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="truncate font-semibold text-slate-900">{signature}</h3>
+    <Card className="min-w-0 p-5" aria-label="Selected search result detail">
+      <div className="mb-4 flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="break-words font-semibold text-slate-900">Selected result</h2>
+          <p className="mt-1 break-words font-mono text-sm text-slate-700">{signature}</p>
+        </div>
         <Badge variant="secondary">{context?.length ?? 0} contexts</Badge>
       </div>
 
@@ -58,8 +61,8 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = ({
         <ul className="space-y-4">
           {context.map((ctx, ctxIndex) => (
             <li key={`${signature}-${ctxIndex}`} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="font-medium text-slate-800">{ctx.method}</p>
+              <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-3">
+                <p className="min-w-0 break-words font-mono text-sm font-medium text-slate-800">{ctx.method}</p>
                 <span className="text-xs text-slate-500">{ctx.neighbors.length} related</span>
               </div>
 
@@ -68,7 +71,7 @@ export const SearchResultCard: React.FC<SearchResultCardProps> = ({
                   {ctx.neighbors.map((neighbor, neighborIndex) => {
                     const entries = Object.entries(neighbor ?? {});
                     return (
-                      <section className="rounded-md border border-slate-200 bg-white p-3" key={neighborIndex}>
+                      <section className="min-w-0 rounded-md border border-slate-200 bg-white p-3" key={neighborIndex}>
                         <header className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                           Neighbor {neighborIndex + 1}
                         </header>
