@@ -38,8 +38,8 @@ If you are evaluating thesis claims, start with:
 - Python 3.10+
 - Node.js + Yarn
 - Neo4j 5.x
-- OPA on `PATH`
-- Java + Maven for benchmark and remediation verification
+- OPA `v1.15.1` on `PATH` (required for `make policy-check` and OPA evaluation)
+- Java JDK (e.g., OpenJDK 26+) + Maven for remediation build re-verification
 
 ### Install
 
