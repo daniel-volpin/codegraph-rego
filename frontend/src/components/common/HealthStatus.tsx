@@ -32,11 +32,26 @@ const detailFor = (details: Record<string, unknown>, ...keys: string[]): string 
 const buildItems = (data: HealthCheckResponse): DependencyItem[] => {
   const details = (data.details ?? {}) as Record<string, unknown>;
   return [
-    { key: "startup", label: "startup", healthy: data.startup_ready, detail: null },
+    { key: "startup", label: "startup", healthy: data.startup_ready, detail: detailFor(details, "startup") },
     { key: "neo4j", label: "graph", healthy: data.neo4j, detail: detailFor(details, "neo4j") },
-    { key: "faiss_index", label: "search index", healthy: data.faiss_index, detail: detailFor(details, "search") },
-    { key: "signature_map", label: "signatures", healthy: data.signature_map, detail: null },
-    { key: "embedding_model", label: "embeddings", healthy: data.embedding_model, detail: null },
+    {
+      key: "faiss_index",
+      label: "search index",
+      healthy: data.faiss_index,
+      detail: detailFor(details, "faiss_index", "search"),
+    },
+    {
+      key: "signature_map",
+      label: "signatures",
+      healthy: data.signature_map,
+      detail: detailFor(details, "signature_map", "signatures"),
+    },
+    {
+      key: "embedding_model",
+      label: "embeddings",
+      healthy: data.embedding_model,
+      detail: detailFor(details, "embedding_model", "embeddings"),
+    },
     { key: "opa", label: "OPA", healthy: data.opa, detail: detailFor(details, "opa") },
   ].map((item) => ({
     ...item,

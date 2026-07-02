@@ -82,6 +82,26 @@ describe("HealthStatus", () => {
     expect(within(region).getByText(/opa policy engine/i).parentElement).toHaveTextContent(/unavailable/i);
   });
 
+  it("shows backend detail strings for every degraded dependency family", async () => {
+    vi.mocked(fetchHealth).mockResolvedValue({
+      ...healthyPayload,
+      status: "degraded" as const,
+      startup_ready: false,
+      signature_map: false,
+      details: {
+        startup: "preload still running",
+        signature_map: "signature map missing",
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<HealthStatus />);
+
+    await user.click(await findDisclosureControl(/backend status: degraded \(2\)\. expand dependency details/i));
+
+    expect(screen.getByText("preload still running")).toBeInTheDocument();
+    expect(screen.getByText("signature map missing")).toBeInTheDocument();
+  });
+
   it("offers guidance and a manual re-check when the backend is unreachable", async () => {
     vi.mocked(fetchHealth).mockRejectedValue(new Error("network down"));
     const user = userEvent.setup();

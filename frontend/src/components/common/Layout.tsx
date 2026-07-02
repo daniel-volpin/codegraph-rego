@@ -28,7 +28,7 @@ const Layout = ({ children }: PropsWithChildren) => {
       </a>
 
       <Dialog open={isDrawerOpen} onOpenChange={setDrawerOpen}>
-        <div className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
+        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
           {/* Radix manages aria-expanded/aria-controls and focus return for us. */}
           <button
             type="button"
@@ -45,7 +45,7 @@ const Layout = ({ children }: PropsWithChildren) => {
             <span className="text-sm font-semibold text-slate-900">CodeGraph</span>
           </div>
           <div className="w-9" />
-        </div>
+        </header>
 
         <DialogPortal>
           <DialogOverlay className="lg:hidden" />
@@ -73,12 +73,12 @@ const Layout = ({ children }: PropsWithChildren) => {
       <div className="lg:grid lg:min-h-screen lg:grid-cols-[18rem_1fr]">
         <SidebarNav className="hidden lg:flex" />
         <div className="p-4 sm:p-6 xl:p-8">
-          <header className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
             <div className="min-w-0">
               <Breadcrumbs />
             </div>
             <HealthStatus />
-          </header>
+          </div>
           <div className="flex flex-col gap-6 lg:flex-row">
             <main id="main-content" className="min-w-0 flex-1">
               {children}
