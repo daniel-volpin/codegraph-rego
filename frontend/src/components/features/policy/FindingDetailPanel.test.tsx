@@ -88,68 +88,80 @@ describe("FindingDetailPanel", () => {
     hookState.pendingAction = undefined;
   });
 
-  it("renders idle, running, and ready states for explain/preview/verify", async () => {
+  it("renders evidence hierarchy and prompts for explanation", async () => {
     const user = userEvent.setup();
-    const { rerender } = renderWithProviders(<FindingDetailPanel selectedFinding={finding} />);
+    renderWithProviders(<FindingDetailPanel selectedFinding={finding} />);
 
-    expect(screen.getByText(/no explanation generated yet/i)).toBeInTheDocument();
-    expect(screen.getByText(/confidence score will appear after preview or verification completes/i)).toBeInTheDocument();
+    expect(screen.getByText(/1\. Policy Finding \(Authoritative OPA Rule\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/2\. Source Evidence & Graph Grounding/i)).toBeInTheDocument();
+    expect(screen.getByText(/3\. Generated LLM Explanation/i)).toBeInTheDocument();
+    expect(screen.getByText(/4\. Remediation & Virtual Verification/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /explain finding/i }));
     expect(mutationSpies.explain).toHaveBeenCalledWith(finding);
+  });
 
-    hookState.pendingAction = "explain";
-    rerender(<FindingDetailPanel selectedFinding={finding} />);
-    expect(screen.getByRole("button", { name: /explaining/i })).toBeDisabled();
-
-    hookState.pendingAction = undefined;
+  it("renders structured explanation with model metadata", async () => {
     hookState.explainResult = {
       status: "OK",
+      model: "qwen3.5-9b-mlx",
       explanation_structured: {
         citation: "/tmp/uploaded_code/app/src/main/java/com/acme/Demo.java:40-42",
-        why: "MD5 is weak and should not be used for security-sensitive hashing.",
-        fix: "Replace MD5 with SHA-256.",
+        why: "MD5 is cryptographically broken.",
+        fix: "Migrate to SHA-256.",
       },
     };
-    rerender(<FindingDetailPanel selectedFinding={finding} />);
-    expect(screen.getByText(/replace md5 with sha-256/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /preview suggested fix/i }));
-    expect(mutationSpies.preview).toHaveBeenCalledWith(finding);
+    renderWithProviders(<FindingDetailPanel selectedFinding={finding} />);
 
-    hookState.pendingAction = "preview";
-    rerender(<FindingDetailPanel selectedFinding={finding} />);
-    expect(screen.getByRole("button", { name: /previewing/i })).toBeDisabled();
+    expect(screen.getByText(/Model: qwen3\.5-9b-mlx/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI Analysis \(Non-Authoritative\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/migrate to sha-256/i)).toBeInTheDocument();
+  });
 
-    hookState.pendingAction = undefined;
+  it("renders read-only preview diff with copy control", async () => {
     hookState.previewResult = {
       status: "OK",
+      violation_id: "ISO-A.10-WEAK-HASH",
       diff: "@@ -1,3 +1,3 @@\n-MD5\n+SHA-256",
       confidence: {
-        score: 0.95,
+        score: 0.92,
         band: "apply",
         threshold_apply: 0.75,
         threshold_review: 0.5,
-        rationale: "High-confidence bounded replacement.",
+        rationale: "High confidence bounded fix.",
       },
     };
-    rerender(<FindingDetailPanel selectedFinding={finding} />);
-    expect(screen.getByText(/proposed diff/i)).toBeInTheDocument();
-    expect(screen.getByText(/high-confidence bounded replacement/i)).toBeInTheDocument();
-    expect(screen.getByText(/score 95% against thesis review\/apply thresholds/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /verify fix/i }));
+    renderWithProviders(<FindingDetailPanel selectedFinding={finding} />);
+
+    expect(screen.getByText(/Read-Only Virtual Fix Preview/i)).toBeInTheDocument();
+    expect(screen.getByText(/\+SHA-256/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /copy diff/i })).toBeInTheDocument();
+  });
+
+  it("opens confirmation dialog before running dry-run apply", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<FindingDetailPanel selectedFinding={finding} />);
+
+    await user.click(screen.getByRole("button", { name: /verify fix \(dry run\)/i }));
+
+    expect(screen.getByTestId("remediation-confirm-modal")).toBeInTheDocument();
+    expect(screen.getByText(/Confirm Dry-Run Remediation/i)).toBeInTheDocument();
+    expect(screen.getByText(/Verify fix evaluates the patch against the virtual workspace/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /confirm & verify fix/i }));
     expect(mutationSpies.apply).toHaveBeenCalledWith(finding);
+  });
 
-    hookState.pendingAction = "apply";
-    rerender(<FindingDetailPanel selectedFinding={finding} />);
-    expect(screen.getByRole("button", { name: /verifying/i })).toBeDisabled();
-
-    hookState.pendingAction = undefined;
+  it("renders categorized pipeline outcome for fully verified apply", async () => {
+    const user = userEvent.setup();
     hookState.applyResult = {
       status: "OK",
+      violation_id: "ISO-A.10-WEAK-HASH",
       generation: {
         decision: "apply_edits",
+        reason: "Replaced MD5 with SHA-256.",
       },
       verification: {
         overall_status: "PASS",
@@ -160,32 +172,35 @@ describe("FindingDetailPanel", () => {
       compilation: {
         attempted: true,
         success: true,
+        output_snippet: "BUILD SUCCESSFUL in 1s",
       },
       confidence: {
         score: 0.95,
         band: "apply",
-        threshold_apply: 0.75,
-        threshold_review: 0.5,
-        rationale: "High-confidence bounded replacement.",
       },
     };
-    rerender(<FindingDetailPanel selectedFinding={finding} />);
 
-    expect(screen.getByText(/verification summary/i)).toBeInTheDocument();
-    expect(screen.getByText(/overall pass/i)).toBeInTheDocument();
+    renderWithProviders(<FindingDetailPanel selectedFinding={finding} />);
 
-    await user.click(screen.getByRole("button", { name: /view details/i }));
-    expect(screen.getByText(/remaining violations:/i)).toBeInTheDocument();
-    expect(screen.getByText(/decision:/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Fix Fully Verified/i)[0]).toBeInTheDocument();
+    expect(screen.getByText(/Patch applied cleanly in dry-run mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/1\. Generation Decision:/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /view metrics detail/i }));
+    expect(screen.getByText(/Remaining Violations:/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /view compilation log/i }));
+    expect(screen.getByText(/Compiler Output Log/i)).toBeInTheDocument();
+    expect(screen.getByText(/BUILD SUCCESSFUL in 1s/i)).toBeInTheDocument();
   });
 
-  it("shows non-OK remediation outcomes as issues", () => {
+  it("renders categorized outcome for no_fix abstention", () => {
     hookState.applyResult = {
-      status: "GENERATION_ERROR",
-      error: "Model refused to produce a bounded method-local change.",
+      status: "OK",
+      violation_id: "ISO-A.10-WEAK-HASH",
       generation: {
         decision: "no_fix",
-        reason: "No safe replacement was evident from the local context.",
+        reason: "No safe method-local fix could be generated.",
       },
       verification: {
         overall_status: "NOT_RUN",
@@ -201,8 +216,8 @@ describe("FindingDetailPanel", () => {
 
     renderWithProviders(<FindingDetailPanel selectedFinding={finding} />);
 
-    expect(screen.getAllByText(/verification issue/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/model refused to produce/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/error/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Remediation Abstained \(NO_FIX\)/i)[0]).toBeInTheDocument();
+    expect(screen.getByText(/Abstained \/ No Fix/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/No safe method-local fix could be generated/i)[0]).toBeInTheDocument();
   });
 });

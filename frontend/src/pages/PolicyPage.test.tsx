@@ -78,18 +78,15 @@ describe("PolicyPage", () => {
     await waitFor(() => expect(runButton).toBeEnabled());
     await user.click(runButton);
 
-    expect(await screen.findByText("ISO-A.8-SQL-INJECTION")).toBeInTheDocument();
+    expect((await screen.findAllByText("ISO-A.8-SQL-INJECTION"))[0]).toBeInTheDocument();
     expect(screen.getAllByText(/CWE-89/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/ISO A.8/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Manual review required/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/automatic remediation is unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/automatic remediation unavailable/i)).toBeInTheDocument();
 
     const evidenceDisclosure = screen.getByRole("group", { name: /evidence and source context/i });
-    expect(evidenceDisclosure).not.toHaveAttribute("open");
-
-    await user.click(within(evidenceDisclosure).getByText(/evidence and source context/i));
-
     expect(evidenceDisclosure).toHaveAttribute("open");
+
     expect(within(evidenceDisclosure).getByText(/DemoController.java:21-28/i)).toBeInTheDocument();
     expect(within(evidenceDisclosure).getByText(/com.acme.QueryBuilder.build/i)).toBeInTheDocument();
   });
@@ -104,7 +101,7 @@ describe("PolicyPage", () => {
     await waitFor(() => expect(runButton).toBeEnabled());
     await user.click(runButton);
 
-    expect(await screen.findByText("ISO-A.8-SQL-INJECTION")).toBeInTheDocument();
+    expect((await screen.findAllByText("ISO-A.8-SQL-INJECTION"))[0]).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: /expand rule group/i })).toBeInTheDocument();
     expect(screen.getByTestId("policy-results-layout")).toHaveClass("min-w-0", "grid-cols-[minmax(0,1fr)]");
     expect(screen.getByTestId("policy-results-region")).toHaveClass("min-w-0");

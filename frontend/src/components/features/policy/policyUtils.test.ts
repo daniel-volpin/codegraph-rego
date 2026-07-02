@@ -1,4 +1,5 @@
 import {
+  categorizeApplyOutcome,
   formatCitationDisplay,
   groupViolationsByRule,
   normalizeViolation,
@@ -106,5 +107,59 @@ describe("policyUtils", () => {
       display: "app/src/main/java/com/acme/Demo.java:42",
       full: "/tmp/work/uploaded_code/app/src/main/java/com/acme/Demo.java:42",
     });
+  });
+
+  it("categorizes apply outcomes correctly across all backend states", () => {
+    // 1. Clean NO_FIX abstention
+    expect(
+      categorizeApplyOutcome({
+        status: "OK",
+        generation: { decision: "no_fix", reason: "Context insufficient." },
+      }).category,
+    ).toBe("no_fix");
+
+    // 2. Generation error
+    expect(
+      categorizeApplyOutcome({
+        status: "GENERATION_ERROR",
+        error: "Schema validation failed",
+      }).category,
+    ).toBe("generation_error");
+
+    // 3. Build compilation failure
+    expect(
+      categorizeApplyOutcome({
+        status: "OK",
+        compilation: { attempted: true, success: false, skipped_reason: "Compiler syntax error" },
+      }).category,
+    ).toBe("build_failed");
+
+    // 4. Fully verified PASS
+    expect(
+      categorizeApplyOutcome({
+        status: "OK",
+        compilation: { attempted: true, success: true },
+        verification: {
+          overall_status: "PASS",
+          target_rule_status: "PASS",
+          remaining_violations: [],
+          new_violations: [],
+        },
+      }).category,
+    ).toBe("fully_verified");
+
+    // 5. Policy still violated
+    expect(
+      categorizeApplyOutcome({
+        status: "OK",
+        compilation: { attempted: true, success: true },
+        verification: {
+          overall_status: "FAIL",
+          target_rule_status: "FAIL",
+          remaining_violations: [],
+          new_violations: [],
+        },
+      }).category,
+    ).toBe("policy_violated");
   });
 });
