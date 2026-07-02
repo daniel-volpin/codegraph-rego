@@ -419,38 +419,6 @@ export const categorizeApplyOutcome = (applyResult: RemediationApplyResponse): C
     };
   }
 
-  if (compilation?.attempted && !compilation.success) {
-    return {
-      category: "build_failed",
-      title: "Build Verification Failed",
-      badgeLabel: "Build Failed",
-      badgeVariant: "destructive",
-      detailMessage: compilation.skipped_reason || applyResult.error || "Compilation of the proposed patch failed.",
-    };
-  }
-
-  if (isOk && verification?.overall_status === "PASS" && (verification.remaining_violations?.length ?? 0) === 0) {
-    return {
-      category: "fully_verified",
-      title: "Fix Fully Verified",
-      badgeLabel: "Fully Verified",
-      badgeVariant: "success",
-      detailMessage: "Patch applied cleanly in dry-run mode, compilation succeeded, and 0 policy violations remain.",
-    };
-  }
-
-  if (verification?.overall_status === "FAIL" || (verification?.remaining_violations?.length ?? 0) > 0 || (verification?.new_violations?.length ?? 0) > 0) {
-    const remainingCount = verification?.remaining_violations?.length ?? 0;
-    const newCount = verification?.new_violations?.length ?? 0;
-    return {
-      category: "policy_violated",
-      title: "Policy Still Violated",
-      badgeLabel: "Policy Check Failed",
-      badgeVariant: "warning",
-      detailMessage: `Re-verification reported ${remainingCount} remaining violation${remainingCount === 1 ? "" : "s"} and ${newCount} new violation${newCount === 1 ? "" : "s"}.`,
-    };
-  }
-
   if (!isOk) {
     if (applyResult.status === "GENERATION_ERROR" || generation?.raw_response_valid === false) {
       return {
@@ -467,6 +435,49 @@ export const categorizeApplyOutcome = (applyResult: RemediationApplyResponse): C
       badgeLabel: "Verification Error",
       badgeVariant: "destructive",
       detailMessage: applyResult.error || `Verification attempt returned status ${applyResult.status}.`,
+    };
+  }
+
+  if (compilation?.attempted && !compilation.success) {
+    return {
+      category: "build_failed",
+      title: "Build Verification Failed",
+      badgeLabel: "Build Failed",
+      badgeVariant: "destructive",
+      detailMessage: compilation.skipped_reason || applyResult.error || "Compilation of the proposed patch failed.",
+    };
+  }
+
+  if (
+    isOk &&
+    verification?.overall_status === "PASS" &&
+    verification?.target_rule_status === "PASS" &&
+    (verification.remaining_violations?.length ?? 0) === 0 &&
+    (verification.new_violations?.length ?? 0) === 0
+  ) {
+    return {
+      category: "fully_verified",
+      title: "Fix Fully Verified",
+      badgeLabel: "Fully Verified",
+      badgeVariant: "success",
+      detailMessage: "Patch applied cleanly in dry-run mode, compilation succeeded, and 0 policy violations remain.",
+    };
+  }
+
+  if (
+    verification?.overall_status === "FAIL" ||
+    verification?.target_rule_status === "FAIL" ||
+    (verification?.remaining_violations?.length ?? 0) > 0 ||
+    (verification?.new_violations?.length ?? 0) > 0
+  ) {
+    const remainingCount = verification?.remaining_violations?.length ?? 0;
+    const newCount = verification?.new_violations?.length ?? 0;
+    return {
+      category: "policy_violated",
+      title: "Policy Still Violated",
+      badgeLabel: "Policy Check Failed",
+      badgeVariant: "warning",
+      detailMessage: `Re-verification reported ${remainingCount} remaining violation${remainingCount === 1 ? "" : "s"} and ${newCount} new violation${newCount === 1 ? "" : "s"}.`,
     };
   }
 
