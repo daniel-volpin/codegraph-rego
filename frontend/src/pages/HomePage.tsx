@@ -102,7 +102,7 @@ const HomePage = () => {
             </ul>
           )}
           {health && health.status !== "ok" && (
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-slate-600">
               Degraded dependencies usually mean the workspace has not been ingested yet or a service is still
               starting. The header status shows per-dependency details.
             </p>

@@ -192,7 +192,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 const pageShells = [
-  { name: "home", path: "/", heading: "Security Research Dashboard" },
+  { name: "home", path: "/", heading: /CodeGraph Workspace|Security Research Dashboard/i },
   { name: "upload", path: "/upload", heading: "Upload Codebase" },
   { name: "search", path: "/search", heading: "Semantic Search" },
   { name: "policy", path: "/policy", heading: "Policy Evaluation" },

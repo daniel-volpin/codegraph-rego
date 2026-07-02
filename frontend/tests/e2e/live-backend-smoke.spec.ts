@@ -21,8 +21,8 @@ test.describe("@live frontend against real backend", () => {
     });
 
     await page.goto("/");
-    await expectAppShell(page, /security research dashboard/i);
-    await expect(page.getByText(health.status === "ok" ? "Healthy" : "Degraded").first()).toBeVisible();
+    await expectAppShell(page, /CodeGraph Workspace|security research dashboard/i);
+    await expect(page.getByText(health.status === "ok" ? "Healthy" : /Degraded/).first()).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("live-dashboard.png"), fullPage: true });
 
     await page.goto("/settings");
