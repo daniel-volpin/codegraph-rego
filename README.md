@@ -39,7 +39,7 @@ If you are evaluating thesis claims, start with:
 - Node.js + Yarn
 - Neo4j 5.x
 - OPA `v1.15.1` on `PATH` (required for `make policy-check` and OPA evaluation)
-- Java JDK (e.g., OpenJDK 26+) + Maven for remediation build re-verification
+- Java JDK (8+ or newer) and Maven for remediation build re-verification (release validation was performed with OpenJDK 26.0.1)
 
 ### Install
 
