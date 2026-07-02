@@ -19,6 +19,7 @@ import {
   readPersistedPolicyEvaluation,
 } from "../lib/persistence";
 import { uniqueSortedModuleLabels } from "../lib/workspace";
+import { messageMentionsBackendDependency } from "../lib/dependencies";
 import { Badge } from "../components/ui/badge";
 import ControlsPanel from "../components/features/policy/ControlsPanel";
 import FindingDetailPanel from "../components/features/policy/FindingDetailPanel";
@@ -42,10 +43,8 @@ import { Card } from "../components/ui/card";
 const evalQueryKey = (preset: PolicyViewPreset) =>
   ["policyEvaluation:last", preset] as const;
 
-const dependencyPattern = /\b(neo4j|opa|faiss|search index|signature map|embedding|backend|dependency|startup|unavailable|connection|connect)\b/i;
-
 const evaluationErrorTitle = (message: string | null) =>
-  message && dependencyPattern.test(message)
+  messageMentionsBackendDependency(message)
     ? "Backend dependency unavailable."
     : "Policy evaluation failed.";
 

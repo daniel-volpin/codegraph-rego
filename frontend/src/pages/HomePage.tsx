@@ -6,16 +6,17 @@ import { fetchHealth } from "../lib/api";
 import type { HealthCheckResponse, UploadResponse } from "../lib/types";
 import { readPersistedLastUpload } from "../lib/persistence";
 import { uniqueSortedModuleLabels } from "../lib/workspace";
+import { BACKEND_DEPENDENCY_LABELS } from "../lib/dependencies";
 import { Badge } from "../components/ui/badge";
 import { Card } from "../components/ui/card";
 
 const DEPENDENCIES: Array<{ key: keyof HealthCheckResponse; label: string }> = [
-  { key: "startup_ready", label: "Startup preload" },
-  { key: "neo4j", label: "Graph database" },
-  { key: "faiss_index", label: "Search index" },
-  { key: "signature_map", label: "Signature map" },
-  { key: "embedding_model", label: "Embeddings" },
-  { key: "opa", label: "Policy engine" },
+  { key: "startup_ready", label: BACKEND_DEPENDENCY_LABELS.startup_ready.homeLabel },
+  { key: "neo4j", label: BACKEND_DEPENDENCY_LABELS.neo4j.homeLabel },
+  { key: "faiss_index", label: BACKEND_DEPENDENCY_LABELS.faiss_index.homeLabel },
+  { key: "signature_map", label: BACKEND_DEPENDENCY_LABELS.signature_map.homeLabel },
+  { key: "embedding_model", label: BACKEND_DEPENDENCY_LABELS.embedding_model.homeLabel },
+  { key: "opa", label: BACKEND_DEPENDENCY_LABELS.opa.homeLabel },
 ];
 
 const HomePage = () => {

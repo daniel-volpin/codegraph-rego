@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Search, Sparkles } from "lucide-r
 import { searchCode } from "../lib/api";
 import type { SearchResponse } from "../lib/types";
 import { toast } from "sonner";
+import { messageMentionsBackendDependency } from "../lib/dependencies";
 import { SearchResultCard } from "../components/features/search/SearchResultCard";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -18,7 +19,6 @@ const EXAMPLE_QUERIES = [
 ];
 
 const SEARCH_INPUT_ID = "semantic-search-query";
-const dependencyPattern = /\b(faiss|search index|embedding|backend|dependency|startup|unavailable|connection|connect)\b/i;
 
 const compactSignature = (signature: string) => {
   const openParen = signature.indexOf("(");
@@ -30,7 +30,7 @@ const compactSignature = (signature: string) => {
 };
 
 const searchErrorTitle = (message: string | undefined) =>
-  message && dependencyPattern.test(message)
+  messageMentionsBackendDependency(message, ["faiss_index", "embedding_model"])
     ? "Search failed: backend search dependency unavailable."
     : "Search failed.";
 
