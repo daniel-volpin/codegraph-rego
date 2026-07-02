@@ -63,13 +63,6 @@ const renderStructuredExplanation = (payload: PolicyExplanationStructured) => {
 
 const buildImmediateEvidence = (finding: ViolationRow): ImmediateEvidence => {
   const raw = finding.raw as Record<string, unknown>;
-  const startLine = typeof raw.snippet_start_line === "number" ? raw.snippet_start_line : null;
-  const endLine = typeof raw.snippet_end_line === "number" ? raw.snippet_end_line : null;
-  const citation = startLine != null && endLine != null
-    ? `${finding.filePath}:${startLine}-${endLine}`
-    : startLine != null
-      ? `${finding.filePath}:${startLine}`
-      : finding.filePath;
 
   const evidence =
     raw.evidence && typeof raw.evidence === "object" && raw.evidence !== null
@@ -89,7 +82,7 @@ const buildImmediateEvidence = (finding: ViolationRow): ImmediateEvidence => {
     ? evidence.vector_context.filter((item): item is string => typeof item === "string")
     : [];
 
-  return { citation, callers, neighbors };
+  return { citation: finding.citation, callers, neighbors };
 };
 
 const ArtifactSkeleton = ({ lines = 3 }: { lines?: number }) => (
@@ -148,6 +141,10 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
   const previewFailed = previewResult?.status && previewResult.status !== "OK";
   const applyFailed = applyResult?.status && applyResult.status !== "OK";
   const explainFailed = explainResult?.status && explainResult.status !== "OK";
+  const remediationUnavailable =
+    selectedFinding?.remediation.support_tier === "manual" ||
+    selectedFinding?.remediation.preview_available === false ||
+    selectedFinding?.remediation.verify_available === false;
   const statusMessage =
     applyResult?.status === "OK"
       ? `${verificationPrefix} ${applyResult.verification?.new_violations?.length ?? 0} new violations.`
@@ -166,7 +163,7 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
 
   return (
     <Card
-      className="p-5 2xl:sticky 2xl:top-24 2xl:max-h-[calc(100vh-11rem)] 2xl:overflow-auto"
+      className="min-w-0 p-5 2xl:sticky 2xl:top-24 2xl:max-h-[calc(100vh-11rem)] 2xl:overflow-auto"
       data-testid="finding-dossier"
     >
       <div role="status" aria-live="polite" className="sr-only">
@@ -196,11 +193,19 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
       ) : (
         <div className="space-y-4 pt-4">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="truncate font-mono text-sm text-slate-900" title={selectedFinding.targetMethod}>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary">Control {selectedFinding.controlLabel}</Badge>
+              <Badge variant="secondary">{selectedFinding.cweLabel}</Badge>
+              <Badge variant={severityVariant(selectedFinding.severity)}>{selectedFinding.severity}</Badge>
+            </div>
+            <p className="mt-3 truncate font-mono text-sm text-slate-900" title={selectedFinding.targetMethod}>
               {selectedFinding.targetMethod}
             </p>
             <p className="mt-1 truncate font-mono text-xs text-slate-500" title={selectedFinding.filePath}>
               {selectedFinding.filePath}
+            </p>
+            <p className="mt-1 break-words font-mono text-xs text-slate-500" title={selectedFinding.citation}>
+              {formatCitationDisplay(selectedFinding.citation).display}
             </p>
             <p className="mt-2 text-sm text-slate-700">{selectedFinding.reason}</p>
           </div>
@@ -273,6 +278,15 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
             </Button>
           </div>
 
+          {remediationUnavailable && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <p className="font-medium">Automatic remediation is unavailable for this finding.</p>
+              <p className="mt-1 break-words">
+                {selectedFinding.remediation.reason_code}: {selectedFinding.remediation.rationale}
+              </p>
+            </div>
+          )}
+
           <ConfidenceBand confidence={confidenceSurface} />
 
           <div className="space-y-4">
@@ -282,10 +296,16 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
             >
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Explanation artifact</p>
               {(pendingAction === "explain" || !explainResult) && immediateEvidence && (
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <details
+                  aria-label="Evidence and source context"
+                  className="rounded-md border border-slate-200 bg-slate-50 p-4"
+                >
+                  <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Immediate evidence
-                  </p>
+                    <span className="ml-2 normal-case tracking-normal text-slate-500">
+                      Evidence and source context
+                    </span>
+                  </summary>
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Citation</p>
@@ -320,7 +340,7 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
                       </div>
                     </div>
                   )}
-                </div>
+                </details>
               )}
               {explainFailed && explainResult?.error && (
                 <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">

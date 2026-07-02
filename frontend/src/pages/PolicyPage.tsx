@@ -9,7 +9,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { evaluatePolicies, fetchPolicyCatalog } from "../lib/api";
 import type { PolicyCatalogResponse, PolicyEvaluateResponse } from "../lib/types";
@@ -19,6 +19,7 @@ import {
   readPersistedPolicyEvaluation,
 } from "../lib/persistence";
 import { uniqueSortedModuleLabels } from "../lib/workspace";
+import { messageMentionsBackendDependency } from "../lib/dependencies";
 import { Badge } from "../components/ui/badge";
 import ControlsPanel from "../components/features/policy/ControlsPanel";
 import FindingDetailPanel from "../components/features/policy/FindingDetailPanel";
@@ -41,6 +42,90 @@ import { Card } from "../components/ui/card";
 
 const evalQueryKey = (preset: PolicyViewPreset) =>
   ["policyEvaluation:last", preset] as const;
+
+const evaluationErrorTitle = (message: string | null) =>
+  messageMentionsBackendDependency(message)
+    ? "Backend dependency unavailable."
+    : "Policy evaluation failed.";
+
+interface EvaluationStatusCardProps {
+  isFetching: boolean;
+  hasEvaluationResult: boolean;
+  findingCount: number;
+  totalFindingCount: number;
+  ruleCount: number;
+  errorMessage: string | null;
+  responseIsPartial: boolean;
+}
+
+const EvaluationStatusCard = ({
+  isFetching,
+  hasEvaluationResult,
+  findingCount,
+  totalFindingCount,
+  ruleCount,
+  errorMessage,
+  responseIsPartial,
+}: EvaluationStatusCardProps) => {
+  if (errorMessage) return null;
+
+  const status =
+    isFetching ? "running"
+    : responseIsPartial ? "partial"
+    : hasEvaluationResult && totalFindingCount === 0 ? "empty"
+    : hasEvaluationResult ? "findings"
+    : "initial";
+
+  const config = {
+    running: {
+      icon: <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-indigo-600" />,
+      title: "Policy evaluation is running.",
+      body: "The backend is evaluating the current workspace. Findings will appear when the response is validated.",
+      tone: "border-indigo-200 bg-indigo-50 text-indigo-900",
+    },
+    partial: {
+      icon: <AlertTriangle aria-hidden="true" className="h-4 w-4 text-amber-700" />,
+      title: "Evaluation response is partial.",
+      body: "The response validated, but expected evaluation metadata was absent. Review the findings that are present and rerun before treating this as complete evidence.",
+      tone: "border-amber-200 bg-amber-50 text-amber-900",
+    },
+    empty: {
+      icon: <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-emerald-700" />,
+      title: "Evaluation completed successfully.",
+      body: "Zero findings were returned. This means the policy engine evaluated the current workspace and did not report violations for the selected scope.",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    },
+    findings: {
+      icon: <AlertTriangle aria-hidden="true" className="h-4 w-4 text-amber-700" />,
+      title: "Evaluation completed with findings.",
+      body: `${findingCount} visible finding${findingCount === 1 ? "" : "s"} across ${ruleCount} rule group${ruleCount === 1 ? "" : "s"}. Use the table and case dossier for evidence, explanation, and remediation availability.`,
+      tone: "border-amber-200 bg-amber-50 text-amber-900",
+    },
+    initial: {
+      icon: <ChevronRight aria-hidden="true" className="h-4 w-4 text-slate-500" />,
+      title: "Policy evaluation has not run yet.",
+      body: "Run a policy scan to evaluate the uploaded workspace. A zero finding result will be shown separately after a successful backend response.",
+      tone: "border-slate-200 bg-slate-50 text-slate-700",
+    },
+  }[status];
+
+  return (
+    <Card
+      role="status"
+      aria-label="Policy evaluation status"
+      aria-live={isFetching ? "polite" : "off"}
+      className={`p-4 text-sm ${config.tone}`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 shrink-0">{config.icon}</div>
+        <div>
+          <p className="font-medium">{config.title}</p>
+          <p className="mt-1">{config.body}</p>
+        </div>
+      </div>
+    </Card>
+  );
+};
 
 const PolicyPage = () => {
   const queryClient = useQueryClient();
@@ -231,6 +316,16 @@ const PolicyPage = () => {
   const evaluationError =
     evalQuery.error?.message ??
     (evalQuery.data?.error ? evalQuery.data.error : null);
+  const responseIsPartial =
+    Boolean(evalQuery.data) &&
+    (!Object.prototype.hasOwnProperty.call(evalQuery.data, "opa_output") ||
+      !Object.prototype.hasOwnProperty.call(evalQuery.data, "enriched"));
+  const tableEmptyMessage =
+    !hasEvaluationResult
+      ? "No policy evaluation has run yet. Run a scan to see rule groups."
+      : findings.length === 0
+        ? "Evaluation completed successfully with zero findings for the selected scope."
+        : "No findings match the current module filter.";
 
   // ---- Table ----
 
@@ -238,7 +333,7 @@ const PolicyPage = () => {
     () => [
       {
         id: "expander",
-        header: "",
+        header: () => <span className="sr-only">Expand rule group</span>,
         enableSorting: false,
         cell: ({ row }) => (
           <button
@@ -329,12 +424,22 @@ const PolicyPage = () => {
         frameworkDemoScopeSource={frameworkDemoScopeSource}
       />
 
+      <EvaluationStatusCard
+        isFetching={evalQuery.isFetching}
+        hasEvaluationResult={hasEvaluationResult}
+        findingCount={filteredFindings.length}
+        totalFindingCount={findings.length}
+        ruleCount={data.length}
+        errorMessage={evaluationError}
+        responseIsPartial={responseIsPartial}
+      />
+
       {evaluationError && (
         <Card
           role="alert"
           className="border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"
         >
-          <p className="font-medium text-rose-900">Policy evaluation failed.</p>
+          <p className="font-medium text-rose-900">{evaluationErrorTitle(evaluationError)}</p>
           <p className="mt-1 break-words">{evaluationError}</p>
           <p className="mt-2 text-xs text-rose-700">
             Check the health indicator for missing backend dependencies, then rerun the evaluation.
@@ -344,7 +449,10 @@ const PolicyPage = () => {
 
       <SummaryCards {...summary} />
 
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] 2xl:items-start">
+      <div
+        data-testid="policy-results-layout"
+        className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] 2xl:items-start"
+      >
         <ViolationGroupTable
           table={table}
           columnCount={columns.length}
@@ -354,6 +462,7 @@ const PolicyPage = () => {
           expandedFindingByGroup={expandedFindingByGroup}
           onToggleFinding={toggleFindingExpanded}
           hasEvaluationResult={hasEvaluationResult}
+          emptyMessage={tableEmptyMessage}
         />
 
         <FindingDetailPanel key={selectedFinding?.id ?? "empty"} selectedFinding={selectedFinding} />

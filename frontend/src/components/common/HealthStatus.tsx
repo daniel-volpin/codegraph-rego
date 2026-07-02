@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Check, ChevronDown, RefreshCw, X } from "lucide-react";
 import { fetchHealth } from "../../lib/api";
 import type { HealthCheckResponse } from "../../lib/types";
+import { BACKEND_DEPENDENCY_LABELS, type BackendDependencyKey } from "../../lib/dependencies";
 
 interface DependencyItem {
   key: string;
@@ -11,15 +12,6 @@ interface DependencyItem {
   healthy: boolean;
   detail: string | null;
 }
-
-const DEPENDENCY_DESCRIPTIONS: Record<string, string> = {
-  startup: "Startup preload (graph sync, indexes)",
-  neo4j: "Neo4j graph database",
-  faiss_index: "FAISS semantic search index",
-  signature_map: "Method signature map",
-  embedding_model: "Embedding model",
-  opa: "OPA policy engine",
-};
 
 const detailFor = (details: Record<string, unknown>, ...keys: string[]): string | null => {
   for (const key of keys) {
@@ -31,31 +23,34 @@ const detailFor = (details: Record<string, unknown>, ...keys: string[]): string 
 
 const buildItems = (data: HealthCheckResponse): DependencyItem[] => {
   const details = (data.details ?? {}) as Record<string, unknown>;
-  return [
-    { key: "startup", label: "startup", healthy: data.startup_ready, detail: detailFor(details, "startup") },
-    { key: "neo4j", label: "graph", healthy: data.neo4j, detail: detailFor(details, "neo4j") },
+  const definitions: Array<{
+    key: BackendDependencyKey;
+    healthy: boolean;
+    detail: string | null;
+  }> = [
+    { key: "startup", healthy: data.startup_ready, detail: detailFor(details, "startup") },
+    { key: "neo4j", healthy: data.neo4j, detail: detailFor(details, "neo4j") },
     {
       key: "faiss_index",
-      label: "search index",
       healthy: data.faiss_index,
       detail: detailFor(details, "faiss_index", "search"),
     },
     {
       key: "signature_map",
-      label: "signatures",
       healthy: data.signature_map,
       detail: detailFor(details, "signature_map", "signatures"),
     },
     {
       key: "embedding_model",
-      label: "embeddings",
       healthy: data.embedding_model,
       detail: detailFor(details, "embedding_model", "embeddings"),
     },
-    { key: "opa", label: "OPA", healthy: data.opa, detail: detailFor(details, "opa") },
-  ].map((item) => ({
+    { key: "opa", healthy: data.opa, detail: detailFor(details, "opa") },
+  ];
+  return definitions.map((item) => ({
     ...item,
-    description: DEPENDENCY_DESCRIPTIONS[item.key] ?? item.label,
+    label: BACKEND_DEPENDENCY_LABELS[item.key].shortLabel,
+    description: BACKEND_DEPENDENCY_LABELS[item.key].description,
   }));
 };
 

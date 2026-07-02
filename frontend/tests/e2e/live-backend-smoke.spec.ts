@@ -21,8 +21,8 @@ test.describe("@live frontend against real backend", () => {
     });
 
     await page.goto("/");
-    await expectAppShell(page, /security research dashboard/i);
-    await expect(page.getByText(health.status === "ok" ? "Healthy" : "Degraded").first()).toBeVisible();
+    await expectAppShell(page, /CodeGraph Workspace|security research dashboard/i);
+    await expect(page.getByText(health.status === "ok" ? "Healthy" : /Degraded/).first()).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("live-dashboard.png"), fullPage: true });
 
     await page.goto("/settings");
@@ -61,7 +61,7 @@ test.describe("@live frontend against real backend", () => {
     const runButton = page.getByRole("button", { name: /run .*scan/i });
     await expect(runButton).toBeEnabled();
     await runButton.click();
-    await expect(page.getByRole("alert")).toContainText("Policy evaluation failed.");
+    await expect(page.getByRole("alert")).toContainText(/Backend dependency unavailable|Policy evaluation failed/);
     await expect(page.getByTestId("finding-dossier")).toContainText(
       "Run a policy scan and select a finding to open a case dossier.",
     );

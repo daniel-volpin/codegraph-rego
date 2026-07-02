@@ -21,6 +21,7 @@ interface ViolationGroupTableProps {
   expandedFindingByGroup: Record<string, string | null>;
   onToggleFinding: (groupId: string, findingId: string) => void;
   hasEvaluationResult: boolean;
+  emptyMessage?: string;
 }
 
 const ViolationGroupTable = ({
@@ -32,18 +33,22 @@ const ViolationGroupTable = ({
   expandedFindingByGroup,
   onToggleFinding,
   hasEvaluationResult,
+  emptyMessage,
 }: ViolationGroupTableProps) => {
   const rows = table.getRowModel().rows;
 
   return (
-    <Card className="overflow-hidden">
+    <Card data-testid="policy-results-region" className="min-w-0 overflow-hidden">
       {viewPreset === "framework_demo" && (
         <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
           Showing the benchmark-aligned categories used in the thesis framework demo. Switch to All findings to inspect
           the full policy surface.
         </div>
       )}
-      <div className="overflow-auto 2xl:max-h-[calc(100vh-11rem)]">
+      <div
+        data-testid="policy-group-table-scroll"
+        className="max-w-full overflow-x-auto 2xl:max-h-[calc(100vh-11rem)]"
+      >
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-slate-100 text-left text-slate-700">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -60,7 +65,7 @@ const ViolationGroupTable = ({
                       aria-sort={canSort ? ariaSort : undefined}
                       className={`px-3 py-2 font-semibold overflow-hidden ${colWidthClass(header.column.id)}`}
                     >
-                      {header.isPlaceholder ? null : canSort ? (
+                      {header.isPlaceholder ? <span className="sr-only">Expand rule group</span> : canSort ? (
                         <button
                           type="button"
                           className="inline-flex items-center gap-1"
@@ -130,9 +135,10 @@ const ViolationGroupTable = ({
                 <td colSpan={columnCount} className="py-12 text-center">
                   <Scale aria-hidden="true" className="mx-auto h-10 w-10 text-slate-300" />
                   <p className="mt-3 text-sm text-slate-500">
-                    {hasEvaluationResult
+                    {emptyMessage ??
+                    (hasEvaluationResult
                       ? "No rule groups matched the current policy scan."
-                      : "No rule groups loaded yet. Run a policy evaluation to see results."}
+                      : "No rule groups loaded yet. Run a policy evaluation to see results.")}
                   </p>
                 </td>
               </tr>

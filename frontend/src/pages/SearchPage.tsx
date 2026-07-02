@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, Search, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Search, Sparkles } from "lucide-react";
 import { searchCode } from "../lib/api";
 import type { SearchResponse } from "../lib/types";
 import { toast } from "sonner";
+import { messageMentionsBackendDependency } from "../lib/dependencies";
 import { SearchResultCard } from "../components/features/search/SearchResultCard";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -17,9 +18,67 @@ const EXAMPLE_QUERIES = [
   "cryptographic key generation",
 ];
 
+const SEARCH_INPUT_ID = "semantic-search-query";
+
+const compactSignature = (signature: string) => {
+  const openParen = signature.indexOf("(");
+  const prefix = openParen >= 0 ? signature.slice(0, openParen) : signature;
+  const suffix = openParen >= 0 ? signature.slice(openParen) : "";
+  const parts = prefix.split(".").filter(Boolean);
+  if (parts.length < 2) return signature;
+  return `${parts[parts.length - 2]}.${parts[parts.length - 1]}${suffix}`;
+};
+
+const searchErrorTitle = (message: string | undefined) =>
+  messageMentionsBackendDependency(message, ["faiss_index", "embedding_model"])
+    ? "Search failed: backend search dependency unavailable."
+    : "Search failed.";
+
+interface SearchStatusProps {
+  pending: boolean;
+  result: SearchResponse | null;
+}
+
+const SearchStatus = ({ pending, result }: SearchStatusProps) => {
+  if (!pending && !result) return null;
+  if (pending) {
+    return (
+      <Card
+        role="status"
+        aria-label="Search status"
+        aria-live="polite"
+        className="flex items-center gap-3 border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900"
+      >
+        <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-indigo-600" />
+        Searching the code graph. Results will appear here when the backend responds.
+      </Card>
+    );
+  }
+  if (result?.error) return null;
+  const count = result?.matches.length ?? 0;
+  return (
+    <Card
+      role="status"
+      aria-label="Search status"
+      aria-live="off"
+      className={`flex items-center gap-3 p-4 text-sm ${
+        count > 0
+          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+          : "border-slate-200 bg-slate-50 text-slate-700"
+      }`}
+    >
+      <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-emerald-700" />
+      <span>
+        Search completed with {count} result{count === 1 ? "" : "s"}.
+      </span>
+    </Card>
+  );
+};
+
 const SearchPage = () => {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<SearchResponse | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   // Per-call AbortController. A second submit cancels any in-flight call so
   // a stale late response can't overwrite the latest UI state, and unmount
   // aborts whatever is in flight.
@@ -35,6 +94,7 @@ const SearchPage = () => {
     },
     onSuccess: (data) => {
       setResult(data);
+      setSelectedIndex(data.matches.length > 0 ? 0 : null);
       const matchCount = data.matches.length;
       toast.success(
         matchCount > 0
@@ -45,6 +105,7 @@ const SearchPage = () => {
     onError: (error: Error) => {
       if (error.name === "AbortError") return;
       setResult({ matches: [], contexts: [], error: error.message });
+      setSelectedIndex(null);
       toast.error(`Search failed: ${error.message}`);
     },
   });
@@ -57,8 +118,14 @@ const SearchPage = () => {
       return;
     }
     setResult(null);
+    setSelectedIndex(null);
     searchMutation.mutate(query.trim());
   };
+
+  const selectedSignature =
+    result && !result.error && selectedIndex != null ? result.matches[selectedIndex] : null;
+  const selectedContext =
+    result && !result.error && selectedIndex != null ? result.contexts[selectedIndex] ?? [] : [];
 
   return (
     <div className="space-y-4">
@@ -67,12 +134,17 @@ const SearchPage = () => {
         <p className="mt-2 max-w-3xl text-sm text-slate-600">
           Find relevant methods with natural-language prompts and inspect structural neighbors in one place.
         </p>
-        <form className="mt-5 flex flex-col gap-3 md:flex-row" onSubmit={handleSubmit}>
+        <form className="mt-5 flex flex-col gap-3 md:flex-row" role="search" onSubmit={handleSubmit}>
+          <label htmlFor={SEARCH_INPUT_ID} className="sr-only">
+            Search query
+          </label>
           <Input
-            type="text"
+            id={SEARCH_INPUT_ID}
+            type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Describe a method, vulnerability pattern, or control..."
+            autoComplete="off"
           />
           <Button type="submit" disabled={searchPending || !query.trim()} className="md:min-w-36">
             <Search className="mr-1 h-4 w-4" />
@@ -80,6 +152,8 @@ const SearchPage = () => {
           </Button>
         </form>
       </Card>
+
+      <SearchStatus pending={searchPending} result={result} />
 
       {!result && !searchPending && (
         <Card className="px-6 py-10 text-center">
@@ -105,17 +179,15 @@ const SearchPage = () => {
         </Card>
       )}
 
-      {searchPending && (
-        <Card role="status" aria-live="polite" className="flex items-center gap-3 p-4 text-sm text-slate-600">
-          <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-indigo-500" />
-          Searching the code graph. Results will appear here when the backend responds.
-        </Card>
-      )}
-
       {result?.error && (
         <Card role="alert" className="border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          <p className="font-medium text-rose-800">Search failed.</p>
-          <p className="mt-1 break-words">{result.error}</p>
+          <div className="flex items-start gap-2">
+            <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-medium text-rose-800">{searchErrorTitle(result.error)}</p>
+              <p className="mt-1 break-words">{result.error}</p>
+            </div>
+          </div>
           <p className="mt-2 text-xs text-rose-700">
             If this mentions the search index or embeddings, upload and index a codebase first or wait for backend startup to finish.
           </p>
@@ -123,18 +195,59 @@ const SearchPage = () => {
       )}
 
       {result && !result.error && result.matches.length === 0 && (
-        <Card className="p-4 text-sm text-slate-600">No matches yet. Try a more specific query.</Card>
+        <Card className="p-4 text-sm text-slate-600">
+          <p className="font-medium text-slate-800">No results found.</p>
+          <p className="mt-1">
+            Try a more specific method name, API, vulnerability pattern, or control phrase. Confirm a codebase has been uploaded and indexed if the query should match.
+          </p>
+        </Card>
       )}
 
       {result && !result.error && result.matches.length > 0 && (
-        <div className="space-y-4">
-          {result.matches.map((signature, index) => (
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)] xl:items-start">
+          <Card className="overflow-hidden">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <h2 className="text-sm font-semibold text-slate-900">Search results</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Select a result to inspect graph context returned by the backend.
+              </p>
+            </div>
+            <ul aria-label="Search results" className="divide-y divide-slate-200">
+              {result.matches.map((signature, index) => {
+                const contextCount = result.contexts[index]?.length ?? 0;
+                const selected = selectedIndex === index;
+                return (
+                  <li key={`${signature}-${index}`}>
+                    <button
+                      type="button"
+                      aria-current={selected ? "true" : undefined}
+                      onClick={() => setSelectedIndex(index)}
+                      className={`block w-full min-w-0 px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 ${
+                        selected ? "bg-indigo-50" : "bg-white hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="block break-words font-mono text-sm font-semibold text-slate-900">
+                        {compactSignature(signature)}
+                      </span>
+                      <span className="mt-1 block break-words font-mono text-xs text-slate-700">
+                        {signature}
+                      </span>
+                      <span className="mt-2 block text-xs text-slate-700">
+                        {contextCount} graph context{contextCount === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+
+          {selectedSignature && (
             <SearchResultCard
-              key={signature}
-              signature={signature}
-              context={result.contexts[index]}
+              signature={selectedSignature}
+              context={selectedContext}
             />
-          ))}
+          )}
         </div>
       )}
     </div>
