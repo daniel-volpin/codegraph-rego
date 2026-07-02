@@ -253,7 +253,7 @@ test("@thesis policy scan renders findings and remediation artifacts", async ({ 
   await expect(page.getByText("ISO-A.10-WEAK-HASH").first()).toBeVisible();
   await expect(page.getByTitle("com.acme.Demo.hashPassword(String)")).toBeVisible();
   await expect(page.getByText("Weak hash usage detected")).toBeVisible();
-  await expect(page.getByText("app/src/main/java/com/acme/Demo.java:40-42")).toBeVisible();
+  await expect(page.getByText("app/src/main/java/com/acme/Demo.java:40-42").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Preview suggested fix" }).click();
   await expect(page.getByText("Proposed diff")).toBeVisible();
