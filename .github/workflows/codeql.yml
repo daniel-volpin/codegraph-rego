@@ -16,6 +16,14 @@ permissions:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
+    # Skip on private repositories unless GHAS / code scanning has been
+    # explicitly enabled via the repository variable ENABLE_GHAS_WORKFLOWS.
+    # github.event.repository.visibility is 'public' for public repos;
+    # vars.ENABLE_GHAS_WORKFLOWS can be set to 'true' in Settings → Variables
+    # to opt a private repo into CodeQL once GHAS is licensed.
+    if: >-
+      github.event.repository.visibility == 'public' ||
+      vars.ENABLE_GHAS_WORKFLOWS == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
