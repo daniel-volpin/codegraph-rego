@@ -38,14 +38,17 @@ const ViolationGroupTable = ({
   const rows = table.getRowModel().rows;
 
   return (
-    <Card className="overflow-hidden">
+    <Card data-testid="policy-results-region" className="min-w-0 overflow-hidden">
       {viewPreset === "framework_demo" && (
         <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
           Showing the benchmark-aligned categories used in the thesis framework demo. Switch to All findings to inspect
           the full policy surface.
         </div>
       )}
-      <div className="overflow-auto 2xl:max-h-[calc(100vh-11rem)]">
+      <div
+        data-testid="policy-group-table-scroll"
+        className="max-w-full overflow-x-auto 2xl:max-h-[calc(100vh-11rem)]"
+      >
         <table className="w-full table-fixed border-collapse text-sm">
           <thead className="bg-slate-100 text-left text-slate-700">
             {table.getHeaderGroups().map((headerGroup) => (

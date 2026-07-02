@@ -449,7 +449,10 @@ const PolicyPage = () => {
 
       <SummaryCards {...summary} />
 
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] 2xl:items-start">
+      <div
+        data-testid="policy-results-layout"
+        className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] 2xl:items-start"
+      >
         <ViolationGroupTable
           table={table}
           columnCount={columns.length}

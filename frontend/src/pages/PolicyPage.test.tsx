@@ -94,6 +94,22 @@ describe("PolicyPage", () => {
     expect(within(evidenceDisclosure).getByText(/com.acme.QueryBuilder.build/i)).toBeInTheDocument();
   });
 
+  it("keeps policy results inside a narrow-safe scroll region", async () => {
+    vi.mocked(evaluatePolicies).mockResolvedValue(policyResponseWithFinding());
+    const user = userEvent.setup();
+
+    renderWithProviders(<PolicyPage />);
+
+    const runButton = await screen.findByRole("button", { name: /run .*policy scan|run .*demo scan/i });
+    await waitFor(() => expect(runButton).toBeEnabled());
+    await user.click(runButton);
+
+    expect(await screen.findByText("ISO-A.8-SQL-INJECTION")).toBeInTheDocument();
+    expect(screen.getByTestId("policy-results-layout")).toHaveClass("min-w-0");
+    expect(screen.getByTestId("policy-results-region")).toHaveClass("min-w-0");
+    expect(screen.getByTestId("policy-group-table-scroll")).toHaveClass("max-w-full", "overflow-x-auto");
+  });
+
   it("communicates backend dependency failures as degraded or unavailable evaluation state", async () => {
     vi.mocked(evaluatePolicies).mockRejectedValue(new Error("Neo4j unavailable"));
     const user = userEvent.setup();
