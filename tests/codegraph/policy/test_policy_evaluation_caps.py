@@ -6,6 +6,8 @@ from typing import Any
 import pytest
 
 from codegraph.policy import integration
+from codegraph.policy.runtime import catalog as runtime_catalog
+from codegraph.policy.runtime import opa as runtime_opa
 from tests.codegraph.policy._test_helpers import BundleBuilder
 
 Bundle = dict[str, Any]
@@ -19,7 +21,7 @@ def policy_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(integration, "load_policy_catalog", lambda: {})
     monkeypatch.setattr(integration, "load_iso_rules", lambda: {})
     monkeypatch.setattr(integration, "get_policy_catalog_entries", lambda: [])
-    monkeypatch.setattr(integration, "_resolve_catalog_entry", lambda _violation_id, _catalog: None)
+    monkeypatch.setattr(runtime_catalog, "resolve_catalog_entry", lambda _violation_id, _catalog: None)
 
 
 def bundle(target_method: str, *, file_path: str | None = None, source_code: str = "") -> Bundle:
@@ -44,7 +46,7 @@ def install_policy_input(
     evaluator: EvaluateBundle,
 ) -> None:
     monkeypatch.setattr(integration, "build_policy_input", lambda **_kwargs: {"bundles": bundles})
-    monkeypatch.setattr(integration, "_evaluate_bundle", evaluator)
+    monkeypatch.setattr(runtime_opa, "evaluate_bundle", evaluator)
 
 
 def violations_by_id(result: dict[str, Any]) -> dict[str, dict[str, Any]]:

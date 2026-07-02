@@ -1,6 +1,6 @@
 import unittest
 
-from codegraph.policy.source_analysis import analyze_crypto_indicators
+from codegraph.policy.source_analysis import analyze_policy_indicators
 
 
 class TestPathTraversalDetected(unittest.TestCase):
@@ -8,7 +8,7 @@ class TestPathTraversalDetected(unittest.TestCase):
         source = (
             'String fileName = base + request.getHeader("x"); new java.io.FileInputStream(new java.io.File(fileName));'
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
         self.assertTrue(flags["path_sink_uses_tainted_input"])
         self.assertFalse(flags["path_sink_uses_safe_resource_helper"])
@@ -19,12 +19,12 @@ class TestPathTraversalDetected(unittest.TestCase):
             "String fileName = base + value;"
             "new java.io.FileOutputStream(fileName, false);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
     def test_path_traversal_two_arg_file_detected(self) -> None:
         source = 'String bar = request.getHeader("x"); new java.io.File(bar, "/Test.txt");'
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
     def test_path_traversal_nested_parent_child_file_detected(self) -> None:
@@ -33,7 +33,7 @@ class TestPathTraversalDetected(unittest.TestCase):
             "String bar = values[0];"
             "new java.io.File(new java.io.File(org.owasp.benchmark.helpers.Utils.TESTFILES_DIR), bar);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
     def test_path_traversal_get_parameter_map_detected(self) -> None:
@@ -44,7 +44,7 @@ class TestPathTraversalDetected(unittest.TestCase):
             "String fileName = base + param;"
             "new java.io.FileOutputStream(fileName, false);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
     def test_path_traversal_get_parameter_values_detected(self) -> None:
@@ -54,7 +54,7 @@ class TestPathTraversalDetected(unittest.TestCase):
             "String fileName = base + param;"
             "new java.io.FileInputStream(new java.io.File(fileName));"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
     def test_path_traversal_get_the_parameter_detected(self) -> None:
@@ -64,7 +64,7 @@ class TestPathTraversalDetected(unittest.TestCase):
             "String bar = param;"
             'new java.io.File(bar, "/Test.txt");'
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
     def test_path_traversal_constant_if_else_tainted_branch_detected(self) -> None:
@@ -76,7 +76,7 @@ class TestPathTraversalDetected(unittest.TestCase):
             "String fileName = base + bar;"
             "new java.io.FileInputStream(fileName);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
 
     def test_path_traversal_cookie_base64_flow_uses_compatibility_signal(self) -> None:
@@ -88,7 +88,7 @@ class TestPathTraversalDetected(unittest.TestCase):
             "org.apache.commons.codec.binary.Base64.encodeBase64(param.getBytes())));"
             'new java.io.File(bar, "/Test.txt");'
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
         self.assertFalse(flags["path_sink_uses_safe_constant"])
         self.assertFalse(flags["path_sink_uses_safe_resource_helper"])
@@ -107,7 +107,7 @@ class TestPathTraversalDetected(unittest.TestCase):
             "String fileURI = base + bar;"
             "new java.io.File(fileURI);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
         self.assertFalse(flags["path_sink_uses_safe_constant"])
 
@@ -124,7 +124,7 @@ class TestPathTraversalDetected(unittest.TestCase):
             "String fileName = base + bar;"
             "new java.io.FileInputStream(fileName);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
         self.assertTrue(flags["path_sink_uses_tainted_input"])
 
@@ -137,7 +137,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             "String fileName = base + bar;"
             "new java.io.FileOutputStream(fileName);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["path_traversal_detected"])
         self.assertTrue(flags["path_sink_uses_safe_constant"])
 
@@ -149,7 +149,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             "String fileName = base + bar;"
             "new java.io.FileInputStream(new java.io.File(fileName));"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["path_traversal_detected"])
 
     def test_path_traversal_constant_switch_not_flagged(self) -> None:
@@ -162,7 +162,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             "String fileName = base + bar;"
             "new java.io.FileInputStream(fileName);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["path_traversal_detected"])
 
     def test_path_traversal_constant_if_else_safe_branch_not_flagged(self) -> None:
@@ -174,7 +174,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             "String fileName = base + bar;"
             "new java.io.FileInputStream(fileName);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["path_traversal_detected"])
 
     def test_classpath_file_read_not_flagged_as_path_traversal(self) -> None:
@@ -183,7 +183,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             'new java.io.FileInputStream(org.owasp.benchmark.helpers.Utils.getFileFromClasspath("employees.xml", this.getClass().getClassLoader()));'
             'String expression = "/Employees/Employee[@emplid=\'" + param + "\']";'
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["path_traversal_detected"])
         self.assertTrue(flags["path_sink_uses_safe_resource_helper"])
 
@@ -195,7 +195,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             "String other = base + param;"
             "new java.io.FileInputStream(fileName);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["path_traversal_detected"])
         self.assertTrue(flags["path_sink_uses_safe_constant"])
 
@@ -206,7 +206,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             "String fileName = base + param;"
             "new java.io.FileInputStream(fileName);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["path_traversal_detected"])
         self.assertTrue(flags["path_sink_uses_tainted_input"])
         self.assertFalse(flags["path_sink_uses_safe_constant"])
@@ -224,7 +224,7 @@ class TestPathTraversalNotFlagged(unittest.TestCase):
             "String fileName = base + bar;"
             "new java.io.FileInputStream(fileName);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["path_traversal_detected"])
         self.assertTrue(flags["path_sink_uses_safe_constant"])
 

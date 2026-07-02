@@ -1,14 +1,45 @@
 """
-Shared Neo4j helpers: driver factory and idempotent constraint creation.
+Shared Neo4j helpers: driver factory, process-wide shared driver, and
+idempotent constraint creation.
+
+Lifecycle ownership: long-lived server paths (API routers, policy runtime,
+search) use ``shared_neo4j_driver`` and must NOT close it — the app lifespan
+(or atexit, for scripts) closes it once. One-shot evaluation scripts that
+own their whole process lifetime keep using ``get_neo4j_driver`` and close
+it themselves.
 """
+
+import atexit
+import threading
 
 from neo4j import GraphDatabase
 
 from codegraph.config import settings
 
+_SHARED_DRIVER = None
+_SHARED_DRIVER_LOCK = threading.Lock()
+
 
 def get_neo4j_driver():
     return GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
+
+
+def shared_neo4j_driver():
+    """Process-wide driver (one connection pool). Callers must not close it."""
+    global _SHARED_DRIVER
+    with _SHARED_DRIVER_LOCK:
+        if _SHARED_DRIVER is None:
+            _SHARED_DRIVER = get_neo4j_driver()
+            atexit.register(close_shared_neo4j_driver)
+    return _SHARED_DRIVER
+
+
+def close_shared_neo4j_driver() -> None:
+    global _SHARED_DRIVER
+    with _SHARED_DRIVER_LOCK:
+        if _SHARED_DRIVER is not None:
+            _SHARED_DRIVER.close()
+            _SHARED_DRIVER = None
 
 
 def ensure_constraints(driver=None):

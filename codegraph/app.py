@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -104,6 +105,17 @@ async def _preload_resources(application: FastAPI) -> None:
         application.state.startup_status = startup_status
 
 
+@asynccontextmanager
+async def _lifespan(application: FastAPI):
+    await _preload_resources(application)
+    try:
+        yield
+    finally:
+        from codegraph.db import close_shared_neo4j_driver
+
+        close_shared_neo4j_driver()
+
+
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """Stamp every request with a stable ``X-Request-Id``.
 
@@ -162,7 +174,7 @@ def create_app() -> FastAPI:
     # logs where it gets ingested by aggregators with broader access.
     LOGGER.debug("Runtime Neo4j target: uri=%s user=%s", settings.neo4j_uri, settings.neo4j_user)
 
-    application = FastAPI()
+    application = FastAPI(lifespan=_lifespan)
     application.state.startup_status = _default_startup_status()
 
     try:
@@ -189,10 +201,6 @@ def create_app() -> FastAPI:
     application.include_router(policy_router)
     application.include_router(remediation_router)
 
-    async def _startup() -> None:
-        await _preload_resources(application)
-
-    application.add_event_handler("startup", _startup)
     application.add_exception_handler(Exception, _generic_exception_handler)
     return application
 

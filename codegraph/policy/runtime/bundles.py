@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
-from codegraph.db import get_neo4j_driver
+from codegraph.db import shared_neo4j_driver
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.policy.source_analysis_core import strip_java_lexical_noise
@@ -86,6 +86,35 @@ def _snapshot_from_record(record: Any) -> dict[str, Any] | None:
     }
 
 
+# Shared context expansion + projection for method snapshots. Both fetchers
+# must stay column-identical so _snapshot_from_record sees one record shape.
+_METHOD_CONTEXT_AND_RETURN = (
+    "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
+    "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
+    "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
+    "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
+    "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
+    "RETURN coalesce(m.full_signature, m.signature) AS signature, "
+    "       m.name AS name, "
+    "       m.file_path AS file_path, "
+    "       m.start_line AS start_line, "
+    "       m.end_line AS end_line, "
+    "       m.modifiers AS modifiers, "
+    "       m.annotations AS property_annotations, "
+    "       cls.fqn AS class_fqn, "
+    "       collect(DISTINCT ann.name) AS annotation_nodes, "
+    "       collect(DISTINCT CASE WHEN usedField IS NULL "
+    "                             THEN NULL "
+    "                             ELSE {"
+    "                                 name: usedField.name, "
+    "                                 type: usedField.type, "
+    "                                 class_fqn: usedField.class_fqn"
+    "                             } END) AS uses_fields, "
+    "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
+    "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
+)
+
+
 def fetch_methods_with_context(
     driver,
     *,
@@ -97,33 +126,7 @@ def fetch_methods_with_context(
     if workspace_root:
         cypher += " WHERE m.file_path STARTS WITH $workspace_root "
         params["workspace_root"] = workspace_root
-    cypher += (
-        "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
-        "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
-        "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
-        "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
-        "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
-    )
-    cypher += (
-        "RETURN coalesce(m.full_signature, m.signature) AS signature, "
-        "       m.name AS name, "
-        "       m.file_path AS file_path, "
-        "       m.start_line AS start_line, "
-        "       m.end_line AS end_line, "
-        "       m.modifiers AS modifiers, "
-        "       m.annotations AS property_annotations, "
-        "       cls.fqn AS class_fqn, "
-        "       collect(DISTINCT ann.name) AS annotation_nodes, "
-        "       collect(DISTINCT CASE WHEN usedField IS NULL "
-        "                             THEN NULL "
-        "                             ELSE {"
-        "                                 name: usedField.name, "
-        "                                 type: usedField.type, "
-        "                                 class_fqn: usedField.class_fqn"
-        "                             } END) AS uses_fields, "
-        "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
-        "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
-    )
+    cypher += _METHOD_CONTEXT_AND_RETURN
     if isinstance(max_bundles, int) and max_bundles > 0:
         cypher += " LIMIT $max_bundles"
         params["max_bundles"] = max_bundles
@@ -142,30 +145,8 @@ def fetch_method_snapshot(driver, method_signature: str) -> dict[str, Any] | Non
         "WHERE coalesce(m.full_signature, m.signature) = $method_signature "
         "   OR m.signature = $method_signature "
         "   OR m.full_signature = $method_signature "
-        "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
-        "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
-        "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
-        "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
-        "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
-        "RETURN coalesce(m.full_signature, m.signature) AS signature, "
-        "       m.name AS name, "
-        "       m.file_path AS file_path, "
-        "       m.start_line AS start_line, "
-        "       m.end_line AS end_line, "
-        "       m.modifiers AS modifiers, "
-        "       m.annotations AS property_annotations, "
-        "       cls.fqn AS class_fqn, "
-        "       collect(DISTINCT ann.name) AS annotation_nodes, "
-        "       collect(DISTINCT CASE WHEN usedField IS NULL "
-        "                             THEN NULL "
-        "                             ELSE {"
-        "                                 name: usedField.name, "
-        "                                 type: usedField.type, "
-        "                                 class_fqn: usedField.class_fqn"
-        "                             } END) AS uses_fields, "
-        "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
-        "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
-        "LIMIT 1"
+        + _METHOD_CONTEXT_AND_RETURN
+        + "LIMIT 1"
     )
     with driver.session() as session:
         record = session.run(cypher, method_signature=method_signature).single()
@@ -355,15 +336,11 @@ def build_policy_input(
     max_bundles: int | None = None,
     workspace_root: str | None = None,
 ) -> dict[str, Any]:
-    driver = get_neo4j_driver()
-    try:
-        methods = fetch_methods_with_context(
-            driver,
-            max_bundles=max_bundles,
-            workspace_root=workspace_root,
-        )
-    finally:
-        driver.close()
+    methods = fetch_methods_with_context(
+        shared_neo4j_driver(),
+        max_bundles=max_bundles,
+        workspace_root=workspace_root,
+    )
     hybrid_search = load_hybrid_search()
 
     workers = min(32, (os.cpu_count() or 4) + 4)

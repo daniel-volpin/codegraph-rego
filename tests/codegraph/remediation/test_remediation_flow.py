@@ -97,13 +97,13 @@ class RemediationFlowTests(RemediationTestBase):
 
     def test_remediation_capability_matches_supported_rule_set(self):
         from codegraph.remediation.capabilities import (
-            DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS,
+            default_supported_remediation_rule_ids,
             get_remediation_capability,
         )
 
         self.assertEqual(
             set(self.service.RemediationService._FIX_STRATEGIES.keys()),
-            set(DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS),
+            set(default_supported_remediation_rule_ids()),
         )
 
         supported = get_remediation_capability(

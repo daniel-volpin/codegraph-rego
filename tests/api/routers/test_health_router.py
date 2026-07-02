@@ -87,7 +87,7 @@ class HealthRouterTests(unittest.IsolatedAsyncioTestCase):
 
     @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
-    @patch("api.routers.health.get_neo4j_driver", return_value=_FakeDriver())
+    @patch("api.routers.health.shared_neo4j_driver", return_value=_FakeDriver())
     async def test_health_returns_ok_when_runtime_is_ready(
         self,
         _mock_driver,
@@ -108,7 +108,7 @@ class HealthRouterTests(unittest.IsolatedAsyncioTestCase):
 
     @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
-    @patch("api.routers.health.get_neo4j_driver", return_value=_FakeDriver())
+    @patch("api.routers.health.shared_neo4j_driver", return_value=_FakeDriver())
     async def test_health_returns_degraded_when_startup_is_degraded(
         self,
         _mock_driver,
@@ -139,7 +139,7 @@ class HealthzLivenessTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.status, "alive")
 
-    @patch("api.routers.health.get_neo4j_driver")
+    @patch("api.routers.health.shared_neo4j_driver")
     @patch("api.routers.health._load_search_health_dependencies")
     @patch("api.routers.health._opa_probe")
     async def test_healthz_does_no_external_io(
@@ -167,7 +167,7 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
 
     @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
-    @patch("api.routers.health.get_neo4j_driver")
+    @patch("api.routers.health.shared_neo4j_driver")
     async def test_readyz_reports_dependency_status(
         self,
         mock_driver,
@@ -187,7 +187,7 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
 
     @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
-    @patch("api.routers.health.get_neo4j_driver")
+    @patch("api.routers.health.shared_neo4j_driver")
     async def test_readyz_caches_second_call_within_ttl(
         self,
         mock_driver,
@@ -225,7 +225,7 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
 
     @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
-    @patch("api.routers.health.get_neo4j_driver", return_value=_FakeDriver())
+    @patch("api.routers.health.shared_neo4j_driver", return_value=_FakeDriver())
     async def test_health_and_readyz_share_the_cache(
         self,
         _mock_driver,
@@ -254,7 +254,7 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
 
     @patch("api.routers.health._opa_probe", return_value=(False, "opa version probe failed: bad binary"))
     @patch("api.routers.health._load_search_health_dependencies")
-    @patch("api.routers.health.get_neo4j_driver", return_value=_FakeDriver())
+    @patch("api.routers.health.shared_neo4j_driver", return_value=_FakeDriver())
     async def test_readyz_reports_opa_probe_failure(
         self,
         _mock_driver,

@@ -9,20 +9,12 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from codegraph.db import get_neo4j_driver
+from codegraph.db import shared_neo4j_driver
 from codegraph.policy.runtime import bundles as runtime_bundles
 from codegraph.policy.runtime import catalog as runtime_catalog
 from codegraph.policy.runtime import opa as runtime_opa
 
 LOGGER = logging.getLogger(__name__)
-
-
-def _load_hybrid_search():
-    return runtime_bundles.load_hybrid_search()
-
-
-def _is_test_source_path(file_path: Any) -> bool:
-    return runtime_bundles.is_test_source_path(file_path)
 
 
 def load_policy_catalog() -> dict[str, dict[str, Any]]:
@@ -31,10 +23,6 @@ def load_policy_catalog() -> dict[str, dict[str, Any]]:
 
 def get_policy_catalog_entries() -> list[dict[str, Any]]:
     return runtime_catalog.get_policy_catalog_entries()
-
-
-def _resolve_catalog_entry(violation_id: Any, catalog: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
-    return runtime_catalog.resolve_catalog_entry(violation_id, catalog)
 
 
 def load_iso_rules() -> dict[str, Any]:
@@ -53,23 +41,6 @@ def build_policy_input(
     return runtime_bundles.build_policy_input(max_bundles=max_bundles, workspace_root=workspace_root)
 
 
-def _fetch_methods_with_context(
-    driver,
-    *,
-    max_bundles: int | None = None,
-    workspace_root: str | None = None,
-) -> list[dict[str, Any]]:
-    return runtime_bundles.fetch_methods_with_context(
-        driver,
-        max_bundles=max_bundles,
-        workspace_root=workspace_root,
-    )
-
-
-def _fetch_method_snapshot(driver, method_signature: str) -> dict[str, Any] | None:
-    return runtime_bundles.fetch_method_snapshot(driver, method_signature)
-
-
 def build_evidence_bundle(
     method_snapshot: dict[str, Any],
     search_service=None,
@@ -82,18 +53,6 @@ def build_evidence_bundle(
         method_index=method_index,
         source_path_override=source_path_override,
     )
-
-
-def _normalize_violation_payload(payload: Any) -> dict[str, Any] | None:
-    return runtime_opa.normalize_violation_payload(payload, LOGGER)
-
-
-def _build_violation_response(
-    normalized: dict[str, Any],
-    bundle: dict[str, Any],
-    control_meta: dict[str, Any] | None,
-) -> dict[str, Any]:
-    return runtime_opa.build_violation_response(normalized, bundle, control_meta)
 
 
 def _allowed_rule_ids(rule_ids: list[str] | None) -> set[str]:
@@ -124,7 +83,7 @@ def _evaluate_bundles_concurrently(bundles: list[dict[str, Any]]) -> tuple[list[
     failed_bundles: list[dict[str, Any]] = []
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        future_to_idx = {pool.submit(_evaluate_bundle, bundle): idx for idx, bundle in enumerate(bundles)}
+        future_to_idx = {pool.submit(runtime_opa.evaluate_bundle, bundle): idx for idx, bundle in enumerate(bundles)}
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
             bundle = bundles[idx]
@@ -171,7 +130,7 @@ def _collect_violation_responses(
 
     for bundle, opa_result in zip(bundles, opa_results):
         for violation in opa_result or []:
-            normalized = _normalize_violation_payload(violation)
+            normalized = normalize_violation_payload(violation)
             if normalized is None:
                 continue
 
@@ -181,8 +140,8 @@ def _collect_violation_responses(
             if _max_per_rule_reached(violation_id, violation_counts_by_id, max_per_violation_id):
                 continue
 
-            control_meta = _resolve_catalog_entry(violation_id, catalog)
-            violations.append(_build_violation_response(normalized, bundle, control_meta))
+            control_meta = runtime_catalog.resolve_catalog_entry(violation_id, catalog)
+            violations.append(runtime_opa.build_violation_response(normalized, bundle, control_meta))
             if violation_id is not None:
                 key = str(violation_id)
                 violation_counts_by_id[key] = violation_counts_by_id.get(key, 0) + 1
@@ -262,20 +221,12 @@ def evaluate_bundle(bundle: dict[str, Any]) -> list[dict[str, Any]]:
     same query and policy directory as the main evaluation path, but accepts an
     in-memory bundle (e.g., for virtual remediation previews).
     """
-    return _evaluate_bundle(bundle)
+    return runtime_opa.evaluate_bundle(bundle)
 
 
 def normalize_violation_payload(payload: Any) -> dict[str, Any] | None:
     """Public helper to coerce OPA outputs into a dict or return None."""
-    return _normalize_violation_payload(payload)
-
-
-def _evaluate_bundle(bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    return runtime_opa.evaluate_bundle(bundle)
-
-
-def _evaluate_package_root(bundle: dict[str, Any], package: str = "data.iso27001") -> dict[str, Any]:
-    return runtime_opa.evaluate_package_root(bundle, package=package)
+    return runtime_opa.normalize_violation_payload(payload, LOGGER)
 
 
 class PolicyEvaluator:
@@ -286,20 +237,18 @@ class PolicyEvaluator:
         self._rules = load_iso_rules()
 
     def evaluate(self, method_signature: str, *, source_path_override: str | None = None) -> dict[str, Any]:
-        driver = get_neo4j_driver()
-        try:
-            snapshot = _fetch_method_snapshot(driver, method_signature)
-        finally:
-            driver.close()
+        snapshot = runtime_bundles.fetch_method_snapshot(shared_neo4j_driver(), method_signature)
         if not snapshot:
             return {
                 "target_method": method_signature,
                 "violations": [],
                 "error": "method_not_found",
             }
-        bundle = build_evidence_bundle(snapshot, _load_hybrid_search(), source_path_override=source_path_override)
+        bundle = build_evidence_bundle(
+            snapshot, runtime_bundles.load_hybrid_search(), source_path_override=source_path_override
+        )
         try:
-            opa_output = _evaluate_bundle(bundle)
+            opa_output = runtime_opa.evaluate_bundle(bundle)
         except RuntimeError as exc:
             return {
                 "target_method": method_signature,
@@ -309,12 +258,12 @@ class PolicyEvaluator:
         catalog = self._catalog
         violations: list[dict[str, Any]] = []
         for violation in opa_output:
-            normalized = _normalize_violation_payload(violation)
+            normalized = normalize_violation_payload(violation)
             if normalized is None:
                 continue
             violation_id = normalized.get("violation_id")
-            control_meta = _resolve_catalog_entry(violation_id, catalog)
-            violations.append(_build_violation_response(normalized, bundle, control_meta))
+            control_meta = runtime_catalog.resolve_catalog_entry(violation_id, catalog)
+            violations.append(runtime_opa.build_violation_response(normalized, bundle, control_meta))
         return {
             "target_method": method_signature,
             "violations": violations,
@@ -324,16 +273,14 @@ class PolicyEvaluator:
 
     def trace(self, method_signature: str, *, source_path_override: str | None = None) -> dict[str, Any]:
         """Shadow trace path: evaluates the bundle via package root to extract intermediate predicate definitions."""
-        driver = get_neo4j_driver()
-        try:
-            snapshot = _fetch_method_snapshot(driver, method_signature)
-        finally:
-            driver.close()
+        snapshot = runtime_bundles.fetch_method_snapshot(shared_neo4j_driver(), method_signature)
         if not snapshot:
             return {}
-        bundle = build_evidence_bundle(snapshot, _load_hybrid_search(), source_path_override=source_path_override)
+        bundle = build_evidence_bundle(
+            snapshot, runtime_bundles.load_hybrid_search(), source_path_override=source_path_override
+        )
         try:
-            return _evaluate_package_root(bundle)
+            return runtime_opa.evaluate_package_root(bundle)
         except RuntimeError:
             return {}
 
