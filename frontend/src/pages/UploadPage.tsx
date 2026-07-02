@@ -21,11 +21,18 @@ import {
   uniqueSortedModuleLabels,
 } from "../lib/workspace";
 
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 const UploadPage = () => {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const refetchStatusRef = useRef<(() => void) | null>(null);
-  const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragActive, setDragActive] = useState(false);
   const [result, setResult] = useState<UploadResponse | null>(null);
   const [localStatus, setLocalStatus] = useState<UploadStatus | null>(null);
   const upsertActivity = useUpsertActivity();
@@ -127,9 +134,33 @@ const UploadPage = () => {
     };
   }, [clearActivity]);
 
+  // A stray drop outside the dropzone would otherwise navigate the browser
+  // to the zip file and destroy the upload session. Neutralize document-level
+  // drops while this page is mounted; the dropzone handles its own.
+  useEffect(() => {
+    const prevent = (event: DragEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("dragover", prevent);
+    window.addEventListener("drop", prevent);
+    return () => {
+      window.removeEventListener("dragover", prevent);
+      window.removeEventListener("drop", prevent);
+    };
+  }, []);
+
+  const acceptFile = (file: File | null | undefined) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      toast.error(`"${file.name}" is not a ZIP archive. Select a .zip file.`);
+      return;
+    }
+    setSelectedFile(file);
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const file = inputRef.current?.files?.[0];
+    const file = selectedFile;
     if (!file) {
       const feedback: UploadResponse = {
         status: "error",
@@ -181,37 +212,58 @@ const UploadPage = () => {
         </p>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-          <label className="group flex min-h-80 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center transition hover:border-indigo-400 hover:bg-indigo-50">
+          <label
+            data-testid="upload-dropzone"
+            className={`group flex min-h-80 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-8 text-center transition focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 ${
+              isDragActive
+                ? "border-indigo-500 bg-indigo-50"
+                : "border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50"
+            }`}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (!isProcessing) setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragActive(false);
+              if (isProcessing) return;
+              acceptFile(event.dataTransfer.files?.[0]);
+            }}
+          >
+            {/* sr-only (not display:none) keeps the input keyboard-focusable,
+                so the dropzone can be operated without a pointer. */}
             <input
               ref={inputRef}
               type="file"
               accept=".zip"
               disabled={isProcessing}
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                setSelectedName(file ? file.name : null);
-              }}
+              className="sr-only"
+              aria-label="Select ZIP archive with Java sources"
+              onChange={(event) => acceptFile(event.target.files?.[0])}
             />
             <div className="mb-4 rounded-full bg-white p-3 shadow-sm ring-1 ring-slate-200">
-              <FileArchive className="h-8 w-8 text-indigo-600" />
+              <FileArchive aria-hidden="true" className="h-8 w-8 text-indigo-600" />
             </div>
             <p className="text-xl font-semibold text-slate-900">
-              {selectedName ? "File selected" : "Click to select ZIP archive"}
+              {selectedFile ? "File selected" : "Select or drop a ZIP archive"}
             </p>
             <p className="mt-1 text-sm text-slate-500">
-              Drag and drop a .zip file with Java sources, ideally under src/main/java.
+              Click to browse, or drag a .zip with Java sources (ideally under src/main/java) onto this area.
             </p>
-            {selectedName && (
+            {selectedFile && (
               <Badge variant="secondary" className="mt-4 max-w-full truncate px-3 py-1 text-xs">
-                {selectedName}
+                {selectedFile.name} · {formatFileSize(selectedFile.size)}
               </Badge>
             )}
           </label>
 
-          <div className="flex items-center justify-end">
-            <Button type="submit" disabled={isProcessing || !selectedName}>
-              <UploadCloud className="mr-1 h-4 w-4" />
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">
+              Uploading replaces the active workspace and re-runs ingestion and indexing.
+            </p>
+            <Button type="submit" disabled={isProcessing || !selectedFile}>
+              <UploadCloud aria-hidden="true" className="mr-1 h-4 w-4" />
               {isProcessing ? "Processing..." : "Upload & Ingest"}
             </Button>
           </div>
