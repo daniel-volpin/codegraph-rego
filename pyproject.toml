@@ -49,3 +49,7 @@ extend-select = ["I", "UP"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning:importlib._bootstrap",
+]
+
