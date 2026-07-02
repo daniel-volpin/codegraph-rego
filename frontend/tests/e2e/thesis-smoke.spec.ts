@@ -256,14 +256,16 @@ test("@thesis policy scan renders findings and remediation artifacts", async ({ 
   await expect(page.getByText("app/src/main/java/com/acme/Demo.java:40-42").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Preview suggested fix" }).click();
-  await expect(page.getByText("Proposed diff")).toBeVisible();
+  await expect(page.getByText("Read-Only Virtual Fix Preview")).toBeVisible();
   await expect(page.getByText("+sha256(input)")).toBeVisible();
   await expect(page.getByText("High-confidence bounded replacement.")).toBeVisible();
 
   await page.getByRole("button", { name: "Verify fix (dry run)" }).click();
-  await expect(page.getByText("Verification summary")).toBeVisible();
-  await expect(page.getByText("Overall PASS")).toBeVisible();
-  await expect(page.getByText("Compilation success")).toBeVisible();
+  await expect(page.getByText("Confirm Dry-Run Remediation")).toBeVisible();
+  await page.getByRole("button", { name: "Confirm & verify fix" }).click();
+
+  await expect(page.getByText("Fix Fully Verified").first()).toBeVisible();
+  await expect(page.getByText("4. Remediation & Virtual Verification")).toBeVisible();
 });
 
 test("@thesis responsive drawer navigation reaches search", async ({ page }, testInfo) => {
@@ -271,7 +273,7 @@ test("@thesis responsive drawer navigation reaches search", async ({ page }, tes
 
   await page.goto("/");
   await page.getByRole("button", { name: "Open navigation" }).click();
-  await page.getByRole("link", { name: "Search" }).click();
+  await page.getByRole("link", { name: "Search", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Semantic Search" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("mobile-drawer-search.png"), fullPage: true });

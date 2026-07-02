@@ -12,7 +12,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: `PATH=/opt/homebrew/bin:$PATH yarn dev --host 127.0.0.1 --port ${serverPort}`,
+    command: `npx yarn dev --host 127.0.0.1 --port ${serverPort}`,
     port: serverPort,
     reuseExistingServer: true,
   },
