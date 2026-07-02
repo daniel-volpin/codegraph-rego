@@ -333,7 +333,7 @@ const PolicyPage = () => {
     () => [
       {
         id: "expander",
-        header: "",
+        header: () => <span className="sr-only">Expand rule group</span>,
         enableSorting: false,
         cell: ({ row }) => (
           <button
@@ -451,7 +451,7 @@ const PolicyPage = () => {
 
       <div
         data-testid="policy-results-layout"
-        className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] 2xl:items-start"
+        className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] 2xl:items-start"
       >
         <ViolationGroupTable
           table={table}

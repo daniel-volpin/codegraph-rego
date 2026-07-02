@@ -105,7 +105,8 @@ describe("PolicyPage", () => {
     await user.click(runButton);
 
     expect(await screen.findByText("ISO-A.8-SQL-INJECTION")).toBeInTheDocument();
-    expect(screen.getByTestId("policy-results-layout")).toHaveClass("min-w-0");
+    expect(screen.getByRole("columnheader", { name: /expand rule group/i })).toBeInTheDocument();
+    expect(screen.getByTestId("policy-results-layout")).toHaveClass("min-w-0", "grid-cols-[minmax(0,1fr)]");
     expect(screen.getByTestId("policy-results-region")).toHaveClass("min-w-0");
     expect(screen.getByTestId("policy-group-table-scroll")).toHaveClass("max-w-full", "overflow-x-auto");
   });

@@ -163,7 +163,7 @@ const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps) => {
 
   return (
     <Card
-      className="p-5 2xl:sticky 2xl:top-24 2xl:max-h-[calc(100vh-11rem)] 2xl:overflow-auto"
+      className="min-w-0 p-5 2xl:sticky 2xl:top-24 2xl:max-h-[calc(100vh-11rem)] 2xl:overflow-auto"
       data-testid="finding-dossier"
     >
       <div role="status" aria-live="polite" className="sr-only">

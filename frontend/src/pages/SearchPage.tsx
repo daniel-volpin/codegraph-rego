@@ -204,7 +204,7 @@ const SearchPage = () => {
       )}
 
       {result && !result.error && result.matches.length > 0 && (
-        <div className="grid gap-4 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)] xl:items-start">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)] xl:items-start">
           <Card className="overflow-hidden">
             <div className="border-b border-slate-200 px-4 py-3">
               <h2 className="text-sm font-semibold text-slate-900">Search results</h2>
@@ -229,10 +229,10 @@ const SearchPage = () => {
                       <span className="block break-words font-mono text-sm font-semibold text-slate-900">
                         {compactSignature(signature)}
                       </span>
-                      <span className="mt-1 block break-words font-mono text-xs text-slate-500">
+                      <span className="mt-1 block break-words font-mono text-xs text-slate-700">
                         {signature}
                       </span>
-                      <span className="mt-2 block text-xs text-slate-500">
+                      <span className="mt-2 block text-xs text-slate-700">
                         {contextCount} graph context{contextCount === 1 ? "" : "s"}
                       </span>
                     </button>

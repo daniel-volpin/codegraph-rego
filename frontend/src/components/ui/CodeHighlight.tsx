@@ -9,6 +9,33 @@ import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 SyntaxHighlighter.registerLanguage("java", java);
 SyntaxHighlighter.registerLanguage("json", json);
 
+const accessibleOneLight = {
+  ...oneLight,
+  comment: { ...oneLight.comment, color: "#475569" },
+  prolog: { ...oneLight.prolog, color: "#475569" },
+  cdata: { ...oneLight.cdata, color: "#475569" },
+  "attr-name": { ...oneLight["attr-name"], color: "#92400e" },
+  "class-name": { ...oneLight["class-name"], color: "#92400e" },
+  boolean: { ...oneLight.boolean, color: "#92400e" },
+  constant: { ...oneLight.constant, color: "#92400e" },
+  number: { ...oneLight.number, color: "#92400e" },
+  atrule: { ...oneLight.atrule, color: "#92400e" },
+  selector: { ...oneLight.selector, color: "#166534" },
+  string: { ...oneLight.string, color: "#166534" },
+  char: { ...oneLight.char, color: "#166534" },
+  builtin: { ...oneLight.builtin, color: "#166534" },
+  inserted: { ...oneLight.inserted, color: "#166534" },
+  regex: { ...oneLight.regex, color: "#166534" },
+  "attr-value": { ...oneLight["attr-value"], color: "#166534" },
+  "attr-value > .token.punctuation": {
+    ...oneLight["attr-value > .token.punctuation"],
+    color: "#166534",
+  },
+  variable: { ...oneLight.variable, color: "#1d4ed8" },
+  operator: { ...oneLight.operator, color: "#1d4ed8" },
+  function: { ...oneLight.function, color: "#1d4ed8" },
+} satisfies typeof oneLight;
+
 interface CodeHighlightProps {
   code: string;
   language?: "java" | "json" | "text";
@@ -40,9 +67,11 @@ const CodeHighlight = ({
     >
       <SyntaxHighlighter
         language={normalizedLanguage}
-        style={oneLight}
+        style={accessibleOneLight}
         wrapLongLines={wrapLongLines}
         showLineNumbers
+        tabIndex={0}
+        aria-label={`${language} code snippet`}
         customStyle={{
           margin: 0,
           background: "transparent",
@@ -60,7 +89,7 @@ const CodeHighlight = ({
         lineNumberStyle={{
           minWidth: "2.25em",
           paddingRight: "0.75em",
-          color: "#94a3b8",
+          color: "#475569",
           userSelect: "none",
         }}
       >

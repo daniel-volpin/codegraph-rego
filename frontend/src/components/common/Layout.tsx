@@ -1,4 +1,4 @@
-import { PropsWithChildren, useState } from "react";
+import { type CSSProperties, type PropsWithChildren, useState } from "react";
 import { Menu, ShieldCheck } from "lucide-react";
 import SidebarNav from "./SidebarNav";
 import Breadcrumbs from "./Breadcrumbs";
@@ -13,6 +13,23 @@ import {
   DialogPortal,
   DialogTitle,
 } from "../ui/dialog";
+
+type ToastColorVars = CSSProperties & Record<`--${string}`, string>;
+
+const toastColorVars: ToastColorVars = {
+  "--success-bg": "#ecfdf5",
+  "--success-border": "#a7f3d0",
+  "--success-text": "#064e3b",
+  "--info-bg": "#eef2ff",
+  "--info-border": "#c7d2fe",
+  "--info-text": "#312e81",
+  "--warning-bg": "#fffbeb",
+  "--warning-border": "#fde68a",
+  "--warning-text": "#78350f",
+  "--error-bg": "#fff1f2",
+  "--error-border": "#fecdd3",
+  "--error-text": "#881337",
+};
 
 const Layout = ({ children }: PropsWithChildren) => {
   const [isDrawerOpen, setDrawerOpen] = useState(false);
@@ -87,7 +104,21 @@ const Layout = ({ children }: PropsWithChildren) => {
           </div>
         </div>
       </div>
-      <Toaster richColors position="top-right" />
+      <Toaster
+        richColors
+        position="top-right"
+        style={toastColorVars}
+        toastOptions={{
+          classNames: {
+            success: "border-emerald-300 bg-emerald-50 text-emerald-950",
+            error: "border-rose-300 bg-rose-50 text-rose-950",
+            warning: "border-amber-300 bg-amber-50 text-amber-950",
+            info: "border-indigo-300 bg-indigo-50 text-indigo-950",
+            title: "text-current",
+            description: "text-current",
+          },
+        }}
+      />
     </div>
   );
 };

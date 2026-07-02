@@ -65,7 +65,7 @@ const ViolationGroupTable = ({
                       aria-sort={canSort ? ariaSort : undefined}
                       className={`px-3 py-2 font-semibold overflow-hidden ${colWidthClass(header.column.id)}`}
                     >
-                      {header.isPlaceholder ? null : canSort ? (
+                      {header.isPlaceholder ? <span className="sr-only">Expand rule group</span> : canSort ? (
                         <button
                           type="button"
                           className="inline-flex items-center gap-1"
