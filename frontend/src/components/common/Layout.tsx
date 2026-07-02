@@ -77,12 +77,7 @@ const Layout = ({ children }: PropsWithChildren) => {
             <div className="min-w-0">
               <Breadcrumbs />
             </div>
-            <div className="hidden sm:block">
-              <HealthStatus variant="header" />
-            </div>
-            <div className="sm:hidden">
-              <HealthStatus variant="panel" />
-            </div>
+            <HealthStatus />
           </header>
           <div className="flex flex-col gap-6 lg:flex-row">
             <main id="main-content" className="min-w-0 flex-1">
