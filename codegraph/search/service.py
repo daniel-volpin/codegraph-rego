@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from codegraph.config import settings
-from codegraph.db import get_neo4j_driver
+from codegraph.db import shared_neo4j_driver
 from codegraph.search.hybrid import (
     fetch_graph_context_for_method,
     load_embedding_model,
@@ -21,16 +21,18 @@ class HybridSearchService:
 
     def __init__(
         self,
-        index_path: str = settings.faiss_index_path,
-        signature_map_candidates: tuple[str, ...] = (
+        index_path: str | None = None,
+        signature_map_candidates: tuple[str, ...] | None = None,
+        model_name: str | None = None,
+    ):
+        # Resolved at construction, not import: default-argument expressions
+        # would freeze settings values before tests or env overrides apply.
+        self._index_path = index_path or settings.faiss_index_path
+        self._signature_map_candidates = signature_map_candidates or (
             settings.signature_map_path_full,
             settings.signature_map_path,
-        ),
-        model_name: str = settings.embedding_model_name,
-    ):
-        self._index_path = index_path
-        self._signature_map_candidates = signature_map_candidates
-        self._model_name = model_name
+        )
+        self._model_name = model_name or settings.embedding_model_name
 
     def _load_index(self):
         return load_faiss_index(self._index_path)
@@ -74,9 +76,6 @@ def run_search(query: str, k: int = 5) -> tuple[list[str], list[list[dict[str, A
     matches = service.search(query, top_k=k)
     contexts: list[list[dict[str, Any]]] = []
     if matches:
-        driver = get_neo4j_driver()
-        try:
-            contexts = [fetch_graph_context_for_method(sig, driver) for sig in matches]
-        finally:
-            driver.close()
+        driver = shared_neo4j_driver()
+        contexts = [fetch_graph_context_for_method(sig, driver) for sig in matches]
     return matches, contexts

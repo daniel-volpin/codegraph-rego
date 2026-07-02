@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
-from codegraph.db import get_neo4j_driver
+from codegraph.db import shared_neo4j_driver
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.policy.source_analysis_core import strip_java_lexical_noise
@@ -86,6 +86,35 @@ def _snapshot_from_record(record: Any) -> dict[str, Any] | None:
     }
 
 
+# Shared context expansion + projection for method snapshots. Both fetchers
+# must stay column-identical so _snapshot_from_record sees one record shape.
+_METHOD_CONTEXT_AND_RETURN = (
+    "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
+    "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
+    "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
+    "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
+    "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
+    "RETURN coalesce(m.full_signature, m.signature) AS signature, "
+    "       m.name AS name, "
+    "       m.file_path AS file_path, "
+    "       m.start_line AS start_line, "
+    "       m.end_line AS end_line, "
+    "       m.modifiers AS modifiers, "
+    "       m.annotations AS property_annotations, "
+    "       cls.fqn AS class_fqn, "
+    "       collect(DISTINCT ann.name) AS annotation_nodes, "
+    "       collect(DISTINCT CASE WHEN usedField IS NULL "
+    "                             THEN NULL "
+    "                             ELSE {"
+    "                                 name: usedField.name, "
+    "                                 type: usedField.type, "
+    "                                 class_fqn: usedField.class_fqn"
+    "                             } END) AS uses_fields, "
+    "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
+    "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
+)
+
+
 def fetch_methods_with_context(
     driver,
     *,
@@ -97,33 +126,7 @@ def fetch_methods_with_context(
     if workspace_root:
         cypher += " WHERE m.file_path STARTS WITH $workspace_root "
         params["workspace_root"] = workspace_root
-    cypher += (
-        "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
-        "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
-        "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
-        "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
-        "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
-    )
-    cypher += (
-        "RETURN coalesce(m.full_signature, m.signature) AS signature, "
-        "       m.name AS name, "
-        "       m.file_path AS file_path, "
-        "       m.start_line AS start_line, "
-        "       m.end_line AS end_line, "
-        "       m.modifiers AS modifiers, "
-        "       m.annotations AS property_annotations, "
-        "       cls.fqn AS class_fqn, "
-        "       collect(DISTINCT ann.name) AS annotation_nodes, "
-        "       collect(DISTINCT CASE WHEN usedField IS NULL "
-        "                             THEN NULL "
-        "                             ELSE {"
-        "                                 name: usedField.name, "
-        "                                 type: usedField.type, "
-        "                                 class_fqn: usedField.class_fqn"
-        "                             } END) AS uses_fields, "
-        "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
-        "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
-    )
+    cypher += _METHOD_CONTEXT_AND_RETURN
     if isinstance(max_bundles, int) and max_bundles > 0:
         cypher += " LIMIT $max_bundles"
         params["max_bundles"] = max_bundles
@@ -142,30 +145,8 @@ def fetch_method_snapshot(driver, method_signature: str) -> dict[str, Any] | Non
         "WHERE coalesce(m.full_signature, m.signature) = $method_signature "
         "   OR m.signature = $method_signature "
         "   OR m.full_signature = $method_signature "
-        "OPTIONAL MATCH (cls:Class)-[:DECLARES]->(m) "
-        "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
-        "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
-        "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
-        "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
-        "RETURN coalesce(m.full_signature, m.signature) AS signature, "
-        "       m.name AS name, "
-        "       m.file_path AS file_path, "
-        "       m.start_line AS start_line, "
-        "       m.end_line AS end_line, "
-        "       m.modifiers AS modifiers, "
-        "       m.annotations AS property_annotations, "
-        "       cls.fqn AS class_fqn, "
-        "       collect(DISTINCT ann.name) AS annotation_nodes, "
-        "       collect(DISTINCT CASE WHEN usedField IS NULL "
-        "                             THEN NULL "
-        "                             ELSE {"
-        "                                 name: usedField.name, "
-        "                                 type: usedField.type, "
-        "                                 class_fqn: usedField.class_fqn"
-        "                             } END) AS uses_fields, "
-        "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
-        "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
-        "LIMIT 1"
+        + _METHOD_CONTEXT_AND_RETURN
+        + "LIMIT 1"
     )
     with driver.session() as session:
         record = session.run(cypher, method_signature=method_signature).single()
@@ -286,21 +267,30 @@ def _record_evidence_span_attributes(
     span.set_attribute("analysis_flags_active", analysis_flag_count)
 
 
-def build_evidence_bundle(
+def build_evidence_bundle_from_source(
     method_snapshot: dict[str, Any],
+    source_code: str,
+    *,
     search_service: HybridSearchService | None = None,
     method_index: dict[str, dict[str, Any]] | None = None,
-    source_path_override: str | Path | None = None,
     taint_path_finder: TaintPathFinder | None = None,
+    bundle_file_path: str | None = None,
+    vector_context: list[str] | None = None,
 ) -> dict[str, Any]:
+    """Canonical source-text -> policy-input construction.
+
+    This is the single owner of the evidence semantics Rego evaluates
+    against: lexical source views, analysis flags, helper summaries, and
+    taint-path shape. Every evaluation path — on-disk methods and virtual
+    remediation candidates alike — must go through here so the policy
+    input cannot fork. Pure with respect to the workspace and graph; the
+    only optional I/O is the vector lookup when ``vector_context`` is not
+    supplied.
+    """
     with _tracer.start_as_current_span("evidence.build") as span:
         span.set_attribute("method_signature", str(method_snapshot.get("signature") or ""))
         span.set_attribute("file_path", str(method_snapshot.get("file_path") or ""))
 
-        file_path = method_snapshot.get("file_path")
-        resolved_path = resolve_source_path(file_path)
-        source_path = _resolve_bundle_source_path(resolved_path, source_path_override)
-        source_code = _extract_method_source(method_snapshot, source_path)
         source_code_active, source_code_substring_safe = _source_views(source_code)
 
         graph_context = _graph_context(method_snapshot)
@@ -310,12 +300,13 @@ def build_evidence_bundle(
             method_snapshot=method_snapshot,
             method_index=method_index,
         )
-        vector_context = _vector_context(search_service, method_snapshot["signature"])
+        if vector_context is None:
+            vector_context = _vector_context(search_service, method_snapshot["signature"])
         bundle = build_policy_bundle(
             target_method=method_snapshot["signature"],
             method_name=method_snapshot.get("name"),
             class_fqn=method_snapshot.get("class_fqn"),
-            file_path=resolved_path.as_posix() if resolved_path else file_path,
+            file_path=bundle_file_path if bundle_file_path is not None else method_snapshot.get("file_path"),
             start_line=method_snapshot.get("start_line"),
             end_line=method_snapshot.get("end_line"),
             modifiers=method_snapshot.get("modifiers") or [],
@@ -350,20 +341,38 @@ def build_evidence_bundle(
         return result
 
 
+def build_evidence_bundle(
+    method_snapshot: dict[str, Any],
+    search_service: HybridSearchService | None = None,
+    method_index: dict[str, dict[str, Any]] | None = None,
+    source_path_override: str | Path | None = None,
+    taint_path_finder: TaintPathFinder | None = None,
+) -> dict[str, Any]:
+    """On-disk variant: extract the method source, then delegate to the core."""
+    file_path = method_snapshot.get("file_path")
+    resolved_path = resolve_source_path(file_path)
+    source_path = _resolve_bundle_source_path(resolved_path, source_path_override)
+    source_code = _extract_method_source(method_snapshot, source_path)
+    return build_evidence_bundle_from_source(
+        method_snapshot,
+        source_code,
+        search_service=search_service,
+        method_index=method_index,
+        taint_path_finder=taint_path_finder,
+        bundle_file_path=resolved_path.as_posix() if resolved_path else file_path,
+    )
+
+
 def build_policy_input(
     *,
     max_bundles: int | None = None,
     workspace_root: str | None = None,
 ) -> dict[str, Any]:
-    driver = get_neo4j_driver()
-    try:
-        methods = fetch_methods_with_context(
-            driver,
-            max_bundles=max_bundles,
-            workspace_root=workspace_root,
-        )
-    finally:
-        driver.close()
+    methods = fetch_methods_with_context(
+        shared_neo4j_driver(),
+        max_bundles=max_bundles,
+        workspace_root=workspace_root,
+    )
     hybrid_search = load_hybrid_search()
 
     workers = min(32, (os.cpu_count() or 4) + 4)

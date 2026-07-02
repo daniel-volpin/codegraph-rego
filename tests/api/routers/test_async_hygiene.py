@@ -63,7 +63,7 @@ class HealthDoesNotBlockEventLoop(unittest.IsolatedAsyncioTestCase):
 
     @patch("api.routers.health._opa_probe", return_value=(True, None))
     @patch("api.routers.health._load_search_health_dependencies")
-    @patch("api.routers.health.get_neo4j_driver", return_value=_SlowDriver(delay=0.30))
+    @patch("api.routers.health.shared_neo4j_driver", return_value=_SlowDriver(delay=0.30))
     async def test_readyz_yields_to_event_loop_during_slow_neo4j(
         self,
         _mock_driver,

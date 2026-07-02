@@ -7,15 +7,15 @@ class TestIntegration(PolicyTestBase):
     """Tests for policy module integration functions."""
 
     def test_is_test_source_path_matches_src_test_only(self) -> None:
-        from codegraph.policy.integration import _is_test_source_path
+        from codegraph.policy.runtime.bundles import is_test_source_path
 
-        self.assertTrue(_is_test_source_path("/workspace/project/src/test/java/org/example/FooTest.java"))
-        self.assertTrue(_is_test_source_path(r"C:\workspace\project\src\test\java\org\example\FooTest.java"))
-        self.assertFalse(_is_test_source_path("/workspace/project/src/main/java/org/example/Foo.java"))
-        self.assertFalse(_is_test_source_path(None))
+        self.assertTrue(is_test_source_path("/workspace/project/src/test/java/org/example/FooTest.java"))
+        self.assertTrue(is_test_source_path(r"C:\workspace\project\src\test\java\org\example\FooTest.java"))
+        self.assertFalse(is_test_source_path("/workspace/project/src/main/java/org/example/Foo.java"))
+        self.assertFalse(is_test_source_path(None))
 
     def test_fetch_methods_with_context_excludes_test_sources(self) -> None:
-        from codegraph.policy.integration import _fetch_methods_with_context
+        from codegraph.policy.runtime.bundles import fetch_methods_with_context
 
         records = [
             {
@@ -48,7 +48,7 @@ class TestIntegration(PolicyTestBase):
             },
         ]
 
-        snapshots = _fetch_methods_with_context(_FakeDriver(records))
+        snapshots = fetch_methods_with_context(_FakeDriver(records))
 
         self.assertEqual(len(snapshots), 1)
         self.assertEqual(snapshots[0]["signature"], "org.example.MainController.endpoint()")

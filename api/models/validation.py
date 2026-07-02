@@ -175,8 +175,11 @@ class RemediationApplyRequest(BaseModel):
     violation_id: str
     target_method: str | None = None
     file_path: str | None = None
-    mode: str = "dry_run"
-    max_attempts: int = 2
+    # "apply" writes to the live workspace after verification; anything else
+    # must be rejected up front rather than falling through the mode checks
+    # in the apply flow with mixed graph/file state.
+    mode: Literal["dry_run", "apply"] = "dry_run"
+    max_attempts: int = Field(2, ge=1, le=5)
 
 
 class RemediationApplyResponse(BaseModel):

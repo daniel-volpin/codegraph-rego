@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from codegraph.policy.runtime.bundles import build_evidence_bundle_from_source
 from codegraph.telemetry import get_tracer
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -185,21 +186,35 @@ def build_virtual_bundle(
     updated_source: str,
     virtual_graph: dict[str, Any],
 ) -> dict[str, Any]:
-    graph_context = {
+    """Policy input for a virtual remediation candidate.
+
+    Adapts the preview context into a method snapshot and delegates to the
+    canonical evidence core, so the candidate is evaluated under exactly
+    the same lexical views, analysis flags, and bundle shape as the normal
+    policy-evaluation path. Graph context comes from the candidate's
+    virtual graph (the fix may add or remove calls); the baseline vector
+    context is reused because it is keyed on the unchanged method
+    signature and never read by Rego. Read-only: no file, graph, or index
+    access.
+    """
+    violation = context.get("violation") or {}
+    evidence = context.get("evidence") or {}
+    target_method = context.get("target_method")
+    snapshot = {
+        "signature": target_method,
+        "name": method_name_from_signature(target_method),
+        "class_fqn": violation.get("class_fqn"),
+        "file_path": context.get("file_path"),
+        "start_line": evidence.get("start_line"),
+        "end_line": evidence.get("end_line"),
+        "modifiers": violation.get("modifiers") or [],
         "annotations": virtual_graph.get("annotations") or [],
         "uses_fields": virtual_graph.get("uses_fields") or [],
         "calls": virtual_graph.get("calls") or [],
         "callers": virtual_graph.get("callers") or [],
     }
-    evidence = context.get("evidence") or {}
-    target_method = context.get("target_method")
-    return {
-        "target_method": target_method,
-        "method_name": method_name_from_signature(target_method),
-        "class_fqn": context.get("violation", {}).get("class_fqn"),
-        "file_path": context.get("file_path"),
-        "modifiers": context.get("violation", {}).get("modifiers") or [],
-        "source_code": updated_source,
-        "graph_context": graph_context,
-        "vector_context": evidence.get("vector_context") or [],
-    }
+    return build_evidence_bundle_from_source(
+        snapshot,
+        updated_source,
+        vector_context=list(evidence.get("vector_context") or []),
+    )

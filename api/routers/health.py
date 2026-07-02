@@ -13,7 +13,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from api.models.validation import HealthCheckResponse, LivenessResponse
-from codegraph.db import get_neo4j_driver
+from codegraph.db import shared_neo4j_driver
 
 router = APIRouter()
 
@@ -103,10 +103,8 @@ def _compute_readiness(request: Request) -> tuple[dict[str, Any], int]:
         "details": {},
     }
     try:
-        drv = get_neo4j_driver()
-        with drv.session() as s:
+        with shared_neo4j_driver().session() as s:
             s.run("RETURN 1").consume()
-        drv.close()
         checks["neo4j"] = True
     except Exception as e:
         checks["details"]["neo4j"] = str(e)

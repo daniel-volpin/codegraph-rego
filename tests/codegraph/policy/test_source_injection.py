@@ -1,12 +1,12 @@
 import unittest
 
-from codegraph.policy.source_analysis import analyze_crypto_indicators
+from codegraph.policy.source_analysis import analyze_policy_indicators
 
 
 class TestCommandInjectionDetected(unittest.TestCase):
     def test_command_injection_detected(self) -> None:
         source = 'String cmd = "echo " + request.getHeader("x"); new ProcessBuilder().command(cmd);'
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["command_exec_string_tainted"])
         self.assertFalse(flags["command_exec_args_tainted"])
         self.assertFalse(flags["command_env_only_tainted"])
@@ -18,7 +18,7 @@ class TestCommandInjectionDetected(unittest.TestCase):
             'cmd.append(request.getHeader("x"));'
             "Runtime.getRuntime().exec(cmd.toString());"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["command_exec_string_tainted"])
         self.assertTrue(flags["command_injection_detected"])
 
@@ -28,7 +28,7 @@ class TestCommandInjectionDetected(unittest.TestCase):
             'String[] args = new String[] {"sh", "-c", "ls " + input};'
             "Runtime.getRuntime().exec(args);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["command_exec_string_tainted"])
         self.assertTrue(flags["command_exec_args_tainted"])
         self.assertTrue(flags["command_injection_detected"])
@@ -44,7 +44,7 @@ class TestCommandInjectionDetected(unittest.TestCase):
             "ProcessBuilder pb = new ProcessBuilder();"
             "pb.command(argList);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["command_exec_args_tainted"])
         self.assertTrue(flags["command_injection_detected"])
 
@@ -63,7 +63,7 @@ class TestCommandInjectionDetected(unittest.TestCase):
             'String[] args = new String[] {"sh", "-c", "ls " + bar};'
             "Runtime.getRuntime().exec(args);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["command_exec_args_tainted"])
         self.assertTrue(flags["command_injection_detected"])
 
@@ -75,7 +75,7 @@ class TestCommandInjectionDetected(unittest.TestCase):
             'String[] argsEnv = {"foo=bar"};'
             "Runtime.getRuntime().exec(args, argsEnv);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["command_exec_args_tainted"])
         self.assertFalse(flags["command_env_only_tainted"])
         self.assertTrue(flags["command_injection_detected"])
@@ -88,7 +88,7 @@ class TestCommandInjectionDetected(unittest.TestCase):
             'String cmd = "echo " + bar;'
             "Runtime.getRuntime().exec(cmd);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["command_exec_string_tainted"])
         self.assertTrue(flags["command_injection_detected"])
 
@@ -103,7 +103,7 @@ class TestCommandInjectionDetected(unittest.TestCase):
             'String cmd = "echo " + bar;'
             "Runtime.getRuntime().exec(cmd);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["command_exec_string_tainted"])
         self.assertTrue(flags["command_injection_detected"])
 
@@ -114,7 +114,7 @@ class TestCommandInjectionDetected(unittest.TestCase):
             "String[] argsEnv = {param};"
             "Runtime.getRuntime().exec(cmd, argsEnv);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["command_exec_string_tainted"])
         self.assertFalse(flags["command_exec_args_tainted"])
         self.assertTrue(flags["command_env_only_tainted"])
@@ -131,7 +131,7 @@ class TestCommandInjectionDetected(unittest.TestCase):
             'String[] argsEnv = {"foo=bar"};'
             'Runtime.getRuntime().exec(args, argsEnv, new java.io.File(System.getProperty("user.dir")));'
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["command_exec_string_tainted"])
         self.assertTrue(flags["command_exec_args_tainted"])
         self.assertTrue(flags["command_injection_detected"])
@@ -149,7 +149,7 @@ class TestCommandInjectionNotFlagged(unittest.TestCase):
             'String[] argsEnv = {"Foo=bar"};'
             "Runtime.getRuntime().exec(cmd + bar, argsEnv);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["command_exec_string_tainted"])
         self.assertFalse(flags["command_exec_args_tainted"])
         self.assertFalse(flags["command_injection_detected"])
@@ -169,7 +169,7 @@ class TestCommandInjectionNotFlagged(unittest.TestCase):
             "  }"
             "}"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["command_exec_string_tainted"])
         self.assertFalse(flags["command_exec_args_tainted"])
         self.assertFalse(flags["command_injection_detected"])
@@ -195,14 +195,14 @@ class TestCommandInjectionNotFlagged(unittest.TestCase):
             'String[] argsEnv = {"Foo=bar"};'
             'Runtime.getRuntime().exec(cmd + bar, argsEnv, new java.io.File(System.getProperty("user.dir")));'
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["command_exec_string_tainted"])
         self.assertFalse(flags["command_exec_args_tainted"])
         self.assertFalse(flags["command_injection_detected"])
 
     def test_command_branch_taint_not_cleared_by_optional_safe_reassignment(self) -> None:
         source = 'String cmd = request.getParameter("cmd");if (flag) cmd = "safe";Runtime.getRuntime().exec(cmd);'
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["command_exec_string_tainted"])
         self.assertTrue(flags["command_injection_detected"])
 
@@ -210,7 +210,7 @@ class TestCommandInjectionNotFlagged(unittest.TestCase):
 class TestLDAPInjection(unittest.TestCase):
     def test_ldap_injection_detected(self) -> None:
         source = 'String filter = "(&(uid=" + request.getHeader("x") + "))"; InitialDirContext idc = null; idc.search(base, filter, filters, sc);'
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["ldap_injection_detected"])
 
     def test_ldap_injection_get_headers_detected(self) -> None:
@@ -220,7 +220,7 @@ class TestLDAPInjection(unittest.TestCase):
             'String filter = "(&(uid=" + param + "))";'
             "InitialDirContext idc = null; idc.search(base, filter, filters, sc);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["ldap_injection_detected"])
 
     def test_ldap_injection_get_parameter_values_detected(self) -> None:
@@ -230,7 +230,7 @@ class TestLDAPInjection(unittest.TestCase):
             'String filter = "(&(uid=" + bar + "))";'
             "InitialDirContext idc = null; idc.search(base, filter, sc);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["ldap_injection_detected"])
 
     def test_ldap_safe_constant_ternary_not_flagged(self) -> None:
@@ -241,7 +241,7 @@ class TestLDAPInjection(unittest.TestCase):
             'String filter = "(&(uid=" + bar + "))";'
             "InitialDirContext idc = null; idc.search(base, filter, filters, sc);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["ldap_injection_detected"])
         self.assertTrue(flags["ldap_filter_uses_safe_constant"])
 
@@ -255,7 +255,7 @@ class TestLDAPInjection(unittest.TestCase):
             'String filter = "(&(uid=" + bar + "))";'
             "InitialDirContext idc = null; idc.search(base, filter, sc);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["ldap_injection_detected"])
         self.assertTrue(flags["ldap_filter_uses_safe_constant"])
 
@@ -263,7 +263,7 @@ class TestLDAPInjection(unittest.TestCase):
 class TestXPathInjection(unittest.TestCase):
     def test_xpath_injection_detected(self) -> None:
         source = 'String expr = "/Employees/Employee[@emplid=\'" + request.getHeader("x") + "\']"; XPathFactory.newInstance(); xp.evaluate(expr, xmlDocument);'
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["xpath_injection_detected"])
 
     def test_xpath_injection_builder_detected(self) -> None:
@@ -272,7 +272,7 @@ class TestXPathInjection(unittest.TestCase):
             'expr.append(request.getHeader("x"));'
             'expr.append("\']"); XPathFactory.newInstance(); xp.evaluate(expr.toString(), xmlDocument);'
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["xpath_injection_detected"])
 
     def test_xpath_constant_if_else_safe_branch_not_flagged(self) -> None:
@@ -284,7 +284,7 @@ class TestXPathInjection(unittest.TestCase):
             'String expression = "/Employees/Employee[@emplid=\'" + bar + "\']";'
             "XPathFactory.newInstance(); xp.evaluate(expression, xmlDocument);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["xpath_injection_detected"])
         self.assertTrue(flags["xpath_query_uses_safe_constant"])
 
@@ -300,7 +300,7 @@ class TestXPathInjection(unittest.TestCase):
             'String expression = "/Employees/Employee[@emplid=\'" + bar + "\']";'
             "XPathFactory.newInstance(); xp.compile(expression).evaluate(xmlDocument, javax.xml.xpath.XPathConstants.NODESET);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["xpath_injection_detected"])
         self.assertTrue(flags["xpath_query_uses_safe_constant"])
 
@@ -317,7 +317,7 @@ class TestXPathInjection(unittest.TestCase):
             'String expression = "/Employees/Employee[@emplid=\'" + bar + "\']";'
             "xp.compile(expression).evaluate(xmlDocument, javax.xml.xpath.XPathConstants.NODESET);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["xpath_injection_detected"])
         self.assertFalse(flags["xpath_query_uses_tainted_input"])
 
@@ -329,7 +329,7 @@ class TestSQLInjection(unittest.TestCase):
             'sql.append(request.getHeader("x"));'
             'sql.append("\'"); connection.prepareCall(sql.toString());'
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["sql_dynamic_query_detected"])
         self.assertTrue(flags["sql_query_uses_tainted_input"])
 
@@ -339,7 +339,7 @@ class TestSQLInjection(unittest.TestCase):
             'String sql = "select * from users where name = \'" + values[0] + "\'";'
             "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.queryForRowSet(sql);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["sql_dynamic_query_detected"])
 
     def test_sql_dynamic_query_prepare_statement_detected(self) -> None:
@@ -348,7 +348,7 @@ class TestSQLInjection(unittest.TestCase):
             'String sql = "select * from users where username=? and password=\'" + values[0] + "\'";'
             "connection.prepareStatement(sql);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["sql_dynamic_query_detected"])
 
     def test_sql_dynamic_query_query_for_object_detected(self) -> None:
@@ -357,7 +357,7 @@ class TestSQLInjection(unittest.TestCase):
             'String sql = "select * from users where password=\'" + param + "\'";'
             "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.queryForObject(sql, new Object[] {}, String.class);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["sql_dynamic_query_detected"])
         self.assertTrue(flags["sql_query_uses_tainted_input"])
 
@@ -367,7 +367,7 @@ class TestSQLInjection(unittest.TestCase):
             'String sql = "update users set password=\'" + param + "\'";'
             "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.batchUpdate(sql);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["sql_dynamic_query_detected"])
         self.assertTrue(flags["sql_query_uses_tainted_input"])
 
@@ -379,7 +379,7 @@ class TestSQLInjection(unittest.TestCase):
             "String sql = \"insert into users (username, password) values ('foo', '\" + bar + \"')\";"
             "statement.executeUpdate(sql);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["sql_dynamic_query_detected"])
         self.assertTrue(flags["sql_query_uses_safe_constant"])
 
@@ -395,7 +395,7 @@ class TestSQLInjection(unittest.TestCase):
             'String sql = "select * from users where password=\'" + bar + "\'";'
             "connection.prepareStatement(sql);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["sql_dynamic_query_detected"])
         self.assertTrue(flags["sql_query_uses_safe_constant"])
 
@@ -415,7 +415,7 @@ class TestSQLInjection(unittest.TestCase):
             "String sql = \"SELECT * from USERS where USERNAME='foo' and PASSWORD='\" + bar + \"'\";"
             "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.execute(sql);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertFalse(flags["sql_dynamic_query_detected"])
         self.assertFalse(flags["sql_query_uses_tainted_input"])
 
@@ -427,13 +427,13 @@ class TestSQLInjection(unittest.TestCase):
             "String sql = \"SELECT * from USERS where USERNAME='foo' and PASSWORD='\" + bar + \"'\";"
             "connection.prepareStatement(sql);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["sql_query_uses_tainted_input"])
         self.assertTrue(flags["sql_dynamic_query_detected"])
 
     def test_sql_prepare_call_flags(self) -> None:
         source = "java.sql.CallableStatement statement = connection.prepareCall(sql);"
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["sql_prepare_call_detected"])
         self.assertTrue(flags["sql_callable_statement_detected"])
 
@@ -449,7 +449,7 @@ class TestSQLInjection(unittest.TestCase):
             "String sql = \"SELECT * from USERS where USERNAME='foo' and PASSWORD='\" + bar + \"'\";"
             "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.queryForMap(sql);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["sql_query_uses_tainted_input"])
         self.assertTrue(flags["sql_dynamic_query_detected"])
 
@@ -462,7 +462,7 @@ class TestSQLInjection(unittest.TestCase):
             "String sql = \"SELECT * from USERS where USERNAME='foo' and PASSWORD='\" + bar + \"'\";"
             "org.owasp.benchmark.helpers.DatabaseHelper.JDBCtemplate.queryForObject(sql, Long.class);"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["sql_query_uses_tainted_input"])
         self.assertTrue(flags["sql_dynamic_query_detected"])
 
@@ -474,7 +474,7 @@ class TestSQLInjection(unittest.TestCase):
             "statement.addBatch(sql);"
             "statement.executeBatch();"
         )
-        flags = analyze_crypto_indicators(source)
+        flags = analyze_policy_indicators(source)
         self.assertTrue(flags["sql_query_uses_tainted_input"])
         self.assertTrue(flags["sql_dynamic_query_detected"])
 

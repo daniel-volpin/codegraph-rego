@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from typing import Any
 
 from codegraph.benchmark_registry import load_policy_registry
@@ -14,7 +15,12 @@ SUPPORTED_RULE_RATIONALES = {
 SAFE_REFUSAL_RULE_IDS = frozenset({"ISO-A.10-WEAK-RANDOM", "ISO-A.10-WEAK-CRYPTO"})
 
 
-def _build_default_remediation_rule_matrix() -> dict[str, dict[str, Any]]:
+# The default matrix derives from the benchmark policy registry on disk, so it
+# is loaded lazily: importing this module (which policy runtime code does on
+# every violation response) must not perform file I/O or fail on a missing
+# registry.
+@lru_cache(maxsize=1)
+def default_remediation_rule_matrix() -> dict[str, dict[str, Any]]:
     matrix: dict[str, dict[str, Any]] = {}
     for category in load_policy_registry().categories:
         if category.remediation_tier not in {"full", "guarded"}:
@@ -35,9 +41,8 @@ def _build_default_remediation_rule_matrix() -> dict[str, dict[str, Any]]:
     return matrix
 
 
-DEFAULT_REMEDIATION_RULE_MATRIX = _build_default_remediation_rule_matrix()
-
-DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS = frozenset(DEFAULT_REMEDIATION_RULE_MATRIX.keys())
+def default_supported_remediation_rule_ids() -> frozenset[str]:
+    return frozenset(default_remediation_rule_matrix().keys())
 
 
 @dataclass(frozen=True)
@@ -75,14 +80,15 @@ def get_remediation_capability(
     *,
     supported_rule_ids: Iterable[str] | None = None,
 ) -> RemediationCapability:
+    default_matrix = default_remediation_rule_matrix()
     if supported_rule_ids is None:
-        supported_ids = set(DEFAULT_SUPPORTED_REMEDIATION_RULE_IDS)
-        capability_map = dict(DEFAULT_REMEDIATION_RULE_MATRIX)
+        supported_ids = set(default_matrix)
+        capability_map = dict(default_matrix)
     else:
         supported_ids = set(supported_rule_ids)
         capability_map = {
             rule_id_value: dict(
-                DEFAULT_REMEDIATION_RULE_MATRIX.get(
+                default_matrix.get(
                     rule_id_value,
                     {
                         "support_tier": "full",
