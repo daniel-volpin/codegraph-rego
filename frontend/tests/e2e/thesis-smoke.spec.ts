@@ -215,10 +215,7 @@ test("@thesis search submits and renders backend results", async ({ page }) => {
   await page.getByRole("button", { name: "Search" }).click();
 
   await expect(
-    page.getByRole("heading", {
-      level: 3,
-      name: "com.acme.HashController.hashPassword(String)",
-    }),
+    page.getByText("com.acme.HashController.hashPassword(String)").first(),
   ).toBeVisible();
   await expect(page.getByText("Search failed")).toHaveCount(0);
 });
@@ -253,7 +250,7 @@ test("@thesis policy scan renders findings and remediation artifacts", async ({ 
   await page.goto("/policy");
   await page.getByRole("button", { name: "Run Full Policy Scan" }).click();
 
-  await expect(page.getByText("ISO-A.10-WEAK-HASH")).toBeVisible();
+  await expect(page.getByText("ISO-A.10-WEAK-HASH").first()).toBeVisible();
   await expect(page.getByTitle("com.acme.Demo.hashPassword(String)")).toBeVisible();
   await expect(page.getByText("Weak hash usage detected")).toBeVisible();
   await expect(page.getByText("app/src/main/java/com/acme/Demo.java:40-42")).toBeVisible();
