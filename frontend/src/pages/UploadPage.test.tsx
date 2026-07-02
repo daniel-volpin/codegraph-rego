@@ -60,6 +60,21 @@ describe("UploadPage", () => {
     expect(screen.getByRole("button", { name: /upload & ingest/i })).toBeDisabled();
   });
 
+  it("clears a previous ZIP selection when a replacement drop is invalid", async () => {
+    renderWithProviders(<UploadPage />);
+
+    const dropzone = await screen.findByTestId("upload-dropzone");
+    dropFile(dropzone, new File(["zipbytes"], "workspace.zip", { type: "application/zip" }));
+    expect(await screen.findByText(/workspace\.zip/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /upload & ingest/i })).toBeEnabled();
+
+    dropFile(dropzone, new File(["x"], "notes.txt", { type: "text/plain" }));
+
+    expect(screen.queryByText(/workspace\.zip/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/notes\.txt/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /upload & ingest/i })).toBeDisabled();
+  });
+
   it("accepts a file chosen through the input", async () => {
     const user = userEvent.setup();
     renderWithProviders(<UploadPage />);

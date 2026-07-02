@@ -152,6 +152,7 @@ const UploadPage = () => {
   const acceptFile = (file: File | null | undefined) => {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".zip")) {
+      setSelectedFile(null);
       toast.error(`"${file.name}" is not a ZIP archive. Select a .zip file.`);
       return;
     }
