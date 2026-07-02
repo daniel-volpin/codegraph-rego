@@ -47,7 +47,7 @@ const SidebarNav = ({ mode = "desktop", className, onNavigate, onClose }: Sideba
           <div className="text-xs uppercase tracking-wide text-sidebar-muted">Security Research Framework</div>
         </div>
       </div>
-      <nav className="space-y-1">
+      <nav aria-label="Primary" className="space-y-1">
         {routes.map((route) => {
           const Icon = route.icon;
           return (

@@ -13,18 +13,18 @@ const Breadcrumbs = () => {
   const label = routeLabels[location.pathname] ?? "Page";
   if (location.pathname === "/") {
     return (
-      <div className="text-sm text-slate-500">
-        <span className="font-medium text-slate-900">{label}</span>
-      </div>
+      <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
+        <span aria-current="page" className="font-medium text-slate-900">{label}</span>
+      </nav>
     );
   }
 
   return (
-    <div className="text-sm text-slate-500">
+    <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
       <Link className="hover:text-slate-900" to="/">Dashboard</Link>
-      <span className="mx-2">/</span>
-      <span className="font-medium text-slate-900">{label}</span>
-    </div>
+      <span aria-hidden="true" className="mx-2">/</span>
+      <span aria-current="page" className="font-medium text-slate-900">{label}</span>
+    </nav>
   );
 };
 
