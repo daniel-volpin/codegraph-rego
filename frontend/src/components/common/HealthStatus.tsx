@@ -45,15 +45,14 @@ const buildItems = (data: HealthCheckResponse): DependencyItem[] => {
 };
 
 /**
- * Backend dependency status as an accessible disclosure: a summary button
- * (state expressed in text + icon, never color alone) that expands into a
- * per-dependency panel with failure details and next-step guidance. Works
- * with keyboard and touch, unlike the previous tooltip-only rendering.
+ * Backend dependency status as a native disclosure. The summary expresses
+ * state in text + icon, never color alone, and the expanded panel keeps
+ * per-dependency failure details available without extra live announcements.
  */
 const HealthStatus = () => {
   const panelId = useId();
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDetailsElement | null>(null);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<HealthCheckResponse, Error>({
     queryKey: ["health"],
@@ -98,15 +97,28 @@ const HealthStatus = () => {
   const SummaryIcon = overall === "healthy" ? Check : AlertTriangle;
   const summaryTone =
     overall === "healthy" ? "text-emerald-700" : overall === "degraded" ? "text-amber-800" : "text-rose-700";
+  const accessibleSummaryLabel = `Backend status: ${summaryLabel}. ${
+    open ? "Collapse dependency details" : "Expand dependency details"
+  }`;
 
   return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
+    <details
+      ref={rootRef}
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      className="relative"
+    >
+      <summary
+        aria-label={accessibleSummaryLabel}
         aria-expanded={open}
         aria-controls={panelId}
-        onClick={() => setOpen((current) => !current)}
-        className={`flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 ${summaryTone}`}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setOpen((current) => !current);
+          }
+        }}
+        className={`flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 [&::-webkit-details-marker]:hidden ${summaryTone}`}
       >
         <SummaryIcon aria-hidden="true" className="h-3.5 w-3.5" />
         {summaryLabel}
@@ -114,7 +126,7 @@ const HealthStatus = () => {
           aria-hidden="true"
           className={`h-3.5 w-3.5 text-slate-400 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
         />
-      </button>
+      </summary>
 
       {open && (
         <div
@@ -169,7 +181,7 @@ const HealthStatus = () => {
           </button>
         </div>
       )}
-    </div>
+    </details>
   );
 };
 

@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import HealthStatus from "./HealthStatus";
@@ -26,16 +26,33 @@ describe("HealthStatus", () => {
     vi.mocked(fetchHealth).mockReset();
   });
 
-  it("summarizes a healthy backend and expands to per-dependency detail", async () => {
+  const findDisclosureControl = (name: RegExp) => screen.findByLabelText(name, { selector: "summary" });
+
+  it("renders a healthy state as a collapsed native disclosure", async () => {
+    vi.mocked(fetchHealth).mockResolvedValue(healthyPayload);
+    renderWithProviders(<HealthStatus />);
+
+    const summary = await findDisclosureControl(/backend status: healthy\. expand dependency details/i);
+    const disclosure = summary.closest("details");
+
+    expect(summary.tagName).toBe("SUMMARY");
+    expect(disclosure).not.toHaveAttribute("open");
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("region", { name: /backend dependency status/i })).not.toBeInTheDocument();
+  });
+
+  it("expands to per-dependency detail", async () => {
     vi.mocked(fetchHealth).mockResolvedValue(healthyPayload);
     const user = userEvent.setup();
     renderWithProviders(<HealthStatus />);
 
-    const summary = await screen.findByRole("button", { name: /healthy/i });
-    expect(summary).toHaveAttribute("aria-expanded", "false");
+    const summary = await findDisclosureControl(/backend status: healthy\. expand dependency details/i);
 
     await user.click(summary);
+    expect(summary.closest("details")).toHaveAttribute("open");
     expect(summary).toHaveAttribute("aria-expanded", "true");
+    expect(summary).toHaveAccessibleName(/backend status: healthy\. collapse dependency details/i);
+
     const region = screen.getByRole("region", { name: /backend dependency status/i });
     expect(region).toHaveTextContent("Neo4j graph database");
     expect(region).toHaveTextContent("OPA policy engine");
@@ -52,12 +69,17 @@ describe("HealthStatus", () => {
     const user = userEvent.setup();
     renderWithProviders(<HealthStatus />);
 
-    await user.click(await screen.findByRole("button", { name: /degraded \(2\)/i }));
+    const summary = await findDisclosureControl(/backend status: degraded \(2\)\. expand dependency details/i);
+    expect(summary).toHaveTextContent("Degraded (2)");
+
+    await user.click(summary);
 
     expect(screen.getByText("connection refused")).toBeInTheDocument();
     expect(screen.getByText("opa executable not found on PATH")).toBeInTheDocument();
-    // State is exposed to assistive tech as text, not only as color.
-    expect(screen.getAllByText(/unavailable/i).length).toBeGreaterThanOrEqual(2);
+
+    const region = screen.getByRole("region", { name: /backend dependency status/i });
+    expect(within(region).getByText(/neo4j graph database/i).parentElement).toHaveTextContent(/unavailable/i);
+    expect(within(region).getByText(/opa policy engine/i).parentElement).toHaveTextContent(/unavailable/i);
   });
 
   it("offers guidance and a manual re-check when the backend is unreachable", async () => {
@@ -65,7 +87,7 @@ describe("HealthStatus", () => {
     const user = userEvent.setup();
     renderWithProviders(<HealthStatus />);
 
-    await user.click(await screen.findByRole("button", { name: /backend unreachable/i }));
+    await user.click(await findDisclosureControl(/backend status: backend unreachable\. expand dependency details/i));
 
     expect(screen.getByText(/health endpoint could not be reached/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /re-check now/i })).toBeInTheDocument();
@@ -76,10 +98,28 @@ describe("HealthStatus", () => {
     const user = userEvent.setup();
     renderWithProviders(<HealthStatus />);
 
-    await user.click(await screen.findByRole("button", { name: /healthy/i }));
+    const summary = await findDisclosureControl(/backend status: healthy\. expand dependency details/i);
+    await user.click(summary);
     expect(screen.getByRole("region", { name: /backend dependency status/i })).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
+    expect(screen.queryByRole("region", { name: /backend dependency status/i })).not.toBeInTheDocument();
+  });
+
+  it("toggles through native keyboard-compatible disclosure behavior", async () => {
+    vi.mocked(fetchHealth).mockResolvedValue(healthyPayload);
+    const user = userEvent.setup();
+    renderWithProviders(<HealthStatus />);
+
+    const summary = await findDisclosureControl(/backend status: healthy\. expand dependency details/i);
+    summary.focus();
+
+    await user.keyboard("{Enter}");
+    expect(summary.closest("details")).toHaveAttribute("open");
+    expect(screen.getByRole("region", { name: /backend dependency status/i })).toBeInTheDocument();
+
+    await user.keyboard("{Enter}");
+    expect(summary.closest("details")).not.toHaveAttribute("open");
     expect(screen.queryByRole("region", { name: /backend dependency status/i })).not.toBeInTheDocument();
   });
 });
