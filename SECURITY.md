@@ -19,16 +19,17 @@ When deploying or running CodeGraph locally or in testing environments, keep the
 
 ## Reporting a Security Vulnerability
 
-If you discover a security vulnerability in CodeGraph, please report it privately before making it public.
+If you discover a security vulnerability in CodeGraph, please report it **privately using GitHub Private Vulnerability Reporting**.
 
-### How to Report
+> **Important**: Private vulnerability reporting must be enabled on the repository settings before making this project public. Do **not** open public GitHub issues or public discussions for security vulnerability reports.
 
-- **GitHub Advisory**: Submit a private report via [GitHub Private Vulnerability Reporting](https://github.com/daniel-volpin/codegraph-rego/security/advisories/new) if enabled.
-- **GitHub Issue**: Alternatively, open a GitHub issue marked with the `security` label, taking care **not to include sensitive credentials, live tokens, or exploitable payloads**.
+### How to Report Privately
+
+- Submit a private report directly through GitHub: [GitHub Private Vulnerability Reporting](https://github.com/daniel-volpin/codegraph-rego/security/advisories/new).
 
 ### What to Include
 
-When reporting a vulnerability, please provide:
+When reporting a vulnerability privately, please provide:
 
 1. A brief description of the issue and its potential impact.
 2. Step-by-step instructions or a minimal proof of concept to reproduce the issue.
@@ -36,5 +37,5 @@ When reporting a vulnerability, please provide:
 
 ### Response Timeline
 
-- **Acknowledgement**: We aim to acknowledge reports within 3 business days.
-- **Assessment & Patching**: Confirmed security issues will be addressed in a dedicated fix branch and release patch.
+- **Acknowledgement**: We aim to acknowledge private reports within 3 business days.
+- **Assessment & Patching**: Confirmed security issues will be addressed privately in a dedicated security fix branch before releasing a patch.

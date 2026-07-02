@@ -29,7 +29,7 @@ CodeGraph is a **benchmark-backed research artifact**. To preserve scientific re
 - Python 3.10+
 - Node.js (v20+) & Yarn (v1.22+)
 - OPA `v1.15.1` on `PATH`
-- Java JDK (8+ or newer) & Maven
+- Java JDK (8+ or newer) and Maven for remediation build re-verification (release validation was performed with OpenJDK 26.0.1)
 - Neo4j 5.x (via Docker Compose)
 
 ### Environment Preparation
@@ -57,8 +57,8 @@ Before opening a pull request, run the full validation suite locally to ensure a
 .venv/bin/ruff check .
 
 # 2. Pytest Backend Test Suite
-CODEGRAPH_ENV_FILE=.env NEO4J_PASS=password \
-PATH="/usr/local/opt/openjdk/libexec/openjdk.jdk/Contents/Home/bin:$(pwd)/.venv/bin:$PATH" \
+JAVA_HOME="<your-jdk-home>" CODEGRAPH_ENV_FILE=.env NEO4J_PASS=password \
+PATH="$JAVA_HOME/bin:$(pwd)/.venv/bin:$PATH" \
 .venv/bin/python -m pytest -q
 
 # 3. OPA Policy Check and Formatting Gate
