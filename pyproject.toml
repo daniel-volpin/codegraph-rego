@@ -49,3 +49,9 @@ extend-select = ["I", "UP"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+filterwarnings = [
+    "ignore:.*SwigPyPacked has no __module__ attribute.*:DeprecationWarning",
+    "ignore:.*SwigPyObject has no __module__ attribute.*:DeprecationWarning",
+    "ignore:.*swigvarlink has no __module__ attribute.*:DeprecationWarning",
+]
+

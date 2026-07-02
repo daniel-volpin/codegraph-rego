@@ -6,10 +6,10 @@ This file is the shortest path to rerun the thesis-final evaluation pipeline on 
 
 - Python 3.10+
 - Neo4j 5.x
-- OPA on `PATH`
-- Java + Maven
+- OPA `v1.15.1` on `PATH` (required for `make policy-check` and OPA policy evaluation)
+- Java JDK (8+ or newer) and Maven for remediation build re-verification (release validation was performed with OpenJDK 26.0.1)
 - local checkout of `BenchmarkJava`
-- LM Studio or another OpenAI-compatible LLM endpoint for explanation/remediation runs
+- LM Studio, OpenAI, or another OpenAI-compatible LLM endpoint for explanation/remediation runs
 
 ## 2. Environment
 
