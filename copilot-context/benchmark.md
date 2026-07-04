@@ -34,7 +34,7 @@ Remediation support tiers:
   - `Citation@FP (no-ctx)=0.000` (`0/9`)
 - Remediation baseline: `outputs/thesis_final_remediation_v2/`
   - `25/25` fully verified
-  - `Brier=0.0119`, `ECE=0.1091`
+  - `Brier=0.0057`, `ECE=0.0696` (per `remediation_metrics.json` / `confidence_calibration.json`; the prose block in that run's `summary.md` diverges and is not the canonical carrier)
 
 ## Follow-Up Evidence
 

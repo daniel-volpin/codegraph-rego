@@ -26,8 +26,7 @@ Start the backend first:
 
 ```bash
 cd /path/to/codegraph-rego
-source .venv/bin/activate
-uvicorn app:app --host 127.0.0.1 --port 8000
+make backend-dev   # starts Neo4j via compose, then the API on port 8000
 ```
 
 Upload a ZIP:

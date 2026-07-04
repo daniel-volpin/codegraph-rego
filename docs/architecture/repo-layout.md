@@ -27,5 +27,5 @@ This split is intentional:
 Compatibility rules for this branch:
 
 - keep `app.py` at the root
-- keep the `run_*_eval.py` evaluation runners at the root (`run_benchmark_eval.py`, `run_explanation_eval.py`, `run_remediation_eval.py`, `run_comparison_eval.py`, `run_lexical_noise_eval.py`, `run_owasp_lexical_eval.py`, `run_owasp_multiseed_eval.py`)
+- keep the `run_*_eval.py` evaluation runners at the root
 - avoid introducing new top-level utility scripts when equivalent functionality belongs under `scripts/`
