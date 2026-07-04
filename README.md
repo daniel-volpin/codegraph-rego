@@ -169,7 +169,9 @@ Key endpoints:
 - `POST /search`
 - `GET /policy/evaluate`
 - `POST /policy/evaluate_with_llm`
+- `GET /policy/catalog`
 - `POST /policy/explain_one`
+- `POST /policy/reviews` / `GET /policy/reviews`
 - `POST /remediation/preview`
 - `POST /remediation/apply`
 - `GET /healthz`

@@ -39,9 +39,10 @@ If you are using LM Studio with different explanation/remediation models, enable
 
 ### Environment Variable Reference
 
-Every variable consumed by `codegraph.config.Settings`, the upload pipeline, the
-remediation gate, and the OpenTelemetry layer. `.env.example` ships matching
-defaults — keep it in sync when adding new variables.
+The operator-facing variables consumed by `codegraph.config.Settings`, the
+upload pipeline, the remediation gate, and the OpenTelemetry layer (internal
+path/index overrides live in `codegraph/config.py`). `.env.example` ships
+matching defaults — keep it in sync when adding new variables.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
@@ -49,6 +50,8 @@ defaults — keep it in sync when adding new variables.
 | `NEO4J_USER` | `neo4j` | Neo4j auth user. Required. |
 | `NEO4J_PASS` | _unset_ | Neo4j auth password. Required (no default). |
 | `OWASP_BENCHMARK_ROOT` | _unset_ | Absolute path to the local `BenchmarkJava` checkout. Required for benchmark eval scripts. |
+| `CODEGRAPH_HOST` | `127.0.0.1` | Bind host for the backend service. Loopback by default for safe local-only operation. |
+| `CODEGRAPH_OPA_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OPA eval subprocesses. |
 | `LLM_API_BASE` | `http://localhost:1234/v1` | OpenAI-compatible base URL (LM Studio, vLLM, etc.). |
 | `LLM_API_KEY` | _unset_ | API key sent to the LLM endpoint. Use `lm-studio` for LM Studio. |
 | `LLM_MODEL` | `qwen3.5-9b-mlx` | Default explanation model. |
@@ -105,7 +108,7 @@ python run_remediation_eval.py \
   --reset-neo4j
 ```
 
-The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/thesis_final_remediation_v4/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier runs under `outputs/detection_calibration_path_precision_v4/` and `outputs/repro_supported_medium_branch_benchmarktest01017_fix/` are preserved as historical reference only.
+The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/thesis_final_remediation_v4/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier historical runs (`detection_calibration_path_precision_v4`, `repro_supported_medium_branch_benchmarktest01017_fix`) are no longer tracked in the repository.
 
 ## 4. Recommended Explanation-Eval Defaults
 
