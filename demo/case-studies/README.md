@@ -25,7 +25,7 @@ These case studies are secondary validation surfaces for CodeGraph. They are not
 Start the backend first:
 
 ```bash
-cd "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph"
+cd /path/to/codegraph-rego
 source .venv/bin/activate
 uvicorn app:app --host 127.0.0.1 --port 8000
 ```

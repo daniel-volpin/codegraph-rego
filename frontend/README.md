@@ -10,8 +10,8 @@ This Vite + React (TypeScript) client surfaces the main workflows exposed by the
 
 ```bash
 cd frontend
-npm install
-npm run dev
+yarn install
+yarn dev
 ```
 
 The development server starts at <http://127.0.0.1:5173> by default and proxies API requests to the FastAPI backend over `/api`, so ensure the API is running locally on <http://127.0.0.1:8000> unless you override the dev proxy target.
@@ -33,11 +33,12 @@ echo 'CODEGRAPH_DEV_PROXY_TARGET=http://localhost:9000' > .env
 
 ### Available Scripts
 
-- `npm run dev` – start the Vite dev server.
-- `npm run build` – type-check and create a production build.
-- `npm run preview` – serve the build output locally.
-- `npm test` – run the Vitest unit suite.
-- `npm run test:e2e` – run the Playwright end-to-end suite.
+- `yarn dev` – start the Vite dev server.
+- `yarn build` – type-check and create a production build.
+- `yarn preview` – serve the build output locally.
+- `yarn lint` – run eslint with `--max-warnings 0`.
+- `yarn test` – run the Vitest unit suite (`yarn test:watch` for watch mode).
+- `yarn test:e2e` – run the Playwright end-to-end suite (`yarn test:e2e:thesis` for the `@thesis`-tagged subset).
 
 ## Project Structure
 

@@ -34,7 +34,7 @@ Remediation support tiers:
   - `Citation@FP (no-ctx)=0.000` (`0/9`)
 - Remediation baseline: `outputs/thesis_final_remediation_v2/`
   - `25/25` fully verified
-  - `Brier=0.0057`, `ECE=0.0696`
+  - `Brier=0.0119`, `ECE=0.1091`
 
 ## Follow-Up Evidence
 
@@ -42,6 +42,7 @@ Remediation support tiers:
   - `18/25 = 0.72`
 - Strongest provenance-backed remediation anchor: `outputs/thesis_final_remediation_v4/`
   - `25/25 = 1.00`
+  - `Brier=0.0057`, `ECE=0.0696`
 
 If a minimum remediation threshold of `70%` is required, use:
 
