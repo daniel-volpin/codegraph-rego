@@ -265,5 +265,6 @@ When citing a control in the thesis, use the short canonical form.
   - citation/grounding quality
 
 ## Read Together With
-- [architecture overview](./../copilot-context/architecture.md)
+- [repository layout and boundaries](./architecture/repo-layout.md)
+- [benchmark context and claim guardrails](./../copilot-context/benchmark.md)
 - [remediation prompting design](./remediation_prompting_design.md)

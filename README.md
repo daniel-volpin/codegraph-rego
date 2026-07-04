@@ -125,8 +125,8 @@ Authoritative thesis-final artifact families:
 
 Follow-up artifact families:
 
-- remediation v3: [`outputs/thesis_final_remediation_v3/`](./outputs/thesis_final_remediation_v3/) when present
-- stronger provenance-backed remediation anchor: [`outputs/pr_full_verification_2026-05-11/`](./outputs/pr_full_verification_2026-05-11/) when needed for threshold-based thesis framing
+- provenance-backed remediation rerun: [`outputs/thesis_final_remediation_v3/`](./outputs/thesis_final_remediation_v3/) (`18/25` fully verified)
+- strongest provenance-backed remediation anchor: [`outputs/thesis_final_remediation_v4/`](./outputs/thesis_final_remediation_v4/) (`25/25` fully verified)
 
 Use artifact directories, tags, and recorded commit provenance when citing results. Do **not** cite README prose as the primary evidence source.
 

@@ -7,12 +7,8 @@ This repository uses Copilot Agent with context-based reference files for improv
 ## Context Anchors
 - Reference context from `/copilot-context/` before analyzing the entire codebase.
 - Use the following context files for fast and accurate reasoning:
-  - `benchmark.md` — Thesis benchmark scope, evidence anchors, and citation guardrails.
-  - `architecture.md` — System design and module interactions.
-  - `dependencies.md` — External libraries, APIs, and frameworks.
-  - `services.md` — Service roles, functions, and dependencies.
-  - `configuration.md` — Environment variables and configuration settings.
-  - `improvements.md` — Technical debt and refactoring recommendations.
+  - `benchmark.md` — Thesis benchmark scope, evidence anchors, and citation guardrails (the substantive context file).
+  - `architecture.md`, `dependencies.md`, `services.md`, `configuration.md`, `improvements.md` — pointer files only; each redirects to the canonical source (`README.md`, `REPRODUCIBILITY.md`, `docs/`, manifests) so facts do not drift across documents.
 
 ---
 
@@ -29,8 +25,8 @@ This repository uses Copilot Agent with context-based reference files for improv
 ## Project Summary
 - Converts Java/Spring codebases into a queryable knowledge graph and ISO 27001 compliance checker.
 - Core modules: ingestion, embedding, search, policy evaluation, LLM explanations, and agentic remediation.
-- Integrates Neo4j, FAISS, OPA/Rego, LiteLLM, and FastAPI.
-- Frontend: Vite + React + TypeScript SPA with react-router-dom, react-query, lucide-react, prismjs.
+- Integrates Neo4j, FAISS, OPA/Rego, an OpenAI-compatible LLM client, and FastAPI.
+- Frontend: Vite + React + TypeScript SPA with react-router-dom, TanStack Query, Zod, Radix UI, and Tailwind.
 
 ---
 

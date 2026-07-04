@@ -8,7 +8,7 @@ This repository keeps two explicit backend boundaries:
 The root folder is intentionally small. It should contain only stable entrypoints and core project metadata:
 
 - `app.py` for `uvicorn app:app`
-- the three validated evaluation runners
+- the validated evaluation runners (`run_*_eval.py`)
 - repository metadata such as `README.md`, `REPRODUCIBILITY.md`, `pyproject.toml`, and `Makefile`
 
 Operational utilities that are useful but not part of the stable thesis entrypoint surface live under `scripts/`:
@@ -27,5 +27,5 @@ This split is intentional:
 Compatibility rules for this branch:
 
 - keep `app.py` at the root
-- keep `run_benchmark_eval.py`, `run_explanation_eval.py`, and `run_remediation_eval.py` at the root
+- keep the `run_*_eval.py` evaluation runners at the root
 - avoid introducing new top-level utility scripts when equivalent functionality belongs under `scripts/`
