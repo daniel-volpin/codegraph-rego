@@ -52,3 +52,4 @@ Included Since [previous tag]
 - If a release is only documentation or metadata, a patch version is usually enough.
 - If the release includes meaningful new features or workflow expansions, prefer a minor version bump.
 - If manifests intentionally diverge from the Git tag, document that decision in the release notes.
+- While the repository is private, update the static README release badge with each release.

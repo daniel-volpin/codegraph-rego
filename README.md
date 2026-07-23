@@ -1,7 +1,7 @@
 # CodeGraph
 
 [![CI](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/github/v/release/daniel-volpin/codegraph-rego?label=release)](https://github.com/daniel-volpin/codegraph-rego/releases)
+[![Release: v0.5.0](https://img.shields.io/badge/release-v0.5.0-blue)](https://github.com/daniel-volpin/codegraph-rego/releases/tag/v0.5.0)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](./pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Citation](https://img.shields.io/badge/citation-CITATION.cff-orange)](./CITATION.cff)
