@@ -20,11 +20,10 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Auto-approve patch/minor updates
+      - name: Auto-approve patch updates
         if: >-
           ${{
-            steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-            steps.metadata.outputs.update-type == 'version-update:semver-minor'
+            steps.metadata.outputs.update-type == 'version-update:semver-patch'
           }}
         uses: actions/github-script@v9
         with:
@@ -35,14 +34,13 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.payload.pull_request.number,
               event: "APPROVE",
-              body: "Auto-approving safe Dependabot patch/minor update."
+              body: "Auto-approving Dependabot patch update."
             });
 
-      - name: Enable auto-merge for patch/minor updates
+      - name: Enable auto-merge for patch updates
         if: >-
           ${{
-            steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-            steps.metadata.outputs.update-type == 'version-update:semver-minor'
+            steps.metadata.outputs.update-type == 'version-update:semver-patch'
           }}
         uses: actions/github-script@v9
         with:
