@@ -300,21 +300,21 @@ not *recall on synthetic-benchmark wrappers*.
 2. **OWASP Benchmark cannot measure F10's value** — see §6. This is
    itself a result, but the thesis must not claim "F10 improves
    OWASP" from these numbers (it doesn't; it just doesn't hurt).
-3. **No real-world FP measurement yet.** JHipster and PetClinic are
-   secondary case studies in this thesis; a measured FP delta from F10
-   on a real codebase remains future work.
+3. **No real-world FP measurement yet.** Spring PetClinic and
+   gs-securing-web are secondary case studies in this thesis; a measured
+   FP delta from F10 on a real codebase remains future work.
 4. **The file-level evaluator drops graph context** by design. Cases
    where F10 might interact with multi-hop taint paths or helper
-   summaries are out of scope here; the full pipeline is what runs in
-   production.
+   summaries are out of scope here; the full graph pipeline is evaluated
+   separately.
 5. **The Python regex layer (active-code view) still matches FP
    patterns inside string literals.** F10's literal-stripping applies
    only to the Rego substring view; the active-code view preserves
    them so crypto algorithm strings like `"MD5"` inside
    `MessageDigest.getInstance` remain detectable. The price is that 7
    of the LexicalNoiseJava NEG fixtures (literal / text-block strata)
-   still trigger the rule via the flag path. Candidate F11
-   intervention: anchor the regex layer on call-site context.
+   still trigger the rule via the flag path. This remains a known
+   limitation of the active-code view.
 6. **Bootstrap CIs assume per-case independence.** OWASP test cases
    are programmatically generated and share boilerplate; the true
    effective sample size is smaller than n. The multi-seed evaluator
@@ -330,53 +330,5 @@ not *recall on synthetic-benchmark wrappers*.
    rule fire on this file?" semantic — registry rule IDs do not
    deterministically map to CodeGraph violation IDs, so per-CWE
    semantic alignment for OWASP would require parsing each
-   finding's `metadata.cwe` field. That extension is deferred to a
-   follow-up.
-
-## 8. Positioning vs adjacent work
-
-* **AST-based SAST (SemGrep, CodeQL, Joern)** — F10 closes the
-  largest precision gap between lexical and AST matchers (the
-  comment/literal FP class) without paying the AST-build cost. Industry
-  positioning evidence (e.g. SemGrep is reported as ~10× slower than
-  lexical OPA-style matchers on the same workload [7])
-  motivates keeping the lexical pipeline viable.
-* **LLM-assisted SAST (IRIS [5], LLMxCPG
-  [6], MoCQ [9])**
-  — F10 is *complementary*. A deterministic pre-filter that strips
-  textual noise reduces the token budget the LLM must reason over
-  and removes a major FP class before any LLM call is made,
-  lowering both cost and false-alarm noise in the LLM's input.
-* **Organizational AI-GRC platforms (e.g. Scytale.ai)** — different
-  layer of the stack: policy authoring, evidence collection, audit
-  workflows. CodeGraph is the code-level evidence producer that
-  feeds *into* such platforms; F10 makes that evidence cleaner.
-
----
-
-### References (placeholders for the thesis chapter)
-
-1. (Static-analysis FP taxonomy survey — e.g. Liu et al., TSE 2023, on
-   industrial SAST FP sources.)
-2. (Christakis & Bird, "What developers want and need from program
-   analysis", ASE 2016, on alarm fatigue.)
-3. (OWASP Benchmark v1.2 — Wichers, OWASP project page; cite the v1.2
-   technical report.)
-4. (Chen et al., FSE 2023, on the synthetic-vs-real benchmark gap in
-   SAST evaluation.)
-5. (IRIS — LLM-assisted SAST, ICLR 2025. Verify venue / year at
-   submission time.)
-6. (LLMxCPG — LLM + CPG taint, USENIX Security 2025. Verify venue /
-   year at submission time.)
-7. (SemGrep — the r2c / Returntocorp technical write-ups; consult the
-   project paper or the EMSE 2024 evaluation for AST-matching
-   performance numbers. For the "~10× slower than the lexical baseline"
-   claim, cite a primary benchmark — placeholder until a defensible
-   source is selected.)
-8. (Industrial SAST experience — Bessey et al., "A Few Billion Lines
-   of Code Later", CACM 2010 — the Coverity retrospective on what
-   industrial SAST can and cannot do in production. Cited here for the
-   FP-budget-as-deployment-blocker argument, not as a SemGrep
-   reference.)
-9. (MoCQ — model-checking + LLM for code quality, April 2025. Verify
-   venue / year at submission time.)
+   finding's `metadata.cwe` field, which is outside this evaluation's
+   scope.

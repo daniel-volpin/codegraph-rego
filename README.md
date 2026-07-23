@@ -1,7 +1,7 @@
 # CodeGraph
 
 [![CI](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/github/v/tag/daniel-volpin/codegraph-rego?label=version)](https://github.com/daniel-volpin/codegraph-rego/tags)
+[![Version](https://img.shields.io/github/v/release/daniel-volpin/codegraph-rego?label=release)](https://github.com/daniel-volpin/codegraph-rego/releases)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](./pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Citation](https://img.shields.io/badge/citation-CITATION.cff-orange)](./CITATION.cff)
@@ -36,7 +36,7 @@ If you are evaluating thesis claims, start with:
 ### Prerequisites
 
 - Python 3.10+
-- Node.js + Yarn
+- Node.js 22+ and Yarn 1.22+
 - Neo4j 5.x
 - OPA `v1.15.1` on `PATH` (required for `make policy-check` and OPA evaluation)
 - Java JDK (8+ or newer) and Maven for remediation build re-verification (release validation was performed with OpenJDK 26.0.1)
@@ -136,23 +136,24 @@ Canonical local verification:
 
 ```bash
 uv run ruff check .
-uv run pytest -q
-cd frontend && yarn build
+uv run python -m pytest -q
+PATH="$(pwd)/.venv/bin:$PATH" make policy-check
+cd frontend && yarn lint && yarn test && yarn build
 ```
 
 Benchmark-sensitive smoke runs:
 
 ```bash
-python run_benchmark_eval.py \
+uv run python run_benchmark_eval.py \
   --config configs/benchmark/smoke_mixed.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/branch_baseline_recovery/detection_smoke \
+  --output-dir outputs/local_smoke/detection \
   --reset-neo4j
 
-python run_remediation_eval.py \
+uv run python run_remediation_eval.py \
   --config configs/benchmark/remediation_bounded_smoke.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/branch_baseline_recovery/remediation_bounded_smoke \
+  --output-dir outputs/local_smoke/remediation \
   --sample-size 3 \
   --reset-neo4j
 ```
@@ -240,6 +241,7 @@ For broader hardening, treat that as a separate engineering effort beyond the th
 
 - Rerun guidance: [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md)
 - Release checklist: [`docs/release_checklist.md`](./docs/release_checklist.md)
+- Public-release gate: [`docs/public_release_checklist.md`](./docs/public_release_checklist.md)
 - Benchmark evidence context: [`copilot-context/benchmark.md`](./copilot-context/benchmark.md)
 
 ## Contributing
@@ -258,4 +260,6 @@ If a change affects benchmark-sensitive logic, include the relevant smoke run or
 ## Citation & License
 
 - Cite the repository using [`CITATION.cff`](./CITATION.cff).
-- This repository is licensed under the [MIT License](./LICENSE).
+- Original CodeGraph source is licensed under the [MIT License](./LICENSE).
+- Benchmark-derived research artifacts retain applicable upstream terms; see
+  [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).

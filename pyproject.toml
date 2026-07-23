@@ -1,7 +1,7 @@
 [project]
 name = "codegraph"
 version = "0.5.0"
-description = "A sophisticated code search and understanding engine powered by CodeGraph"
+description = "Benchmark-backed JVM security and compliance framework with graph-structured evidence"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -54,4 +54,3 @@ filterwarnings = [
     "ignore:.*SwigPyObject has no __module__ attribute.*:DeprecationWarning",
     "ignore:.*swigvarlink has no __module__ attribute.*:DeprecationWarning",
 ]
-

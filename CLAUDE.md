@@ -59,9 +59,9 @@ Requires `.env` (copy `.env.example`) with at least `NEO4J_PASS`. Config is load
 ### Benchmark evaluation runners (root-level, stable entrypoints)
 
 ```bash
-python run_benchmark_eval.py   --config configs/benchmark/smoke_mixed.json               --mapping configs/benchmark/policy_registry.json --output-dir outputs/<dir> --reset-neo4j
-python run_explanation_eval.py --config configs/benchmark/multicat_full.json             --mapping configs/benchmark/policy_registry.json --output-dir outputs/<dir> --reset-neo4j
-python run_remediation_eval.py --config configs/benchmark/remediation_bounded_smoke.json --mapping configs/benchmark/policy_registry.json --output-dir outputs/<dir> --sample-size 3 --reset-neo4j
+uv run python run_benchmark_eval.py   --config configs/benchmark/smoke_mixed.json               --mapping configs/benchmark/policy_registry.json --output-dir outputs/<dir> --reset-neo4j
+uv run python run_explanation_eval.py --config configs/benchmark/multicat_full.json             --mapping configs/benchmark/policy_registry.json --output-dir outputs/<dir> --reset-neo4j
+uv run python run_remediation_eval.py --config configs/benchmark/remediation_bounded_smoke.json --mapping configs/benchmark/policy_registry.json --output-dir outputs/<dir> --sample-size 3 --reset-neo4j
 ```
 
 Runners need `OWASP_BENCHMARK_ROOT` (local BenchmarkJava checkout) and, for explanation/remediation, an OpenAI-compatible LLM endpoint. Every run writes a `provenance.json` (git SHA, OPA version, model, seed, config hash). The explanation eval supports `--resume`. Exact rerun flow: `REPRODUCIBILITY.md`.

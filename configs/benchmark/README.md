@@ -15,4 +15,4 @@
 - `sql_fn_recovery_smoke.json` – pinned SQL-injection testcases with `debug_fn_analysis` for FN-recovery checks
 - `lexical_noise_v1.json` – LexicalNoiseJava v1 manifest for the F10 lexical-noise eval (`run_lexical_noise_eval.py`)
 
-These files are the supported defaults for docs, scripts, and reruns on this branch.
+These files are the supported defaults for documentation, scripts, and reruns.

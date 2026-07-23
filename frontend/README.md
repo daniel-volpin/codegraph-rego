@@ -42,7 +42,7 @@ echo 'CODEGRAPH_DEV_PROXY_TARGET=http://localhost:9000' > .env
 
 ## Project Structure
 
-```init
+```text
 frontend/
   src/
     pages/        # Upload, search, policy, settings, home
@@ -56,8 +56,8 @@ frontend/
       schemas.ts      # Zod schemas at the wire boundary; types inferred via z.infer
       types.ts        # Re-export surface for inferred types
       persistence.ts  # IndexedDB persistence (idb-keyval) for large eval payloads
-      runtimeConfig.ts# Runtime base-URL resolution (window/meta/env/default)
-      observability.ts# reportError + reportMetric event bus
+      runtimeConfig.ts # Runtime base-URL resolution (window/meta/env/default)
+      observability.ts # reportError + reportMetric event bus
       tracing.ts      # Browser OpenTelemetry (FetchInstrumentation, OTLP/console exporter)
     store/        # Zustand stores (e.g. activity)
 ```

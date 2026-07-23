@@ -2,6 +2,9 @@
 
 Use this checklist for small repository releases so Git tags, GitHub release notes, and manifest versions stay synchronized.
 
+Before changing repository visibility, complete the separate
+[public release checklist](./public_release_checklist.md).
+
 ## Scope
 
 - release from `main`
@@ -16,9 +19,10 @@ Use this checklist for small repository releases so Git tags, GitHub release not
 4. Update the frontend manifest version in [frontend/package.json](../frontend/package.json).
 5. Commit the version-bump changes to `main` or merge them through the normal PR flow.
 6. Verify the relevant checks are green:
-   - `.venv/bin/ruff check .`
+   - `uv run ruff check .`
    - `UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest -q`
-   - `cd frontend && yarn build`
+   - `PATH="$(pwd)/.venv/bin:$PATH" make policy-check`
+   - `cd frontend && yarn lint && yarn test && yarn build`
 7. Draft release notes that summarize the changes since the previous tag.
 8. Create the GitHub release from `main` using the same version number as the manifests.
 9. Verify the published result:

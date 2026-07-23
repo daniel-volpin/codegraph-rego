@@ -27,10 +27,10 @@ CodeGraph is a **benchmark-backed research artifact**. To preserve scientific re
 ### Prerequisites
 
 - Python 3.10+
-- Node.js (v20+) & Yarn (v1.22+)
-- OPA `v1.15.1` on `PATH`
+- Node.js 22+ and Yarn 1.22+
+- OPA `v1.15.1` (installed into `.venv/bin` by `make install`)
 - Java JDK (8+ or newer) and Maven for remediation build re-verification (release validation was performed with OpenJDK 26.0.1)
-- Neo4j 5.x (via Docker Compose)
+- Neo4j 5.x through a Docker- or Podman-compatible Compose runtime
 
 ### Environment Preparation
 
@@ -53,23 +53,21 @@ cp .env.example .env
 Before opening a pull request, run the full validation suite locally to ensure all quality gates pass:
 
 ```bash
-# 1. Python Linting & Formatting Check
-.venv/bin/ruff check .
+# 1. Python Linting Check
+uv run ruff check .
 
 # 2. Pytest Backend Test Suite
-JAVA_HOME="<your-jdk-home>" CODEGRAPH_ENV_FILE=.env NEO4J_PASS=password \
-PATH="$JAVA_HOME/bin:$(pwd)/.venv/bin:$PATH" \
-.venv/bin/python -m pytest -q
+CODEGRAPH_ENV_FILE=.env NEO4J_PASS=password uv run python -m pytest -q
 
 # 3. OPA Policy Check and Formatting Gate
 PATH="$(pwd)/.venv/bin:$PATH" make policy-check
 
 # 4. Frontend Linting, Unit Tests, and Build
 cd frontend
-npx yarn lint
-npx yarn test
-npx yarn build
-npx playwright test
+yarn lint
+yarn test
+yarn build
+yarn test:e2e
 cd ..
 
 # 5. Git Formatting Check

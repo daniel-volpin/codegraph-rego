@@ -1,9 +1,19 @@
-## Baseline-Recovery Checklist
+## Summary
 
-- [ ] `.venv/bin/ruff check .`
-- [ ] `UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest -q`
-- [ ] `cd frontend && yarn build`
-- [ ] Detection smoke rerun written to `outputs/branch_baseline_recovery/detection_smoke/`
-- [ ] Bounded remediation smoke rerun written to `outputs/branch_baseline_recovery/remediation_bounded_smoke/`
-- [ ] If supported remediation medium was rerun, results are written to `outputs/branch_baseline_recovery/remediation_supported_medium/`
-- [ ] Any benchmark claim changes cite matching `outputs/` artifacts and distinguish branch-local reruns from frozen historical baselines
+<!-- Describe the problem and the smallest change that solves it. -->
+
+## Validation
+
+<!-- Check each relevant item; mark non-applicable items as N/A with a short reason. -->
+
+- [ ] `uv run ruff check .`
+- [ ] `uv run python -m pytest -q`
+- [ ] `PATH="$(pwd)/.venv/bin:$PATH" make policy-check`
+- [ ] `cd frontend && yarn lint && yarn test && yarn build`
+
+## Review Checklist
+
+- [ ] Tests and documentation cover the changed behavior.
+- [ ] API payload changes include matching Zod schema updates.
+- [ ] Benchmark semantics and control mappings are unchanged, or the change is explicitly justified.
+- [ ] Benchmark claim changes cite matching `outputs/` artifacts and preserve canonical evidence.

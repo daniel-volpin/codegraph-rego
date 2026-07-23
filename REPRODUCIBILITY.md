@@ -1,6 +1,6 @@
 # Reproducibility Guide
 
-This file is the shortest path to rerun the thesis-final evaluation pipeline on this branch.
+This file is the shortest path to rerun the thesis-final evaluation pipeline.
 
 ## 1. Prerequisites
 
@@ -81,29 +81,30 @@ matching defaults — keep it in sync when adding new variables.
 | `OTEL_TRACE_FILE` | _unset_ | If set, write spans to this JSONL file instead of stdout. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | _unset_ | OTLP endpoint URL for an external collector (Grafana Tempo, etc.). |
 
-## 3. Branch Verification Contract
+## 3. Verification Contract
 
-Use these commands as the baseline-recovery gate on this branch:
+Use these commands as the local verification gate:
 
 ```bash
-.venv/bin/ruff check .
+uv run ruff check .
 UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest -q
-cd frontend && yarn build
+PATH="$(pwd)/.venv/bin:$PATH" make policy-check
+cd frontend && yarn lint && yarn test && yarn build
 ```
 
-For branch-local smoke evidence, write new outputs under `outputs/branch_baseline_recovery/`:
+Write local smoke evidence under `outputs/local_smoke/`:
 
 ```bash
-python run_benchmark_eval.py \
+uv run python run_benchmark_eval.py \
   --config configs/benchmark/smoke_mixed.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/branch_baseline_recovery/detection_smoke \
+  --output-dir outputs/local_smoke/detection \
   --reset-neo4j
 
-python run_remediation_eval.py \
+uv run python run_remediation_eval.py \
   --config configs/benchmark/remediation_bounded_smoke.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/branch_baseline_recovery/remediation_bounded_smoke \
+  --output-dir outputs/local_smoke/remediation \
   --sample-size 3 \
   --reset-neo4j
 ```
@@ -144,7 +145,7 @@ Canonical benchmark configs live under `configs/benchmark/`.
 For the live thesis/demo UI flow, use the curated OWASP Benchmark pack instead of a generic sample app:
 
 ```bash
-python3 scripts/evaluation/build_benchmark_demo_pack.py \
+uv run python scripts/evaluation/build_benchmark_demo_pack.py \
   --benchmark-root "$OWASP_BENCHMARK_ROOT" \
   --output-dir demo/benchmark-framework-demo/build
 ```
@@ -162,21 +163,21 @@ The selected benchmark cases cover:
 
 For the UI thesis/demo, use the Policy page's `Framework demo focus` preset after upload. That preset sends an explicit `rule_ids` filter to the backend so the grouped table reflects the benchmark-aligned categories rather than the full servlet-heavy policy surface.
 
-## 6. Run Thesis-Final Detection
+## 6. Reproduce Thesis-Final Detection
 
 The tracked detection artifact set is
 `outputs/thesis_final_detection_full_v2/`. It carries bootstrap CIs and a
-per-run `provenance.json`:
+per-run `provenance.json`. Reproduce it in a non-canonical directory:
 
 ```bash
-python run_benchmark_eval.py \
+uv run python run_benchmark_eval.py \
   --config configs/benchmark/multicat_full.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/thesis_final_detection_full_v2 \
+  --output-dir outputs/reproduction/detection_full_v2 \
   --reset-neo4j
 ```
 
-## 7. Run Thesis-Final Explanation Evaluation
+## 7. Reproduce Thesis-Final Explanation Evaluation
 
 The v1 baseline measured `Citation@Context` on the TP cohort only. The v2
 run additionally evaluates the FP cohort (citation grounding on the
@@ -185,10 +186,10 @@ Re-run into a fresh directory:
 
 ```bash
 LLM_CONCURRENCY=1 \
-python run_explanation_eval.py \
+uv run python run_explanation_eval.py \
   --config configs/benchmark/multicat_full.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/thesis_final_explanation_full_v2 \
+  --output-dir outputs/reproduction/explanation_full_v2 \
   --evidence-mode lean \
   --llm-max-tokens-eval 192 \
   --reset-neo4j
@@ -206,10 +207,10 @@ the existing artifacts rather than truncating them.
 ```bash
 # First run is interrupted after, say, 4 of 8 categories.
 LLM_CONCURRENCY=1 \
-python run_explanation_eval.py \
+uv run python run_explanation_eval.py \
   --config configs/benchmark/multicat_full.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/thesis_final_explanation_full_v2 \
+  --output-dir outputs/reproduction/explanation_full_v2 \
   --evidence-mode lean \
   --llm-max-tokens-eval 192 \
   --reset-neo4j \
@@ -227,41 +228,20 @@ Notes:
   newly-executed violations on the resume run; samples written by the
   prior run remain untouched.
 
-## 8. Run Thesis-Final Supported Remediation
+## 8. Rerun Supported Remediation
 
-The v2 baseline at `outputs/thesis_final_remediation_v2/` is preserved.
-The defensibility pass splits the calibration into three populations
-(full / attempted_only / no_fix_only). The provenance-backed fallback is
-preserved under `outputs/thesis_final_remediation_v3/`:
+The v2 baseline and provenance-backed v3/v4 follow-ups under
+`outputs/thesis_final_remediation_*` are protected canonical evidence. Do not
+rerun directly into those directories unless intentionally regenerating the
+canonical artifact set and checksum manifest.
 
-```bash
-python run_remediation_eval.py \
-  --config configs/benchmark/remediation_supported_medium.json \
-  --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/thesis_final_remediation_v3 \
-  --sample-size 60 \
-  --reset-neo4j
-```
-
-After the raw-source evidence preservation fix, promote the clean
-supported-medium remediation artifact under `outputs/thesis_final_remediation_v4/`:
+For a local supported-medium rerun, use a non-canonical output directory:
 
 ```bash
-python run_remediation_eval.py \
+uv run python run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
   --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/thesis_final_remediation_v4 \
-  --sample-size 60 \
-  --reset-neo4j
-```
-
-For the baseline-recovery branch, prefer this branch-local output directory for the supported-medium rerun:
-
-```bash
-python run_remediation_eval.py \
-  --config configs/benchmark/remediation_supported_medium.json \
-  --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/branch_baseline_recovery/remediation_supported_medium \
+  --output-dir outputs/local_smoke/remediation_supported_medium \
   --sample-size 60 \
   --reset-neo4j
 ```
@@ -271,7 +251,7 @@ python run_remediation_eval.py \
 For a bounded remediation refresh across full and guarded support tiers:
 
 ```bash
-python run_remediation_eval.py \
+uv run python run_remediation_eval.py \
   --config configs/benchmark/remediation_bounded_smoke.json \
   --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/remediation_eval_bounded_smoke \
@@ -282,7 +262,7 @@ python run_remediation_eval.py \
 To compare local remediation models on the same bounded subset:
 
 ```bash
-python scripts/evaluation/run_remediation_model_bakeoff.py \
+uv run python scripts/evaluation/run_remediation_model_bakeoff.py \
   --models qwen/qwen3-coder-30b qwen3.5-27b \
   --config configs/benchmark/remediation_bounded_smoke.json \
   --output-dir outputs/remediation_model_bakeoff \
@@ -297,7 +277,7 @@ version, model id, seed, config sha256, uv.lock hash, and pyproject hash.
 This is the canonical per-run manifest; cite it alongside any number you
 quote from the artifact.
 
-Latest PR #107 rerun snapshot (2026-05-03):
+Canonical artifact snapshot (generated 2026-05-03):
 
 - detection v2 (`outputs/thesis_final_detection_full_v2/`): precision
   `0.9528` (95% bootstrap CI `[0.9253, 0.9780]`), recall `0.9528`
@@ -469,5 +449,5 @@ Read this section before treating any single re-run as canonical.
   Wilson confidence intervals emitted next to the point estimates over
   individual point values.
 - When citing thesis-final numbers, cite the artifact directory
-  (`outputs/thesis_final_*/`) plus the git tag (`thesis-final-v1`) — not the
-  README prose.
+  (`outputs/thesis_final_*/`) plus the `thesis-evidence-2026-05-31` git tag —
+  not the README prose.

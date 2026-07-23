@@ -23,9 +23,9 @@ This repository uses Copilot Agent with context-based reference files for improv
 ---
 
 ## Project Summary
-- Converts Java/Spring codebases into a queryable knowledge graph and ISO 27001 compliance checker.
+- Converts Java/Spring codebases into a queryable knowledge graph and ISO-aligned compliance checker.
 - Core modules: ingestion, embedding, search, policy evaluation, LLM explanations, and agentic remediation.
-- Integrates Neo4j, FAISS, OPA/Rego, an OpenAI-compatible LLM client, and FastAPI.
+- Integrates Neo4j, FAISS, OPA/Rego, an OpenAI-compatible LLM client, bounded remediation, and FastAPI.
 - Frontend: Vite + React + TypeScript SPA with react-router-dom, TanStack Query, Zod, Radix UI, and Tailwind.
 
 ---

@@ -19,7 +19,7 @@
 - Main implementation target: JVM microservices, especially Java/Spring style codebases.
 - Main benchmark/evaluation target and primary demo substrate: OWASP Benchmark.
 - Core evaluated categories currently include weak crypto/hash, insecure randomness, SQL injection, path traversal, command injection, LDAP injection, and XPath injection checks.
-- Realistic sample apps such as JHipster are secondary qualitative case studies for upload/search/policy browsing, not the primary remediation evidence surface.
+- Realistic sample apps such as Spring PetClinic and gs-securing-web are secondary qualitative case studies for upload/search/policy browsing, not the primary remediation evidence surface.
 
 ## Important Thesis Framing
 - Prefer the phrase `graph-based code understanding` or `graph-structured evidence`.
@@ -123,9 +123,15 @@ Every eval run writes a `provenance.json` next to its other artifacts
 - `seed`
 - `llm` block (model, temperature, max_tokens) when applicable
 
+Schema v2 records repository- and corpus-relative paths where possible and
+otherwise retains only the final path component, including path-like fields
+inside `extra`. This keeps new manifests portable and avoids publishing local
+machine prefixes. Historical canonical manifests remain unchanged as part of
+the thesis evidence record.
+
 Cite the artifact directory **plus the SHA recorded in
 `provenance.json`** when referring to canonical numbers. v1 numbers are
-addressable via the `thesis-final-v1` git tag.
+addressable via the `thesis-evidence-2026-05-31` git tag.
 
 Canonical thesis outputs that are intentionally versioned under
 `outputs/thesis_final_*` are protected by `outputs/canonical_manifest.sha256`.
@@ -153,14 +159,9 @@ Canonical thesis runs:
 ## Remediation IR (`RepairIntent`)
 
 `codegraph/remediation/repair_intent.py` defines a typed intermediate
-representation for bounded JVM security repairs. Its own header
-self-describes the module as *"shadow-mode only"* with respect to the
-production remediation pipeline (`apply_flow.py` does not call
-`plan_repair_intent`), and an earlier draft of this review framed the
-module as dead code. That framing was wrong.
-
-The IR is not dead: it is the backbone of the **deterministic-vs-LLM
-remediation comparison harness**. `comparison.py:144` consumes a
+representation for bounded JVM security repairs. It is the backbone of
+the **deterministic-vs-LLM remediation comparison harness**.
+`comparison.py:144` consumes a
 `RepairIntent` via `compile_repair_intent` (from `patch_compiler.py`),
 and `run_comparison_eval.py` drives this end-to-end as a separate
 evaluation surface from the live `run_remediation_eval.py` flow.
@@ -174,9 +175,7 @@ Practical implications for the thesis:
   production" is not.
 - The production live path (`apply_flow.py → service.propose_method_edits`)
   goes LLM-output → structured edit dicts → `editing.apply_method_edits`
-  directly. The IR is not yet on this path; deciding whether to
-  promote it onto the live path is a design choice for a future PR,
-  not a clean-up item for this one.
+  directly. The IR is not part of this live path.
 - Keep `repair_intent.py` and `patch_compiler.py` as comparison-eval
   infrastructure. Removing them would delete a non-trivial chunk of the
   comparison-eval surface that `run_comparison_eval.py` depends on.
@@ -226,7 +225,7 @@ When citing a control in the thesis, use the short canonical form.
   - structured JSON-schema output materially improved explanation citation quality
   - explicit stop sequences for local Qwen/LM Studio requests were added to stop repeated `<|im_end|>` token spam
 
-## What Future Agents Should Preserve
+## Maintenance Invariants
 - Keep evaluation changes isolated from remediation unless there is a clear reason to couple them.
 - Keep explanation-eval optimizations measurable:
   - compare throughput
@@ -253,7 +252,7 @@ When citing a control in the thesis, use the short canonical form.
   - prompt size
   - concurrency
 
-## Current State Of The Branch
+## Current Implementation Status
 - Performance bottlenecks were already reduced substantially in ingestion and evaluation orchestration.
 - Explanation evaluation now has:
   - live progress reporting

@@ -71,7 +71,7 @@ The realistic Spring sample app remains useful for qualitative browsing and poli
 Set `OWASP_BENCHMARK_ROOT` to your local BenchmarkJava checkout, then run:
 
 ```bash
-python3 scripts/evaluation/build_benchmark_demo_pack.py \
+uv run python scripts/evaluation/build_benchmark_demo_pack.py \
   --benchmark-root "$OWASP_BENCHMARK_ROOT" \
   --output-dir demo/benchmark-framework-demo/build
 ```

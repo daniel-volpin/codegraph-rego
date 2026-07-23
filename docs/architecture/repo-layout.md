@@ -24,7 +24,7 @@ This split is intentional:
 - HTTP concerns stay separate from domain orchestration
 - package code remains importable without depending on ad hoc root scripts
 
-Compatibility rules for this branch:
+Repository compatibility rules:
 
 - keep `app.py` at the root
 - keep the `run_*_eval.py` evaluation runners at the root

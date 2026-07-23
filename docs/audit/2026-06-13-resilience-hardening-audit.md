@@ -5,12 +5,12 @@
   construction -> OPA/Rego policy evaluation -> explanation/remediation context
   -> patch apply -> build and policy re-verification -> evaluation provenance.
 - **Purpose:** record the reviewer-facing outcome of the resilience audit for the
-  thesis branch. This note is engineering evidence; cite the canonical artifacts
+  thesis baseline. This note is engineering evidence; cite the canonical artifacts
   under `outputs/thesis_final_*` for reported metrics.
 
 ## Reviewer Verdict
 
-The hardening work is worth keeping in the thesis PR. It improves resilience,
+The hardening work is part of the thesis baseline. It improves resilience,
 reproducibility, and failure honesty without silently changing the thesis-reported
 metrics. The canonical manifest, manifest generator, and pytest tripwire are also
 worth keeping because they turn accidental metric drift into a visible review
@@ -25,7 +25,7 @@ on GitHub because they obscure the final claim. The durable evidence is:
 - which canonical outputs support the paper's numbers, and
 - which tests/commands protect those claims.
 
-## Changes Landed In This PR
+## Changes Landed During The Audit
 
 - OPA `eval` calls are bounded by a configurable timeout so a hung policy engine
   cannot stall a full run indefinitely.
@@ -66,6 +66,7 @@ Keep these because they are directly useful to a thesis examiner or reviewer:
 - `tests/test_opa_version_pin.py`
 - selected files under `outputs/thesis_final_detection_full_v2/`
 - selected files under `outputs/thesis_final_explanation_full_v2/`
+- selected files under `outputs/thesis_final_remediation_v2/`
 - selected files under `outputs/thesis_final_remediation_v3/`
 - selected files under `outputs/thesis_final_remediation_v4/`
 - `docs/architecture/artifact-policy.md`
@@ -106,9 +107,9 @@ surface around those artifacts.
 
 ## Deliberately Deferred Metric-Affecting Work
 
-The following issues remain valid architectural hotspots, but they should not be
-merged into the thesis-preserving hardening PR because a correct fix could change
-reported metrics or evidence semantics:
+The following issues remain valid architectural hotspots, but they were
+deliberately excluded because a correct fix could change reported metrics or
+evidence semantics:
 
 - **Method span inference:** current brace-count span inference can be confused by
   braces inside comments or string/char literals. Replacing it with parser-backed

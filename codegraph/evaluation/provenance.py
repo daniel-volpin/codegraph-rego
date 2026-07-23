@@ -102,12 +102,78 @@ def _git_sha_for_path(path: Path) -> str | None:
     return None
 
 
-def _ground_truth_info(ground_truth_path: str | os.PathLike | None) -> dict[str, Any] | None:
+def _git_root_for_path(path: Path) -> Path | None:
+    """Best-effort root of the git repository containing ``path``."""
+    anchor = path if path.is_dir() else path.parent
+    result = _safe_run(["git", "-C", str(anchor), "rev-parse", "--show-toplevel"])
+    if result.get("returncode") != 0 or not result.get("stdout"):
+        return None
+    return Path(result["stdout"])
+
+
+def _portable_path(
+    path: str | os.PathLike | None,
+    *,
+    repo_root: Path,
+    external_root: Path | None = None,
+) -> str | None:
+    """Return a reproducible path without exposing a machine-specific prefix."""
+    if path is None:
+        return None
+
+    path_obj = Path(path)
+    if not path_obj.is_absolute():
+        return path_obj.as_posix()
+
+    try:
+        resolved_path = path_obj.resolve(strict=False)
+    except OSError:
+        resolved_path = path_obj
+
+    for candidate_root in (repo_root, external_root):
+        if candidate_root is None:
+            continue
+        try:
+            return resolved_path.relative_to(candidate_root.resolve(strict=False)).as_posix()
+        except (OSError, ValueError):
+            continue
+
+    return path_obj.name or None
+
+
+def _portable_metadata(value: Any, *, repo_root: Path, key: str | None = None) -> Any:
+    """Normalize path-like values nested in optional provenance metadata."""
+    if isinstance(value, dict):
+        return {
+            item_key: _portable_metadata(item_value, repo_root=repo_root, key=str(item_key))
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_portable_metadata(item, repo_root=repo_root, key=key) for item in value]
+    if isinstance(value, os.PathLike):
+        return _portable_path(value, repo_root=repo_root)
+    if isinstance(value, str) and key:
+        normalized_key = key.lower()
+        if normalized_key in {"path", "root", "dir", "file", "executable"} or normalized_key.endswith(
+            ("_path", "_root", "_dir", "_file", "_executable")
+        ):
+            return _portable_path(value, repo_root=repo_root)
+    return value
+
+
+def _ground_truth_info(
+    ground_truth_path: str | os.PathLike | None,
+    *,
+    repo_root: Path,
+) -> dict[str, Any] | None:
     """Hash the ground-truth labels and pin the corpus commit they were scored against."""
     if not ground_truth_path:
         return None
     path = Path(ground_truth_path)
-    info: dict[str, Any] = {"path": str(path)}
+    corpus_root = _git_root_for_path(path) if path.exists() else None
+    info: dict[str, Any] = {
+        "path": _portable_path(path, repo_root=repo_root, external_root=corpus_root),
+    }
     if path.exists():
         info["sha256"] = _file_sha256(path)
         info["corpus_git_sha"] = _git_sha_for_path(path)
@@ -171,14 +237,14 @@ def collect_provenance(
     pyproject = root / "pyproject.toml"
 
     provenance: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "eval_kind": eval_kind,
         "generated_at": _now_iso_utc(),
         "git": _git_info(root),
         "python": {
             "version": sys.version.split()[0],
             "implementation": platform.python_implementation(),
-            "executable": sys.executable,
+            "executable": Path(sys.executable).name,
         },
         "platform": {
             "system": platform.system(),
@@ -191,16 +257,16 @@ def collect_provenance(
         "opa": _opa_version(),
         "neo4j": _neo4j_settings(),
         "config": {
-            "path": str(config_path_obj) if config_path_obj else None,
+            "path": _portable_path(config_path_obj, repo_root=root),
             "sha256": _file_sha256(config_path_obj) if config_path_obj and config_path_obj.exists() else None,
         },
-        "ground_truth": _ground_truth_info(ground_truth_path),
-        "output_dir": str(output_dir) if output_dir else None,
+        "ground_truth": _ground_truth_info(ground_truth_path, repo_root=root),
+        "output_dir": _portable_path(output_dir, repo_root=root),
         "seed": seed,
         "llm": dict(llm) if llm else None,
     }
     if extra:
-        provenance["extra"] = dict(extra)
+        provenance["extra"] = _portable_metadata(dict(extra), repo_root=root)
     return provenance
 
 
