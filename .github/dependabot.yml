@@ -15,9 +15,43 @@ updates:
     commit-message:
       prefix: "deps(py)"
     groups:
-      python-minor-patch:
+      python-api:
+        patterns:
+          - "fastapi"
+          - "uvicorn"
+          - "aiofiles"
+          - "python-multipart"
+          - "pydantic"
+          - "pydantic-settings"
         update-types:
           - "minor"
+          - "patch"
+      python-ml:
+        patterns:
+          - "sentence-transformers"
+          - "faiss-cpu"
+          - "numpy"
+        update-types:
+          - "minor"
+          - "patch"
+      python-observability:
+        patterns:
+          - "opentelemetry-*"
+        update-types:
+          - "minor"
+          - "patch"
+      python-dev:
+        patterns:
+          - "pytest"
+          - "httpx"
+          - "ruff"
+        update-types:
+          - "minor"
+          - "patch"
+      python-patches:
+        patterns:
+          - "*"
+        update-types:
           - "patch"
 
   - package-ecosystem: "npm"
@@ -35,9 +69,81 @@ updates:
     commit-message:
       prefix: "deps(ui)"
     groups:
-      frontend-minor-patch:
+      frontend-observability:
+        patterns:
+          - "@opentelemetry/*"
+          - "web-vitals"
         update-types:
           - "minor"
+          - "patch"
+      frontend-react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+        update-types:
+          - "minor"
+          - "patch"
+      frontend-ui:
+        patterns:
+          - "@radix-ui/*"
+          - "class-variance-authority"
+          - "clsx"
+          - "lucide-react"
+          - "sonner"
+          - "tailwind-merge"
+        update-types:
+          - "minor"
+          - "patch"
+      frontend-data-state:
+        patterns:
+          - "@tanstack/*"
+          - "idb-keyval"
+          - "zod"
+          - "zustand"
+        update-types:
+          - "minor"
+          - "patch"
+      frontend-routing-content:
+        patterns:
+          - "react-markdown"
+          - "react-router-dom"
+          - "react-syntax-highlighter"
+        update-types:
+          - "minor"
+          - "patch"
+      frontend-testing:
+        patterns:
+          - "@axe-core/*"
+          - "@playwright/*"
+          - "@testing-library/*"
+          - "fake-indexeddb"
+          - "jsdom"
+          - "msw"
+          - "vitest"
+        update-types:
+          - "minor"
+          - "patch"
+      frontend-build:
+        patterns:
+          - "@tailwindcss/*"
+          - "@typescript-eslint/*"
+          - "@vitejs/*"
+          - "autoprefixer"
+          - "eslint"
+          - "eslint-*"
+          - "postcss"
+          - "tailwindcss"
+          - "typescript"
+          - "vite"
+        update-types:
+          - "minor"
+          - "patch"
+      frontend-patches:
+        patterns:
+          - "*"
+        update-types:
           - "patch"
 
   - package-ecosystem: "github-actions"
