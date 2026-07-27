@@ -34,7 +34,7 @@ Repository = "https://github.com/daniel-volpin/codegraph-rego"
 dev = [
     "pytest>=9.1.1",
     "httpx>=0.24.1",
-    "ruff>=0.15.22",
+    "ruff>=0.16.0",
 ]
 
 [tool.ruff]
