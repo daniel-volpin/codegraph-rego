@@ -65,7 +65,7 @@
     "fake-indexeddb": "^6.2.2",
     "jsdom": "^26.1.0",
     "msw": "^2.15.0",
-    "postcss": "^8.5.22",
+    "postcss": "^8.5.23",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.4.5",
     "vite": "^8.1.5",
