@@ -203,6 +203,17 @@ export const PolicyCatalogResponseSchema = z
   .loose();
 export type PolicyCatalogResponse = z.infer<typeof PolicyCatalogResponseSchema>;
 
+// ---- Policy SARIF export ----
+
+export const SarifExportResponseSchema = z
+  .object({
+    $schema: z.string().optional(),
+    version: z.string().default("2.1.0"),
+    runs: z.array(z.record(z.string(), z.unknown())).default([]),
+  })
+  .loose();
+export type SarifExportResponse = z.infer<typeof SarifExportResponseSchema>;
+
 // ---- Remediation ----
 
 export const RemediationGenerationResultSchema = z

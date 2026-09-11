@@ -1,4 +1,4 @@
-import { Loader2, Sparkles, SlidersHorizontal } from "lucide-react";
+import { Download, Loader2, Sparkles, SlidersHorizontal } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
 import { Switch } from "../../ui/switch";
@@ -19,6 +19,8 @@ interface ControlsPanelProps {
   policyCatalogIsLoading: boolean;
   policyCatalogIsError: boolean;
   frameworkDemoScopeSource: string;
+  onExportSarif?: () => void;
+  isExportingSarif?: boolean;
 }
 
 const ControlsPanel = ({
@@ -33,6 +35,8 @@ const ControlsPanel = ({
   policyCatalogIsLoading,
   policyCatalogIsError,
   frameworkDemoScopeSource,
+  onExportSarif,
+  isExportingSarif = false,
 }: ControlsPanelProps) => (
   <Card className="p-5 shadow-xs border-zinc-200/80 dark:border-zinc-800">
     <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_auto] lg:items-center">
@@ -103,7 +107,29 @@ const ControlsPanel = ({
         </div>
       </div>
 
-      <div className="flex lg:justify-end lg:self-center">
+      <div className="flex flex-col sm:flex-row gap-2 lg:justify-end lg:self-center">
+        {onExportSarif && (
+          <Button
+            variant="outline"
+            data-testid="policy-sarif-export"
+            onClick={onExportSarif}
+            disabled={isExportingSarif || evalIsFetching}
+            title="Export policy findings in standard OASIS SARIF v2.1.0 format"
+            className="font-medium text-xs"
+          >
+            {isExportingSarif ? (
+              <>
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Exporting SARIF…
+              </>
+            ) : (
+              <>
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Export SARIF v2.1.0
+              </>
+            )}
+          </Button>
+        )}
         <Button
           data-testid="policy-eval-run"
           onClick={onEvalRefetch}

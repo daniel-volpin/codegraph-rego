@@ -12,6 +12,10 @@ vi.mock("../lib/api", () => ({
     framework_demo_rule_ids: [],
   }),
   evaluatePolicies: vi.fn(),
+  exportPolicySarif: vi.fn().mockResolvedValue({
+    version: "2.1.0",
+    runs: [],
+  }),
 }));
 
 vi.mock("../lib/persistence", () => ({
@@ -173,6 +177,15 @@ describe("PolicyPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/backend dependency unavailable/i);
     expect(screen.getByRole("alert")).toHaveTextContent(/neo4j unavailable/i);
+  });
+
+  it("triggers SARIF v2.1.0 report export", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PolicyPage />);
+
+    const exportButton = await screen.findByTestId("policy-sarif-export");
+    expect(exportButton).toBeInTheDocument();
+    await user.click(exportButton);
   });
 });
 

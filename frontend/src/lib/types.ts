@@ -19,6 +19,7 @@ export type {
   RemediationGenerationResult,
   RemediationPreviewResponse,
   RemediationVerificationSummary,
+  SarifExportResponse,
   SearchMatch,
   SearchResponse,
   UploadResponse,
@@ -33,4 +34,5 @@ export type {
   PolicyExplainOneRequest,
   PolicyReviewCreateRequest,
   PolicyReviewLabel,
+  PolicySarifExportOptions,
 } from "./api";
