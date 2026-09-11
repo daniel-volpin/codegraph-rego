@@ -11,9 +11,10 @@ import {
   ruleGroupStatusLabel,
   ruleGroupStatusVariant,
 } from "./policyUtils";
+import type { PolicyTableFeatures } from "./tableFeatures";
 
 interface ViolationGroupTableProps {
-  table: Table<ViolationGroupRow>;
+  table: Table<PolicyTableFeatures, ViolationGroupRow>;
   columnCount: number;
   viewPreset: PolicyViewPreset;
   selectedFindingId: string | null;
@@ -155,4 +156,3 @@ const ViolationGroupTable = ({
 };
 
 export default ViolationGroupTable;
-

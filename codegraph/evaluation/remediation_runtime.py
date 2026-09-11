@@ -5,7 +5,7 @@ import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -205,7 +205,7 @@ def build_confidence_calibration(
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _safe_slug(value: str | None) -> str:
@@ -639,7 +639,7 @@ class RemediationRuntime:
         self.progress_path = self.output_dir / "progress.json"
         self.summary_path = self.output_dir / "summary.md"
         self.results_jsonl_path = self.output_dir / "results.jsonl"
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = datetime.now(UTC)
         self.total_cases = 0
         self.completed_results: list[dict[str, Any]] = []
         self.results_handle = self.results_jsonl_path.open("w", encoding="utf-8")
@@ -649,7 +649,7 @@ class RemediationRuntime:
             self.results_handle.close()
 
     def elapsed_seconds(self) -> float:
-        return (datetime.now(timezone.utc) - self.started_at).total_seconds()
+        return (datetime.now(UTC) - self.started_at).total_seconds()
 
     def write_stage_progress(self, stage: str, message: str, **extra: Any) -> None:
         payload = {

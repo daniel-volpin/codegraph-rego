@@ -43,7 +43,9 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
     async def test_preview_returns_generation_payload(self, _mock_preview):
         from api.routers.remediation import remediation_preview
 
-        response = await remediation_preview(RemediationPreviewRequest(violation_id="ISO-A.10-WEAK-HASH"))
+        response = await remediation_preview(RemediationPreviewRequest(
+            violation_id="ISO-A.10-WEAK-HASH", method_key="workspace@revision:Demo.java#hash",
+        ))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body)
@@ -72,7 +74,9 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
     async def test_preview_returns_no_fix_as_success_response(self, _mock_preview):
         from api.routers.remediation import remediation_preview
 
-        response = await remediation_preview(RemediationPreviewRequest(violation_id="ISO-A.10-WEAK-CRYPTO"))
+        response = await remediation_preview(RemediationPreviewRequest(
+            violation_id="ISO-A.10-WEAK-CRYPTO", method_key="workspace@revision:Demo.java#encrypt",
+        ))
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.body)
@@ -99,7 +103,9 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
     async def test_preview_generation_error_returns_500(self, _mock_preview):
         from api.routers.remediation import remediation_preview
 
-        response = await remediation_preview(RemediationPreviewRequest(violation_id="ISO-A.10-WEAK-HASH"))
+        response = await remediation_preview(RemediationPreviewRequest(
+            violation_id="ISO-A.10-WEAK-HASH", method_key="workspace@revision:Demo.java#hash",
+        ))
 
         self.assertEqual(response.status_code, 500)
         payload = json.loads(response.body)
@@ -132,7 +138,9 @@ class TestRemediationRouter(unittest.IsolatedAsyncioTestCase):
     async def test_apply_build_error_returns_500(self, _mock_apply):
         from api.routers.remediation import remediation_apply
 
-        response = await remediation_apply(RemediationApplyRequest(violation_id="ISO-A.10-WEAK-HASH"))
+        response = await remediation_apply(RemediationApplyRequest(
+            violation_id="ISO-A.10-WEAK-HASH", method_key="workspace@revision:Demo.java#hash",
+        ))
 
         self.assertEqual(response.status_code, 500)
         payload = json.loads(response.body)
@@ -148,7 +156,11 @@ class TestRemediationApplyRequestValidation(unittest.TestCase):
     def _post_apply(self, mock_apply, payload: dict):
         mock_apply.return_value = dict(self._OK_RESULT)
         client = TestClient(_build_app())
-        return client.post("/remediation/apply", json={"violation_id": "ISO-A.10-WEAK-HASH", **payload})
+        return client.post("/remediation/apply", json={
+            "violation_id": "ISO-A.10-WEAK-HASH",
+            "method_key": "workspace@revision:Demo.java#hash",
+            **payload,
+        })
 
     @patch("api.routers.remediation.apply_remediation")
     def test_defaults_are_dry_run_with_two_attempts(self, mock_apply):
@@ -158,6 +170,19 @@ class TestRemediationApplyRequestValidation(unittest.TestCase):
         _, kwargs = mock_apply.call_args
         self.assertEqual(kwargs["mode"], "dry_run")
         self.assertEqual(kwargs["max_attempts"], 2)
+        self.assertEqual(kwargs["method_key"], "workspace@revision:Demo.java#hash")
+        self.assertNotIn("target_method", kwargs)
+
+    @patch("api.routers.remediation.apply_remediation")
+    def test_display_signature_cannot_replace_canonical_key(self, mock_apply):
+        client = TestClient(_build_app())
+        for payload in (
+            {"violation_id": "ISO-A.10-WEAK-HASH", "target_method": "demo.Demo.hash()"},
+            {"violation_id": "ISO-A.10-WEAK-HASH", "method_key": ""},
+        ):
+            response = client.post("/remediation/apply", json=payload)
+            self.assertEqual(response.status_code, 422)
+        mock_apply.assert_not_called()
 
     @patch("api.routers.remediation.apply_remediation")
     def test_dry_run_mode_is_accepted(self, mock_apply):

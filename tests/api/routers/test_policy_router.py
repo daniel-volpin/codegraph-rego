@@ -2,10 +2,38 @@ import json
 import unittest
 from unittest.mock import patch
 
-from api.models.validation import PolicyExplainOneRequest
+from api.models.validation import PolicyEvaluateWithLLMRequest, PolicyExplainOneRequest
 
 
 class TestPolicyRouter(unittest.IsolatedAsyncioTestCase):
+    async def test_all_failed_scan_returns_error_status(self):
+        from api.routers.policy import policy_evaluate
+
+        result = {"violations": [], "error": "All bundles failed", "evaluation": {"status": "failed"}}
+        with patch("api.routers.policy.evaluate_policies", return_value=result):
+            response = await policy_evaluate()
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(json.loads(response.body), result)
+
+    async def test_explanation_scan_retains_completeness_and_unexplained_findings(self):
+        from api.routers.policy import policy_evaluate_with_llm
+
+        result = {
+            "violations": [{"violation_id": "A"}, {"violation_id": "B"}],
+            "evaluation": {"status": "partial", "failed_bundles": 1},
+            "failed_bundles": [{"target_method": "broken"}],
+        }
+        with (
+            patch("api.routers.policy.evaluate_policies", return_value=result),
+            patch("api.routers.policy.explain_policy_violations", return_value=[{"explanation": "one"}]),
+        ):
+            response = await policy_evaluate_with_llm(PolicyEvaluateWithLLMRequest(limit=1))
+        payload = json.loads(response.body)
+        self.assertEqual(payload["evaluation"], result["evaluation"])
+        self.assertEqual(payload["violations"], result["violations"])
+        self.assertEqual(payload["failed_bundles"], result["failed_bundles"])
+        self.assertEqual(payload["enriched"], [{"explanation": "one"}])
+
     @patch(
         "api.routers.policy.generate_policy_explanation_structured",
         return_value={

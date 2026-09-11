@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +10,7 @@ from codegraph.evaluation.io import write_json
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 CompletedKey = tuple[str, str, str]  # (cohort, category_id, violation_id)
@@ -73,7 +73,7 @@ class ExplanationRuntime:
         self.partial_metrics_path = self.output_dir / "partial_metrics.json"
         self.samples_path = self.output_dir / "explanation_samples.jsonl"
         self.request_metrics_path = self.output_dir / "request_metrics.jsonl"
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = datetime.now(UTC)
 
         self.total_target_violations = 0
         self.processed_violations = 0
@@ -96,7 +96,7 @@ class ExplanationRuntime:
         self.request_metrics_handle = self.request_metrics_path.open(file_mode, encoding="utf-8")
 
     def elapsed_seconds(self) -> float:
-        return (datetime.now(timezone.utc) - self.started_at).total_seconds()
+        return (datetime.now(UTC) - self.started_at).total_seconds()
 
     def write_stage_progress(self, stage: str, message: str, **extra: Any) -> None:
         payload = {

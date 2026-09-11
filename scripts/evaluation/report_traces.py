@@ -28,7 +28,7 @@ import json
 import statistics
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +42,7 @@ def _parse_iso(ts: str | None) -> datetime | None:
     ts = ts.rstrip("Z").split("+")[0]
     for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
         try:
-            return datetime.strptime(ts, fmt).replace(tzinfo=timezone.utc)
+            return datetime.strptime(ts, fmt).replace(tzinfo=UTC)
         except ValueError:
             continue
     return None
@@ -243,7 +243,7 @@ def build_report(spans: list[dict[str, Any]]) -> str:
     for s in spans:
         by_name[s["name"]].append(s)
 
-    ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    ts = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     sections = [f"# CodeGraph Trace Report — {ts}\n"]
 

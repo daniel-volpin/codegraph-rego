@@ -3,28 +3,28 @@ name = "codegraph"
 version = "0.5.0"
 description = "Benchmark-backed JVM security and compliance framework with graph-structured evidence"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 authors = [
     { name = "Daniel Volpin" },
 ]
 dependencies = [
-    "fastapi==0.139.2",
-    "uvicorn>=0.51.0",
+    "fastapi==0.141.1",
+    "uvicorn==0.52.4",
     "aiofiles==25.1.0",
     "python-multipart==0.0.32",
-    "sentence-transformers==5.6.0",
-    "faiss-cpu==1.14.3",
-    "numpy>=2.0.0,<3",
-    "neo4j==6.2.0",
-    "javalang==0.13.0",
-    "pydantic>=2.13.4",
-    "pydantic-settings>=2.14.2",
-    "python-dotenv>=1.2.0",
-    "openai>=2.47.0",
-    "opentelemetry-sdk==1.41.1",
-    "opentelemetry-instrumentation-fastapi==0.62b1",
-    "opentelemetry-instrumentation-httpx==0.62b1",
+    "sentence-transformers==6.0.1",
+    "faiss-cpu==1.15.0",
+    "numpy==2.5.3",
+    "neo4j==6.3.0",
+    "pydantic==2.13.5",
+    "pydantic-settings==2.15.0",
+    "python-dotenv==1.2.3",
+    "openai==3.13.0",
+    "opentelemetry-sdk==1.44.0",
+    "opentelemetry-instrumentation-fastapi==0.65b0",
+    "opentelemetry-instrumentation-httpx==0.65b0",
+    "httpx2==2.12.0",
 ]
 
 [project.urls]
@@ -32,20 +32,19 @@ Repository = "https://github.com/daniel-volpin/codegraph-rego"
 
 [dependency-groups]
 dev = [
-    "pytest>=9.1.1",
-    "httpx>=0.24.1",
-    "ruff>=0.15.22",
+    "pytest==9.1.1",
+    "httpx==0.28.1",
+    "ruff==0.16.7",
+    "pyyaml==6.0.3",
 ]
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py314"
 
 [tool.ruff.lint]
-# Keep ruff's defaults and add import sorting (I) and pyupgrade (UP) so
-# type-hint modernization (PEP 585/604) and import order stay enforced
-# and cannot drift back.
-extend-select = ["I", "UP"]
+# Keep the existing lint policy explicit across Ruff releases.
+select = ["E4", "E7", "E9", "F", "I", "UP"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

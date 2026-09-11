@@ -8,14 +8,15 @@ from pathlib import Path
 from typing import Any
 
 from codegraph.config import settings
-from codegraph.ingestion.service import process_single_file_content
-from codegraph.policy.integration import PolicyEvaluator
-from codegraph.policy.trace import PolicyStateTrace, filter_predicate_trace, project_trace_profile
-from codegraph.remediation.capabilities import get_remediation_capability
-from codegraph.remediation.editing import (
-    read_source_preserving_format,
-    write_source_preserving_format,
+from codegraph.ingestion.service import WorkspacePublication, ingest
+from codegraph.ingestion.snapshots import (
+    SnapshotError,
+    StaleSourceError,
+    create_source_snapshot_from_bytes,
 )
+from codegraph.policy.trace import PolicyStateTrace, filter_predicate_trace, project_trace_profile
+from codegraph.remediation.candidate import InvalidCandidateError, build_candidate_overlay
+from codegraph.remediation.capabilities import get_remediation_capability
 from codegraph.remediation.metrics import (
     capture_raw_llm_output,
     extract_testcase_id,
@@ -28,10 +29,9 @@ from codegraph.remediation.result_models import (
     apply_result,
     early_error_result,
     generation_error_result,
-    partial_error_result,
 )
+from codegraph.remediation.scoped_verification import verify_candidate
 from codegraph.remediation.validation import extract_assistant_content
-from codegraph.remediation.verification import build_verification_summary
 from codegraph.telemetry import get_tracer
 
 LOGGER = logging.getLogger(__name__)
@@ -41,6 +41,8 @@ _tracer = get_tracer("codegraph.remediation.apply_flow")
 @dataclass
 class _ReplacementAttemptOutcome:
     updated_content: str | None = None
+    candidate_file_bytes: bytes | None = None
+    candidate_method_bytes: bytes | None = None
     original_method: str | None = None
     updated_method: str | None = None
     raw_output: Any = None
@@ -67,7 +69,7 @@ def _build_passed(compilation: CompilationResult) -> bool:
 
 
 def _verification_passed(verification: dict[str, Any]) -> bool:
-    return verification.get("target_rule_status") == "PASS" and verification.get("overall_status") == "PASS"
+    return verification.get("status") == "POLICY_PASS"
 
 
 def _can_commit_apply(mode: str, verification: dict[str, Any], compilation: CompilationResult) -> bool:
@@ -86,9 +88,11 @@ def _final_status(
         return "VERIFICATION_ERROR"
     if verification.get("error"):
         return "VERIFICATION_ERROR"
-    if compilation.get("attempted") and not compilation.get("success"):
-        return "BUILD_ERROR"
-    if verification.get("overall_status") == "FAIL" or verification.get("target_rule_status") == "FAIL":
+    if not _build_passed(compilation):
+        if compilation.get("attempted"):
+            return "BUILD_ERROR"
+        return "VERIFICATION_ERROR"
+    if not _verification_passed(verification):
         return "VERIFICATION_ERROR"
     if mode == "apply" and not apply_successful:
         return "VERIFICATION_ERROR"
@@ -99,59 +103,84 @@ def _final_error(status: str, verification: dict[str, Any], *, restore_failed: b
     if status == "OK":
         return None
     if restore_failed:
-        return "Rollback failed: workspace/graph left in candidate state"
+        primary_error = verification.get("error")
+        rollback_error = "Rollback failed: workspace may be left in candidate state"
+        return f"{primary_error}; {rollback_error}" if primary_error else rollback_error
     return verification.get("error") or "Apply verification failed"
-
-
-def _baseline_trace_context(
-    *,
-    target_method: str,
-    resolved_path: Path,
-    rule_id: Any,
-    prompt_context: dict[str, Any] | None,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    try:
-        before_trace_raw = PolicyEvaluator().trace(target_method, source_path_override=resolved_path.as_posix())
-    except Exception as exc:
-        LOGGER.warning("Shadow trace failed on baseline: %s", exc)
-        return None, prompt_context
-
-    if not before_trace_raw:
-        return before_trace_raw, prompt_context
-
-    enriched_context = dict(prompt_context) if prompt_context else {}
-    before_filtered = filter_predicate_trace(before_trace_raw)
-    trace_profile = project_trace_profile(str(rule_id), before_filtered)
-    if trace_profile is not None:
-        enriched_context["normalized_trace_profile"] = trace_profile
-    return before_trace_raw, enriched_context
-
-
-def _restore_graph(file_path: str, original_content: str) -> bool:
-    try:
-        process_single_file_content(file_path, original_content)
-        return True
-    except Exception as exc:  # pragma: no cover - runtime guard
-        LOGGER.warning("Failed to restore original graph content for %s: %s", file_path, exc)
-        return False
 
 
 def _restore_file(
     resolved_path: Path,
-    original_content: str,
-    source_encoding: str,
-    source_newline: str,
+    original_bytes: bytes,
+    expected_current_bytes: bytes | None,
 ) -> bool:
     try:
-        write_source_preserving_format(resolved_path, original_content, source_encoding, source_newline)
+        if expected_current_bytes is not None and resolved_path.read_bytes() != expected_current_bytes:
+            LOGGER.warning("Refusing to restore %s because it changed after remediation wrote the candidate.", resolved_path)
+            return False
+        resolved_path.write_bytes(original_bytes)
         return True
-    except Exception as exc:  # pragma: no cover - filesystem guard
+    except OSError as exc:  # pragma: no cover - filesystem guard
         LOGGER.warning("Failed to restore original content for %s: %s", resolved_path, exc)
         return False
 
 
 def _should_restore(mode: str, apply_successful: bool) -> bool:
     return mode != "apply" or not apply_successful
+
+
+def _method_key_relative_path(method_key: str) -> Path:
+    try:
+        _, tail = method_key.split(":", 1)
+    except ValueError as exc:
+        raise ValueError("invalid_method_key") from exc
+    relative = tail.split("#file:", 1)[0] if "#file:" in tail else tail.split("#", 1)[0]
+    if not relative:
+        raise ValueError("invalid_method_key")
+    path = Path(relative)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError("invalid_method_key")
+    return path
+
+
+def _workspace_root_for(resolved_path: Path, method_key: str) -> Path:
+    relative = _method_key_relative_path(method_key)
+    resolved = resolved_path.resolve()
+    relative_parts = relative.parts
+    if len(resolved.parts) >= len(relative_parts) and resolved.parts[-len(relative_parts) :] == relative_parts:
+        root_parts = resolved.parts[: -len(relative_parts)]
+        return Path(*root_parts) if root_parts else Path("/")
+    raise ValueError("source_path_method_key_mismatch")
+
+
+def _apply_work_root() -> Path:
+    root = Path.cwd() / "build" / "remediation-apply-work"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _publish_workspace_revision(workspace_root: Path) -> WorkspacePublication:
+    return ingest(workspace_root.as_posix(), progress_callback=None, source_roots=None)
+
+
+def _required_evidence_source_sha256(context: dict[str, Any]) -> str:
+    evidence = context.get("evidence") if isinstance(context.get("evidence"), dict) else {}
+    value = evidence.get("source_sha256")
+    if not isinstance(value, str) or not value:
+        raise ValueError("evidence.source_sha256 is required")
+    return value
+
+
+def _stale_verification(rule_id: str) -> dict[str, Any]:
+    return {
+        "status": "STALE_CANDIDATE",
+        "policy_status": "NOT_EVALUATED",
+        "build_status": "NOT_EVALUATED",
+        "target_rule_status": "UNKNOWN",
+        "rule_id": rule_id,
+        "stale_reasons": ["source_sha256_mismatch"],
+        "error": "source changed during remediation",
+    }
 
 
 def _policy_state_trace(
@@ -273,7 +302,7 @@ def _run_replacement_attempts(
     mode: str,
     max_attempts: int,
     raw_capture_dir: str | None,
-    original_content: str,
+    baseline_snapshot: Any,
 ) -> _ReplacementAttemptOutcome:
     outcome = _ReplacementAttemptOutcome()
     for attempt in range(max_attempts):
@@ -329,14 +358,16 @@ def _run_replacement_attempts(
                 return outcome
 
             try:
-                outcome.updated_content, outcome.original_method, outcome.updated_method = service._replace_method_in_source(
-                    original_content,
-                    updated_source_lines or [],
-                    target_method,
-                )
+                candidate_method_source = updated_source or "\n".join(updated_source_lines or [])
+                overlay = build_candidate_overlay(baseline_snapshot, candidate_method_source.encode("utf-8"))
+                outcome.updated_content = overlay.candidate_file_source
+                outcome.candidate_file_bytes = overlay.candidate_file_bytes
+                outcome.candidate_method_bytes = overlay.candidate_method_bytes
+                outcome.original_method = baseline_snapshot.method_source
+                outcome.updated_method = overlay.candidate_method_source
                 attempt_span.set_attribute("outcome", "replacement_ok")
                 return outcome
-            except ValueError as exc:
+            except (InvalidCandidateError, ValueError) as exc:
                 outcome.attempt_errors.append(summarize_retry_error(str(exc)))
                 attempt_span.set_attribute("error_summary", str(exc)[:200])
                 attempt_span.set_attribute("outcome", "replacement_error")
@@ -347,7 +378,7 @@ def execute_apply_fix(
     service: Any,
     violation_id: str,
     *,
-    target_method: str | None,
+    method_key: str,
     file_path: str | None,
     mode: str,
     max_attempts: int,
@@ -357,14 +388,14 @@ def execute_apply_fix(
 ) -> ApplyFixResult:
     with _tracer.start_as_current_span("remediation.fix") as fix_span:
         fix_span.set_attribute("violation_id", str(violation_id or ""))
-        fix_span.set_attribute("target_method", str(target_method or ""))
+        fix_span.set_attribute("method_key", str(method_key or ""))
         fix_span.set_attribute("file_path", str(file_path or ""))
         fix_span.set_attribute("mode", str(mode or ""))
         fix_span.set_attribute("max_attempts", max_attempts)
         result = _execute_apply_fix_inner(
             service,
             violation_id,
-            target_method=target_method,
+            method_key=method_key,
             file_path=file_path,
             mode=mode,
             max_attempts=max_attempts,
@@ -386,7 +417,7 @@ def _execute_apply_fix_inner(
     service: Any,
     violation_id: str,
     *,
-    target_method: str | None,
+    method_key: str,
     file_path: str | None,
     mode: str,
     max_attempts: int,
@@ -396,12 +427,29 @@ def _execute_apply_fix_inner(
     _fix_span: Any = None,
 ) -> ApplyFixResult:
     max_attempts = max(1, max_attempts)
-    context = service.get_violation_context(violation_id, target_method, file_path)
+    if not method_key:
+        return early_error_result(
+            "INVALID",
+            violation_id=violation_id,
+            error="method_key is required",
+        )
+    try:
+        source_relative_path = _method_key_relative_path(method_key)
+    except ValueError as exc:
+        return early_error_result(
+            "INVALID",
+            violation_id=violation_id,
+            error=str(exc),
+            method_key=method_key,
+            file_path=file_path,
+        )
+    context = service.get_violation_context(violation_id, method_key=method_key, file_path=file_path)
     if context is None:
         return early_error_result(
             "NOT_FOUND",
             violation_id=violation_id,
             error=f"Violation {violation_id} not found",
+            method_key=method_key,
         )
 
     rule_id = context.get("rule_id")
@@ -412,18 +460,20 @@ def _execute_apply_fix_inner(
             violation_id=violation_id,
             error=capability.reason_code,
             rule_id=rule_id,
-            target_method=context.get("target_method") or target_method,
+            method_key=method_key,
+            target_method=context.get("target_method") or method_key,
             file_path=context.get("file_path") or file_path,
         )
 
-    target_method = target_method or context.get("target_method")
+    target_method = str(context.get("target_method") or method_key)
     file_path = file_path or context.get("file_path")
-    if not target_method or not file_path:
+    if not file_path:
         return early_error_result(
             "INVALID",
             violation_id=violation_id,
-            error="target_method and file_path are required to apply remediation",
+            error="file_path is required to apply remediation",
             rule_id=context.get("rule_id"),
+            method_key=method_key,
             target_method=target_method,
             file_path=file_path,
         )
@@ -452,22 +502,64 @@ def _execute_apply_fix_inner(
             violation_id=violation_id,
             error=f"Could not resolve file path: {file_path}",
             rule_id=context.get("rule_id"),
+            method_key=method_key,
             target_method=target_method,
             file_path=file_path,
         )
 
-    # Detect encoding + line ending up-front so the write-back path
-    # preserves Windows-authored sources (CRLF) and BOM-prefixed files
-    # rather than silently rewriting them to LF / no-BOM.
-    original_content, source_encoding, source_newline = read_source_preserving_format(resolved_path)
-    baseline_violations = context.get("baseline_violations") or []
-    before_trace_raw, prompt_context = _baseline_trace_context(
-        target_method=target_method,
-        resolved_path=resolved_path,
-        rule_id=context.get("rule_id"),
-        prompt_context=prompt_context,
-    )
-
+    try:
+        workspace_root = _workspace_root_for(resolved_path, method_key)
+    except ValueError as exc:
+        return early_error_result(
+            "INVALID",
+            violation_id=violation_id,
+            error=str(exc),
+            rule_id=context.get("rule_id"),
+            method_key=method_key,
+            target_method=target_method,
+            file_path=file_path,
+        )
+    try:
+        expected_source_sha256 = _required_evidence_source_sha256(context)
+    except ValueError as exc:
+        return early_error_result(
+            "VERIFICATION_ERROR",
+            violation_id=violation_id,
+            error=str(exc),
+            rule_id=context.get("rule_id"),
+            method_key=method_key,
+            target_method=target_method,
+            file_path=file_path,
+        )
+    original_bytes = resolved_path.read_bytes()
+    try:
+        baseline_snapshot = create_source_snapshot_from_bytes(
+            workspace_root=workspace_root,
+            source_path=resolved_path,
+            source_bytes=original_bytes,
+            method_selector=method_key,
+            expected_source_sha256=expected_source_sha256,
+        )
+    except StaleSourceError:
+        return early_error_result(
+            "VERIFICATION_ERROR",
+            violation_id=violation_id,
+            error="stale_source_hash",
+            rule_id=context.get("rule_id"),
+            method_key=method_key,
+            target_method=target_method,
+            file_path=file_path,
+        )
+    except SnapshotError as exc:
+        return early_error_result(
+            "VERIFICATION_ERROR",
+            violation_id=violation_id,
+            error=str(exc),
+            rule_id=context.get("rule_id"),
+            method_key=method_key,
+            target_method=target_method,
+            file_path=file_path,
+        )
     context["prompt_context"] = prompt_context
 
     replacement = _run_replacement_attempts(
@@ -479,12 +571,18 @@ def _execute_apply_fix_inner(
         mode=mode,
         max_attempts=max_attempts,
         raw_capture_dir=raw_capture_dir,
-        original_content=original_content,
+        baseline_snapshot=baseline_snapshot,
     )
     if replacement.terminal_result is not None:
         return replacement.terminal_result
 
-    if not replacement.updated_content or not replacement.updated_method or not replacement.original_method:
+    if (
+        not replacement.updated_content
+        or not replacement.updated_method
+        or not replacement.original_method
+        or replacement.candidate_file_bytes is None
+        or replacement.candidate_method_bytes is None
+    ):
         final_status = "REPLACEMENT_ERROR"
         final_error = "Failed to produce a valid method replacement"
         if replacement.generation_payload and replacement.generation_payload.get("raw_response_valid") is False:
@@ -497,6 +595,7 @@ def _execute_apply_fix_inner(
             target_method=target_method,
             file_path=file_path,
             rule_id=context.get("rule_id"),
+            method_key=method_key,
             attempt_count=min(max_attempts, len(replacement.attempt_errors)),
             llm_output=replacement.raw_output,
             errors=replacement.attempt_errors,
@@ -516,98 +615,67 @@ def _execute_apply_fix_inner(
     apply_successful = False
     attempt_count = min(max_attempts, max(1, len(replacement.attempt_errors) + 1))
     live_workspace_modified = False
-    graph_modified = False
     restore_failed = False
+    cleanup: dict[str, bool | None] = {"file_restored": None, "revision_published": None}
+    before_trace_raw = None
+    after_trace_raw = None
 
     try:
-        with tempfile.TemporaryDirectory() as tmp:
-            _temp_root, temp_file_path, temp_build_root = service._prepare_temp_workspace(Path(tmp), resolved_path)
-            write_source_preserving_format(temp_file_path, replacement.updated_content, source_encoding, source_newline)
+        tempdir = tempfile.TemporaryDirectory(prefix="candidate-", dir=_apply_work_root())
+        tmp = Path(tempdir.__enter__())
+        try:
+            _temp_root, temp_file_path, temp_build_root = service._prepare_temp_workspace(tmp, resolved_path)
+            temp_file_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_file_path.write_bytes(replacement.candidate_file_bytes)
             compilation = service._compile_project(temp_build_root, build_command=build_command)
 
-            try:
-                if mode == "apply":
-                    live_workspace_modified = True
-                    write_source_preserving_format(resolved_path, replacement.updated_content, source_encoding, source_newline)
-
-                graph_modified = True
-                process_single_file_content(file_path, replacement.updated_content)
-            except Exception as exc:  # pragma: no cover - runtime guard
-                _err = {"err": str(exc), "err_type": type(exc).__name__, "file_path": str(resolved_path)}
-                if LOGGER.isEnabledFor(logging.DEBUG):
-                    LOGGER.exception("Failed to re-ingest updated file", extra=_err)
-                else:
-                    LOGGER.error("Failed to re-ingest updated file", extra=_err)
-                return partial_error_result(
-                    violation_id=violation_id,
-                    error=str(exc),
-                    target_method=target_method,
-                    file_path=file_path,
-                    rule_id=context.get("rule_id"),
-                    updated_source_code=replacement.updated_method,
-                    diff=diff,
-                    compilation=compilation,
-                    generation=replacement.generation_payload,
-                    confidence=replacement.confidence,
-                )
-
-            evaluator = PolicyEvaluator()
-            after_eval = evaluator.evaluate(
-                target_method,
-                source_path_override=temp_file_path.as_posix() if mode == "dry_run" else None,
+            verification_workspace = tmp / "verification-workspace"
+            verification_source = verification_workspace / source_relative_path
+            verification_source.parent.mkdir(parents=True, exist_ok=True)
+            verification_source.write_bytes(original_bytes)
+            candidate_method_rel = Path(".candidate") / "candidate-method.java"
+            candidate_method_path = verification_workspace / candidate_method_rel
+            candidate_method_path.parent.mkdir(parents=True, exist_ok=True)
+            candidate_method_path.write_bytes(replacement.candidate_method_bytes)
+            verification = verify_candidate(
+                workspace_root=verification_workspace,
+                source=source_relative_path,
+                method_selector=method_key,
+                candidate=candidate_method_rel,
+                rule_id=str(context.get("rule_id")),
+                expected_source_sha256=expected_source_sha256,
+                work_dir=tmp / "verify",
             )
+        finally:
+            tempdir.__exit__(None, None, None)
 
-            after_trace_raw = None
-            try:
-                after_trace_raw = evaluator.trace(
-                    target_method,
-                    source_path_override=temp_file_path.as_posix() if mode == "dry_run" else None,
-                )
-            except Exception as exc:
-                LOGGER.warning("Shadow trace failed on candidate: %s", exc)
-            if after_eval.get("error"):
-                verification = {
-                    "error": after_eval.get("error"),
-                    "baseline": baseline_violations,
-                    "after": after_eval.get("violations") or [],
-                }
-            else:
-                verification = build_verification_summary(
-                    context.get("rule_id"),
-                    baseline_violations,
-                    after_eval.get("violations") or [],
-                )
+        if resolved_path.read_bytes() != original_bytes:
+            verification = _stale_verification(str(context.get("rule_id")))
 
-            apply_successful = _can_commit_apply(mode, verification, compilation)
+        apply_successful = _can_commit_apply(mode, verification, compilation)
+        if apply_successful:
+            live_workspace_modified = True
+            resolved_path.write_bytes(replacement.candidate_file_bytes)
+            _publish_workspace_revision(workspace_root)
+            cleanup["revision_published"] = True
     except Exception as exc:  # pragma: no cover - runtime guard
         _err = {"err": str(exc), "err_type": type(exc).__name__, "violation_id": violation_id}
         if LOGGER.isEnabledFor(logging.DEBUG):
             LOGGER.exception("Apply remediation failed", extra=_err)
         else:
             LOGGER.error("Apply remediation failed", extra=_err)
-        return partial_error_result(
-            violation_id=violation_id,
-            error=str(exc),
-            target_method=target_method,
-            file_path=file_path,
-            rule_id=context.get("rule_id"),
-            updated_source_code=replacement.updated_method,
-            diff=diff,
-            compilation=compilation,
-            generation=replacement.generation_payload,
-            confidence=replacement.confidence,
-        )
+        apply_successful = False
+        verification = {**verification, "error": str(exc)}
     finally:
-        if graph_modified and _should_restore(mode, apply_successful):
-            restore_failed = restore_failed or not _restore_graph(file_path, original_content)
         if live_workspace_modified and _should_restore(mode, apply_successful):
-            restore_failed = restore_failed or not _restore_file(
+            cleanup["file_restored"] = _restore_file(
                 resolved_path,
-                original_content,
-                source_encoding,
-                source_newline,
+                original_bytes,
+                replacement.candidate_file_bytes,
             )
+        restore_failed = any(restored is False for restored in cleanup.values())
 
+    verification["cleanup"] = cleanup
     status = _final_status(
         mode=mode,
         verification=verification,
@@ -620,6 +688,7 @@ def _execute_apply_fix_inner(
     metadata: ApplyMetadata = {
         "violation_id": violation_id,
         "rule_id": context.get("rule_id"),
+        "method_key": method_key,
         "target_method": target_method,
         "file_path": file_path,
         "attempt_count": attempt_count,
@@ -629,6 +698,7 @@ def _execute_apply_fix_inner(
         status,
         violation_id=violation_id,
         rule_id=context.get("rule_id"),
+        method_key=method_key,
         target_method=target_method,
         file_path=file_path,
         updated_source_code=replacement.updated_method,

@@ -1,27 +1,29 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 echo "Setting up CodeGraph benchmark environment..."
 
-mkdir -p .venv/bin
-
-# 0. Ensure uv is installed
-if ! command -v uv &> /dev/null; then
-    echo "uv not found on PATH. Attempting to install via curl installer..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh || { echo "Failed to install uv. Please install uv manually: https://docs.astral.sh/uv/"; exit 1; }
-    export PATH="$HOME/.local/bin:$PATH"
+if ! command -v java >/dev/null || ! command -v javac >/dev/null || ! command -v mvn >/dev/null; then
+    echo "JDK 21 and Maven are required to build the Java analysis adapter." >&2
+    exit 1
 fi
+if ! command -v uv >/dev/null; then
+    echo "uv is required. Install it before running benchmark setup." >&2
+    exit 1
+fi
+make java-parser-build
 
 # 1. Sync Python dependencies
 echo "Syncing Python virtual environment with uv..."
-uv sync
+uv sync --locked
 
 # 2. Check and install OPA directly into the virtual environment
 VENV_BIN=".venv/bin"
 OPA_BIN="$VENV_BIN/opa"
+OPA_VERSION=v1.20.2
 
-if [ -x "$OPA_BIN" ]; then
-    echo "OPA CLI is already installed at $OPA_BIN"
+if [ -x "$OPA_BIN" ] && [ "$("$OPA_BIN" version | awk '/^Version:/ {print $2}')" = "${OPA_VERSION#v}" ]; then
+    echo "OPA $OPA_VERSION is already installed at $OPA_BIN"
 else
     echo "Downloading OPA CLI for benchmark evaluations..."
     OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -40,18 +42,40 @@ else
     # Map OS to OPA release targets
     if [ "$OS" = "darwin" ]; then
         OPA_OS="darwin"
+        OPA_SUFFIX=""
     elif [ "$OS" = "linux" ]; then
         OPA_OS="linux"
+        OPA_SUFFIX="_static"
     else
         echo "Unsupported OS: $OS for automatic OPA install."
         exit 1
     fi
 
-    DOWNLOAD_URL="https://github.com/open-policy-agent/opa/releases/download/v1.15.1/opa_${OPA_OS}_${OPA_ARCH}_static"
+    DOWNLOAD_URL="https://github.com/open-policy-agent/opa/releases/download/${OPA_VERSION}/opa_${OPA_OS}_${OPA_ARCH}${OPA_SUFFIX}"
+    OPA_TMP="$(mktemp "$VENV_BIN/.opa-download.XXXXXX")"
+    OPA_CHECKSUM="$OPA_TMP.sha256"
+    trap 'rm -f -- "$OPA_TMP" "$OPA_CHECKSUM"' EXIT
     
     echo "Fetching OPA from: $DOWNLOAD_URL"
-    curl -L -o "$OPA_BIN" "$DOWNLOAD_URL"
-    chmod +x "$OPA_BIN"
+    curl -fLsS -o "$OPA_TMP" "$DOWNLOAD_URL"
+    curl -fLsS -o "$OPA_CHECKSUM" "$DOWNLOAD_URL.sha256"
+    "$VENV_BIN/python" -c '
+import hashlib
+import pathlib
+import sys
+
+with open(sys.argv[1], "rb") as stream:
+    actual = hashlib.file_digest(stream, "sha256").hexdigest()
+expected = pathlib.Path(sys.argv[2]).read_text(encoding="ascii").split()[0]
+if actual != expected:
+    raise SystemExit("OPA download checksum mismatch")
+' "$OPA_TMP" "$OPA_CHECKSUM"
+    chmod +x "$OPA_TMP"
+    if [ "$("$OPA_TMP" version | awk '/^Version:/ {print $2}')" != "${OPA_VERSION#v}" ]; then
+        echo "Downloaded OPA does not report the required version $OPA_VERSION" >&2
+        exit 1
+    fi
+    mv "$OPA_TMP" "$OPA_BIN"
     
     echo "OPA successfully installed to $OPA_BIN"
 fi

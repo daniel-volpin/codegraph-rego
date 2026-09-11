@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HealthStartupStatus(BaseModel):
@@ -39,6 +39,7 @@ class HealthCheckResponse(BaseModel):
     status: Literal["ok", "degraded"]
     startup_ready: bool
     neo4j: bool
+    graph_generation: bool
     faiss_index: bool
     signature_map: bool
     embedding_model: bool
@@ -61,10 +62,27 @@ class SearchResponse(BaseModel):
     contexts: list[list[SearchMatch]]
 
 
+class PolicyEvaluationSummary(BaseModel):
+    status: Literal["complete", "partial", "failed"]
+    attempted_bundles: int = Field(ge=0)
+    evaluated_bundles: int = Field(ge=0)
+    failed_bundles: int = Field(ge=0)
+    omitted_findings: int = Field(ge=0)
+    excluded_findings: int = Field(ge=0)
+    truncated: bool
+    scope_limited: bool
+    rule_ids: list[str]
+
+
 class PolicyEvaluateResponse(BaseModel):
     violations: list | None = None
     opa_output: dict | None = None
     error: str | None = None
+    evaluation: PolicyEvaluationSummary | None = None
+    enriched: list[dict] | None = None
+    failed_bundles: list[dict] | None = None
+    failed_bundle_count: int | None = None
+    truncated: bool | None = None
 
 
 class PolicyCatalogResponse(BaseModel):
@@ -132,8 +150,9 @@ class PolicyReviewListResponse(BaseModel):
 
 
 class RemediationPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     violation_id: str
-    target_method: str | None = None
+    method_key: str = Field(min_length=1)
     file_path: str | None = None
 
 
@@ -157,6 +176,7 @@ class RemediationGenerationResponse(BaseModel):
 class RemediationPreviewResponse(BaseModel):
     status: str
     violation_id: str
+    method_key: str | None = None
     rule_id: str | None = None
     target_method: str | None = None
     file_path: str | None = None
@@ -172,8 +192,9 @@ class RemediationPreviewResponse(BaseModel):
 
 
 class RemediationApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     violation_id: str
-    target_method: str | None = None
+    method_key: str = Field(min_length=1)
     file_path: str | None = None
     # "apply" writes to the live workspace after verification; anything else
     # must be rejected up front rather than falling through the mode checks
@@ -185,6 +206,7 @@ class RemediationApplyRequest(BaseModel):
 class RemediationApplyResponse(BaseModel):
     status: str
     violation_id: str
+    method_key: str | None = None
     rule_id: str | None = None
     target_method: str | None = None
     file_path: str | None = None

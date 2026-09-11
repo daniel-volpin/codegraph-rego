@@ -180,7 +180,9 @@ class RemediationPreviewDoesNotBlockEventLoop(unittest.IsolatedAsyncioTestCase):
                 ticks.append(1)
 
         preview_task = asyncio.create_task(
-            remediation_preview(RemediationPreviewRequest(violation_id="v1"))
+            remediation_preview(
+                RemediationPreviewRequest(violation_id="v1", method_key="workspace@revision:Demo.java#method:hash/0")
+            )
         )
         tick_task = asyncio.create_task(_tick())
         await asyncio.gather(preview_task, tick_task)

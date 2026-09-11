@@ -2,7 +2,7 @@ import ipaddress
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -89,6 +89,40 @@ class Settings(BaseSettings):
         None,
         validation_alias=AliasChoices("LLM_API_KEY", "llm_api_key"),
         description="LLM API key",
+    )
+    llm_api_mode: Literal["auto", "responses", "chat_completions"] = Field(
+        "auto",
+        description="Explicit provider endpoint; auto preserves hosted Responses and local LM Studio Chat behavior.",
+    )
+    llm_timeout_seconds: float = Field(
+        60.0, gt=0, le=600, description="HTTP request timeout for model calls, not a total agent-run deadline.",
+    )
+    llm_max_concurrent_requests: int = Field(
+        2,
+        ge=1,
+        le=8,
+        validation_alias=AliasChoices("LLM_MAX_CONCURRENT_REQUESTS", "llm_max_concurrent_requests"),
+        description="Process-local cap on active provider SDK/client generation calls.",
+    )
+    llm_max_pending_requests: int = Field(
+        4,
+        ge=0,
+        le=32,
+        validation_alias=AliasChoices("LLM_MAX_PENDING_REQUESTS", "llm_max_pending_requests"),
+        description="Process-local cap on generation calls waiting for provider admission.",
+    )
+    llm_queue_timeout_seconds: float = Field(
+        5.0,
+        gt=0.0,
+        le=120.0,
+        validation_alias=AliasChoices("LLM_QUEUE_TIMEOUT_SECONDS", "llm_queue_timeout_seconds"),
+        description="Maximum queue wait for provider admission; separate from LLM HTTP request timeout.",
+    )
+    llm_max_retries: int = Field(
+        0, ge=0, le=2, description="SDK transport retries per generation attempt; default avoids hidden retry multiplication.",
+    )
+    llm_send_temperature: bool = Field(
+        True, description="Disable for model/provider combinations that do not accept a temperature parameter.",
     )
     llm_temperature: float = Field(
         0.2,
@@ -200,9 +234,66 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("CODEGRAPH_OPA_TIMEOUT", "opa_timeout_seconds"),
         description="Per-invocation timeout for OPA eval subprocesses.",
     )
+    policy_workers: int = Field(
+        2, ge=1, le=32,
+        description="Concurrent evidence/OPA workers per scan; at most twice this many tasks are submitted at once.",
+    )
     ui_review_store_path: str = Field(
         "outputs/policy_ui_reviews/reviews.jsonl",
         description="Append-only JSONL store for UI triage/review records.",
+    )
+    java_parser_jar: Path = Field(
+        PROJECT_ROOT / "tools/java-parser/target/codegraph-java-parser.jar",
+        validation_alias=AliasChoices("JAVA_PARSER_JAR", "java_parser_jar"),
+        description="Executable JDT parser fat jar used by the Python process-boundary adapter.",
+    )
+    java_parser_timeout_seconds: float = Field(
+        30.0,
+        gt=0.0,
+        le=120.0,
+        validation_alias=AliasChoices("JAVA_PARSER_TIMEOUT_SECONDS", "java_parser_timeout_seconds"),
+        description="Per Java parser subprocess deadline in seconds.",
+    )
+    java_parser_heap_mb: int = Field(
+        384,
+        ge=128,
+        le=2048,
+        validation_alias=AliasChoices("JAVA_PARSER_HEAP_MB", "java_parser_heap_mb"),
+        description="Maximum heap for each fresh Java parser subprocess.",
+    )
+    java_parser_max_concurrent_requests: int = Field(
+        1,
+        ge=1,
+        le=2,
+        validation_alias=AliasChoices("JAVA_PARSER_MAX_CONCURRENT_REQUESTS", "java_parser_max_concurrent_requests"),
+        description="Process-local cap on active Java parser subprocess requests.",
+    )
+    java_parser_queue_timeout_seconds: float = Field(
+        5.0,
+        gt=0.0,
+        le=120.0,
+        validation_alias=AliasChoices("JAVA_PARSER_QUEUE_TIMEOUT_SECONDS", "java_parser_queue_timeout_seconds"),
+        description="Maximum queue wait for Java parser subprocess admission.",
+    )
+    java_parser_max_source_bytes: int = Field(
+        4 * 1024 * 1024,
+        ge=1 * 1024 * 1024,
+        le=4 * 1024 * 1024,
+        validation_alias=AliasChoices("JAVA_PARSER_MAX_SOURCE_BYTES", "java_parser_max_source_bytes"),
+        description="Maximum source bytes accepted by the Java parser adapter.",
+    )
+    java_parser_max_output_bytes: int = Field(
+        16 * 1024 * 1024,
+        ge=1 * 1024 * 1024,
+        le=16 * 1024 * 1024,
+        validation_alias=AliasChoices("JAVA_PARSER_MAX_OUTPUT_BYTES", "java_parser_max_output_bytes"),
+        description="Maximum stdout bytes accepted from the Java parser subprocess.",
+    )
+    java_parser_language_level: str = Field(
+        "25",
+        pattern=r"^(?:[89]|1[0-9]|2[0-5])$",
+        validation_alias=AliasChoices("JAVA_PARSER_LANGUAGE_LEVEL", "java_parser_language_level"),
+        description="Default JDT language level passed to the Java parser.",
     )
 
     model_config = SettingsConfigDict(extra="ignore")

@@ -34,20 +34,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'javascript-typescript', 'python' ]
+        language: [ 'javascript-typescript', 'python', 'java-kotlin' ]
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4
+      uses: github/codeql-action/init@v4.38.0
       with:
         languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.language == 'java-kotlin' && 'manual' || 'none' }}
+
+    - name: Set up Java
+      if: matrix.language == 'java-kotlin'
+      uses: actions/setup-java@v6.0.1
+      with:
+        distribution: temurin
+        java-version: "21"
+
+    - name: Build Java parser adapter
+      if: matrix.language == 'java-kotlin'
+      run: make java-parser-build
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4
+      uses: github/codeql-action/analyze@v4.38.0
       with:
         category: "/language:${{ matrix.language }}"

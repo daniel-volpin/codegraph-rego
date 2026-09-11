@@ -1,0 +1,16 @@
+{
+  "notes": "CWE-328 negative: SHA-256 hash usage should not trigger weak-hash detection.",
+  "bundle": {
+    "target_method": "org.example.HashService.hashSafely()",
+    "method_name": "hashSafely",
+    "file_path": "src/main/java/org/example/HashService.java",
+    "source_code": "public byte[] hashSafely(byte[] value) { return java.security.MessageDigest.getInstance(\"SHA-256\").digest(value); }",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": ["java.security.MessageDigest.getInstance(\"SHA-256\")"],
+      "callers": []
+    }
+  },
+  "expected_violation_ids": []
+}

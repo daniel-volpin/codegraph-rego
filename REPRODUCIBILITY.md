@@ -1,13 +1,17 @@
 # Reproducibility Guide
 
-This file is the shortest path to rerun the thesis-final evaluation pipeline.
+This file describes the evaluation workflow for the current source baseline.
+Published thesis-final results retain their original commit, dependencies, and
+OPA 1.15.1 provenance. Reproducing those exact results requires that recorded
+revision; runs of this modernized branch are new evidence, not historical reruns.
 
 ## 1. Prerequisites
 
-- Python 3.10+
+- Python 3.14+ (the pinned development and CI runtime is 3.14.7)
+- uv 0.12.13+
 - Neo4j 5.x
-- OPA `v1.15.1` on `PATH` (required for `make policy-check` and OPA policy evaluation)
-- Java JDK (8+ or newer) and Maven for remediation build re-verification (release validation was performed with OpenJDK 26.0.1)
+- OPA `v1.20.2` on `PATH` (required for `make policy-check` and OPA policy evaluation)
+- JDK 21+ and Maven for the JDT adapter; the analyzed project's build may require its own configured Java release
 - local checkout of `BenchmarkJava`
 - LM Studio, OpenAI, or another OpenAI-compatible LLM endpoint for explanation/remediation runs
 
@@ -52,9 +56,24 @@ matching defaults — keep it in sync when adding new variables.
 | `OWASP_BENCHMARK_ROOT` | _unset_ | Absolute path to the local `BenchmarkJava` checkout. Required for benchmark eval scripts. |
 | `CODEGRAPH_HOST` | `127.0.0.1` | Bind host for the backend service. Loopback by default for safe local-only operation. |
 | `CODEGRAPH_OPA_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OPA eval subprocesses. |
+| `JAVA_PARSER_JAR` | `tools/java-parser/target/codegraph-java-parser.jar` | Explicit path to the Eclipse JDT parser fat jar. Build with `make java-parser-build`; the Python adapter never downloads or builds it at runtime. |
+| `JAVA_PARSER_TIMEOUT_SECONDS` | `30.0` | Per-request deadline for the fresh JVM parser process. |
+| `JAVA_PARSER_HEAP_MB` | `384` | Heap cap passed as `-Xmx` to each parser JVM. |
+| `JAVA_PARSER_MAX_CONCURRENT_REQUESTS` | `1` | Process-local Java parser admission cap (`1..2`); initial correctness uses a fresh JVM and AST per request. |
+| `JAVA_PARSER_QUEUE_TIMEOUT_SECONDS` | `5.0` | Maximum wait for Java parser admission before failing fast. |
+| `JAVA_PARSER_MAX_SOURCE_BYTES` | `4194304` | Maximum UTF-8 Java source payload accepted by the Python adapter. |
+| `JAVA_PARSER_MAX_OUTPUT_BYTES` | `16777216` | Maximum stdout JSON payload accepted from the parser process. |
+| `JAVA_PARSER_LANGUAGE_LEVEL` | `25` | Default JDT language level sent in parser requests. |
 | `LLM_API_BASE` | `http://localhost:1234/v1` | OpenAI-compatible base URL (LM Studio, vLLM, etc.). |
 | `LLM_API_KEY` | _unset_ | API key sent to the LLM endpoint. Use `lm-studio` for LM Studio. |
 | `LLM_MODEL` | `qwen3.5-9b-mlx` | Default explanation model. |
+| `LLM_API_MODE` | `auto` | Endpoint mode selection (`auto`, `responses`, `chat_completions`). |
+| `LLM_TIMEOUT_SECONDS` | `60.0` | Per SDK HTTP operation timeout for model calls (not a total agent-run deadline). |
+| `LLM_MAX_CONCURRENT_REQUESTS` | `2` | Process-local cap on active provider SDK/client generation calls, shared by OpenAI-compatible transports. Not global across processes and not a durable run/token budget. |
+| `LLM_MAX_PENDING_REQUESTS` | `4` | Process-local cap on provider generation calls waiting for admission before client construction. |
+| `LLM_QUEUE_TIMEOUT_SECONDS` | `5.0` | Maximum provider admission queue wait in seconds; separate from `LLM_TIMEOUT_SECONDS`, which applies after SDK/client operation starts. |
+| `LLM_MAX_RETRIES` | `0` | SDK transport retries per generation attempt (allowed range `0..2`). |
+| `LLM_SEND_TEMPERATURE` | `1` | When `0`, suppresses temperature for providers/models that reject it. |
 | `LLM_TEMPERATURE` | `0.2` | Sampling temperature for explanation. Note: not zero; outputs are not bitwise reproducible. |
 | `LLM_ENABLE_THINKING` | `false` | Disable extended thinking on supported models. |
 | `LLM_CONCURRENCY` | `2` | Max parallel LLM requests during eval. |
@@ -71,6 +90,7 @@ matching defaults — keep it in sync when adding new variables.
 | `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW` | `0.50` | Threshold for `review` band; below this falls to `abstain`. |
 | `REMEDIATION_CONFIDENCE_TEMPERATURE` | `1.0` | Sigmoid temperature scaling for confidence calibration. |
 | `REMEDIATION_TRACE_PROMPT_ENABLED` | `0` | Persist remediation prompt + trace context for audit. |
+| `POLICY_WORKERS` | `2` | OPA/evidence workers per scan; bounded submission caps in-flight+queued tasks at `<= 2 * POLICY_WORKERS`. |
 | `UI_REVIEW_STORE_PATH` | `outputs/policy_ui_reviews/reviews.jsonl` | JSONL append target for human review feedback from the UI. |
 | `UPLOAD_MAX_ARCHIVE_SIZE_BYTES` | `104857600` | Max total upload archive size (100 MB). |
 | `UPLOAD_MAX_MEMBER_SIZE_BYTES` | `52428800` | Max single-file size inside an archive (50 MB). |

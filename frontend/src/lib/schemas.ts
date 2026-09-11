@@ -34,6 +34,7 @@ const EvidenceSchema = z
 // the full original payload when we hand `violation.raw` back.
 export const ViolationSchema = z
   .object({
+    method_key: z.string().min(1),
     violation_id: z.string().optional(),
     rule_id: z.string().optional(),
     target_method: z.string().optional(),
@@ -97,12 +98,27 @@ export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 
 // ---- Policy ----
 
+export const PolicyEvaluationSummarySchema = z.object({
+  status: z.enum(["complete", "partial", "failed"]),
+  attempted_bundles: z.number().int().nonnegative(),
+  evaluated_bundles: z.number().int().nonnegative(),
+  failed_bundles: z.number().int().nonnegative(),
+  omitted_findings: z.number().int().nonnegative(),
+  excluded_findings: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+  scope_limited: z.boolean(),
+  rule_ids: z.array(z.string()),
+});
+
 export const PolicyEvaluateResponseSchema = z
   .object({
     violations: z.array(ViolationSchema).optional(),
     opa_output: z.record(z.string(), z.unknown()).optional(),
     enriched: z.array(z.record(z.string(), z.unknown())).optional(),
     error: z.string().optional(),
+    evaluation: PolicyEvaluationSummarySchema.optional(),
+    failed_bundle_count: z.number().int().nonnegative().optional(),
+    truncated: z.boolean().optional(),
   })
   .loose();
 export type PolicyEvaluateResponse = z.infer<typeof PolicyEvaluateResponseSchema>;
@@ -266,6 +282,7 @@ export type RemediationCompilationResult = z.infer<
 
 export const RemediationPreviewResponseSchema = z
   .object({
+    method_key: z.string().nullable().optional(),
     status: z.string(),
     violation_id: z.string(),
     rule_id: z.string().nullable().optional(),
@@ -288,6 +305,7 @@ export type RemediationPreviewResponse = z.infer<
 
 export const RemediationApplyResponseSchema = z
   .object({
+    method_key: z.string().nullable().optional(),
     status: z.string(),
     violation_id: z.string(),
     rule_id: z.string().nullable().optional(),
@@ -324,6 +342,7 @@ export const HealthCheckResponseSchema = z
     status: z.enum(["ok", "degraded"]).catch("degraded"),
     startup_ready: z.boolean(),
     neo4j: z.boolean(),
+    graph_generation: z.boolean(),
     faiss_index: z.boolean(),
     signature_map: z.boolean(),
     embedding_model: z.boolean(),

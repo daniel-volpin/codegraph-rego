@@ -28,15 +28,11 @@ _OPA_VERSION_PATTERN = re.compile(r"^Version:\s*(?P<version>\S+)\s*$", re.MULTIL
 
 def _load_search_health_dependencies() -> dict[str, Any]:
     from codegraph.config import settings
-    from codegraph.search.hybrid import load_embedding_model, load_faiss_index, load_signature_map
+    from codegraph.search.hybrid import load_embedding_model, validate_retrieval_generation
 
     return {
-        "faiss_index_path": settings.faiss_index_path,
-        "signature_map_path": settings.signature_map_path,
-        "signature_map_path_full": settings.signature_map_path_full,
         "embedding_model_name": settings.embedding_model_name,
-        "load_faiss_index": load_faiss_index,
-        "load_signature_map": load_signature_map,
+        "validate_generation": lambda: validate_retrieval_generation(shared_neo4j_driver()),
         "load_embedding_model": load_embedding_model,
     }
 
@@ -90,6 +86,7 @@ def _compute_readiness(request: Request) -> tuple[dict[str, Any], int]:
         "status": "degraded",
         "startup_ready": bool(startup_state.get("ready")),
         "neo4j": False,
+        "graph_generation": False,
         "faiss_index": False,
         "signature_map": False,
         "embedding_model": False,
@@ -110,11 +107,8 @@ def _compute_readiness(request: Request) -> tuple[dict[str, Any], int]:
         checks["details"]["neo4j"] = str(e)
     try:
         deps = _load_search_health_dependencies()
-        deps["load_faiss_index"](deps["faiss_index_path"])
-        try:
-            deps["load_signature_map"](deps["signature_map_path_full"])
-        except Exception:
-            deps["load_signature_map"](deps["signature_map_path"])
+        deps["validate_generation"]()
+        checks["graph_generation"] = True
         checks["faiss_index"] = True
         checks["signature_map"] = True
         deps["load_embedding_model"](deps["embedding_model_name"])
@@ -131,6 +125,7 @@ def _compute_readiness(request: Request) -> tuple[dict[str, Any], int]:
         [
             checks["startup_ready"],
             checks["neo4j"],
+            checks["graph_generation"],
             checks["faiss_index"],
             checks["signature_map"],
             checks["embedding_model"],

@@ -17,9 +17,13 @@ def _write_java(tmp: str, name: str, body: str) -> str:
 
 
 def _snapshot(sig: str, file_path: str, calls: list[str] | None = None) -> dict:
+    byte_length = len(Path(file_path).read_bytes())
     return {
+        "method_key": sig,
         "signature": sig,
         "file_path": file_path,
+        "start_byte": 0,
+        "end_byte": byte_length,
         "start_line": 2,
         "end_line": 3,
         "calls": calls or [],

@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import shutil
-import tempfile
+import uuid
 import zipfile
 from collections.abc import AsyncIterator
 
@@ -21,7 +21,7 @@ from codegraph.common.progress import (
 )
 from codegraph.config import settings
 from codegraph.embedding.service import EmbeddingService
-from codegraph.ingestion.service import ingest, purge_workspace_entities
+from codegraph.ingestion.service import WorkspacePublication, ingest, rollback_workspace_revision
 from codegraph.ingestion.utils import UploadValidationError, find_java_roots, safe_extract_zip
 
 router = APIRouter()
@@ -34,9 +34,20 @@ def _workspace_parent_dir() -> str:
     return parent_dir
 
 
-def _stage_upload_archive(file_name: str) -> tuple[str, str]:
+def _unique_workspace_dir(prefix: str) -> str:
     parent_dir = _workspace_parent_dir()
-    staging_dir = tempfile.mkdtemp(prefix=".upload_staging_", dir=parent_dir)
+    for _ in range(10):
+        path = os.path.join(parent_dir, f"{prefix}{uuid.uuid4().hex}")
+        try:
+            os.mkdir(path)
+            return path
+        except FileExistsError:
+            continue
+    raise RuntimeError(f"Unable to allocate workspace directory with prefix {prefix!r}")
+
+
+def _stage_upload_archive(file_name: str) -> tuple[str, str]:
+    staging_dir = _unique_workspace_dir(".upload_staging_")
     zip_path = os.path.join(staging_dir, file_name)
     return staging_dir, zip_path
 
@@ -46,10 +57,14 @@ def _swap_workspace(staging_dir: str) -> str | None:
     parent_dir = _workspace_parent_dir()
     backup_dir = None
     if os.path.exists(target_dir):
-        backup_dir = tempfile.mkdtemp(prefix=".upload_backup_", dir=parent_dir)
-        os.rmdir(backup_dir)
+        backup_dir = os.path.join(parent_dir, f".upload_backup_{uuid.uuid4().hex}")
         os.replace(target_dir, backup_dir)
-    os.replace(staging_dir, target_dir)
+    try:
+        os.replace(staging_dir, target_dir)
+    except OSError:
+        if backup_dir is not None:
+            os.replace(backup_dir, target_dir)
+        raise
     return backup_dir
 
 
@@ -86,9 +101,11 @@ async def _stream_upload_to_disk(file: UploadFile, zip_path: str) -> None:
             await handle.write(chunk)
 
 
-def _ingest_java_roots(java_roots: list[str]) -> None:
-    for java_root in java_roots:
-        ingest(java_root, progress_callback=update_progress, sync=False)
+def _ingest_upload_workspace(upload_root: str, java_roots: list[str]) -> WorkspacePublication:
+    return ingest(upload_root, progress_callback=update_progress, source_roots=java_roots)
+
+
+def _build_upload_embeddings() -> None:
     EmbeddingService.build_embeddings(progress_callback=update_progress)
 
 
@@ -138,17 +155,14 @@ def _final_java_roots(java_root_relatives: list[str]) -> list[str]:
     return [os.path.join(upload_root, relative) for relative in java_root_relatives]
 
 
-async def _restore_previous_workspace(backup_dir: str | None) -> Exception | None:
+async def _restore_previous_workspace(
+    backup_dir: str | None, *, publication: WorkspacePublication | None = None,
+) -> Exception | None:
     try:
         update_progress("upload", "Restoring previous workspace…", 21.0)
         await asyncio.to_thread(_restore_workspace, backup_dir)
-        upload_root = os.path.abspath(settings.upload_dir)
-        if not os.path.exists(upload_root):
-            return None
-        restored_java_roots = await asyncio.to_thread(find_java_roots, upload_root)
-        await asyncio.to_thread(purge_workspace_entities, upload_root)
-        if restored_java_roots:
-            await asyncio.to_thread(_ingest_java_roots, restored_java_roots)
+        if publication is not None:
+            await asyncio.to_thread(rollback_workspace_revision, publication)
         return None
     except Exception as restore_exc:  # pragma: no cover - defensive fallback
         return restore_exc
@@ -160,16 +174,20 @@ async def _handle_workspace_processing_error(
     request_id: str,
     staging_dir: str | None,
     backup_dir: str | None,
+    publication: WorkspacePublication | None = None,
 ) -> JSONResponse:
-    restore_error = await _restore_previous_workspace(backup_dir)
+    restore_error = (
+        await _restore_previous_workspace(backup_dir, publication=publication)
+        if staging_dir is None else None
+    )
     await asyncio.to_thread(_cleanup_dir, staging_dir)
-    await asyncio.to_thread(_cleanup_dir, backup_dir)
     if restore_error is not None:
         return _error_response(
-            f"Processing failed: {exc}. Restore also failed: {restore_error}",
+            f"Processing failed: {exc}. Restore also failed: {restore_error}. Recovery directory: {backup_dir}",
             request_id,
             500,
         )
+    await asyncio.to_thread(_cleanup_dir, backup_dir)
     return _error_response(f"Processing failed: {exc}", request_id, 500)
 
 
@@ -187,19 +205,24 @@ async def upload_zip(file: UploadFile = File(...)):
 
     staging_dir, java_root_relatives = prepared
     backup_dir = None
+    publication = None
     try:
         update_progress("upload", "Replacing workspace…", 19.0)
         backup_dir = await asyncio.to_thread(_swap_workspace, staging_dir)
         staging_dir = None
-        update_progress("upload", "Resetting uploaded graph…", 20.0)
-        await asyncio.to_thread(purge_workspace_entities, os.path.abspath(settings.upload_dir))
-        await asyncio.to_thread(_ingest_java_roots, _final_java_roots(java_root_relatives))
+        update_progress("upload", "Publishing uploaded graph revision…", 20.0)
+        upload_root = os.path.abspath(settings.upload_dir)
+        publication = await asyncio.to_thread(
+            _ingest_upload_workspace, upload_root, _final_java_roots(java_root_relatives),
+        )
+        await asyncio.to_thread(_build_upload_embeddings)
     except Exception as exc:
         return await _handle_workspace_processing_error(
             exc,
             request_id=request_id,
             staging_dir=staging_dir,
             backup_dir=backup_dir,
+            publication=publication,
         )
     await asyncio.to_thread(_cleanup_dir, backup_dir)
     complete_progress("Codebase processed!")
@@ -294,7 +317,7 @@ async def _upload_status_event_stream(
             # keepalive comment if nothing changed).
             try:
                 await asyncio.wait_for(state_changed.wait(), timeout=_SSE_HEARTBEAT_INTERVAL_S)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # SSE comment lines are ignored by EventSource but defeat
                 # proxy idle timeouts; cheaper than re-emitting status.
                 yield b": heartbeat\n\n"

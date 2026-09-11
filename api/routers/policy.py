@@ -47,7 +47,7 @@ async def policy_evaluate(
         max_per_violation_id=max_per_violation_id,
         rule_ids=rule_ids,
     )
-    status = 200 if "violations" in result or "opa_output" in result else 500
+    status = 200 if not result.get("error") and ("violations" in result or "opa_output" in result) else 500
     return JSONResponse(result, status_code=status)
 
 
@@ -60,7 +60,7 @@ async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
         max_per_violation_id=payload.max_per_violation_id,
         rule_ids=payload.rule_ids,
     )
-    if "violations" not in res:
+    if res.get("error") or "violations" not in res:
         return JSONResponse(res, status_code=500)
     safe_limit = max(1, payload.limit)
     safe_limit = min(safe_limit, 100)
@@ -71,7 +71,7 @@ async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
         max_items=safe_limit,
         model=(payload.model or "").strip() or settings.llm_model,
     )
-    return JSONResponse({"violations": vio, "enriched": enriched})
+    return JSONResponse({**res, "enriched": enriched})
 
 
 @router.post("/policy/explain_one", response_model=PolicyExplainOneResponse)

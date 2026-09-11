@@ -16,13 +16,14 @@ def _progress(phase: str, message: str, progress: float) -> None:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    settings_obj = config.get_settings()
     parser = argparse.ArgumentParser(description="Build semantic code embeddings.")
-    parser.add_argument("--neo4j-uri", default=config.NEO4J_URI, help="Neo4j Bolt URI")
-    parser.add_argument("--neo4j-user", default=config.NEO4J_USER, help="Neo4j username")
-    parser.add_argument("--neo4j-pass", default=config.NEO4J_PASS, help="Neo4j password")
+    parser.add_argument("--neo4j-uri", default=settings_obj.neo4j_uri, help="Neo4j Bolt URI")
+    parser.add_argument("--neo4j-user", default=settings_obj.neo4j_user, help="Neo4j username")
+    parser.add_argument("--neo4j-pass", default=settings_obj.neo4j_pass, help="Neo4j password")
     parser.add_argument(
         "--model",
-        default=config.EMBEDDING_MODEL_NAME,
+        default=settings_obj.embedding_model_name,
         help="SentenceTransformer model id (default: %(default)s)",
     )
     parser.add_argument(
@@ -40,13 +41,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    import codegraph.embedding.service as embedding_module
+    settings_obj = config.get_settings()
+    settings_obj.neo4j_uri = args.neo4j_uri
+    settings_obj.neo4j_user = args.neo4j_user
+    settings_obj.neo4j_pass = args.neo4j_pass
+    settings_obj.embedding_model_name = args.model
 
-    # Override module-level constants so the service picks up CLI overrides.
-    embedding_module.NEO4J_URI = args.neo4j_uri
-    embedding_module.NEO4J_USER = args.neo4j_user
-    embedding_module.NEO4J_PASS = args.neo4j_pass
-    embedding_module.EMBEDDING_MODEL_NAME = args.model
+    import codegraph.embedding.service as embedding_module
 
     callback = None if args.quiet else _progress
     embedding_module.EmbeddingService.build_embeddings(

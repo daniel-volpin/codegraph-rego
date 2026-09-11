@@ -299,53 +299,50 @@ class TestDirectCallSpecialCases(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             outer_path = Path(tmpdir) / "Outer.java"
             inner_path = Path(tmpdir) / "Inner.java"
-            outer_path.write_text(
-                "\n".join(
-                    [
-                        "class Outer {",
-                        "  private String doSomething(String param) {",
-                        "    return param;",
-                        "  }",
-                        "}",
-                    ]
-                ),
-                encoding="utf-8",
+            outer_source = "\n".join(
+                [
+                    "class Outer {",
+                    "  private String doSomething(String param) {",
+                    "    return param;",
+                    "  }",
+                    "}",
+                ]
             )
-            inner_path.write_text(
-                "\n".join(
-                    [
-                        "class Outer$Test {",
-                        "  private String doSomething(String param) {",
-                        '    return "This_should_always_happen";',
-                        "  }",
-                        "}",
-                    ]
-                ),
-                encoding="utf-8",
+            inner_source = "\n".join(
+                [
+                    "class Outer$Test {",
+                    "  private String doSomething(String param) {",
+                    '    return "This_should_always_happen";',
+                    "  }",
+                    "}",
+                ]
             )
+            outer_path.write_text(outer_source, encoding="utf-8")
+            inner_path.write_text(inner_source, encoding="utf-8")
+            inner_start = inner_source.index("  private String doSomething")
+            inner_end = inner_source.index("\n  }", inner_start) + len("\n  }")
             method_snapshot = {
                 "class_fqn": "org.example.Outer",
                 "calls": [
-                    "org.example.Outer.doSomething(java.lang.String)",
-                    "org.example.Outer$Test.doSomething(java.lang.String)",
+                    "workspace@revision:Inner.java#method:Outer$Test.doSomething/1",
                 ],
             }
             method_index = {
-                "org.example.Outer.doSomething(java.lang.String)": {
+                "workspace@revision:Outer.java#method:Outer.doSomething/1": {
+                    "method_key": "workspace@revision:Outer.java#method:Outer.doSomething/1",
                     "signature": "org.example.Outer.doSomething(java.lang.String)",
                     "class_fqn": "org.example.Outer",
                     "name": "doSomething",
                     "file_path": outer_path.as_posix(),
-                    "start_line": 2,
-                    "end_line": 3,
                 },
-                "org.example.Outer$Test.doSomething(java.lang.String)": {
+                "workspace@revision:Inner.java#method:Outer$Test.doSomething/1": {
+                    "method_key": "workspace@revision:Inner.java#method:Outer$Test.doSomething/1",
                     "signature": "org.example.Outer$Test.doSomething(java.lang.String)",
                     "class_fqn": "org.example.Outer$Test",
                     "name": "doSomething",
                     "file_path": inner_path.as_posix(),
-                    "start_line": 2,
-                    "end_line": 3,
+                    "start_byte": inner_start,
+                    "end_byte": inner_end,
                 },
             }
             result = builder.build(
@@ -357,7 +354,7 @@ class TestDirectCallSpecialCases(unittest.TestCase):
         self.assertEqual(result["safe_constant_return_vars"], ["bar"])
         self.assertTrue(result["safe_constant_return_used_in_path_sink"])
 
-    def test_falls_back_to_same_file_helper_when_call_graph_is_missing(self) -> None:
+    def test_missing_call_graph_does_not_guess_same_file_helper(self) -> None:
         builder = DirectCallSummaryBuilder()
         with tempfile.TemporaryDirectory() as tmpdir:
             source_path = Path(tmpdir) / "BenchmarkTest01027.java"
@@ -402,9 +399,9 @@ class TestDirectCallSpecialCases(unittest.TestCase):
                 method_index=method_index,
             )
 
-        self.assertEqual(result["safe_constant_return_vars"], ["bar"])
-        self.assertTrue(result["safe_constant_return_used_in_path_sink"])
-        self.assertEqual(result["analyzed_call_count"], 1)
+        self.assertEqual(result["safe_constant_return_vars"], [])
+        self.assertFalse(result["safe_constant_return_used_in_path_sink"])
+        self.assertEqual(result["analyzed_call_count"], 0)
 
 
 if __name__ == "__main__":

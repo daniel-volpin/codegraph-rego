@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
 from codegraph.policy.analysis.state import AssignmentStateAnalyzer
 from codegraph.policy.source_analysis_core import PATH_LDAP_UNTRUSTED_INPUT_PATTERNS, UNTRUSTED_INPUT_PATTERNS
 
@@ -269,7 +268,7 @@ class DirectCallSummaryBuilder:
         sql_tainted_vars: list[str] = []
         command_tainted_vars: list[str] = []
         state = self._assignment_analyzer.analyze(current_source)
-        call_signatures = method_snapshot.get("calls") or []
+        call_method_keys = method_snapshot.get("calls") or []
         for assigned_var, method_name, raw_args in CALL_ASSIGNMENT_WITH_ARGS_RE.findall(current_source):
             is_untrusted_source_call = method_name.lower() in {
                 "getparameter",
@@ -297,9 +296,7 @@ class DirectCallSummaryBuilder:
             arg_is_known_safe = arg_is_safe_constant
             callee_snapshot = self._resolve_called_method(
                 method_name=method_name,
-                call_signatures=call_signatures,
-                current_class_fqn=method_snapshot.get("class_fqn"),
-                current_file_path=method_snapshot.get("file_path"),
+                call_method_keys=call_method_keys,
                 method_index=method_index,
             )
             if not callee_snapshot:
@@ -385,70 +382,19 @@ class DirectCallSummaryBuilder:
     def _resolve_called_method(
         *,
         method_name: str,
-        call_signatures: list[str],
-        current_class_fqn: str | None,
-        current_file_path: str | None,
+        call_method_keys: list[str],
         method_index: dict[str, dict[str, Any]],
     ) -> dict[str, Any] | None:
-        candidates = [sig for sig in call_signatures if sig and _method_name_from_signature(sig) == method_name]
-        if not candidates:
-            return DirectCallSummaryBuilder._resolve_same_file_method(
-                method_name=method_name,
-                current_class_fqn=current_class_fqn,
-                current_file_path=current_file_path,
-                method_index=method_index,
-            )
-        if len(candidates) == 1:
-            return method_index.get(candidates[0])
-        if current_class_fqn:
-            nested_prefix = f"{current_class_fqn}$"
-            for signature in candidates:
-                snapshot = method_index.get(signature)
-                class_fqn = snapshot.get("class_fqn") if snapshot else None
-                if isinstance(class_fqn, str) and class_fqn.startswith(nested_prefix):
-                    return snapshot
-            for signature in candidates:
-                snapshot = method_index.get(signature)
-                if snapshot and snapshot.get("class_fqn") == current_class_fqn:
-                    return snapshot
-        for signature in candidates:
-            snapshot = method_index.get(signature)
-            if snapshot and snapshot.get("class_fqn") == current_class_fqn:
-                return snapshot
-        return method_index.get(candidates[0]) or DirectCallSummaryBuilder._resolve_same_file_method(
-            method_name=method_name,
-            current_class_fqn=current_class_fqn,
-            current_file_path=current_file_path,
-            method_index=method_index,
-        )
-
-    @staticmethod
-    def _resolve_same_file_method(
-        *,
-        method_name: str,
-        current_class_fqn: str | None,
-        current_file_path: str | None,
-        method_index: dict[str, dict[str, Any]],
-    ) -> dict[str, Any] | None:
-        if not current_file_path:
-            return None
         candidates = [
-            snapshot
-            for snapshot in method_index.values()
-            if snapshot.get("name") == method_name and snapshot.get("file_path") == current_file_path
+            method_key
+            for method_key in call_method_keys
+            if method_key and method_index.get(method_key, {}).get("name") == method_name
         ]
         if not candidates:
             return None
-        if current_class_fqn:
-            nested_prefix = f"{current_class_fqn}$"
-            for snapshot in candidates:
-                class_fqn = snapshot.get("class_fqn")
-                if isinstance(class_fqn, str) and class_fqn.startswith(nested_prefix):
-                    return snapshot
-            for snapshot in candidates:
-                if snapshot.get("class_fqn") == current_class_fqn:
-                    return snapshot
-        return candidates[0]
+        if len(candidates) == 1:
+            return method_index.get(candidates[0])
+        return None
 
     @staticmethod
     def _read_method_source(method_snapshot: dict[str, Any]) -> str:
@@ -458,15 +404,14 @@ class DirectCallSummaryBuilder:
         path = Path(file_path)
         if not path.is_file():
             return ""
-        source_code = extract_snippet_by_lines(
-            path.as_posix(),
-            method_snapshot.get("start_line"),
-            method_snapshot.get("end_line"),
-            padding=2,
-        )
-        if not source_code and method_snapshot.get("name"):
-            return extract_code_snippet(path.as_posix(), method_snapshot.get("name", ""))
-        return source_code
+        start_byte = method_snapshot.get("start_byte")
+        end_byte = method_snapshot.get("end_byte")
+        if not isinstance(start_byte, int) or not isinstance(end_byte, int) or end_byte < start_byte:
+            return ""
+        raw = path.read_bytes()
+        if end_byte > len(raw):
+            return ""
+        return raw[start_byte:end_byte].decode("utf-8")
 
     @staticmethod
     def _vars_used_in_template(source_code: str, vars_to_check: list[str], template: str) -> bool:
@@ -545,8 +490,3 @@ class DirectCallSummaryBuilder:
             | set(COMMAND_EXEC_ENV_ARG_VAR_RE.findall(source_code))
         )
         return payload_lists, payload_arrays
-
-
-def _method_name_from_signature(signature: str) -> str:
-    head = signature.split("(")[0]
-    return head.rsplit(".", 1)[-1]

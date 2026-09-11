@@ -6,15 +6,18 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import httpx2
 from openai import OpenAI
 
 from codegraph.config import settings
 from codegraph.llm.schema.explanation import strip_structured_stop_tokens
 from codegraph.llm.transport.base import LLMRequest, LLMTransport, LLMUnavailableError
+from codegraph.llm.transport.provider_admission import provider_admission_gate
 from codegraph.telemetry import get_tracer
 
 logger = logging.getLogger("codegraph.llm.transport.openai_compatible")
 _tracer = get_tracer("codegraph.llm.transport")
+_CLIENT_CLOSE_EXCEPTIONS = (RuntimeError, OSError, httpx2.HTTPError)
 
 
 def _summarize_exception(exc: Exception) -> str:
@@ -68,7 +71,10 @@ def _infer_provider(api_base: str | None) -> str:
 def _build_client(*, api_base: str | None, api_key: str | None) -> OpenAI:
     # LM Studio accepts any api_key token for OpenAI-compatible mode.
     effective_api_key = api_key or ("lm-studio" if _is_lm_studio_api_base(api_base) else None)
-    kwargs: dict[str, Any] = {}
+    kwargs: dict[str, Any] = {
+        "timeout": settings.llm_timeout_seconds,
+        "max_retries": settings.llm_max_retries,
+    }
     if api_base:
         kwargs["base_url"] = api_base
     if effective_api_key is not None:
@@ -80,7 +86,17 @@ def _extract_message_content(response: Any, *, allow_reasoning_content: bool = F
     choices = getattr(response, "choices", None)
     if not choices:
         raise LLMUnavailableError("LLM returned an empty response.")
+    finish_reason = getattr(choices[0], "finish_reason", None)
+    if isinstance(finish_reason, str):
+        normalized_finish_reason = finish_reason.strip().lower()
+        if normalized_finish_reason == "length":
+            raise LLMUnavailableError("LLM response is incomplete (finish_reason=length).")
+        if normalized_finish_reason == "content_filter":
+            raise LLMUnavailableError("LLM response was blocked by content filtering.")
     message = getattr(choices[0], "message", None)
+    refusal = getattr(message, "refusal", None)
+    if isinstance(refusal, str) and refusal:
+        raise LLMUnavailableError("LLM refused the request.")
     content = getattr(message, "content", "") if message is not None else ""
     if isinstance(content, list):
         parts: list[str] = []
@@ -102,11 +118,21 @@ def _extract_message_content(response: Any, *, allow_reasoning_content: bool = F
 
 
 def _extract_responses_output_text(response: Any) -> str:
+    status = getattr(response, "status", None)
+    if isinstance(status, str) and status != "completed":
+        raise LLMUnavailableError(f"LLM response is {status}.")
+
+    output_items = getattr(response, "output", None) or []
+    for item in output_items:
+        content = getattr(item, "content", None) or []
+        for part in content:
+            if getattr(part, "type", None) == "refusal":
+                raise LLMUnavailableError("LLM refused the request.")
+
     output_text = getattr(response, "output_text", None)
     if isinstance(output_text, str) and output_text.strip():
         return output_text.strip()
 
-    output_items = getattr(response, "output", None) or []
     text_parts: list[str] = []
     for item in output_items:
         content = getattr(item, "content", None) or []
@@ -151,7 +177,7 @@ class _GenerationConfig:
     api_base: str | None
     model: str
     max_tokens: int | None
-    temperature: float
+    temperature: float | None
     use_chat_completions: bool
     extra_body: dict[str, Any]
 
@@ -172,8 +198,14 @@ def _generation_config(request: LLMRequest) -> _GenerationConfig:
         api_base=api_base,
         model=request.model or settings.llm_model or "gpt-4o-mini",
         max_tokens=request.max_tokens if request.max_tokens is not None else settings.llm_max_tokens_explanation,
-        temperature=request.temperature if request.temperature is not None else settings.llm_temperature,
-        use_chat_completions=bool(request.response_format) and is_lm_studio,
+        temperature=(
+            (request.temperature if request.temperature is not None else settings.llm_temperature)
+            if settings.llm_send_temperature else None
+        ),
+        use_chat_completions=(
+            settings.llm_api_mode == "chat_completions"
+            or (settings.llm_api_mode == "auto" and is_lm_studio)
+        ),
         extra_body=extra_body,
     )
 
@@ -189,7 +221,8 @@ def _set_common_span_attributes(
     span.set_attribute("llm.model", config.model)
     span.set_attribute("llm.provider", _infer_provider(config.api_base))
     span.set_attribute("llm.base_url", config.api_base or "")
-    span.set_attribute("llm.temperature", config.temperature)
+    if config.temperature is not None:
+        span.set_attribute("llm.temperature", config.temperature)
     span.set_attribute("llm.max_tokens", config.max_tokens if config.max_tokens is not None else -1)
     span.set_attribute("llm.task_type", task_type)
     span.set_attribute("llm.response_format", str(request.response_format is not None))
@@ -213,9 +246,7 @@ def _set_usage_attributes(span: Any, usage: Any, token_names: Mapping[str, str])
     if token_names["total"]:
         total_tokens = _token_count(usage, token_names["total"])
     else:
-        total_tokens = (prompt_tokens if prompt_tokens > 0 else 0) + (
-            completion_tokens if completion_tokens > 0 else 0
-        )
+        total_tokens = max(0, prompt_tokens) + max(0, completion_tokens)
     span.set_attribute("llm.prompt_tokens", prompt_tokens)
     span.set_attribute("llm.completion_tokens", completion_tokens)
     span.set_attribute("llm.total_tokens", total_tokens or -1)
@@ -225,8 +256,9 @@ def _chat_completion_params(request: LLMRequest, config: _GenerationConfig) -> d
     params: dict[str, Any] = {
         "model": config.model,
         "messages": list(request.messages),
-        "temperature": config.temperature,
     }
+    if config.temperature is not None:
+        params["temperature"] = config.temperature
     if config.max_tokens is not None:
         params["max_tokens"] = config.max_tokens
     if request.stop is not None:
@@ -242,8 +274,9 @@ def _responses_params(request: LLMRequest, config: _GenerationConfig) -> dict[st
     params: dict[str, Any] = {
         "model": config.model,
         "input": list(request.messages),
-        "temperature": config.temperature,
     }
+    if config.temperature is not None:
+        params["temperature"] = config.temperature
     if config.max_tokens is not None:
         params["max_output_tokens"] = config.max_tokens
     if request.response_format is not None:
@@ -279,23 +312,42 @@ def _generate_with_responses(client: OpenAI, request: LLMRequest, config: _Gener
 class OpenAICompatibleTransport(LLMTransport):
     def generate(self, request: LLMRequest, *, task_type: str = "", retry_index: int = 0) -> str:
         config = _generation_config(request)
-        client = _build_client(api_base=config.api_base, api_key=settings.llm_api_key)
 
         with _tracer.start_as_current_span("llm.generate") as span:
             _set_common_span_attributes(span, request, config, task_type=task_type, retry_index=retry_index)
 
             t0 = time.monotonic()
+            client = None
+            close_error: RuntimeError | OSError | httpx2.HTTPError | None = None
+            output_text: str | None = None
+            generation_error_message: str | None = None
+            generation_exception: LLMUnavailableError | None = None
+            generation_cause: Exception | None = None
             try:
-                if config.use_chat_completions:
-                    return _generate_with_chat_completions(client, request, config, span)
-                return _generate_with_responses(client, request, config, span)
+                with provider_admission_gate.acquire(
+                    max_active=settings.llm_max_concurrent_requests,
+                    max_waiting=settings.llm_max_pending_requests,
+                    queue_timeout_seconds=settings.llm_queue_timeout_seconds,
+                ):
+                    try:
+                        client = _build_client(api_base=config.api_base, api_key=settings.llm_api_key)
+                        if config.use_chat_completions:
+                            output_text = _generate_with_chat_completions(client, request, config, span)
+                        else:
+                            output_text = _generate_with_responses(client, request, config, span)
+                    finally:
+                        if client is not None:
+                            try:
+                                client.close()
+                            except _CLIENT_CLOSE_EXCEPTIONS as exc:
+                                close_error = exc
+                                span.set_attribute("llm.close_error", _summarize_exception(exc))
+                                logger.warning("Failed to close LLM client cleanly: %s", _summarize_exception(exc))
             except LLMUnavailableError as exc:
                 error_msg = str(exc) or "LLM returned an empty response."
+                generation_exception = exc
+                generation_error_message = error_msg
                 span.set_attribute("llm.error", error_msg)
-                span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
-                if request.raise_on_error:
-                    raise
-                return f"[LLM unavailable: {error_msg}]"
             except Exception as exc:  # pragma: no cover - runtime guard
                 logger.exception(
                     "LLM completion failed (model=%s api_base=%s endpoint=%s)",
@@ -304,8 +356,27 @@ class OpenAICompatibleTransport(LLMTransport):
                     "chat.completions" if config.use_chat_completions else "responses",
                 )
                 error_msg = _humanize_llm_failure(exc, api_base=config.api_base)
+                generation_exception = LLMUnavailableError(error_msg)
+                generation_error_message = error_msg
+                generation_cause = exc
                 span.set_attribute("llm.error", error_msg)
+            finally:
                 span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
+
+            if generation_error_message is not None:
+                if request.raise_on_error and generation_exception is not None:
+                    if generation_cause is not None:
+                        raise generation_exception from generation_cause
+                    raise generation_exception
+                return f"[LLM unavailable: {generation_error_message}]"
+
+            if close_error is not None:
+                close_error_message = f"LLM client cleanup failed: {_summarize_exception(close_error)}"
+                span.set_attribute("llm.error", close_error_message)
                 if request.raise_on_error:
-                    raise LLMUnavailableError(error_msg) from exc
-                return f"[LLM unavailable: {error_msg}]"
+                    raise LLMUnavailableError(close_error_message) from close_error
+                return f"[LLM unavailable: {close_error_message}]"
+
+            if output_text is not None:
+                return output_text
+            raise LLMUnavailableError("LLM returned an empty response.")

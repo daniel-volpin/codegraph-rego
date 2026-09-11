@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from collections.abc import Callable
 from types import SimpleNamespace
@@ -18,7 +19,7 @@ Evaluator = Callable[[Bundle], Any]
 
 class CompletedOpaProcess:
     returncode = 0
-    stdout = '{"result": []}'
+    stdout = '{"result": [{"expressions": [{"value": []}]}]}'
     stderr = ""
 
 
@@ -65,3 +66,31 @@ def test_timeout_seconds_comes_from_settings(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(runtime_opa, "settings", SimpleNamespace(opa_timeout_seconds=7.5))
 
     assert runtime_opa._opa_timeout_seconds() == 7.5
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [],
+        None,
+        {},
+        {"result": []},
+        {"result": [{}]},
+        {"result": [{"expressions": []}]},
+        {"result": [{"expressions": [{}]}]},
+        {"result": [{"expressions": [{"value": None}]}]},
+        {"result": [{"expressions": [{"value": False}]}]},
+        {"result": [{"expressions": [{"value": {}}]}]},
+        {"result": [{"expressions": [{"value": ["not a violation"]}]}]},
+    ],
+)
+def test_invalid_or_undefined_policy_result_is_not_a_clean_scan(monkeypatch, bundle, payload) -> None:
+    process = SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr="")
+    monkeypatch.setattr(runtime_opa.subprocess, "run", Mock(return_value=process))
+    with pytest.raises(RuntimeError, match="OPA"):
+        runtime_opa.evaluate_bundle(bundle)
+
+
+def test_defined_empty_violation_list_is_a_clean_scan(monkeypatch, bundle) -> None:
+    monkeypatch.setattr(runtime_opa.subprocess, "run", Mock(return_value=CompletedOpaProcess()))
+    assert runtime_opa.evaluate_bundle(bundle) == []

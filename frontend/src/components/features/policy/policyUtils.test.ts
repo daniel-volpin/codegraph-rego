@@ -3,33 +3,32 @@ import {
   formatCitationDisplay,
   groupViolationsByRule,
   normalizeViolation,
-  trimSnippetToMethod,
 } from "./policyUtils";
 
 describe("policyUtils", () => {
-  it("trims a snippet to the target method body", () => {
+  it("preserves the exact parser-selected snippet without scanning braces", () => {
     const snippet = [
-      "class Demo {",
       "  @Override",
-      "  public void safe() {}",
       "  public void vulnerable(String input) {",
+      '    String closing = "}";',
       "    sink(input);",
       "  }",
-      "}",
+      "",
     ].join("\n");
 
-    expect(trimSnippetToMethod(snippet, "com.acme.Demo.vulnerable(String)")).toContain(
-      "public void vulnerable(String input) {",
-    );
-    expect(trimSnippetToMethod(snippet, "com.acme.Demo.vulnerable(String)")).not.toContain(
-      "public void safe()",
-    );
+    const row = normalizeViolation({
+      method_key: "test@revision:Demo.java#vulnerable",
+      target_method: "com.acme.Demo.vulnerable(String)",
+      code_snippet: snippet,
+    });
+    expect(row.snippet).toBe(snippet);
   });
 
   it("normalizes a violation into a stable row shape", () => {
     const row = normalizeViolation({
       violation_id: "ISO-A.10-WEAK-HASH",
       target_method: "com.acme.Demo.hash(String)",
+      method_key: "test@revision:Demo.java#hash",
       file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/Demo.java",
       severity: "high",
       reason: "Weak hash usage detected",
@@ -47,8 +46,13 @@ describe("policyUtils", () => {
     });
 
     expect(row.id).toBe(
-      "ISO-A.10-WEAK-HASH:com.acme.Demo.hash(String):/tmp/uploaded_code/app/src/main/java/com/acme/Demo.java",
+      "ISO-A.10-WEAK-HASH:test@revision:Demo.java#hash",
     );
+    expect(row.methodKey).toBe("test@revision:Demo.java#hash");
+    expect(normalizeViolation({
+      ...row.raw,
+      method_key: "test@next-revision:Demo.java#hash",
+    }).id).not.toBe(row.id);
     expect(row.severity).toBe("HIGH");
     expect(row.ruleId).toBe("ISO-A.10-WEAK-HASH");
     expect(row.remediation.support_tier).toBe("full");
@@ -59,6 +63,7 @@ describe("policyUtils", () => {
       normalizeViolation({
         violation_id: "ISO-A.10-WEAK-HASH",
         target_method: "a.A.one()",
+        method_key: "test@revision:A.java#one",
         file_path: "/tmp/A.java",
         severity: "high",
         code_snippet: "void one() {}",
@@ -76,6 +81,7 @@ describe("policyUtils", () => {
       normalizeViolation({
         violation_id: "ISO-A.10-WEAK-HASH",
         target_method: "a.A.two()",
+        method_key: "test@revision:B.java#two",
         file_path: "/tmp/B.java",
         severity: "medium",
         code_snippet: "void two() {}",

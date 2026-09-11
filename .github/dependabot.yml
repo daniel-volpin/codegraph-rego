@@ -14,10 +14,6 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "deps(py)"
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-major"
     groups:
       python-api:
         patterns:
@@ -72,10 +68,6 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "deps(ui)"
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-major"
     groups:
       frontend-observability:
         patterns:
@@ -152,6 +144,26 @@ updates:
         patterns:
           - "*"
         update-types:
+          - "patch"
+
+  - package-ecosystem: "maven"
+    directory: "/tools/java-parser"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:15"
+      timezone: "Europe/Amsterdam"
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    target-branch: "main"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps(java)"
+    groups:
+      java-minor-patch:
+        update-types:
+          - "minor"
           - "patch"
 
   - package-ecosystem: "github-actions"

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from threading import Lock
+from time import sleep
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -223,3 +226,66 @@ def test_one_failing_bundle_does_not_abort_whole_run(monkeypatch: pytest.MonkeyP
     assert "error" not in result
     assert result.get("failed_bundle_count") == 1
     assert result["failed_bundles"][0]["target_method"] == "bad"
+    assert result["evaluation"]["status"] == "partial"
+    assert result["evaluation"]["attempted_bundles"] == 2
+    assert result["evaluation"]["evaluated_bundles"] == 1
+
+
+def test_all_failed_bundles_are_not_a_successful_empty_scan(monkeypatch) -> None:
+    def fail(_bundle):
+        raise RuntimeError("OPA unavailable")
+
+    install_policy_input(monkeypatch, bundles=[bundle("broken")], evaluator=fail)
+    result = integration.evaluate_policies()
+    assert result["evaluation"]["status"] == "failed"
+    assert result["evaluation"]["failed_bundles"] == 1
+    assert result["error"]
+
+
+def test_per_rule_cap_reports_omitted_findings(monkeypatch) -> None:
+    install_policy_input(
+        monkeypatch, bundles=[bundle("one")],
+        evaluator=lambda _: [violation("A"), violation("A"), violation("B")],
+    )
+    result = integration.evaluate_policies(max_per_violation_id=1)
+    assert len(result["violations"]) == 2
+    assert result["truncated"] is True
+    assert result["evaluation"]["omitted_findings"] == 1
+
+
+def test_exact_result_limit_does_not_claim_findings_were_omitted(monkeypatch) -> None:
+    install_policy_input(monkeypatch, bundles=[bundle("one")], evaluator=lambda _: [violation("A")])
+    result = integration.evaluate_policies(max_total_violations=1)
+    assert result["truncated"] is False
+    assert result["evaluation"]["omitted_findings"] == 0
+
+
+def test_scope_and_rule_filter_are_explicit(monkeypatch) -> None:
+    install_policy_input(monkeypatch, bundles=[bundle("one")], evaluator=lambda _: [violation("A"), violation("B")])
+    result = integration.evaluate_policies(max_bundles=1, rule_ids=["A"])
+    assert result["evaluation"]["status"] == "complete"
+    assert result["evaluation"]["scope_limited"] is True
+    assert result["evaluation"]["excluded_findings"] == 1
+    assert result["evaluation"]["rule_ids"] == ["A"]
+
+
+def test_policy_concurrency_obeys_configured_worker_budget(monkeypatch) -> None:
+    monkeypatch.setattr(integration, "settings", SimpleNamespace(policy_workers=2), raising=False)
+    lock = Lock()
+    active = 0
+    peak = 0
+
+    def evaluate(current):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        sleep(0.04)
+        with lock:
+            active -= 1
+        return [violation(current["target_method"])]
+
+    install_policy_input(monkeypatch, bundles=[bundle(f"method-{i}") for i in range(8)], evaluator=evaluate)
+    result = integration.evaluate_policies()
+    assert peak <= 2
+    assert [item["violation_id"] for item in result["violations"]] == [f"method-{i}" for i in range(8)]

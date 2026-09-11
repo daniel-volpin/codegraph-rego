@@ -53,6 +53,7 @@ vi.mock("../../../hooks/usePolicyArtifacts", () => ({
 const finding = normalizeViolation({
   violation_id: "ISO-A.10-WEAK-HASH",
   target_method: "com.acme.Demo.hash(String)",
+  method_key: "test@revision:Demo.java#hash",
   file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/Demo.java",
   severity: "HIGH",
   reason: "Weak hash usage detected",

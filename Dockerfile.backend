@@ -1,18 +1,26 @@
-# Backend Dockerfile
-FROM python:3.14-slim
+FROM maven:3.9.16-eclipse-temurin-21@sha256:a972570be789ee5c9fa23446a8914ac7327560b5c022f662cfa9452aef829f18 AS java-parser-build
+
+WORKDIR /java-parser
+COPY tools/java-parser/pom.xml tools/java-parser/settings.xml ./
+COPY tools/java-parser/src ./src
+RUN mvn --batch-mode --no-transfer-progress --settings settings.xml package
+
+FROM python:3.14.7-slim-trixie@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
 
 WORKDIR /app
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openjdk-21-jre-headless && \
+    apt-get clean
+
 # Install uv
-RUN pip install uv
+RUN pip install --no-cache-dir uv==0.12.13
 
 # Install OPA so readiness checks and policy evaluation work inside the container too.
 # Pin to the same version as scripts/setup_benchmark_env.sh so benchmark numbers
-# are reproducible regardless of which environment produced them. v1.15.1 is the
-# version recorded in the canonical thesis_final_* provenance manifests, so the
-# container reproduces that evidence. Bumping is an intentional, reviewable
-# change (it can shift policy results) — pinned by tag, not yet by digest.
-ARG OPA_VERSION=v1.15.1
+# are comparable across the current source baseline. Historical thesis results
+# retain their original engine provenance and must not be relabeled.
+ARG OPA_VERSION=v1.20.2
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
@@ -42,6 +50,9 @@ COPY app.py ./
 COPY api ./api
 COPY codegraph ./codegraph
 COPY configs ./configs
+COPY policy ./policy
+COPY --from=java-parser-build /java-parser/target/codegraph-java-parser.jar \
+    ./tools/java-parser/target/codegraph-java-parser.jar
 
 # Expose port
 EXPOSE 8000

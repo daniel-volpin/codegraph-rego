@@ -434,7 +434,7 @@ export async function fetchUploadStatus(
 
 export async function previewRemediation(
   violationId: string,
-  targetMethod?: string,
+  methodKey: string,
   filePath?: string,
   signal?: AbortSignal,
 ): Promise<RemediationPreviewResponse> {
@@ -444,7 +444,7 @@ export async function previewRemediation(
         status: "OK",
         violation_id: violationId,
         rule_id: violationId,
-        target_method: targetMethod,
+        method_key: methodKey,
         file_path: filePath,
         diff: DEMO_DIFFS[violationId] ?? DEMO_DIFFS["ISO-A.10-WEAK-HASH"],
         confidence: {
@@ -467,7 +467,7 @@ export async function previewRemediation(
     },
     body: JSON.stringify({
       violation_id: violationId,
-      target_method: targetMethod,
+      method_key: methodKey,
       file_path: filePath,
     }),
     signal: withTimeoutSignal(signal, 300_000),
@@ -477,7 +477,7 @@ export async function previewRemediation(
 
 export interface ApplyRemediationPayload {
   violation_id: string;
-  target_method?: string;
+  method_key: string;
   file_path?: string;
   max_attempts?: number;
 }
@@ -490,7 +490,7 @@ export async function applyRemediation(
     return {
       ...DEMO_APPLY_RESULT,
       violation_id: payload.violation_id,
-      target_method: payload.target_method,
+      method_key: payload.method_key,
       file_path: payload.file_path,
     };
   }

@@ -260,6 +260,7 @@ class PolicyHelperSummaries:
 @dataclass(frozen=True)
 class PolicyBundle:
     target_method: str
+    method_key: str | None = None
     method_name: str | None = None
     class_fqn: str | None = None
     file_path: str | None = None
@@ -272,9 +273,14 @@ class PolicyBundle:
     vector_context: tuple[str, ...] = ()
     analysis_flags: PolicyAnalysisFlags | None = field(default_factory=PolicyAnalysisFlags.empty)
     helper_summaries: PolicyHelperSummaries = field(default_factory=PolicyHelperSummaries.empty)
+    workspace_id: str | None = None
+    revision_id: str | None = None
+    parser: dict[str, Any] | None = None
+    taint_paths: tuple[dict[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
+            "method_key": self.method_key,
             "target_method": self.target_method,
             "method_name": self.method_name,
             "class_fqn": self.class_fqn,
@@ -289,6 +295,15 @@ class PolicyBundle:
             "analysis_flags": None if self.analysis_flags is None else self.analysis_flags.to_dict(),
             "helper_summaries": self.helper_summaries.to_dict(),
         }
+        if self.workspace_id is not None:
+            data["workspace_id"] = self.workspace_id
+        if self.revision_id is not None:
+            data["revision_id"] = self.revision_id
+        if self.parser is not None:
+            data["parser"] = self.parser
+        if self.taint_paths:
+            data["taint_paths"] = list(self.taint_paths)
+        return data
 
 
 @dataclass(frozen=True)
@@ -308,6 +323,7 @@ class PolicyInputEnvelope:
 def build_policy_bundle(
     *,
     target_method: str,
+    method_key: Any = None,
     method_name: Any = None,
     class_fqn: Any = None,
     file_path: Any = None,
@@ -320,6 +336,10 @@ def build_policy_bundle(
     vector_context: Any = (),
     analysis_flags: Mapping[str, Any] | PolicyAnalysisFlags | None = None,
     helper_summaries: Mapping[str, Any] | PolicyHelperSummaries | None = None,
+    workspace_id: Any = None,
+    revision_id: Any = None,
+    parser: Any = None,
+    taint_paths: Any = (),
 ) -> PolicyBundle:
     if not isinstance(target_method, str) or not target_method.strip():
         raise TypeError("target_method must be a non-blank string")
@@ -350,6 +370,7 @@ def build_policy_bundle(
 
     return PolicyBundle(
         target_method=target_method,
+        method_key=_normalize_optional_string(method_key),
         method_name=_normalize_optional_string(method_name),
         class_fqn=_normalize_optional_string(class_fqn),
         file_path=_normalize_optional_string(file_path),
@@ -362,6 +383,10 @@ def build_policy_bundle(
         vector_context=_normalize_string_list(vector_context, field_name="vector_context"),
         analysis_flags=normalized_analysis_flags,
         helper_summaries=normalized_helper_summaries,
+        workspace_id=_normalize_optional_string(workspace_id),
+        revision_id=_normalize_optional_string(revision_id),
+        parser=dict(parser) if isinstance(parser, Mapping) else None,
+        taint_paths=tuple(dict(p) for p in taint_paths if isinstance(p, Mapping)) if isinstance(taint_paths, Sequence) else (),
     )
 
 
@@ -379,6 +404,7 @@ def normalize_policy_bundle_mapping(raw: Mapping[str, Any]) -> PolicyBundle:
         raise TypeError("analysis_flags must be a mapping or None")
     return build_policy_bundle(
         target_method=raw.get("target_method"),
+        method_key=raw.get("method_key"),
         method_name=raw.get("method_name"),
         class_fqn=raw.get("class_fqn"),
         file_path=raw.get("file_path"),
@@ -391,6 +417,10 @@ def normalize_policy_bundle_mapping(raw: Mapping[str, Any]) -> PolicyBundle:
         vector_context=raw.get("vector_context", []),
         analysis_flags=analysis_flags,
         helper_summaries=helper_summaries,
+        workspace_id=raw.get("workspace_id"),
+        revision_id=raw.get("revision_id"),
+        parser=raw.get("parser"),
+        taint_paths=raw.get("taint_paths", ()),
     )
 
 

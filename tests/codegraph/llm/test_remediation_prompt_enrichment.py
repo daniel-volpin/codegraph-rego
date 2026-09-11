@@ -145,6 +145,7 @@ def test_apply_flow_does_not_mutate_caller_prompt_context():
     mock_service = MagicMock()
     mock_service.get_violation_context.return_value = {
         "rule_id": "ISO-A.10-WEAK-HASH",
+        "method_key": "workspace@rev:src/Test.java#file:src/Test.java:class:Test:method:test()",
         "target_method": "test()",
         "file_path": "/test.java",
     }
@@ -154,7 +155,7 @@ def test_apply_flow_does_not_mutate_caller_prompt_context():
         execute_apply_fix(
             service=mock_service,
             violation_id="test",
-            target_method="test()",
+            method_key="workspace@rev:src/Test.java#file:src/Test.java:class:Test:method:test()",
             file_path="/test.java",
             mode="dry_run",
             max_attempts=1,

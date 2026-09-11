@@ -40,7 +40,8 @@ def _ready_app() -> FastAPI:
         "ready": True,
         "phase": "ready",
         "checks": {
-            "ingestion": True,
+            "java_parser": True,
+            "graph_generation": True,
             "signature_map": True,
             "faiss_index": True,
             "embedding_model": True,
@@ -56,24 +57,21 @@ def _degraded_app() -> FastAPI:
         "ready": False,
         "phase": "degraded",
         "checks": {
-            "ingestion": False,
-            "signature_map": True,
-            "faiss_index": True,
-            "embedding_model": True,
+            "java_parser": True,
+            "graph_generation": False,
+            "signature_map": False,
+            "faiss_index": False,
+            "embedding_model": False,
         },
-        "errors": {"ingestion": "ingest failed"},
+        "errors": {"startup": "graph/index revision mismatch"},
     }
     return app
 
 
 def _ready_search_deps() -> dict:
     return {
-        "faiss_index_path": "index.faiss",
-        "signature_map_path": "sigmap.json",
-        "signature_map_path_full": "sigmap_full.json",
         "embedding_model_name": "dummy-model",
-        "load_faiss_index": lambda *_args, **_kwargs: None,
-        "load_signature_map": lambda *_args, **_kwargs: None,
+        "validate_generation": lambda: None,
         "load_embedding_model": lambda *_args, **_kwargs: None,
     }
 
@@ -125,8 +123,8 @@ class HealthRouterTests(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(response.body)
         self.assertEqual(payload["status"], "degraded")
         self.assertFalse(payload["startup_ready"])
-        self.assertEqual(payload["startup"]["errors"]["ingestion"], "ingest failed")
-        self.assertEqual(payload["details"]["startup"]["ingestion"], "ingest failed")
+        self.assertEqual(payload["startup"]["errors"]["startup"], "graph/index revision mismatch")
+        self.assertEqual(payload["details"]["startup"]["startup"], "graph/index revision mismatch")
 
 
 class HealthzLivenessTests(unittest.IsolatedAsyncioTestCase):
@@ -198,17 +196,11 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
         from api.routers.health import readyz
 
         mock_driver.return_value = _FakeDriver()
-        # Track FAISS reload calls via a MagicMock so we can count invocations.
-        load_faiss = MagicMock(return_value=None)
-        load_sig = MagicMock(return_value=None)
+        validate_generation = MagicMock(return_value=None)
         load_embed = MagicMock(return_value=None)
         mock_search_deps.return_value = {
-            "faiss_index_path": "index.faiss",
-            "signature_map_path": "sigmap.json",
-            "signature_map_path_full": "sigmap_full.json",
             "embedding_model_name": "dummy-model",
-            "load_faiss_index": load_faiss,
-            "load_signature_map": load_sig,
+            "validate_generation": validate_generation,
             "load_embedding_model": load_embed,
         }
         app = _ready_app()
@@ -218,7 +210,7 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
         await readyz(_build_request(app))
 
         # First call performs one probe each; second and third hit the cache.
-        self.assertEqual(load_faiss.call_count, 1)
+        self.assertEqual(validate_generation.call_count, 1)
         self.assertEqual(load_embed.call_count, 1)
         # Neo4j driver fetched exactly once for the same reason.
         self.assertEqual(mock_driver.call_count, 1)
@@ -235,14 +227,10 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
         """The legacy /health alias and /readyz must hit one shared cache."""
         from api.routers.health import health, readyz
 
-        load_faiss = MagicMock(return_value=None)
+        validate_generation = MagicMock(return_value=None)
         mock_search_deps.return_value = {
-            "faiss_index_path": "index.faiss",
-            "signature_map_path": "sigmap.json",
-            "signature_map_path_full": "sigmap_full.json",
             "embedding_model_name": "dummy-model",
-            "load_faiss_index": load_faiss,
-            "load_signature_map": lambda *_a, **_k: None,
+            "validate_generation": validate_generation,
             "load_embedding_model": lambda *_a, **_k: None,
         }
         app = _ready_app()
@@ -250,7 +238,26 @@ class ReadyzCachingTests(unittest.IsolatedAsyncioTestCase):
         await readyz(_build_request(app))
         await health(_build_request(app))
 
-        self.assertEqual(load_faiss.call_count, 1)
+        self.assertEqual(validate_generation.call_count, 1)
+
+    @patch("api.routers.health._opa_probe", return_value=(True, None))
+    @patch("api.routers.health._load_search_health_dependencies")
+    @patch("api.routers.health.shared_neo4j_driver", return_value=_FakeDriver())
+    async def test_reachable_graph_with_stale_index_is_not_ready(
+        self, _mock_driver, mock_search_deps, _mock_opa,
+    ) -> None:
+        from api.routers.health import readyz
+
+        deps = _ready_search_deps()
+        deps["validate_generation"] = MagicMock(side_effect=ValueError("graph/index revision mismatch"))
+        mock_search_deps.return_value = deps
+        response = await readyz(_build_request(_ready_app()))
+        payload = json.loads(response.body)
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(payload["neo4j"])
+        self.assertFalse(payload["graph_generation"])
+        self.assertFalse(payload["faiss_index"])
+        self.assertEqual(payload["details"]["search"], "graph/index revision mismatch")
 
     @patch("api.routers.health._opa_probe", return_value=(False, "opa version probe failed: bad binary"))
     @patch("api.routers.health._load_search_health_dependencies")

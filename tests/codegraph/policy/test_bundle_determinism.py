@@ -14,17 +14,28 @@ from tests.codegraph.policy._test_helpers import _FakeDriver
 
 def _record(calls, callers, uses_fields):
     return {
+        "method_key": "workspace@revision:Foo.java#method:bar",
         "signature": "com.example.Foo.bar()",
         "name": "bar",
         "file_path": "/work/Foo.java",
         "start_line": 1,
         "end_line": 5,
         "modifiers": [],
+        "declaring_type_key": "workspace@revision:Foo.java#type:Foo",
+        "relative_path": "Foo.java",
+        "start_byte": 0,
+        "end_byte": 10,
         "property_annotations": [],
         "annotation_nodes": [],
         "uses_fields": uses_fields,
         "calls": calls,
         "callers": callers,
+        "workspace_id": "workspace",
+        "revision_id": "revision",
+        "parser_backend": "eclipse-jdt",
+        "parser_version": "3.47.0",
+        "source_sha256": "f" * 64,
+        "range_status": "verified",
     }
 
 

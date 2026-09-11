@@ -19,6 +19,7 @@ class TestIntegration(PolicyTestBase):
 
         records = [
             {
+                "method_key": "workspace@revision:TestController.java#method:endpoint",
                 "signature": "org.example.TestController.endpoint()",
                 "name": "endpoint",
                 "file_path": "/workspace/project/src/test/java/org/example/TestController.java",
@@ -27,12 +28,17 @@ class TestIntegration(PolicyTestBase):
                 "modifiers": [],
                 "property_annotations": ["GetMapping"],
                 "class_fqn": "org.example.TestController",
+                "declaring_type_key": "workspace@revision:TestController.java#type:TestController",
+                "relative_path": "src/test/java/org/example/TestController.java",
+                "start_byte": 0,
+                "end_byte": 10,
                 "annotation_nodes": ["GetMapping"],
                 "uses_fields": [],
                 "calls": [],
                 "callers": [],
             },
             {
+                "method_key": "workspace@revision:MainController.java#method:endpoint",
                 "signature": "org.example.MainController.endpoint()",
                 "name": "endpoint",
                 "file_path": "/workspace/project/src/main/java/org/example/MainController.java",
@@ -41,6 +47,10 @@ class TestIntegration(PolicyTestBase):
                 "modifiers": [],
                 "property_annotations": ["GetMapping"],
                 "class_fqn": "org.example.MainController",
+                "declaring_type_key": "workspace@revision:MainController.java#type:MainController",
+                "relative_path": "src/main/java/org/example/MainController.java",
+                "start_byte": 0,
+                "end_byte": 10,
                 "annotation_nodes": ["GetMapping"],
                 "uses_fields": [],
                 "calls": [],

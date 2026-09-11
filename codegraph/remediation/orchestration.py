@@ -18,7 +18,7 @@ def _get_service() -> RemediationService:
 def preview_virtual_remediation(
     violation_id: str,
     *,
-    target_method: str | None = None,
+    method_key: str,
     file_path: str | None = None,
 ) -> dict[str, Any]:
     """Public orchestration wrapper for virtual remediation preview."""
@@ -28,9 +28,15 @@ def preview_virtual_remediation(
             "error": "violation_id is required",
             "violation_id": violation_id,
         }
+    if not method_key:
+        return {
+            "status": "INVALID",
+            "error": "method_key is required",
+            "violation_id": violation_id,
+        }
     service = _get_service()
     try:
-        return service.preview_virtual_fix(violation_id, target_method=target_method, file_path=file_path)
+        return service.preview_virtual_fix(violation_id, method_key=method_key, file_path=file_path)
     except Exception as exc:  # pragma: no cover - runtime guard
         LOGGER.exception(
             "Virtual remediation preview failed",
@@ -42,7 +48,7 @@ def preview_virtual_remediation(
 def apply_remediation(
     violation_id: str,
     *,
-    target_method: str | None = None,
+    method_key: str,
     file_path: str | None = None,
     mode: str = "dry_run",
     max_attempts: int = 2,
@@ -57,11 +63,17 @@ def apply_remediation(
             "error": "violation_id is required",
             "violation_id": violation_id,
         }
+    if not method_key:
+        return {
+            "status": "INVALID",
+            "error": "method_key is required",
+            "violation_id": violation_id,
+        }
     service = _get_service()
     try:
         return service.apply_fix(
             violation_id,
-            target_method=target_method,
+            method_key=method_key,
             file_path=file_path,
             mode=mode,
             max_attempts=max_attempts,

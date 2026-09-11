@@ -212,11 +212,13 @@ def main() -> int:
                     with tracer.start_as_current_span("benchmark.case") as case_span:
                         case_id, case_dir = runtime.prepare_case(violation)
                         violation_id = violation.get("violation_id")
-                        target_method = violation.get("target_method")
                         evidence = violation.get("evidence") or {}
+                        method_key = violation.get("method_key") or evidence.get("method_key")
+                        target_method = violation.get("target_method")
                         file_path = evidence.get("file_path") or violation.get("file_path")
                         case_span.set_attribute("case_id", str(case_id or ""))
                         case_span.set_attribute("violation_id", str(violation_id or ""))
+                        case_span.set_attribute("method_key", str(method_key or ""))
                         case_span.set_attribute("target_method", str(target_method or ""))
                         case_span.set_attribute("category", str(violation.get("category") or ""))
                         rule_id = (
@@ -224,7 +226,7 @@ def main() -> int:
                         )
                         case_span.set_attribute("rule_id", str(rule_id))
 
-                        if not violation_id or not target_method or not file_path:
+                        if not violation_id or not method_key or not file_path:
                             result = build_skipped_result(
                                 violation=violation,
                                 case_id=case_id,
@@ -237,7 +239,7 @@ def main() -> int:
 
                         apply_result = apply_remediation(
                             str(violation_id),
-                            target_method=str(target_method),
+                            method_key=str(method_key),
                             file_path=str(file_path),
                             mode=args.mode,
                             max_attempts=args.max_attempts,

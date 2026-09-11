@@ -29,7 +29,8 @@ This document describes the HTTP API surface and the frontend integration patter
 - Router: `api/routers/health.py`
 - Response:
   - HTTP `200` when `neo4j`, `faiss_index`, `signature_map` are all true; else HTTP `503`.
-  - Body fields: `status`, `startup_ready`, `neo4j`, `faiss_index`, `signature_map`, `embedding_model`, `opa: boolean`; `startup: HealthStartupStatus`; `details: object`.
+  - Body fields: `status`, `startup_ready`, `neo4j`, `graph_generation`, `faiss_index`, `signature_map`, `embedding_model`, `opa: boolean`; `startup: HealthStartupStatus`; `details: object`.
+  - `graph_generation` requires matching active graph and retrieval-artifact revisions, not merely a reachable Neo4j server. Startup validates resources without automatically ingesting or changing the graph.
 - Frontend schema: `HealthCheckResponseSchema`.
 
 ### `POST /upload`
@@ -82,14 +83,21 @@ This document describes the HTTP API surface and the frontend integration patter
   - `max_per_violation_id?: number`
   - `rule_ids?: string[]` (repeat the parameter to filter server-side to an explicit rule subset)
 - Response:
-  - HTTP `200` on success — at least `violations: Violation[]` plus `opa_output`, `enriched`.
+  - HTTP `200` on success — `violations: Violation[]` plus scan metadata:
+    - `evaluation.status: "complete" | "partial" | "failed"`
+    - `evaluation.attempted_bundles`, `evaluation.evaluated_bundles`, `evaluation.failed_bundles`
+    - `evaluation.omitted_findings`, `evaluation.excluded_findings`
+    - `evaluation.truncated`, `evaluation.scope_limited`, `evaluation.rule_ids`
+    - optional `failed_bundles[]`, `failed_bundle_count`, and top-level `truncated`/`limits` when limit filters are supplied
   - HTTP `5xx` on failure — `{ "error": string, ... }`.
+- `complete` means all selected bundles were evaluated successfully, not exhaustive workspace or parser coverage. `scope_limited` records a configured bundle cap, not a measured omitted-bundle count. `omitted_findings` counts findings removed by result caps; `excluded_findings` counts findings excluded by rule filters.
 - Violation schema (from `codegraph/policy/integration.py`, mirrored as `ViolationSchema`):
   - `violation_id: string` (also accepts `rule_id` for backward compatibility)
-  - `target_method: string`, `file_path: string`, `severity: string`
+  - `method_key: string` is the required operational identity; `target_method: string` is the human-readable signature, alongside `file_path: string` and `severity: string`.
   - `reason: string` (also accepts `description`)
   - `code_snippet?: string`, `updated_source_code?: string`
-  - `evidence?: { source_code?: string, graph_context?: ..., vector_context?: ... }`
+  - `evidence?: { source_code?: string, source_sha256?: string|null, graph_context?: ..., vector_context?: ... }`
+  - `source_sha256` is the captured whole-file hash from parser provenance, not a hash of the displayed method snippet. Missing raw source stays unavailable; masked policy input is not substituted as source evidence.
   - `remediation?: RemediationCapability` (optional; frontend supplies defaults when absent):
     - `supported: boolean`
     - `support_tier: "full" | "guarded" | "manual"`
@@ -104,8 +112,9 @@ This document describes the HTTP API surface and the frontend integration patter
 
 ### `POST /policy/evaluate_with_llm`
 - Router: `api/routers/policy.py`
-- Request JSON: `{ "limit": number, "model"?: string|null, "rule_ids"?: string[]|null }`
-- Response HTTP `200`: `{ "violations": Violation[], "enriched": object[] }`
+- Request JSON: `{ "limit": number, "model"?: string|null, "max_bundles"?: number|null, "max_total_violations"?: number|null, "max_per_violation_id"?: number|null, "rule_ids"?: string[]|null }`
+- Response HTTP `200`: the full `/policy/evaluate` payload plus `enriched: object[]`.
+  - Important: explanation enrichment is capped by `limit`, but the returned `violations` list and `evaluation` metadata remain the full evaluated result (no explained-only truncation).
 
 ### `GET /policy/catalog`
 - Router: `api/routers/policy.py`
@@ -142,7 +151,8 @@ This document describes the HTTP API surface and the frontend integration patter
 
 ### `POST /remediation/preview`
 - Router: `api/routers/remediation.py`
-- Request JSON: `{ "violation_id": string, "target_method"?: string|null, "file_path"?: string|null }`
+- Request JSON: `{ "violation_id": string, "method_key": string, "file_path"?: string|null }`
+- `method_key` must be nonempty. Signature-only and obsolete `target_method` request fields are rejected with HTTP `422`, not used as alternative selectors.
 - Response:
   - HTTP `200`: preview-only remediation result (no filesystem changes)
   - HTTP `400` when `status="INVALID"`, `404` when `status="NOT_FOUND"`, `500` when `status="ERROR"` — in all three cases the JSON payload validates against `RemediationPreviewResponseSchema` so `parseApiResponse` returns the structured envelope instead of throwing.
@@ -151,7 +161,8 @@ This document describes the HTTP API surface and the frontend integration patter
 
 ### `POST /remediation/apply`
 - Router: `api/routers/remediation.py`
-- Request JSON: `{ "violation_id": string, "target_method"?: string, "file_path"?: string, "mode": "dry_run"|"apply", "max_attempts": number }`
+- Request JSON: `{ "violation_id": string, "method_key": string, "file_path"?: string, "mode": "dry_run"|"apply", "max_attempts": number }`
+- `method_key` identifies the workspace revision, file, and JDT declaration. Display signatures cannot select a target.
 - Response:
   - HTTP `200` for `status="OK"` and `status="FAIL"`
   - HTTP `500` for `status="ERROR"`
@@ -160,6 +171,9 @@ This document describes the HTTP API surface and the frontend integration patter
 - Implementation: `codegraph/remediation/service.py` → `apply_fix()`.
 - Note: `status="FAIL"` is an application-level outcome (verification failed), not a transport error.
 - The frontend hardcodes `mode="dry_run"` in `applyRemediation`.
+- Dry runs compile and verify the same candidate bytes in isolated temporary workspaces. They do not write the original source or publish a shared graph revision.
+- Cleanup metadata: `verification.cleanup.file_restored` reports source restoration after a failed apply, and `verification.cleanup.revision_published` records successful apply publication. Values are `true`/`false`, or `null` when no restoration or publication was required.
+- Apply requires passing policy verification and an attempted, successful compilation. Temporary workspace cleanup and a final source-freshness check precede source writes and whole-workspace revision publication.
 
 ---
 
@@ -178,7 +192,7 @@ This document describes the HTTP API surface and the frontend integration patter
 | `fetchHealth` | `GET /health` | 15 s polling; renders per-subsystem booleans |
 | `searchCode` | `POST /search` | Mutation; per-call AbortController cancels previous in-flight searches |
 | `evaluatePolicies` | `GET /policy/evaluate` | Supports repeated `rule_ids` query params for benchmark/demo-focused server-side filtering |
-| `evaluatePoliciesWithLLM` | `POST /policy/evaluate_with_llm` | JSON body `{"limit", "model", "rule_ids"}` |
+| `evaluatePoliciesWithLLM` | `POST /policy/evaluate_with_llm` | JSON body accepts `limit`, `model`, and optional evaluate caps (`max_bundles`, `max_total_violations`, `max_per_violation_id`, `rule_ids`); returns full findings + metadata plus `enriched` |
 | `fetchPolicyCatalog` | `GET /policy/catalog` | Renders catalog entries |
 | `explainPolicyViolationOne` | `POST /policy/explain_one` | 5 min timeout; per-row AbortController in `useExplainMutation` |
 | `saveViolationReview` / `fetchViolationReviews` | `POST`/`GET /policy/reviews` | Triage review persistence |
@@ -188,6 +202,7 @@ This document describes the HTTP API surface and the frontend integration patter
 ### Cache topology
 
 - One React Query cache key per violation and per resource: `["policy", "explain", id]`, `["policy", "preview", id]`, `["policy", "apply", id]` (`frontend/src/hooks/usePolicyArtifacts.ts`). Mutations write only to the affected key; sibling rows do not re-render on each other's landings.
+- The row `id` combines the rule ID and canonical `method_key`, so changing workspace revision does not reuse another revision's remediation result. Findings without a method key fail API/persisted-payload validation.
 - Cross-component pending state is derived from `useIsMutating` predicate-matching on `ViolationRow.id` (`usePendingAction`), so a button in the table row and a button in the detail panel agree on "is this finding's remediation in flight?" without sharing local state.
 - Persistent UI cache (the multi-MB OPA evaluation payload) lives in IndexedDB via `lib/persistence.ts` (`idb-keyval`), schema-versioned and re-validated through Zod on read.
 

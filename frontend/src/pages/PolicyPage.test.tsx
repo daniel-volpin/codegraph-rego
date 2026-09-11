@@ -47,6 +47,59 @@ describe("PolicyPage", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("internal");
   });
 
+  it("uses explicit completeness for a live zero-finding scan", async () => {
+    vi.mocked(evaluatePolicies).mockResolvedValue({
+      violations: [],
+      evaluation: {
+        status: "complete",
+        attempted_bundles: 2,
+        evaluated_bundles: 2,
+        failed_bundles: 0,
+        omitted_findings: 0,
+        excluded_findings: 0,
+        truncated: false,
+        scope_limited: false,
+        rule_ids: [],
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<PolicyPage />);
+    const runButton = await screen.findByRole("button", { name: /run .*policy scan|run .*demo scan/i });
+    await waitFor(() => expect(runButton).toBeEnabled());
+    await user.click(runButton);
+    expect(await screen.findByRole("status", { name: /policy evaluation status/i })).toHaveTextContent(
+      /evaluation completed successfully/i,
+    );
+  });
+
+  it("does not present a failed-bundle scan as clean despite legacy metadata", async () => {
+    vi.mocked(evaluatePolicies).mockResolvedValue({
+      violations: [],
+      opa_output: {},
+      enriched: [],
+      evaluation: {
+        status: "partial",
+        attempted_bundles: 2,
+        evaluated_bundles: 1,
+        failed_bundles: 1,
+        omitted_findings: 0,
+        excluded_findings: 0,
+        truncated: false,
+        scope_limited: false,
+        rule_ids: [],
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<PolicyPage />);
+    const runButton = await screen.findByRole("button", { name: /run .*policy scan|run .*demo scan/i });
+    await waitFor(() => expect(runButton).toBeEnabled());
+    await user.click(runButton);
+    expect(await screen.findByRole("status", { name: /policy evaluation status/i })).toHaveTextContent(
+      /evaluation response is partial/i,
+    );
+    expect(screen.queryByText(/evaluation completed successfully with zero findings/i)).not.toBeInTheDocument();
+  });
+
   it("announces loading and then distinguishes a successful zero-findings evaluation", async () => {
     vi.mocked(evaluatePolicies).mockResolvedValue({
       violations: [],
@@ -128,6 +181,7 @@ const policyResponseWithFinding = (): PolicyEvaluateResponse => ({
     {
       violation_id: "ISO-A.8-SQL-INJECTION",
       target_method: "com.acme.DemoController.search(String)",
+      method_key: "test@revision:DemoController.java#search",
       file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/DemoController.java",
       severity: "high",
       reason: "Query string is built from request input.",

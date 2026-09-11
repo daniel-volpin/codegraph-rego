@@ -142,7 +142,7 @@ export function usePreviewMutation() {
       abortRef.current?.abort();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
-      return previewRemediation(row.ruleId, row.targetMethod, row.filePath, ctrl.signal);
+      return previewRemediation(row.ruleId, row.methodKey, row.filePath, ctrl.signal);
     },
     onSuccess: (data, row) => {
       qc.setQueryData(previewKey(row.id), data);
@@ -167,7 +167,7 @@ export function useApplyMutation() {
       const ctrl = new AbortController();
       abortRef.current = ctrl;
       return applyRemediation(
-        { violation_id: row.ruleId, target_method: row.targetMethod, file_path: row.filePath },
+        { violation_id: row.ruleId, method_key: row.methodKey, file_path: row.filePath },
         ctrl.signal,
       );
     },

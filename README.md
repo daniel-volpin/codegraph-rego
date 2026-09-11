@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml)
 [![Release: v0.5.0](https://img.shields.io/badge/release-v0.5.0-blue)](https://github.com/daniel-volpin/codegraph-rego/releases/tag/v0.5.0)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](./pyproject.toml)
+[![Python](https://img.shields.io/badge/python-3.14%2B-blue)](./pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Citation](https://img.shields.io/badge/citation-CITATION.cff-orange)](./CITATION.cff)
 
@@ -35,11 +35,12 @@ If you are evaluating thesis claims, start with:
 
 ### Prerequisites
 
-- Python 3.10+
-- Node.js 22+ and Yarn 1.22+
+- Python 3.14+ (the pinned development and CI runtime is 3.14.7)
+- uv 0.12.13+ to install the pinned runtime and locked dependencies
+- Node.js 24 LTS and Yarn 1.22+
 - Neo4j 5.x
-- OPA `v1.15.1` on `PATH` (required for `make policy-check` and OPA evaluation)
-- Java JDK (8+ or newer) and Maven for remediation build re-verification (release validation was performed with OpenJDK 26.0.1)
+- OPA `v1.20.2` on `PATH` (required for `make policy-check` and OPA evaluation)
+- Java JDK 21+ and Maven to build the required Eclipse JDT analysis adapter
 
 ### Install
 
@@ -49,6 +50,29 @@ cp .env.example .env
 ```
 
 Fill in at least `NEO4J_PASS` in `.env`. The local dev scripts export `CODEGRAPH_ENV_FILE=$PWD/.env` automatically.
+
+`make install` builds the Java adapter before installing Python/frontend dependencies.
+After changing adapter sources, rebuild it with `make java-parser-build`.
+The application never builds or downloads the adapter on a parsing request and
+does not fall back to another Java parser when it is unavailable.
+
+The JDT cutover requires a new graph and matching search artifacts; existing
+signature-keyed state is not migrated on read. Startup checks the active graph
+and index generation without automatically ingesting source. Upload a workspace
+through the application, or explicitly run the ingestion and embedding CLIs for
+an appropriately provisioned database:
+
+```bash
+python -m scripts.ingestion.codebase_to_neo4j --java-root /path/to/workspace
+python -m scripts.ingestion.build_code_embeddings --rebuild-index
+```
+
+The ingestion CLI uses the central `NEO4J_*` runtime settings. Each ingestion
+publishes a workspace revision; there is no legacy `--sync`/prune mode.
+Remediation requests require the finding's `method_key`, not its display
+signature. Java syntax level defaults to 25 and can be set with
+`JAVA_PARSER_LANGUAGE_LEVEL` (8 through 25); available JDK library bindings still
+depend on the parser runtime and supplied classpath.
 
 ### Run
 
@@ -199,13 +223,33 @@ Important environment variables:
 - `LLM_MODEL`
 - `LLM_API_BASE`
 - `LLM_API_KEY`
+- `LLM_API_MODE` (`auto`, `responses`, `chat_completions`; default `auto`)
+- `LLM_TIMEOUT_SECONDS` (default `60`; per SDK HTTP operation, not total run deadline)
+- `LLM_MAX_RETRIES` (default `0`, allowed `0..2`)
+- `LLM_SEND_TEMPERATURE` (default `true`)
 - `LLM_TEMPERATURE`
 - `LLM_CONCURRENCY`
+- `POLICY_WORKERS` (default `2`; per scan, at most `2 * workers` queued tasks)
 - `REMEDIATION_CONFIDENCE_THRESHOLD_APPLY`
 - `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW`
 - `REMEDIATION_CONFIDENCE_TEMPERATURE`
 
 Use [`.env.example`](./.env.example) as the local template.
+
+### Post-thesis modernization baseline
+
+Policy scans expose completeness and omitted findings instead of treating failed
+evaluation as a clean result. Policy workers and provider requests have explicit
+resource controls; remediation reports restoration outcomes independently.
+Source-span extraction handles quoted/comment delimiters, and shadow repairs
+refuse ambiguous or unsupported edits.
+
+Managed embeddings now use atomically published, validated generations. Existing
+legacy indexes require a rebuild before managed search; see the
+[retrieval migration notes](docs/architecture/2026-09-11-retrieval-generations.md).
+This is not isolated candidate verification or a durable autonomous repair
+pipeline. The [modernization roadmap](docs/architecture/2026-09-11-backend-modernization-roadmap.md)
+separates completed groundwork from the next stages.
 
 ## Repository Guide
 
