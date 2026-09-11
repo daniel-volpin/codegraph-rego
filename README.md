@@ -40,6 +40,7 @@ system.
 - [uv](https://docs.astral.sh/uv/) 0.12.13+
 - Python 3.14+ (the project pins 3.14.7)
 - Node.js 24 LTS and Yarn 1.22+
+- OPA `v1.20.2` (installed into `.venv/bin` by `make install`)
 - JDK 21+ and Maven
 - Docker Compose, or Podman with a compatible Compose provider
 

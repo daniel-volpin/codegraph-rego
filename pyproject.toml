@@ -36,6 +36,7 @@ dev = [
     "httpx==0.28.1",
     "ruff==0.16.7",
     "pyyaml==6.0.3",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.ruff]

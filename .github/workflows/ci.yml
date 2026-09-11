@@ -22,11 +22,13 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      policy: ${{ steps.filter.outputs.policy }}
+      java: ${{ steps.filter.outputs.java }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
         with:
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Detect changed paths
         id: filter
@@ -50,15 +52,86 @@ jobs:
             frontend:
               - '.github/workflows/ci.yml'
               - 'frontend/**'
+            policy:
+              - '.github/workflows/ci.yml'
+              - 'policy/**'
+            java:
+              - '.github/workflows/ci.yml'
+              - 'tools/java-parser/**'
 
-  backend:
+  policy-lint:
     needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.policy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: false
+          version: "0.12.13"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14.7"
+
+      - name: Install OPA
+        env:
+          OPA_VERSION: v1.20.2
+        run: |
+          curl -fsSL -o /usr/local/bin/opa "https://github.com/open-policy-agent/opa/releases/download/${OPA_VERSION}/opa_linux_amd64_static"
+          chmod +x /usr/local/bin/opa
+          opa version
+
+      - name: Run policy check
+        run: make policy-check
+
+      - name: Run backend lint
+        run: uvx ruff@0.16.7 check .
+
+  java-parser:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.java == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: "maven"
+
+      - name: Build Java parser adapter
+        run: make java-parser-build
+
+      - name: Upload Java parser artifact
+        uses: actions/upload-artifact@v4.6.1
+        with:
+          name: java-parser-jar
+          path: tools/java-parser/target/codegraph-java-parser.jar
+          retention-days: 1
+
+  backend-tests:
+    needs: [changes, policy-lint, java-parser]
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       NEO4J_PASS: test-password
       UV_CACHE_DIR: ~/.cache/uv
+      OTEL_SDK_DISABLED: "true"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
@@ -76,8 +149,11 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Build Java parser adapter
-        run: make java-parser-build
+      - name: Download Java parser artifact
+        uses: actions/download-artifact@v4.1.9
+        with:
+          name: java-parser-jar
+          path: tools/java-parser/target
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.1.0
@@ -106,14 +182,8 @@ jobs:
           chmod +x /usr/local/bin/opa
           opa version
 
-      - name: Run policy check
-        run: make policy-check
-
-      - name: Run backend lint
-        run: uv run ruff check .
-
-      - name: Run backend tests
-        run: uv run python -m pytest -q
+      - name: Run backend tests in parallel
+        run: uv run python -m pytest -n auto -q
 
   frontend:
     needs: changes
@@ -147,3 +217,4 @@ jobs:
 
       - name: Build frontend
         run: yarn build
+

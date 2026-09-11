@@ -44,7 +44,7 @@ dev: ## Run the application in development mode (backend + frontend)
 	fi
 
 test: ## Run backend tests
-	@uv run python -m pytest -q
+	@OTEL_SDK_DISABLED=true uv run python -m pytest -n auto -q
 
 policy-check: ## Validate OPA/Rego policies (check-only; fails on format drift)
 	@opa check --strict policy/
