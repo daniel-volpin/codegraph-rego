@@ -63,6 +63,169 @@ public-path regressions with only external dependencies mocked. Review correctio
 stay scoped to concrete findings; no additional reviewer is added by default.
 These are process adjustments, not measured efficiency claims.
 
+### Next stage: agentic runtime foundations
+
+Work continues on `feat/agentic-runtime-foundations`, branched from the completed
+`5dc9948` baseline. The original baseline branch remains available for its
+separate governed publishing step.
+
+Two non-Astra workers have independent scopes:
+
+- One resolves the coupled W2/W3 source-snapshot and candidate-isolation
+  interfaces before implementation. Parser/graph migration and restricted build
+  execution are not assumed available.
+- One implements W5 process-local provider admission: bounded active requests,
+  bounded waiting capacity, and a queue deadline. It owns transport/config tests
+  and configuration reference entries, not snapshot or remediation interfaces.
+
+No heavyweight ML stack, model download, live graph change, or deployment is
+required for these packets. Shared interfaces are frozen before further worker
+splitting; tests use small bounded thread counts on the three-vCPU VM.
+
+#### Frozen W2/W3 slice: offline scoped candidate verification
+
+Use the existing Java 8 parser behind an immutable snapshot boundary before
+introducing JavaParser or changing graph keys. A new opt-in offline CLI will
+exercise the implementation; existing HTTP preview/apply behavior stays unchanged.
+This avoids both a graph migration and an unused internal framework.
+
+Ownership is one coupled worker for these interfaces:
+
+| Module | Responsibility |
+| --- | --- |
+| `codegraph/ingestion/snapshots.py` | Source-derived method identity and immutable source snapshots; no database access. |
+| `codegraph/remediation/candidate.py` | Validate candidate shape and construct an in-memory replacement from a baseline snapshot. |
+| `codegraph/remediation/scoped_verification.py` | Fingerprint policies, evaluate baseline/candidate bundles, and compose an honest target-only report. |
+| `scripts/remediation/verify_candidate.py` | Opt-in command taking explicit source, candidate, target, and expected baseline hash; emit the scoped report without applying changes. |
+
+Keep frozen records deeply immutable: source bytes/text, strings, tuples, and
+frozen child records, not mutable dictionaries or lists masquerading as snapshots.
+Identity contains workspace-relative path, declaring type, method/constructor
+name, syntactic parameter types including array/varargs distinctions, and the
+source revision hash. These are syntactic declarations, not resolved JVM
+descriptors. Name/arity alone never disambiguates an overload.
+
+The snapshot records full original file content, exact target bounds, file hash,
+and method hash. Candidate construction re-parses the replacement within its file
+context, preserves every byte outside the target, and checks target identity.
+If current line-based machinery cannot safely isolate a same-line declaration,
+refuse explicitly rather than replacing neighboring code. Unsupported syntax and
+unbalanced input produce explicit invalid/unsupported outcomes.
+
+Policy evidence must use an immutable copy of the exact Rego/data inputs that are
+fingerprinted, not a hash of one version followed by evaluation of mutable global
+paths. Reuse the existing OPA adapter with an additive explicit policy-path
+argument if needed; never mutate global settings to redirect evaluation. Temporary
+OPA input/policy files are allowed; source, graph, and active index writes are not.
+
+Expose orthogonal outcome fields:
+
+```text
+status: POLICY_PASS | POLICY_FAIL | STALE_CANDIDATE |
+        AMBIGUOUS_METHOD | INVALID_CANDIDATE | UNSUPPORTED_SOURCE | OPA_ERROR
+policy_status: PASS | FAIL | ERROR | NOT_EVALUATED
+build_status: NOT_EVALUATED
+build_reason: governed_build_worker_unavailable
+scope: target_method_only
+affected_callers_status: NOT_EVALUATED
+```
+
+Include baseline/candidate source and method hashes, policy fingerprint, engine
+version, target-rule result, and normalized before/after findings. Never emit a
+full verification `PASS`, safety confidence, or application approval. Failure to
+collect engine provenance is an error, not an invented version.
+
+Implementation acceptance, in order:
+
+1. Add failing snapshot/overlay regressions for same-arity overloads, arrays,
+   varargs, constructors, CRLF, unchanged surrounding bytes, ambiguous legacy
+   selectors, unsupported syntax, and stale expected source hashes.
+2. Implement the smallest pure snapshot/overlay helpers and run those targets.
+3. Add failing real-OPA scoped verification cases: MD5 to SHA-256, unchanged MD5,
+   changed source/policy hashes, malformed candidate, and OPA failure. Prohibit
+   database calls, source/index writes, and build execution in these tests.
+4. Implement normalized local evidence through the existing source bundle builder.
+   Recompute candidate ranges and local facts; do not retain stale baseline taint
+   flags as candidate evidence. Report caller effects as unevaluated.
+5. Wire and test the offline CLI using temporary fixture files, with no provider
+   calls or live graph. Document that policy success is not behavioral verification.
+6. Return targeted results and concrete limitations for one lead integration
+   review. No worker commits, extra reviewers, model installations, or deployment.
+
+The provider-admission worker owns separate config/transport files. Serialize
+any newly discovered shared-file requirement through the lead.
+
+#### Parser selection: deeper investigation requested
+
+The user prefers one coherent long-term Java analysis backend and permits a full
+replacement, including Spoon if it better serves analysis and remediation.
+JavaParser is a provisional recommendation, not a frozen dependency decision.
+Keep the scoped snapshot boundary independent of parser-specific AST classes.
+
+Two independent read-only investigations precede migration:
+
+- Map actual ingestion, evidence, graph identity, and remediation requirements.
+- Compare upstream Spoon, JavaParser/JavaSymbolSolver, and OpenRewrite against
+  those requirements using primary documentation, source, and release evidence.
+
+The upstream investigation found a material Spoon integration boundary:
+`CtTypeReference.getTypeDeclaration()` can fall back to reflection, and its
+reflection builder can read static fields, initializing dependency classes.
+Source-model inspection and reflective shadow expansion must not be conflated.
+See the pinned [type reference implementation](https://github.com/INRIA/spoon/blob/v11.5.0/src/main/java/spoon/support/reflect/reference/CtTypeReferenceImpl.java)
+and [reflection builder](https://github.com/INRIA/spoon/blob/v11.5.0/src/main/java/spoon/support/visitor/java/JavaReflectionTreeBuilder.java).
+
+Direct Eclipse JDT Core is therefore also under comparison: stable compiler
+binding APIs may provide source/binary/unresolved provenance without adding
+Spoon-specific internal hooks or reflective target-class access. This is an
+evidence-driven extension of the comparison, not a second permanent backend.
+
+Prioritize honest symbol resolution with incomplete dependencies, modern syntax,
+exact original-source edits, explicit parse diagnostics, and candidate-local
+analysis. Separate documented capabilities from measured behavior. Runtime
+memory/latency remain unknown until a bounded local comparison; do not infer
+them from package size. No parser installation, default cutover, or live graph
+migration is authorized by this investigation alone.
+
+**Research outcome:** recommend direct Eclipse JDT Core DOM as the single backend,
+subject to a bounded offline feasibility fixture. Maven Central reports `3.47.0`
+as the latest/release version (metadata updated 2026-09-07); the deeper API/source
+review used `3.46.0`, so its runtime/dependency assumptions must not silently be
+applied to the newer artifact.
+
+The deciding requirement is public compiler-binding provenance, not a claim that
+one parser is universally more accurate. JDT exposes `IBinding.isRecovered()`,
+`ITypeBinding.isFromSource()`, method declarations/parameter erasure, and nullable
+bindings directly. Spoon adds a useful transformation model but would require
+extra care or internal hooks for this provenance; JavaParser remains a viable
+lighter alternative, not a disproven implementation. OpenRewrite's recipe-first
+model is less directly aligned with custom policy evidence.
+
+Repository mapping identified four parser consumers that must migrate together:
+ingestion extraction, remediation editing/shape validation, virtual evidence
+context, and planning invocation contracts. A package swap alone is insufficient:
+graph keys also conflate overloads and lack first-class workspace revisions.
+
+The intended boundary is Python orchestration -> bounded JDT subprocess ->
+versioned normalized facts, original-source ranges, and explicit diagnostics.
+There will be no permanent dual-parser fallback. Use native UTF-16 offsets with
+verified conversion to original UTF-8 bytes, not display line numbers or mandatory
+whole-file pretty printing. Begin with fresh analysis state per candidate rather
+than claiming unproven cache isolation.
+
+Before migration, establish exact modern-syntax/range behavior, source/binary/
+missing-dependency distinctions, absence of annotation-processor/static-initializer
+execution, and measured memory/latency. A timeout or subprocess is not a sandbox.
+No parser artifacts were installed or candidate projects executed during research.
+
+Primary references:
+[ASTParser](https://help.eclipse.org/latest/topic/org.eclipse.jdt.doc.isv/reference/api/org/eclipse/jdt/core/dom/ASTParser.html),
+[IBinding](https://help.eclipse.org/latest/topic/org.eclipse.jdt.doc.isv/reference/api/org/eclipse/jdt/core/dom/IBinding.html),
+[ITypeBinding](https://help.eclipse.org/latest/topic/org.eclipse.jdt.doc.isv/reference/api/org/eclipse/jdt/core/dom/ITypeBinding.html),
+[ASTRewrite](https://help.eclipse.org/latest/topic/org.eclipse.jdt.doc.isv/reference/api/org/eclipse/jdt/core/dom/rewrite/ASTRewrite.html),
+[published versions](https://repo.maven.apache.org/maven2/org/eclipse/jdt/org.eclipse.jdt.core/maven-metadata.xml).
+Research root `trace_id`: unavailable.
+
 ## Recommendation
 
 Keep CodeGraph's symbolic-first architecture. Modernize the boundaries that make
