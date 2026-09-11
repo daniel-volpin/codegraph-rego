@@ -6,304 +6,233 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Citation](https://img.shields.io/badge/citation-CITATION.cff-orange)](./CITATION.cff)
 
-CodeGraph is a benchmark-backed JVM security and compliance framework for ingesting Java code into a graph, evaluating ISO-aligned OPA/Rego policies, generating grounded explanations, and attempting bounded remediation with re-verification.
+**Benchmark-backed security and compliance analysis for Java applications.**
 
-## Highlights
+CodeGraph turns Java source code into a queryable knowledge graph, evaluates
+ISO-aligned OPA/Rego policies, produces evidence-grounded explanations, and
+attempts bounded remediation with compilation and policy re-verification.
 
-- Primary proof surface is **OWASP Benchmark**, not ad hoc case studies.
-- End-to-end flow: ingestion -> policy evaluation -> explanation -> remediation -> re-verification.
-- Covers 8 benchmark-backed CWE/ISO categories today.
-- Supports structured explanation output with concise `Citation / Why / Fix`.
-- Supports bounded remediation tiers for selected categories.
-- Ships with reproducible outputs under [`outputs/`](./outputs/) and a rerun guide in [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md).
+It is a master thesis research artifact evaluated primarily against
+[OWASP Benchmark](https://owasp.org/www-project-benchmark/). It is not a
+production security scanner, full taint-analysis engine, or autonomous repair
+system.
 
-## Research Scope
+## Why CodeGraph?
 
-CodeGraph is a **research artifact first**.
-
-- Primary evidence comes from benchmark-backed evaluation.
-- Real-world apps are treated as secondary workflow case studies.
-- The service is designed for **single-user, loopback-only** operation unless separately hardened.
-
-If you are evaluating thesis claims, start with:
-
-- [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md)
-- [`outputs/`](./outputs/)
-- [`docs/thesis_context.md`](./docs/thesis_context.md)
+- **Graph-structured analysis:** represents Java declarations and relationships
+  in Neo4j using an Eclipse JDT parser.
+- **Policy as code:** evaluates versioned OPA/Rego rules mapped to ISO-aligned
+  controls.
+- **Grounded explanations:** returns structured `Citation / Why / Fix` output
+  backed by source, graph, and retrieval evidence.
+- **Bounded remediation:** supports automatic fixes only where deterministic
+  validation can constrain the result; safe refusal is an expected outcome.
+- **Reproducible research:** ships benchmark configurations, provenance
+  manifests, confidence intervals, and tracked evaluation artifacts.
+- **Usable interface:** includes a FastAPI backend and React frontend for
+  upload, search, policy review, explanation, and remediation workflows.
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.14+ (the pinned development and CI runtime is 3.14.7)
-- uv 0.12.13+ to install the pinned runtime and locked dependencies
+- macOS or Linux
+- [uv](https://docs.astral.sh/uv/) 0.12.13+
+- Python 3.14+ (the project pins 3.14.7)
 - Node.js 24 LTS and Yarn 1.22+
-- Neo4j 5.x
-- OPA `v1.20.2` on `PATH` (required for `make policy-check` and OPA evaluation)
-- Java JDK 21+ and Maven to build the required Eclipse JDT analysis adapter
+- JDK 21+ and Maven
+- Docker Compose, or Podman with a compatible Compose provider
 
-### Install
+### Install and run
 
 ```bash
+git clone https://github.com/daniel-volpin/codegraph-rego.git
+cd codegraph-rego
+
 make install
 cp .env.example .env
 ```
 
-Fill in at least `NEO4J_PASS` in `.env`. The local dev scripts export `CODEGRAPH_ENV_FILE=$PWD/.env` automatically.
-
-`make install` builds the Java adapter before installing Python/frontend dependencies.
-After changing adapter sources, rebuild it with `make java-parser-build`.
-The application never builds or downloads the adapter on a parsing request and
-does not fall back to another Java parser when it is unavailable.
-
-The JDT cutover requires a new graph and matching search artifacts; existing
-signature-keyed state is not migrated on read. Startup checks the active graph
-and index generation without automatically ingesting source. Upload a workspace
-through the application, or explicitly run the ingestion and embedding CLIs for
-an appropriately provisioned database:
-
-```bash
-python -m scripts.ingestion.codebase_to_neo4j --java-root /path/to/workspace
-python -m scripts.ingestion.build_code_embeddings --rebuild-index
-```
-
-The ingestion CLI uses the central `NEO4J_*` runtime settings. Each ingestion
-publishes a workspace revision; there is no legacy `--sync`/prune mode.
-Remediation requests require the finding's `method_key`, not its display
-signature. Java syntax level defaults to 25 and can be set with
-`JAVA_PARSER_LANGUAGE_LEVEL` (8 through 25); available JDK library bindings still
-depend on the parser runtime and supplied classpath.
-
-### Run
-
-Backend + frontend:
+Set `NEO4J_PASS` in `.env`, then start the backend, frontend, and local Neo4j
+service:
 
 ```bash
 make dev
 ```
 
-Backend only:
+Open:
 
-```bash
-make backend-dev
-```
+- Web application: <http://127.0.0.1:5173>
+- Backend API: <http://127.0.0.1:8000>
+- Health check: <http://127.0.0.1:8000/health>
 
-`make dev` and `make backend-dev` start the local Neo4j dependency with Compose, wait for it to become healthy, and then launch the app. If Docker is unavailable and Podman is installed, the wrapper scripts can fall back to `podman compose`.
+`make install` builds the required Eclipse JDT adapter, installs locked Python
+and frontend dependencies, and installs the pinned OPA binary into `.venv/bin`.
+CodeGraph does not download or substitute a Java parser at request time.
 
-## How It Works
+For benchmark datasets, model configuration, and exact rerun commands, continue
+with [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md).
+
+## Workflow
 
 ```text
-Java source
-  -> ingestion into Neo4j
-  -> policy input bundling
-  -> OPA/Rego evaluation
-  -> structured explanation
-  -> bounded remediation
-  -> verification + benchmark artifacts
+Java project
+    |
+    v
+Eclipse JDT parsing -----> Neo4j knowledge graph
+                              |
+                              +-----> hybrid code search
+                              |
+                              v
+                       OPA/Rego policies
+                              |
+                              v
+                    findings with evidence
+                              |
+                    +---------+---------+
+                    |                   |
+                    v                   v
+             LLM explanation     bounded remediation
+                                        |
+                                        v
+                              compile + re-evaluate
 ```
 
-Core flow:
+The web workflow is:
 
-- ingest Java into a graph
-- evaluate ISO-aligned security rules
-- explain findings with structured `citation / why / fix`
-- attempt bounded remediation where supported
-- re-verify the result
-
-For deeper architecture notes, see:
-
-- [`docs/architecture/artifact-policy.md`](./docs/architecture/artifact-policy.md)
-- [`docs/architecture/repo-layout.md`](./docs/architecture/repo-layout.md)
-- [`docs/frontend_backend_contract.md`](./docs/frontend_backend_contract.md)
+1. Upload a ZIP containing one or more `src/main/java` roots.
+2. Explore the indexed code and evaluate policies.
+3. Review findings and request an evidence-grounded explanation.
+4. Preview supported remediation.
+5. Compile and re-evaluate the exact candidate before accepting it.
 
 ## Benchmark Scope
 
-Current benchmark-backed categories:
+The primary evaluation covers eight OWASP Benchmark categories:
 
-- `CWE-22` -> `ISO-A.8-PATH-TRAVERSAL`
-- `CWE-78` -> `ISO-A.8-CMD-INJECTION`
-- `CWE-89` -> `ISO-A.8-SQL-INJECTION`
-- `CWE-90` -> `ISO-A.8-LDAP-INJECTION`
-- `CWE-327` -> `ISO-A.10-WEAK-CRYPTO`
-- `CWE-328` -> `ISO-A.10-WEAK-HASH`
-- `CWE-330` -> `ISO-A.10-WEAK-RANDOM`
-- `CWE-643` -> `ISO-A.8-XPATH-INJECTION`
-
-Remediation support tiers:
-
-- `full`: weak hash, weak random
-- `guarded`: weak crypto
-- `manual`: injection families and access/logging rules
-
-Canonical benchmark configs live under [`configs/benchmark/`](./configs/benchmark/).
-
-## Results
-
-Authoritative thesis-final artifact families:
-
-| Surface | Artifact directory | Headline |
+| CWE | Policy control | Remediation tier |
 | --- | --- | --- |
-| Detection | [`outputs/thesis_final_detection_full_v2/`](./outputs/thesis_final_detection_full_v2/) | precision `0.953`, recall `0.953`, F1 `0.953` with provenance + CIs |
-| Explanation | [`outputs/thesis_final_explanation_full_v2/`](./outputs/thesis_final_explanation_full_v2/) | `Citation@TP=1.000`, `Citation@FP=1.000`, with provenance |
-| Remediation | [`outputs/thesis_final_remediation_v2/`](./outputs/thesis_final_remediation_v2/) | `25/25` fully verified in the thesis-final v2 run |
+| CWE-22 Path Traversal | `ISO-A.8-PATH-TRAVERSAL` | Manual |
+| CWE-78 Command Injection | `ISO-A.8-CMD-INJECTION` | Manual |
+| CWE-89 SQL Injection | `ISO-A.8-SQL-INJECTION` | Manual |
+| CWE-90 LDAP Injection | `ISO-A.8-LDAP-INJECTION` | Manual |
+| CWE-327 Weak Cryptography | `ISO-A.10-WEAK-CRYPTO` | Guarded |
+| CWE-328 Weak Hash | `ISO-A.10-WEAK-HASH` | Full |
+| CWE-330 Weak Randomness | `ISO-A.10-WEAK-RANDOM` | Full |
+| CWE-643 XPath Injection | `ISO-A.8-XPATH-INJECTION` | Manual |
 
-Follow-up artifact families:
+`full` means a bounded automatic fix path is available. `guarded` may return
+`NO_FIX` when the evidence is insufficient. `manual` is explanation-first and
+requires human remediation.
 
-- provenance-backed remediation rerun: [`outputs/thesis_final_remediation_v3/`](./outputs/thesis_final_remediation_v3/) (`18/25` fully verified)
-- strongest provenance-backed remediation anchor: [`outputs/thesis_final_remediation_v4/`](./outputs/thesis_final_remediation_v4/) (`25/25` fully verified)
+## Research Results
 
-Use artifact directories, tags, and recorded commit provenance when citing results. Do **not** cite README prose as the primary evidence source.
+Repository-tracked thesis artifacts report:
 
-## Verification
+| Evaluation | Result | Evidence |
+| --- | --- | --- |
+| Detection | Precision, recall, and F1: `0.953` | [`outputs/thesis_final_detection_full_v2/`](./outputs/thesis_final_detection_full_v2/) |
+| Explanation grounding | `Citation@TP=1.000`; `Citation@FP=1.000` | [`outputs/thesis_final_explanation_full_v2/`](./outputs/thesis_final_explanation_full_v2/) |
+| Bounded remediation | `25/25` fully verified | [`outputs/thesis_final_remediation_v4/`](./outputs/thesis_final_remediation_v4/) |
 
-Canonical local verification:
+These values describe specific recorded runs, not guaranteed performance on
+arbitrary applications. Cite the artifact's `provenance.json`, recorded commit,
+and confidence intervals rather than this summary. See
+[`copilot-context/benchmark.md`](./copilot-context/benchmark.md) and
+[`docs/thesis_context.md`](./docs/thesis_context.md) for interpretation limits.
+
+## Architecture
+
+| Path | Responsibility |
+| --- | --- |
+| [`app.py`](./app.py) | FastAPI application entrypoint |
+| [`api/`](./api) | Thin HTTP routers and request/response models |
+| [`codegraph/`](./codegraph) | Ingestion, graph, search, policy, LLM, and remediation logic |
+| [`tools/java-parser/`](./tools/java-parser) | Eclipse JDT analysis adapter |
+| [`policy/`](./policy) | OPA/Rego rules and policy catalog |
+| [`configs/benchmark/`](./configs/benchmark) | Canonical benchmark configurations and mappings |
+| [`frontend/`](./frontend) | React, TypeScript, and Vite single-page application |
+| [`scripts/`](./scripts) | Ingestion, search, policy, and evaluation utilities |
+| [`outputs/`](./outputs) | Tracked research evidence and provenance |
+
+Further reading:
+
+- [Repository layout](./docs/architecture/repo-layout.md)
+- [Frontend/backend contract](./docs/frontend_backend_contract.md)
+- [Architecture roadmap](./docs/architecture/2026-09-11-backend-modernization-roadmap.md)
+- [Artifact and evidence policy](./docs/architecture/artifact-policy.md)
+
+## Configuration
+
+CodeGraph loads validated settings through `codegraph.config`. Start from
+[`.env.example`](./.env.example).
+
+| Area | Key variables |
+| --- | --- |
+| Neo4j | `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASS` |
+| LLM provider | `LLM_API_BASE`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_API_MODE` |
+| Java parser | `JAVA_PARSER_JAR`, `JAVA_PARSER_LANGUAGE_LEVEL` |
+| Concurrency | `POLICY_WORKERS`, `LLM_MAX_CONCURRENT_REQUESTS` |
+| Remediation | `REMEDIATION_CONFIDENCE_THRESHOLD_APPLY`, `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW` |
+| Observability | `OTEL_TRACE_FILE`, `OTEL_EXPORTER_OTLP_ENDPOINT` |
+
+The complete operator reference is in
+[`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md#environment-variable-reference).
+
+## Development
+
+Run the local quality gates:
 
 ```bash
 uv run ruff check .
 uv run python -m pytest -q
 PATH="$(pwd)/.venv/bin:$PATH" make policy-check
-cd frontend && yarn lint && yarn test && yarn build
+(cd frontend && yarn lint && yarn test && yarn build)
 ```
 
-Benchmark-sensitive smoke runs:
+Useful targets:
 
 ```bash
-uv run python run_benchmark_eval.py \
-  --config configs/benchmark/smoke_mixed.json \
-  --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/local_smoke/detection \
-  --reset-neo4j
-
-uv run python run_remediation_eval.py \
-  --config configs/benchmark/remediation_bounded_smoke.json \
-  --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/local_smoke/remediation \
-  --sample-size 3 \
-  --reset-neo4j
+make help
+make backend-dev
+make java-parser-build
+make neo4j-up
+make neo4j-down
 ```
 
-For the shortest rerun path, use [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md).
+Benchmark-sensitive changes should also run the focused smoke evaluations
+documented in [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md#verification-contract).
 
-## HTTP API
+## Safety
 
-Key endpoints:
+CodeGraph is designed for **single-user, loopback-only research use**:
 
-- `POST /upload`
-- `GET /upload/status?request_id=<id>`
-- `GET /upload/status/stream?request_id=<id>` (Server-Sent Events)
-- `POST /search`
-- `GET /policy/evaluate`
-- `POST /policy/evaluate_with_llm`
-- `GET /policy/catalog`
-- `POST /policy/explain_one`
-- `POST /policy/reviews` / `GET /policy/reviews`
-- `POST /remediation/preview`
-- `POST /remediation/apply`
-- `GET /healthz`
-- `GET /readyz`
-- `GET /health`
+- The API has no authentication or rate limiting.
+- Uploaded projects share a local workspace.
+- Verification may execute `javac`, Maven, or Gradle against uploaded code.
+- Source and graph context may be sent to the configured LLM provider.
+- Remediation apply mode can modify the active workspace.
 
-Operational notes:
-
-- Every response carries an `X-Request-Id` header.
-- `POST /upload` returns a per-upload `request_id` in the JSON body for progress polling.
-- Unhandled exceptions return `{"error": "internal", "request_id": "..."}`.
-- `GET /healthz` is a cheap liveness probe with no external I/O.
-- `GET /readyz` is a deeper readiness probe and returns `503` with structured details when degraded.
-
-## Configuration
-
-Runtime settings are loaded via `codegraph.config.get_settings()` and validated centrally.
-
-Important environment variables:
-
-- `NEO4J_URI`
-- `NEO4J_USER`
-- `NEO4J_PASS`
-- `LLM_MODEL`
-- `LLM_API_BASE`
-- `LLM_API_KEY`
-- `LLM_API_MODE` (`auto`, `responses`, `chat_completions`; default `auto`)
-- `LLM_TIMEOUT_SECONDS` (default `60`; per SDK HTTP operation, not total run deadline)
-- `LLM_MAX_RETRIES` (default `0`, allowed `0..2`)
-- `LLM_SEND_TEMPERATURE` (default `true`)
-- `LLM_TEMPERATURE`
-- `LLM_CONCURRENCY`
-- `POLICY_WORKERS` (default `2`; per scan, at most `2 * workers` queued tasks)
-- `REMEDIATION_CONFIDENCE_THRESHOLD_APPLY`
-- `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW`
-- `REMEDIATION_CONFIDENCE_TEMPERATURE`
-
-Use [`.env.example`](./.env.example) as the local template.
-
-### Post-thesis modernization baseline
-
-Policy scans expose completeness and omitted findings instead of treating failed
-evaluation as a clean result. Policy workers and provider requests have explicit
-resource controls; remediation reports restoration outcomes independently.
-Source-span extraction handles quoted/comment delimiters, and shadow repairs
-refuse ambiguous or unsupported edits.
-
-Managed embeddings now use atomically published, validated generations. Existing
-legacy indexes require a rebuild before managed search; see the
-[retrieval migration notes](docs/architecture/2026-09-11-retrieval-generations.md).
-This is not isolated candidate verification or a durable autonomous repair
-pipeline. The [modernization roadmap](docs/architecture/2026-09-11-backend-modernization-roadmap.md)
-separates completed groundwork from the next stages.
-
-## Repository Guide
-
-- [`app.py`](./app.py): FastAPI entrypoint for `uvicorn app:app`
-- [`api/`](./api): HTTP routers and request/response models
-- [`codegraph/`](./codegraph): backend domain logic
-- [`configs/benchmark/`](./configs/benchmark/): canonical benchmark configs
-- [`policy/`](./policy): OPA/Rego rules and catalog
-- [`scripts/`](./scripts): operator and evaluation utilities
-- [`docs/`](./docs): architecture, contract, and thesis context notes
-
-## Safety / Trust Boundary
-
-CodeGraph is designed and tested as a **single-user, loopback-only research service**.
-
-Assumptions baked into the codebase:
-
-- The HTTP API has no authentication and no rate limiting.
-- The upload workspace is a single shared directory.
-- Build verification can execute code from uploaded JVM projects.
-- Remediation `mode="apply"` mutates the live workspace.
-
-Safe-operation guidance:
-
-- Bind the API to `127.0.0.1` only unless you add a hardened front door.
-- Treat uploaded archives as untrusted code.
-- Sandbox build verification if you accept arbitrary uploads.
-- Do not treat the current container setup as a production sandbox.
-
-For broader hardening, treat that as a separate engineering effort beyond the thesis artifact.
-
-## Reproducibility & Release
-
-- Rerun guidance: [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md)
-- Release checklist: [`docs/release_checklist.md`](./docs/release_checklist.md)
-- Public-release gate: [`docs/public_release_checklist.md`](./docs/public_release_checklist.md)
-- Benchmark evidence context: [`copilot-context/benchmark.md`](./copilot-context/benchmark.md)
+Keep the service bound to `127.0.0.1`, treat uploads as untrusted, and sandbox
+build verification when analyzing third-party code. See
+[`SECURITY.md`](./SECURITY.md) for the full trust boundary and private
+vulnerability reporting instructions.
 
 ## Contributing
 
-Pull requests are welcome, but benchmark semantics and control mappings should not be changed casually.
+Contributions are welcome. Please read [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+and the [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) before opening a pull
+request.
 
-Before proposing backend changes:
+Changes must preserve benchmark provenance, policy mappings, parser source
+ranges, graph revision integrity, and frontend/backend schema alignment.
 
-- keep `api/` thin and business logic in `codegraph/`
-- use `codegraph.config.settings`, not ad hoc env reads
-- keep `policy/catalog.json` aligned with Rego rules
-- update tests and artifact-facing claims when behavior changes
+## Reproducibility, Citation, and License
 
-If a change affects benchmark-sensitive logic, include the relevant smoke run or output artifact reference.
-
-## Citation & License
-
-- Cite the repository using [`CITATION.cff`](./CITATION.cff).
-- Original CodeGraph source is licensed under the [MIT License](./LICENSE).
-- Benchmark-derived research artifacts retain applicable upstream terms; see
+- Reproduce evaluations with [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md).
+- Cite CodeGraph using [`CITATION.cff`](./CITATION.cff).
+- Original CodeGraph source is available under the [MIT License](./LICENSE).
+- Benchmark-derived artifacts remain subject to applicable upstream terms; see
   [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
+- Before making the repository public, complete the
+  [public release checklist](./docs/public_release_checklist.md).
