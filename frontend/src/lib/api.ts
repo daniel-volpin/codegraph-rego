@@ -9,6 +9,7 @@ import {
   PolicyReviewListResponseSchema,
   RemediationApplyResponseSchema,
   RemediationPreviewResponseSchema,
+  SarifExportResponseSchema,
   SearchResponseSchema,
   UploadResponseSchema,
   UploadStatusSchema,
@@ -22,6 +23,7 @@ import {
   type PolicyReviewListResponse,
   type RemediationApplyResponse,
   type RemediationPreviewResponse,
+  type SarifExportResponse,
   type SearchResponse,
   type UploadResponse,
   type UploadStatus,
@@ -36,6 +38,7 @@ import {
   DEMO_POLICY_CATALOG,
   DEMO_POLICY_EVALUATION,
   DEMO_PREVIEWS,
+  DEMO_SARIF_DOCUMENT,
   DEMO_SEARCH_MATCHES,
   DEMO_UPLOAD_RESPONSE,
   DEMO_UPLOAD_STATUS,
@@ -302,6 +305,61 @@ export async function fetchPolicyCatalog(
   });
 
   return parseApiResponse(response, PolicyCatalogResponseSchema);
+}
+
+export interface PolicySarifExportOptions {
+  ruleIds?: string[];
+}
+
+export async function exportPolicySarif(
+  args?: PolicySarifExportOptions,
+  signal?: AbortSignal,
+): Promise<SarifExportResponse> {
+  if (isDemoMode()) {
+    if (args?.ruleIds && args.ruleIds.length > 0) {
+      const allowed = new Set(args.ruleIds);
+      const runs = (DEMO_SARIF_DOCUMENT.runs ?? []).map((run) => {
+        const results = (run.results as Array<{ ruleId?: string }> ?? []).filter((r) =>
+          r.ruleId ? allowed.has(r.ruleId) : true,
+        );
+        return {
+          ...run,
+          results,
+        };
+      });
+      return {
+        ...DEMO_SARIF_DOCUMENT,
+        runs,
+      };
+    }
+    return DEMO_SARIF_DOCUMENT;
+  }
+
+  const params = new URLSearchParams();
+  for (const ruleId of args?.ruleIds ?? []) {
+    if (ruleId.trim()) {
+      params.append("rule_ids", ruleId.trim());
+    }
+  }
+  const qs = params.toString();
+  const response = await fetch(
+    `${getRuntimeApiBase()}/policy/export/sarif${qs ? `?${qs}` : ""}`,
+    {
+      method: "GET",
+      headers: defaultHeaders,
+      signal,
+    },
+  );
+
+  const data = await parseApiResponse(response, SarifExportResponseSchema);
+  if (!response.ok) {
+    throw new ApiError(
+      typeof data === "object" && data && "error" in data ? String(data.error) : response.statusText || "SARIF export failed",
+      response.status,
+      data,
+    );
+  }
+  return data;
 }
 
 export interface PolicyExplainOneRequest {

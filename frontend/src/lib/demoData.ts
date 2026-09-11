@@ -6,6 +6,7 @@ import type {
   PolicyExplainOneResponse,
   RemediationApplyResponse,
   RemediationPreviewResponse,
+  SarifExportResponse,
   SearchResponse,
   UploadResponse,
   UploadStatus,
@@ -523,4 +524,74 @@ export const DEMO_AGENTIC_RESULT: AgenticRemediationResponse = {
   iterations: 3,
   turns_count: 3,
   error: null,
+};
+
+export const DEMO_SARIF_DOCUMENT: SarifExportResponse = {
+  $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  version: "2.1.0",
+  runs: [
+    {
+      tool: {
+        driver: {
+          name: "CodeGraph Policy Engine",
+          version: "0.6.0",
+          informationUri: "https://github.com/daniel-volpin/codegraph-rego",
+          rules: [
+            {
+              id: "ISO-A.10-WEAK-HASH",
+              name: "WeakHashAlgorithm",
+              shortDescription: { text: "Weak Hash Algorithm (MD5/SHA-1)" },
+              defaultConfiguration: { level: "error" },
+            },
+            {
+              id: "ISO-A.10-WEAK-CRYPTO",
+              name: "WeakCryptographicCipher",
+              shortDescription: { text: "Broken / Deprecated Cryptographic Cipher (DES/ECB)" },
+              defaultConfiguration: { level: "error" },
+            },
+            {
+              id: "ISO-A.8-SQL-INJECTION",
+              name: "SqlInjectionConcatenation",
+              shortDescription: { text: "SQL Injection via Concatenation" },
+              defaultConfiguration: { level: "error" },
+            },
+            {
+              id: "ISO-A.8-PATH-TRAVERSAL",
+              name: "PathTraversal",
+              shortDescription: { text: "Arbitrary Path Traversal via User Input" },
+              defaultConfiguration: { level: "error" },
+            },
+          ],
+        },
+      },
+      results: [
+        {
+          ruleId: "ISO-A.10-WEAK-HASH",
+          level: "error",
+          message: { text: "Weak MD5 hash algorithm detected." },
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: { uri: "src/main/java/com/acme/security/AuthService.java" },
+                region: { startLine: 42, endLine: 45 },
+              },
+            },
+          ],
+        },
+        {
+          ruleId: "ISO-A.8-SQL-INJECTION",
+          level: "error",
+          message: { text: "Dynamic SQL query constructed via raw string concatenation." },
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: { uri: "src/main/java/com/acme/repository/AccountRepository.java" },
+                region: { startLine: 34, endLine: 37 },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ],
 };

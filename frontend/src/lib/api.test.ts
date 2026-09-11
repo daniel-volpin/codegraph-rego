@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, applyRemediation, evaluatePolicies, previewRemediation, searchCode } from "./api";
+import { ApiError, applyRemediation, evaluatePolicies, exportPolicySarif, previewRemediation, searchCode } from "./api";
 import { ViolationSchema } from "./schemas";
 
 const jsonResponse = (payload: unknown, status: number) =>
@@ -62,5 +62,22 @@ describe("API error handling", () => {
       violation_id: "rule",
       target_method: "demo.Demo.method()",
     }).success).toBe(false);
+  });
+
+  it("exports SARIF report with optional rule filters", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () =>
+      jsonResponse({
+        $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+        version: "2.1.0",
+        runs: [],
+      }, 200),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const doc = await exportPolicySarif({ ruleIds: ["ISO-A.10-WEAK-HASH"] });
+    expect(doc.version).toBe("2.1.0");
+    expect(fetchMock).toHaveBeenCalled();
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/policy/export/sarif?rule_ids=ISO-A.10-WEAK-HASH");
   });
 });

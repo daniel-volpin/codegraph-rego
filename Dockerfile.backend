@@ -54,8 +54,19 @@ COPY policy ./policy
 COPY --from=java-parser-build /java-parser/target/codegraph-java-parser.jar \
     ./tools/java-parser/target/codegraph-java-parser.jar
 
+# Configure non-root runtime user for container security
+RUN useradd -u 10001 -U -d /app -s /bin/sh codegraph && \
+    mkdir -p /app/uploaded_code /app/index /app/outputs /app/logs && \
+    chown -R codegraph:codegraph /app
+
+USER codegraph
+
 # Expose port
 EXPOSE 8000
+
+# Container Healthcheck
+HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
+  CMD python -c "import urllib.request; res = urllib.request.urlopen('http://localhost:8000/health'); exit(0 if res.getcode() in [200, 503] else 1)" || exit 1
 
 # Command
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
