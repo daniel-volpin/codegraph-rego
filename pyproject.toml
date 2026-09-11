@@ -56,4 +56,5 @@ filterwarnings = [
     "ignore:.*SwigPyPacked has no __module__ attribute.*:DeprecationWarning",
     "ignore:.*SwigPyObject has no __module__ attribute.*:DeprecationWarning",
     "ignore:.*swigvarlink has no __module__ attribute.*:DeprecationWarning",
+    "ignore:.*anyio.abc.BlockingPortal alias is deprecated.*:DeprecationWarning",
 ]

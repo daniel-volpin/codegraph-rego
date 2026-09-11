@@ -29,6 +29,8 @@ tools/java-parser/target/
 htmlcov/
 *.cover
 .hypothesis/
+.copilot-*
+.worktrees/
 
 # Logs
 *.log
