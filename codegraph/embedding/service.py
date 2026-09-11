@@ -3,6 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import tempfile
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from neo4j import GraphDatabase
 
 from codegraph.config import settings
+from codegraph.search.artifacts import sha256_file
 
 if TYPE_CHECKING:
     import numpy as np
@@ -85,6 +89,57 @@ def _write_json(path: str | Path, payload: Any, *, indent: int | None = None) ->
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=indent)
+
+
+def _atomic_write_json(path: Path, payload: Any, *, indent: int | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.tmp-",
+        delete=False,
+    ) as handle:
+        tmp_path = Path(handle.name)
+    try:
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=indent)
+        os.replace(tmp_path, path)
+    finally:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink()
+
+
+def _publish_generation_manifest(
+    *,
+    manifest_path: Path,
+    generation_id: str,
+    model_name: str,
+    dim: int | None,
+    count: int,
+    index_path: Path,
+    signature_map_path: Path,
+    metadata_path: Path,
+) -> None:
+    manifest = {
+        "schema": "embedding_generation_manifest.v1",
+        "switched_at": datetime.now(timezone.utc).isoformat(),
+        "generation": {
+            "id": generation_id,
+            "model": model_name,
+            "dim": dim,
+            "count": count,
+            "metadata": {
+                "index_path": str(index_path),
+                "index_sha256": sha256_file(index_path),
+                "signature_map_path": str(signature_map_path),
+                "signature_map_sha256": sha256_file(signature_map_path),
+                "metadata_path": str(metadata_path),
+                "metadata_sha256": sha256_file(metadata_path),
+            },
+        },
+    }
+    _atomic_write_json(manifest_path, manifest, indent=2)
 
 
 def _cache_vector_dim(cache_entries: EmbeddingCache) -> int | None:
@@ -253,15 +308,25 @@ class EmbeddingService:
 
         index_dir = Path(settings.index_dir)
         index_dir.mkdir(parents=True, exist_ok=True)
-        index_path = index_dir / "code_embeddings.index"
-        sigmap_legacy_path = index_dir / "embedding_signature_map.json"
-        sigmap_full_path = index_dir / "embedding_full_signature_map.json"
+        generation_id = uuid.uuid4().hex
+        index_path = index_dir / f"code_embeddings.{generation_id}.index"
+        sigmap_full_path = index_dir / f"embedding_full_signature_map.{generation_id}.json"
+        metadata_path = index_dir / f"embedding_metadata.{generation_id}.json"
+        if len(vectors_list) != len(signatures):
+            raise RuntimeError(
+                f"Refusing to publish embedding artifacts: vector/signature count mismatch "
+                f"({len(vectors_list)} vectors for {len(signatures)} signatures)"
+            )
         dim = _build_faiss_index(vectors_np, index_path)
         if dim is not None and progress_callback:
             progress_callback("embedding", "FAISS index written to disk.", 92.0)
+        if vectors_np.shape[0] != len(signatures):
+            raise RuntimeError(
+                f"Refusing to publish embedding artifacts: FAISS index input count mismatch "
+                f"({vectors_np.shape[0]} vectors for {len(signatures)} signatures)"
+            )
 
         _write_json(sigmap_full_path, signatures)
-        _write_json(sigmap_legacy_path, signatures)
         if progress_callback:
             progress_callback("embedding", "Embedding metadata saved.", 95.0)
         metadata = {
@@ -271,12 +336,24 @@ class EmbeddingService:
             "count": len(signatures),
             "built_at": datetime.now(timezone.utc).isoformat(),
             "index_path": str(index_path),
-            "signature_map": {"full": str(sigmap_full_path), "legacy": str(sigmap_legacy_path)},
+            "signature_map": {"full": str(sigmap_full_path)},
             "cache_path": settings.embedding_cache_path,
             "cache_hits": plan.cached_hits,
             "cache_misses": len(plan.snippets_to_encode),
         }
-        _write_json(settings.embedding_metadata_path, metadata, indent=2)
+        _write_json(metadata_path, metadata, indent=2)
+        if dim is None:
+            raise RuntimeError("Refusing to publish embedding artifacts: FAISS index is empty")
+        _publish_generation_manifest(
+            manifest_path=Path(settings.embedding_metadata_path),
+            generation_id=generation_id,
+            model_name=settings.embedding_model_name,
+            dim=dim,
+            count=len(signatures),
+            index_path=index_path,
+            signature_map_path=sigmap_full_path,
+            metadata_path=metadata_path,
+        )
         try:
             _persist_embedding_cache(settings.embedding_cache_path, settings.embedding_model_name, dim, cache_entries)
         except Exception as exc:

@@ -7,8 +7,7 @@ from codegraph.db import shared_neo4j_driver
 from codegraph.search.hybrid import (
     fetch_graph_context_for_method,
     load_embedding_model,
-    load_faiss_index,
-    load_signature_map,
+    load_search_artifacts_bundle,
     semantic_search,
 )
 
@@ -34,14 +33,11 @@ class HybridSearchService:
         )
         self._model_name = model_name or settings.embedding_model_name
 
-    def _load_index(self):
-        return load_faiss_index(self._index_path)
-
-    def _load_signature_map(self) -> list[str]:
+    def _load_artifacts_bundle(self):
         last_exc: Exception | None = None
         for path in self._signature_map_candidates:
             try:
-                return load_signature_map(path)
+                return load_search_artifacts_bundle(index_path=self._index_path, signature_map_path=path)
             except FileNotFoundError as exc:
                 last_exc = exc
         if last_exc:
@@ -52,10 +48,17 @@ class HybridSearchService:
         return load_embedding_model(self._model_name)
 
     def search(self, query: str, top_k: int = 5) -> list[str]:
-        index = self._load_index()
-        signature_map = self._load_signature_map()
+        bundle = self._load_artifacts_bundle()
         model = self._load_model()
-        return semantic_search(query, model, index, signature_map, k=top_k)
+        return semantic_search(
+            query,
+            model,
+            bundle.index,
+            bundle.signature_map,
+            k=top_k,
+            generation=bundle.generation,
+            expected_model_name=self._model_name,
+        )
 
     def similar_to_signature(self, signature: str, top_k: int = 3) -> list[str]:
         """
