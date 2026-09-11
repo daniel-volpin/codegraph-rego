@@ -313,3 +313,82 @@ def test_agentic_safe_refusal(tmp_path: Path) -> None:
     assert result.status == "REFUSED"
     assert "jail policy" in result.reason
     assert result.modified_files == []
+
+
+def test_agentic_dynamic_discovery_tools(tmp_path: Path) -> None:
+    src = tmp_path / "src" / "demo" / "SqlDemo.java"
+    src.parent.mkdir(parents=True)
+    src.write_text(SAMPLE_JAVA, encoding="utf-8")
+
+    finding = {
+        "violation_id": "ISO-A.8-SQL-INJECTION",
+        "method_key": "ws@rev:src/demo/SqlDemo.java#method:queryUser",
+        "target_method": "demo.SqlDemo.queryUser(Connection, String)",
+        "file_path": src.as_posix(),
+        "reason": "SQL injection detected",
+    }
+
+    turn = 0
+
+    def mock_llm_client(messages, **kwargs):
+        nonlocal turn
+        turn += 1
+        if turn == 1:
+            # Test find_files, search_code, search_graph_context
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "tool_calls": [
+                                {
+                                    "id": "f1",
+                                    "function": {
+                                        "name": "find_files",
+                                        "arguments": json.dumps({"pattern": "**/*.java"}),
+                                    },
+                                },
+                                {
+                                    "id": "s1",
+                                    "function": {
+                                        "name": "search_code",
+                                        "arguments": json.dumps({"pattern": "SELECT"}),
+                                    },
+                                },
+                                {
+                                    "id": "g1",
+                                    "function": {
+                                        "name": "search_graph_context",
+                                        "arguments": json.dumps({"symbol_name": "queryUser"}),
+                                    },
+                                },
+                            ]
+                        }
+                    }
+                ]
+            }
+        else:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "tool_calls": [
+                                {
+                                    "id": "finish",
+                                    "function": {
+                                        "name": "finish_remediation",
+                                        "arguments": json.dumps({"reason": "Discovery tools evaluated."}),
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+    service = AgenticRemediationService(llm_client=mock_llm_client)
+    result = service.remediate_finding(finding, workspace_root=tmp_path, max_turns=3)
+    assert len(result.turns) >= 2
+    tool_results = result.turns[1].tool_results
+    assert any(tr.name == "find_files" and "src/demo/SqlDemo.java" in tr.output for tr in tool_results)
+    assert any(tr.name == "search_code" and "SELECT" in tr.output for tr in tool_results)
+    assert any(tr.name == "search_graph_context" for tr in tool_results)
