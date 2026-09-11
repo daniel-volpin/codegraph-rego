@@ -248,3 +248,35 @@ jobs:
 
       - name: Build frontend
         run: yarn build
+
+  ci-success:
+    name: CI success
+    if: always()
+    needs:
+      - changes
+      - policy-lint
+      - java-parser
+      - backend-tests
+      - frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verify required jobs
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          POLICY_RESULT: ${{ needs.policy-lint.result }}
+          JAVA_RESULT: ${{ needs.java-parser.result }}
+          BACKEND_RESULT: ${{ needs.backend-tests.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+        run: |
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "changes job finished with: $CHANGES_RESULT" >&2
+            exit 1
+          fi
+
+          for result in "$POLICY_RESULT" "$JAVA_RESULT" "$BACKEND_RESULT" "$FRONTEND_RESULT"; do
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "required CI job finished with: $result" >&2
+              exit 1
+            fi
+          done

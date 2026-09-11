@@ -1,0 +1,68 @@
+name: Clean Install Smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/setup-smoke.yml"
+      - ".python-version"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "frontend/package.json"
+      - "frontend/yarn.lock"
+      - "scripts/setup_benchmark_env.sh"
+      - "tools/java-parser/**"
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: setup-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clean-install:
+    name: Clean install
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: false
+          version: "0.12.13"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14.7"
+
+      - name: Set up Java
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.21.0"
+
+      - name: Install from a clean checkout
+        run: make install
+
+      - name: Verify installed toolchain
+        run: |
+          test -x .venv/bin/opa
+          test -s tools/java-parser/target/codegraph-java-parser.jar
+          uv run python -c "import codegraph, fastapi, neo4j"
+          cd frontend
+          yarn build

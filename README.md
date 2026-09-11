@@ -1,7 +1,7 @@
 # CodeGraph
 
 [![CI](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml)
-[![Release: v0.6.0](https://img.shields.io/badge/release-v0.6.0-blue)](https://github.com/daniel-volpin/codegraph-rego/releases/tag/v0.6.0)
+[![GitHub release](https://img.shields.io/github/v/release/daniel-volpin/codegraph-rego)](https://github.com/daniel-volpin/codegraph-rego/releases/latest)
 [![Python](https://img.shields.io/badge/python-3.14%2B-blue)](./pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Citation](https://img.shields.io/badge/citation-CITATION.cff-orange)](./CITATION.cff)
@@ -73,6 +73,13 @@ CodeGraph does not download or substitute a Java parser at request time.
 
 For benchmark datasets, model configuration, and exact rerun commands, continue
 with [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md).
+
+### Distribution
+
+The supported installation path is a source checkout using `make install`.
+GitHub releases identify source revisions; CodeGraph is not currently published
+as a PyPI package or supported production container image. Pre-1.0 APIs and
+configuration may evolve between minor releases.
 
 ## Workflow
 
@@ -223,7 +230,7 @@ vulnerability reporting instructions.
 
 Contributions are welcome. Please read [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 and the [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) before opening a pull
-request.
+request. Usage and reproducibility guidance is in [`SUPPORT.md`](./SUPPORT.md).
 
 Changes must preserve benchmark provenance, policy mappings, parser source
 ranges, graph revision integrity, and frontend/backend schema alignment.
@@ -231,6 +238,8 @@ ranges, graph revision integrity, and frontend/backend schema alignment.
 ## Reproducibility, Citation, and License
 
 - Reproduce evaluations with [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md).
+- Review versioning and publication expectations in the
+  [release policy](./docs/release_policy.md).
 - Cite CodeGraph using [`CITATION.cff`](./CITATION.cff).
 - Original CodeGraph source is available under the [MIT License](./LICENSE).
 - Benchmark-derived artifacts remain subject to applicable upstream terms; see

@@ -1,0 +1,55 @@
+name: Usage or reproducibility question
+description: Ask about supported setup, evaluation, or research-artifact usage
+title: "[Question]: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the README and reproducibility guide first. Do not include credentials, confidential source code, or vulnerability details.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked README.md and REPRODUCIBILITY.md.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Topic
+      options:
+        - Installation and local development
+        - Benchmark reproduction
+        - Research results and interpretation
+        - Policy configuration
+        - LLM configuration
+        - Frontend or API usage
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Explain what you are trying to do, what you have tried, and where the documentation was insufficient.
+    validations:
+      required: true
+
+  - type: input
+    id: revision
+    attributes:
+      label: CodeGraph version or commit
+      placeholder: v0.6.0 or a git commit SHA
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include relevant operating system and tool versions when the question concerns setup or execution.
