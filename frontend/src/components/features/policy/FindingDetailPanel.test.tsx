@@ -14,17 +14,20 @@ const mutationSpies = {
   explain: vi.fn(),
   preview: vi.fn(),
   apply: vi.fn(),
+  agentic: vi.fn(),
 };
 
 const hookState: {
   explainResult: PolicyExplainOneResponse | undefined;
   previewResult: RemediationPreviewResponse | undefined;
   applyResult: RemediationApplyResponse | undefined;
-  pendingAction: "explain" | "preview" | "apply" | undefined;
+  agenticResult: Record<string, unknown> | undefined;
+  pendingAction: "explain" | "preview" | "apply" | "agentic" | undefined;
 } = {
   explainResult: undefined,
   previewResult: undefined,
   applyResult: undefined,
+  agenticResult: undefined,
   pendingAction: undefined,
 };
 
@@ -40,14 +43,20 @@ function useApplyResultMock() {
   return hookState.applyResult;
 }
 
+function useAgenticResultMock() {
+  return hookState.agenticResult;
+}
+
 vi.mock("../../../hooks/usePolicyArtifacts", () => ({
   useExplainResult: () => useExplainResultMock(),
   usePreviewResult: () => usePreviewResultMock(),
   useApplyResult: () => useApplyResultMock(),
+  useAgenticResult: () => useAgenticResultMock(),
   usePendingAction: () => hookState.pendingAction,
   useExplainMutation: () => ({ mutate: mutationSpies.explain }),
   usePreviewMutation: () => ({ mutate: mutationSpies.preview }),
   useApplyMutation: () => ({ mutate: mutationSpies.apply }),
+  useAgenticMutation: () => ({ mutate: mutationSpies.agentic }),
 }));
 
 const finding = normalizeViolation({

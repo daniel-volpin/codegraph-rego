@@ -84,9 +84,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=["dry_run", "apply"],
+        choices=["dry_run", "apply", "agentic"],
         default="dry_run",
-        help="Remediation execution mode (default: %(default)s)",
+        help="Remediation execution mode: dry_run, apply, or agentic (default: %(default)s)",
     )
     parser.add_argument(
         "--reset-neo4j",
@@ -237,15 +237,23 @@ def main() -> int:
                             runtime.record_case(apply_result=result, result=result)
                             continue
 
-                        apply_result = apply_remediation(
-                            str(violation_id),
-                            method_key=str(method_key),
-                            file_path=str(file_path),
-                            mode=args.mode,
-                            max_attempts=args.max_attempts,
-                            raw_capture_dir=case_dir.as_posix(),
-                            build_command=args.build_command or context.selection_cfg.get("build_command"),
-                        )
+                        if args.mode == "agentic":
+                            from codegraph.remediation.orchestration import run_agentic_remediation
+                            apply_result = run_agentic_remediation(
+                                violation,
+                                workspace_root=workspace.java_root,
+                                max_turns=max(4, args.max_attempts * 3),
+                            )
+                        else:
+                            apply_result = apply_remediation(
+                                str(violation_id),
+                                method_key=str(method_key),
+                                file_path=str(file_path),
+                                mode=args.mode,
+                                max_attempts=args.max_attempts,
+                                raw_capture_dir=case_dir.as_posix(),
+                                build_command=args.build_command or context.selection_cfg.get("build_command"),
+                            )
                         result = build_remediation_result(
                             violation=violation,
                             apply_result=apply_result,

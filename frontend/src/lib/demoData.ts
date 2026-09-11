@@ -1,4 +1,5 @@
 import type {
+  AgenticRemediationResponse,
   HealthCheckResponse,
   PolicyCatalogResponse,
   PolicyEvaluateResponse,
@@ -478,4 +479,48 @@ export const DEMO_UPLOAD_STATUS: UploadStatus = {
   updated_at: new Date().toISOString(),
   started_at: new Date(Date.now() - 5000).toISOString(),
   request_id: "demo-upload-req-1",
+};
+
+export const DEMO_AGENTIC_RESULT: AgenticRemediationResponse = {
+  status: "SUCCESS",
+  rule_id: "ISO-A.8-SQL-INJECTION",
+  method_key: "demo@v1:AccountRepository.java#findByUsername",
+  target_method: "com.acme.repository.AccountRepository.findByUsername(String)",
+  workspace_root: "/tmp/uploaded_code/app",
+  modified_files: [
+    "src/main/java/com/acme/repository/AccountRepository.java",
+  ],
+  diff: `--- a/src/main/java/com/acme/repository/AccountRepository.java
++++ b/src/main/java/com/acme/repository/AccountRepository.java
+@@ -4,6 +4,7 @@
+ import java.sql.ResultSet;
+ import java.sql.Statement;
++import java.sql.PreparedStatement;
+ 
+ public class AccountRepository {
+     public User findByUsername(Connection conn, String username) throws SQLException {
+-        Statement stmt = conn.createStatement();
+-        String sql = "SELECT * FROM accounts WHERE username = '" + username + "'";
+-        ResultSet rs = stmt.executeQuery(sql);
++        String sql = "SELECT * FROM accounts WHERE username = ?";
++        PreparedStatement stmt = conn.prepareStatement(sql);
++        stmt.setString(1, username);
++        ResultSet rs = stmt.executeQuery();
+         if (rs.next()) {
+             return new User(rs.getString("username"), rs.getString("email"));
+         }`,
+  verification: {
+    all_passed: true,
+    compile_passed: true,
+    compile_output: "0 compilation errors",
+    tests_passed: true,
+    test_output: "All 18 project unit tests passed",
+    policy_passed: true,
+    remaining_violations: [],
+    policy_findings: [],
+  },
+  reason: "Autonomous multi-turn agent successfully refactored string-concatenated SQL query into a parameterized PreparedStatement with typed parameter bindings, verified with Eclipse JDT compilation + project unit tests + OPA policy clearance.",
+  iterations: 3,
+  turns_count: 3,
+  error: null,
 };
