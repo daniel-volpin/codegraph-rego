@@ -148,7 +148,7 @@ jobs:
           - name: "ingestion-eval-llm"
             paths: "tests/codegraph/ingestion tests/codegraph/llm tests/codegraph/evaluation tests/codegraph/common tests/codegraph/app"
           - name: "api-scripts-core"
-            paths: "tests/api tests/scripts tests/baselines tests/test_*.py tests/codegraph/test_*.py"
+            paths: "tests/api tests/scripts tests/baselines tests/test_*.py tests/codegraph/config tests/codegraph/db tests/codegraph/embedding tests/codegraph/search tests/codegraph/test_*.py"
     env:
       NEO4J_PASS: test-password
       UV_CACHE_DIR: ~/.cache/uv

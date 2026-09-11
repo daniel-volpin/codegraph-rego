@@ -86,8 +86,10 @@ docker-down: ## Stop Docker Compose services
 clean: ## Remove build artifacts and temporary files
 	@echo "Removing Python caches..."
 	@find . -type d -name "__pycache__" -prune -exec rm -rf {} +
-	@echo "Removing pytest caches..."
+	@echo "Removing pytest and linter caches..."
 	@find . -type d -name ".pytest_cache" -prune -exec rm -rf {} +
+	@find . -type d -name ".ruff_cache" -prune -exec rm -rf {} +
+	@find . -type d -name ".mypy_cache" -prune -exec rm -rf {} +
 	@echo "Removing build scratch directories..."
 	@rm -rf build/remediation-apply-work build/jdt-tools/m2/org/eclipse 2>/dev/null || true
 

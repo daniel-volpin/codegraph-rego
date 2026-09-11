@@ -29,6 +29,15 @@ This file is the canonical, cross-agent operating guide.
 - Graph revisions are immutable. Read the active revision; publish whole
   workspaces and use predecessor receipts for conditional rollback. Incompatible
   graph/index generations require an explicit rebuild, not compatibility reads.
+- Modular decoupled backend architecture:
+  - `codegraph.ingestion`: AST extraction (`extraction.py`), Cypher batch writes (`persistence.py`), coordinator (`service.py`).
+  - `codegraph.policy`: Boolean/arithmetic evaluation (`boolean_eval.py`), branch reduction (`conditional.py`), Cypher query builder (`graph_queries.py`), SARIF v2.1.0 exporter (`sarif.py`).
+  - `codegraph.evaluation`: Confidence calibration and reliability bins (`calibration.py`), runtime coordinator (`remediation_runtime.py`).
+  - `codegraph.remediation`: Multi-attempt retry loop (`attempts.py`), sandboxed verification & rollback (`apply_flow.py`).
+- Production import standards:
+  - Keep imports explicit, sorted, and strictly at the top of the file; avoid inline/on-the-fly imports inside function bodies.
+  - Submodules must import from concrete source files rather than parent package barrels.
+  - Package `__init__.py` barrels use PEP 562 lazy attribute loaders (`__getattr__`) to prevent circular import deadlocks during contract or registry initialization.
 - Remediation supports both bounded single-method replacement and autonomous
   multi-turn agentic refactoring (`codegraph.remediation.agentic`). Every remediation
   candidate must satisfy the 3 invariant gates (JDT compilation, project test regression,
