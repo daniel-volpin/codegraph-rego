@@ -1,42 +1,57 @@
+"""Assignment state tracking and variable taint analysis for policy engine."""
+
 from __future__ import annotations
 
-import ast
 import re
 from dataclasses import dataclass
 
+from codegraph.policy.analysis.boolean_eval import (
+    eval_boolean_ast,
+    evaluate_constant_boolean,
+    validate_numeric_value,
+)
+from codegraph.policy.analysis.conditional import (
+    IF_ELSE_ASSIGNMENT_RE,
+    LIST_ADD_VALUE_RE,
+    LIST_GET_VALUE_RE,
+    LIST_REMOVE_INDEX_RE,
+    MAP_GET_ASSIGNMENT_RE,
+    MAP_PUT_VALUE_RE,
+    STRING_LITERAL_FULL_RE,
+    SWITCH_BLOCK_RE,
+    ConditionalAssignmentResolver,
+    resolve_collection_expr,
+    resolve_selected_list_gets,
+    resolve_selected_map_gets,
+    resolve_selected_switch_body,
+)
 from codegraph.policy.analysis.primitives import SourceSanitizer
 
 SIMPLE_ASSIGNMENT_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+);", re.DOTALL)
-LIST_ADD_VALUE_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)\s*;", re.DOTALL)
-LIST_REMOVE_INDEX_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.remove\(\s*(\d+)\s*\)\s*;", re.DOTALL)
-LIST_GET_VALUE_RE = re.compile(
-    r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*(\d+)\s*\)\s*;",
-    re.DOTALL,
-)
-MAP_PUT_VALUE_RE = re.compile(
-    r'([A-Za-z_][A-Za-z0-9_]*)\.put\(\s*"([^"]+)"\s*,\s*([^;]+?)\s*\)\s*;',
-    re.DOTALL,
-)
-MAP_GET_ASSIGNMENT_RE = re.compile(
-    r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*"([^"]+)"\s*\)\s*;',
-    re.DOTALL,
-)
-STRING_LITERAL_FULL_RE = re.compile(r'^"([^"\\]*(?:\\.[^"\\]*)*)"$', re.DOTALL)
 INT_LITERAL_FULL_RE = re.compile(r"^-?\d+$")
 CHAR_AT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\.charAt\((\d+)\)$")
 TOP_LEVEL_TERNARY_RE = re.compile(r"^(?P<condition>.+?)\?(?P<when_true>.+?):(?P<when_false>.+)$", re.DOTALL)
-SWITCH_BLOCK_RE = re.compile(r"switch\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*\{(.*?)\}", re.DOTALL)
-IF_ELSE_ASSIGNMENT_RE = re.compile(
-    r"if\s*\((?P<condition>[^{};]*?)\)\s*(?P<when_true>\{[^{}]*\}|[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;)\s*else\s*(?P<when_false>\{[^{}]*\}|[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;)",
-    re.DOTALL,
-)
 IF_ASSIGNMENT_RE = re.compile(
     r"if\s*\((?P<condition>[^{};]*?)\)\s*(?P<body>\{[^{}]*?[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;[^{}]*?\}|[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;)",
     re.DOTALL,
 )
 VAR_REF_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\b")
-_MAX_BOOLEAN_EXPR_NODES = 64
-_MAX_INTEGER_ABS = 1_000_000
+
+__all__ = [
+    "IF_ASSIGNMENT_RE",
+    "IF_ELSE_ASSIGNMENT_RE",
+    "LIST_ADD_VALUE_RE",
+    "LIST_GET_VALUE_RE",
+    "LIST_REMOVE_INDEX_RE",
+    "MAP_GET_ASSIGNMENT_RE",
+    "MAP_PUT_VALUE_RE",
+    "SIMPLE_ASSIGNMENT_RE",
+    "STRING_LITERAL_FULL_RE",
+    "SWITCH_BLOCK_RE",
+    "AssignmentState",
+    "AssignmentStateAnalyzer",
+    "ConditionalAssignmentResolver",
+]
 
 
 @dataclass(frozen=True)
@@ -46,6 +61,8 @@ class AssignmentState:
 
 
 class AssignmentStateAnalyzer:
+    """Analyzes assignment flow, constant propagation, and taint tracking in source snippets."""
+
     def __init__(self, taint_patterns=()) -> None:
         self._taint_patterns = taint_patterns
         self._conditional_resolver = ConditionalAssignmentResolver()
@@ -165,15 +182,15 @@ class AssignmentStateAnalyzer:
                 joined_taint_cutoffs=joined_taint_cutoffs,
             )
 
-        collapsed_maps = self._resolve_selected_map_gets(source_code, string_constants, tainted_vars)
+        collapsed_maps = resolve_selected_map_gets(source_code, string_constants, tainted_vars)
         if collapsed_maps != source_code:
             return self.analyze(collapsed_maps, initial_tainted_vars=initial_tainted_vars)
 
-        collapsed_lists = self._resolve_selected_list_gets(source_code, string_constants, tainted_vars)
+        collapsed_lists = resolve_selected_list_gets(source_code, string_constants, tainted_vars)
         if collapsed_lists != source_code:
             return self.analyze(collapsed_lists, initial_tainted_vars=initial_tainted_vars)
 
-        collapsed = self._resolve_selected_switch_body(source_code, char_constants)
+        collapsed = resolve_selected_switch_body(source_code, char_constants)
         if collapsed != source_code:
             return self.analyze(collapsed, initial_tainted_vars=initial_tainted_vars)
 
@@ -374,122 +391,19 @@ class AssignmentStateAnalyzer:
 
     @staticmethod
     def _evaluate_constant_boolean(expr: str, int_constants: dict[str, int]) -> bool | None:
-        normalized = expr
-        for var, value in int_constants.items():
-            normalized = re.sub(rf"\b{re.escape(var)}\b", str(value), normalized)
-        normalized = normalized.replace("&&", " and ").replace("||", " or ")
-        if re.search(r"[A-Za-z_]", normalized):
-            return None
-        if not re.fullmatch(r"[0-9\s()+\-*/%<>=!&|.andor]+", normalized):
-            return None
-        try:
-            parsed = ast.parse(normalized, mode="eval")
-            if sum(1 for _ in ast.walk(parsed)) > _MAX_BOOLEAN_EXPR_NODES:
-                return None
-            value = AssignmentStateAnalyzer._eval_boolean_ast(parsed.body)
-        except Exception:
-            return None
-        return bool(value) if isinstance(value, (bool, int, float)) else None
+        return evaluate_constant_boolean(expr, int_constants)
 
     @staticmethod
     def _validate_numeric_value(value: int | float | bool) -> int | float | bool:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, int):
-            if abs(value) > _MAX_INTEGER_ABS:
-                raise ValueError("integer_too_large")
-            return value
-        if isinstance(value, float):
-            if abs(value) > float(_MAX_INTEGER_ABS):
-                raise ValueError("float_too_large")
-            return value
-        raise ValueError("unsupported_numeric_value")
+        return validate_numeric_value(value)
 
     @staticmethod
-    def _eval_boolean_ast(node: ast.AST) -> int | float | bool:
-        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float, bool)):
-            return AssignmentStateAnalyzer._validate_numeric_value(node.value)
-
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub, ast.Not)):
-            operand = AssignmentStateAnalyzer._eval_boolean_ast(node.operand)
-            if isinstance(node.op, ast.Not):
-                return not bool(operand)
-            if isinstance(operand, bool):
-                raise ValueError("unsupported_bool_unary")
-            value = +operand if isinstance(node.op, ast.UAdd) else -operand
-            return AssignmentStateAnalyzer._validate_numeric_value(value)
-
-        if isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or)):
-            values = [AssignmentStateAnalyzer._eval_boolean_ast(value) for value in node.values]
-            if isinstance(node.op, ast.And):
-                return all(bool(value) for value in values)
-            return any(bool(value) for value in values)
-
-        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod)):
-            left = AssignmentStateAnalyzer._eval_boolean_ast(node.left)
-            right = AssignmentStateAnalyzer._eval_boolean_ast(node.right)
-            if isinstance(left, bool) or isinstance(right, bool):
-                raise ValueError("unsupported_bool_binop")
-            if isinstance(node.op, ast.Add):
-                value = left + right
-            elif isinstance(node.op, ast.Sub):
-                value = left - right
-            elif isinstance(node.op, ast.Mult):
-                value = left * right
-            elif isinstance(node.op, ast.Div):
-                if right == 0:
-                    raise ValueError("division_by_zero")
-                value = left / right
-            else:
-                if right == 0:
-                    raise ValueError("modulo_by_zero")
-                value = left % right
-            return AssignmentStateAnalyzer._validate_numeric_value(value)
-
-        if isinstance(node, ast.Compare):
-            left = AssignmentStateAnalyzer._eval_boolean_ast(node.left)
-            for op, comparator in zip(node.ops, node.comparators):
-                right = AssignmentStateAnalyzer._eval_boolean_ast(comparator)
-                if isinstance(op, ast.Eq):
-                    matched = left == right
-                elif isinstance(op, ast.NotEq):
-                    matched = left != right
-                elif isinstance(op, ast.Lt):
-                    matched = left < right
-                elif isinstance(op, ast.LtE):
-                    matched = left <= right
-                elif isinstance(op, ast.Gt):
-                    matched = left > right
-                elif isinstance(op, ast.GtE):
-                    matched = left >= right
-                else:
-                    raise ValueError("unsupported_compare")
-                if not matched:
-                    return False
-                left = right
-            return True
-
-        raise ValueError("unsupported_expression")
+    def _eval_boolean_ast(node) -> int | float | bool:
+        return eval_boolean_ast(node)
 
     @staticmethod
     def _resolve_selected_switch_body(source_code: str, char_constants: dict[str, str]) -> str:
-        def _replace(match: re.Match[str]) -> str:
-            target = match.group(1)
-            body = match.group(2)
-            constant = char_constants.get(target)
-            if constant is None:
-                return ""
-            case_match = re.search(rf"case\s+'{re.escape(constant)}'\s*:", body, re.DOTALL)
-            if case_match:
-                tail = body[case_match.end() :]
-                tail = re.sub(r"^(?:\s*case\s+'[^']+'\s*:\s*)+", "", tail, flags=re.DOTALL)
-                stmt_match = re.search(r"(.*?)(?=break;|default:|\Z)", tail, re.DOTALL)
-                if stmt_match:
-                    return stmt_match.group(1)
-            default_match = re.search(r"default\s*:(.*?)(?=break;|\Z)", body, re.DOTALL)
-            return default_match.group(1) if default_match else ""
-
-        return SWITCH_BLOCK_RE.sub(_replace, source_code)
+        return resolve_selected_switch_body(source_code, char_constants)
 
     @classmethod
     def _resolve_selected_list_gets(
@@ -498,30 +412,7 @@ class AssignmentStateAnalyzer:
         string_constants: dict[str, str],
         tainted_vars: set[str],
     ) -> str:
-        items: dict[str, list[str]] = {}
-        for list_name, raw_value in LIST_ADD_VALUE_RE.findall(source_code):
-            resolved = cls._resolve_collection_expr(raw_value.strip(), string_constants, tainted_vars)
-            if resolved is not None:
-                items.setdefault(list_name, []).append(resolved)
-        for list_name, raw_index in LIST_REMOVE_INDEX_RE.findall(source_code):
-            values = items.get(list_name)
-            if values is None:
-                continue
-            index = int(raw_index)
-            if 0 <= index < len(values):
-                values.pop(index)
-
-        def _replace(match: re.Match[str]) -> str:
-            target_var, list_name, raw_index = match.groups()
-            values = items.get(list_name)
-            if values is None:
-                return match.group(0)
-            index = int(raw_index)
-            if not (0 <= index < len(values)):
-                return match.group(0)
-            return f"{target_var} = {values[index]};"
-
-        return LIST_GET_VALUE_RE.sub(_replace, source_code)
+        return resolve_selected_list_gets(source_code, string_constants, tainted_vars)
 
     @classmethod
     def _resolve_selected_map_gets(
@@ -530,20 +421,7 @@ class AssignmentStateAnalyzer:
         string_constants: dict[str, str],
         tainted_vars: set[str],
     ) -> str:
-        entries: dict[str, dict[str, str]] = {}
-        for map_name, key, raw_value in MAP_PUT_VALUE_RE.findall(source_code):
-            resolved = cls._resolve_collection_expr(raw_value.strip(), string_constants, tainted_vars)
-            if resolved is not None:
-                entries.setdefault(map_name, {})[key] = resolved
-
-        def _replace(match: re.Match[str]) -> str:
-            target_var, map_name, key = match.groups()
-            resolved = entries.get(map_name, {}).get(key)
-            if resolved is None:
-                return match.group(0)
-            return f"{target_var} = {resolved};"
-
-        return MAP_GET_ASSIGNMENT_RE.sub(_replace, source_code)
+        return resolve_selected_map_gets(source_code, string_constants, tainted_vars)
 
     @staticmethod
     def _resolve_collection_expr(
@@ -551,27 +429,5 @@ class AssignmentStateAnalyzer:
         string_constants: dict[str, str],
         tainted_vars: set[str],
     ) -> str | None:
-        literal_match = STRING_LITERAL_FULL_RE.match(expr)
-        if literal_match:
-            return expr
-        if expr in string_constants:
-            return f'"{string_constants[expr]}"'
-        if expr in tainted_vars:
-            return expr
-        return None
+        return resolve_collection_expr(expr, string_constants, tainted_vars)
 
-
-class ConditionalAssignmentResolver:
-    @staticmethod
-    def resolve(source_code: str, int_constants: dict[str, int]) -> str:
-        def _replace(match: re.Match[str]) -> str:
-            decision = AssignmentStateAnalyzer._evaluate_constant_boolean(match.group("condition"), int_constants)
-            if decision is None:
-                return match.group(0)
-            chosen_branch = match.group("when_true" if decision else "when_false").strip()
-            normalized = chosen_branch
-            if normalized.startswith("{") and normalized.endswith("}"):
-                normalized = normalized[1:-1].strip()
-            return normalized
-
-        return IF_ELSE_ASSIGNMENT_RE.sub(_replace, source_code)
