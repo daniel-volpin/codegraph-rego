@@ -2,7 +2,7 @@ import ipaddress
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -89,6 +89,19 @@ class Settings(BaseSettings):
         None,
         validation_alias=AliasChoices("LLM_API_KEY", "llm_api_key"),
         description="LLM API key",
+    )
+    llm_api_mode: Literal["auto", "responses", "chat_completions"] = Field(
+        "auto",
+        description="Explicit provider endpoint; auto preserves hosted Responses and local LM Studio Chat behavior.",
+    )
+    llm_timeout_seconds: float = Field(
+        60.0, gt=0, le=600, description="HTTP request timeout for model calls, not a total agent-run deadline.",
+    )
+    llm_max_retries: int = Field(
+        0, ge=0, le=2, description="SDK transport retries per generation attempt; default avoids hidden retry multiplication.",
+    )
+    llm_send_temperature: bool = Field(
+        True, description="Disable for model/provider combinations that do not accept a temperature parameter.",
     )
     llm_temperature: float = Field(
         0.2,
@@ -199,6 +212,10 @@ class Settings(BaseSettings):
         gt=0.0,
         validation_alias=AliasChoices("CODEGRAPH_OPA_TIMEOUT", "opa_timeout_seconds"),
         description="Per-invocation timeout for OPA eval subprocesses.",
+    )
+    policy_workers: int = Field(
+        2, ge=1, le=32,
+        description="Concurrent evidence/OPA workers per scan; at most twice this many tasks are submitted at once.",
     )
     ui_review_store_path: str = Field(
         "outputs/policy_ui_reviews/reviews.jsonl",

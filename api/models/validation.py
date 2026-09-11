@@ -61,10 +61,27 @@ class SearchResponse(BaseModel):
     contexts: list[list[SearchMatch]]
 
 
+class PolicyEvaluationSummary(BaseModel):
+    status: Literal["complete", "partial", "failed"]
+    attempted_bundles: int = Field(ge=0)
+    evaluated_bundles: int = Field(ge=0)
+    failed_bundles: int = Field(ge=0)
+    omitted_findings: int = Field(ge=0)
+    excluded_findings: int = Field(ge=0)
+    truncated: bool
+    scope_limited: bool
+    rule_ids: list[str]
+
+
 class PolicyEvaluateResponse(BaseModel):
     violations: list | None = None
     opa_output: dict | None = None
     error: str | None = None
+    evaluation: PolicyEvaluationSummary | None = None
+    enriched: list[dict] | None = None
+    failed_bundles: list[dict] | None = None
+    failed_bundle_count: int | None = None
+    truncated: bool | None = None
 
 
 class PolicyCatalogResponse(BaseModel):

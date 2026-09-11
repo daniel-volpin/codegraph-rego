@@ -153,17 +153,22 @@ def _parse_opa_stdout(stdout: str, *, package_root: bool = False) -> dict[str, A
     except json.JSONDecodeError as exc:
         scope = "OPA package output" if package_root else "OPA output"
         raise RuntimeError(f"Failed to parse {scope}") from exc
-    return parsed if isinstance(parsed, dict) else {}
+    if not isinstance(parsed, dict) or parsed.get("errors"):
+        raise RuntimeError("Invalid OPA response envelope")
+    return parsed
 
 
-def _extract_opa_value(parsed: Mapping[str, Any], default: Any) -> Any:
-    result = parsed.get("result") or []
-    if not result:
-        return default
-    expressions = result[0].get("expressions") or []
-    if not expressions:
-        return default
-    return expressions[0].get("value") or default
+def _extract_opa_value(parsed: Mapping[str, Any], expected_type: type[list] | type[dict]) -> Any:
+    result = parsed.get("result")
+    if not isinstance(result, list) or len(result) != 1 or not isinstance(result[0], dict):
+        raise RuntimeError("OPA query is undefined or returned an invalid result")
+    expressions = result[0].get("expressions")
+    if not isinstance(expressions, list) or len(expressions) != 1 or not isinstance(expressions[0], dict):
+        raise RuntimeError("Invalid OPA result expressions")
+    value = expressions[0].get("value")
+    if not isinstance(value, expected_type):
+        raise RuntimeError(f"OPA query did not return a {expected_type.__name__}")
+    return value
 
 
 def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -185,7 +190,12 @@ def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, 
             finally:
                 span.set_attribute("opa_duration_ms", round((time.monotonic() - t0) * 1000))
             span.set_attribute("opa_returncode", proc.returncode)
-            violations = _extract_opa_value(out, [])
+            violations = _extract_opa_value(out, list)
+            if any(
+                not isinstance(violation, dict) or not isinstance(violation.get("violation_id"), str)
+                for violation in violations
+            ):
+                raise RuntimeError("OPA returned an invalid violation")
             span.set_attribute("violation_count", len(violations))
             return violations
 
@@ -197,4 +207,4 @@ def evaluate_package_root(bundle: PolicyBundle | Mapping[str, Any], package: str
         cmd = _opa_eval_command(input_path, package)
         proc = _run_opa_eval(cmd, serialized_bundle.get("target_method"), package_root=True)
         out = _parse_opa_stdout(proc.stdout, package_root=True)
-        return _extract_opa_value(out, {})
+        return _extract_opa_value(out, dict)

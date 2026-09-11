@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
+from codegraph.common.concurrency import bounded_futures
+from codegraph.config import settings
 from codegraph.db import shared_neo4j_driver
 from codegraph.policy.runtime import bundles as runtime_bundles
 from codegraph.policy.runtime import catalog as runtime_catalog
@@ -78,21 +78,18 @@ def _bundle_failure(bundle: dict[str, Any], exc: RuntimeError) -> dict[str, Any]
 
 
 def _evaluate_bundles_concurrently(bundles: list[dict[str, Any]]) -> tuple[list[Any], list[dict[str, Any]]]:
-    workers = min(32, (os.cpu_count() or 4) + 4)
     opa_results: list[Any] = [None] * len(bundles)
     failed_bundles: list[dict[str, Any]] = []
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        future_to_idx = {pool.submit(runtime_opa.evaluate_bundle, bundle): idx for idx, bundle in enumerate(bundles)}
-        for future in as_completed(future_to_idx):
-            idx = future_to_idx[future]
-            bundle = bundles[idx]
-            try:
-                opa_results[idx] = future.result()
-            except RuntimeError as exc:
-                failed_bundles.append(_bundle_failure(bundle, exc))
-                LOGGER.warning("OPA evaluation failed for bundle %s: %s", bundle.get("target_method"), exc)
+    for idx, future in bounded_futures(runtime_opa.evaluate_bundle, bundles, max_workers=settings.policy_workers):
+        bundle = bundles[idx]
+        try:
+            opa_results[idx] = future.result()
+        except RuntimeError as exc:
+            failed_bundles.append(_bundle_failure(bundle, exc))
+            LOGGER.warning("OPA evaluation failed for bundle %s: %s", bundle.get("target_method"), exc)
 
+    failed_bundles.sort(key=lambda failure: (str(failure["file_path"]), str(failure["target_method"])))
     return opa_results, failed_bundles
 
 
@@ -124,9 +121,11 @@ def _collect_violation_responses(
     allowed_rule_ids: set[str],
     max_per_violation_id: int | None,
     max_total_violations: int | None,
-) -> tuple[list[dict[str, Any]], dict[str, int], bool]:
+) -> tuple[list[dict[str, Any]], dict[str, int], int, int]:
     violations: list[dict[str, Any]] = []
     violation_counts_by_id: dict[str, int] = {}
+    omitted_findings = 0
+    excluded_findings = 0
 
     for bundle, opa_result in zip(bundles, opa_results):
         for violation in opa_result or []:
@@ -136,8 +135,12 @@ def _collect_violation_responses(
 
             violation_id = normalized.get("violation_id")
             if not _is_allowed_rule(violation_id, allowed_rule_ids):
+                excluded_findings += 1
                 continue
-            if _max_per_rule_reached(violation_id, violation_counts_by_id, max_per_violation_id):
+            if _max_per_rule_reached(
+                violation_id, violation_counts_by_id, max_per_violation_id
+            ) or _max_total_reached(len(violations), max_total_violations):
+                omitted_findings += 1
                 continue
 
             control_meta = runtime_catalog.resolve_catalog_entry(violation_id, catalog)
@@ -145,10 +148,7 @@ def _collect_violation_responses(
             if violation_id is not None:
                 key = str(violation_id)
                 violation_counts_by_id[key] = violation_counts_by_id.get(key, 0) + 1
-            if _max_total_reached(len(violations), max_total_violations):
-                return violations, violation_counts_by_id, True
-
-    return violations, violation_counts_by_id, False
+    return violations, violation_counts_by_id, omitted_findings, excluded_findings
 
 
 def evaluate_policies(
@@ -178,7 +178,7 @@ def evaluate_policies(
     )
 
     opa_results, failed_bundles = _evaluate_bundles_concurrently(bundles)
-    violations, violation_counts_by_id, truncated = _collect_violation_responses(
+    violations, violation_counts_by_id, omitted_findings, excluded_findings = _collect_violation_responses(
         bundles=bundles,
         opa_results=opa_results,
         catalog=catalog,
@@ -188,13 +188,29 @@ def evaluate_policies(
     )
 
     opa_runs = len(bundles)
+    failed_count = len(failed_bundles)
+    status = "failed" if failed_count and failed_count == opa_runs else "partial" if failed_count else "complete"
+    truncated = omitted_findings > 0
     response: dict[str, Any] = {
         "violations": violations,
         "rules_catalog": rules_catalog,
         "catalog": get_policy_catalog_entries(),
         "opa_runs": opa_runs,
         "bundle_count": len(bundles),
+        "evaluation": {
+            "status": status,
+            "attempted_bundles": opa_runs,
+            "evaluated_bundles": opa_runs - failed_count,
+            "failed_bundles": failed_count,
+            "omitted_findings": omitted_findings,
+            "excluded_findings": excluded_findings,
+            "truncated": truncated,
+            "scope_limited": max_bundles is not None,
+            "rule_ids": sorted(allowed_rule_ids),
+        },
     }
+    if status == "failed":
+        response["error"] = "OPA evaluation failed for every selected bundle"
     if failed_bundles:
         response["failed_bundles"] = failed_bundles
         response["failed_bundle_count"] = len(failed_bundles)

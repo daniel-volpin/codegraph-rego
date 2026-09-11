@@ -86,7 +86,7 @@ const EvaluationStatusCard = ({
     partial: {
       icon: <AlertTriangle aria-hidden="true" className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
       title: "Evaluation response is partial.",
-      body: "The response validated, but expected evaluation metadata was absent. Review the findings that are present and rerun before treating this as complete evidence.",
+      body: "Some bundles failed, the scan scope or findings were limited, or completeness metadata is missing. Review the available evidence and rerun without limits before treating this as a complete workspace scan.",
       tone: "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200",
     },
     empty: {
@@ -313,16 +313,24 @@ const PolicyPage = () => {
   );
 
   const hasEvaluationResult = Boolean(evalQuery.data || evalQuery.dataUpdatedAt);
+  const evaluation = evalQuery.data?.evaluation;
   const evaluationError =
     evalQuery.error?.message ??
-    (evalQuery.data?.error ? evalQuery.data.error : null);
+    (evalQuery.data?.error ||
+      (evaluation?.status === "failed" ? "Policy evaluation failed for every selected bundle." : null));
   const responseIsPartial =
     Boolean(evalQuery.data) &&
-    (!Object.prototype.hasOwnProperty.call(evalQuery.data, "opa_output") ||
-      !Object.prototype.hasOwnProperty.call(evalQuery.data, "enriched"));
+    (evaluation
+      ? evaluation.status !== "complete" || evaluation.truncated || evaluation.scope_limited
+      : Boolean(evalQuery.data?.truncated) ||
+        (evalQuery.data?.failed_bundle_count ?? 0) > 0 ||
+        !Object.prototype.hasOwnProperty.call(evalQuery.data, "opa_output") ||
+        !Object.prototype.hasOwnProperty.call(evalQuery.data, "enriched"));
   const tableEmptyMessage =
     !hasEvaluationResult
       ? "No policy evaluation has run yet. Run a scan to see rule groups."
+      : responseIsPartial || evaluationError
+        ? "No findings are available from this incomplete evaluation."
       : findings.length === 0
         ? "Evaluation completed successfully with zero findings for the selected scope."
         : "No findings match the current module filter.";

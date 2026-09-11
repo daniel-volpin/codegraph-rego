@@ -351,6 +351,72 @@ class ApplyFixTests(RemediationTestBase):
             self.assertEqual(out.get("status"), "VERIFICATION_ERROR")
             self.assertIn("Rollback failed", out.get("error", ""))
 
+    def test_graph_rollback_failure_does_not_skip_file_restoration(self):
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "Example.java"
+            original = "class Example { void a() {} }\n"
+            candidate = "class Example { void a() { /* candidate */ } }\n"
+            src_path.write_text(original, encoding="utf-8")
+            remediation = self._build_remediation_for_apply(
+                self.service, src_path, candidate, "org.example.Foo.doPost()",
+                compile_result={"attempted": False, "success": False},
+            )
+
+            class Evaluator:
+                def trace(self, *_args, **_kwargs):
+                    return {}
+
+                def evaluate(self, *_args, **_kwargs):
+                    return {"violations": []}
+
+            with (
+                patch.object(apply_flow_mod, "PolicyEvaluator", Evaluator),
+                patch.object(
+                    apply_flow_mod, "process_single_file_content",
+                    side_effect=[None, RuntimeError("graph rollback unavailable")],
+                ),
+            ):
+                result = remediation.apply_fix("ISO-A.10-WEAK-HASH", mode="apply", max_attempts=1)
+
+            self.assertEqual(src_path.read_text(encoding="utf-8"), original)
+            self.assertEqual(result["status"], "VERIFICATION_ERROR")
+            self.assertEqual(result["verification"]["cleanup"], {"graph_restored": False, "file_restored": True})
+
+    def test_cleanup_failures_are_reported_after_candidate_failure(self):
+        for failing_stage in ("ingestion", "evaluation"):
+            with self.subTest(stage=failing_stage), TemporaryDirectory() as tmp:
+                src_path = Path(tmp) / "Example.java"
+                original = "class Example { void a() {} }\n"
+                candidate = "class Example { void a() { /* candidate */ } }\n"
+                src_path.write_text(original, encoding="utf-8")
+                remediation = self._build_remediation_for_apply(
+                    self.service, src_path, candidate, "org.example.Foo.doPost()",
+                    compile_result={"attempted": True, "success": True},
+                )
+
+                class Evaluator:
+                    def trace(self, *_args, **_kwargs):
+                        return {}
+
+                    def evaluate(self, *_args, **_kwargs):
+                        raise RuntimeError("candidate evaluation failed")
+
+                initial_outcome = RuntimeError("candidate ingestion failed") if failing_stage == "ingestion" else None
+                with (
+                    patch.object(apply_flow_mod, "PolicyEvaluator", Evaluator),
+                    patch.object(
+                        apply_flow_mod, "process_single_file_content",
+                        side_effect=[initial_outcome, RuntimeError("graph rollback unavailable")],
+                    ),
+                ):
+                    result = remediation.apply_fix("ISO-A.10-WEAK-HASH", mode="apply", max_attempts=1)
+
+                self.assertEqual(src_path.read_text(encoding="utf-8"), original)
+                self.assertEqual(result["status"], "VERIFICATION_ERROR")
+                self.assertIn(f"candidate {failing_stage} failed", result["error"])
+                self.assertIn("Rollback failed", result["error"])
+                self.assertEqual(result["verification"]["cleanup"], {"graph_restored": False, "file_restored": True})
+
 
 if __name__ == "__main__":
     unittest.main()

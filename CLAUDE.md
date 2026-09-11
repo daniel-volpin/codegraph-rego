@@ -16,7 +16,7 @@ Real-world apps are secondary workflow case studies, not the primary evidence su
 
 ## Commands
 
-### Backend (Python 3.10+, managed with uv)
+### Backend (Python 3.11+, managed with uv)
 
 ```bash
 make install                        # uv sync + frontend yarn install

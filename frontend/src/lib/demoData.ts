@@ -286,6 +286,17 @@ export const DEMO_VIOLATIONS: Violation[] = [
 
 export const DEMO_POLICY_EVALUATION: PolicyEvaluateResponse = {
   violations: DEMO_VIOLATIONS,
+  evaluation: {
+    status: "complete",
+    attempted_bundles: 4,
+    evaluated_bundles: 4,
+    failed_bundles: 0,
+    omitted_findings: 0,
+    excluded_findings: 0,
+    truncated: false,
+    scope_limited: false,
+    rule_ids: [],
+  },
   opa_output: {
     evaluated_rules: 4,
     passed_rules: 0,

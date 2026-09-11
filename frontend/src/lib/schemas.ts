@@ -97,12 +97,27 @@ export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 
 // ---- Policy ----
 
+export const PolicyEvaluationSummarySchema = z.object({
+  status: z.enum(["complete", "partial", "failed"]),
+  attempted_bundles: z.number().int().nonnegative(),
+  evaluated_bundles: z.number().int().nonnegative(),
+  failed_bundles: z.number().int().nonnegative(),
+  omitted_findings: z.number().int().nonnegative(),
+  excluded_findings: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+  scope_limited: z.boolean(),
+  rule_ids: z.array(z.string()),
+});
+
 export const PolicyEvaluateResponseSchema = z
   .object({
     violations: z.array(ViolationSchema).optional(),
     opa_output: z.record(z.string(), z.unknown()).optional(),
     enriched: z.array(z.record(z.string(), z.unknown())).optional(),
     error: z.string().optional(),
+    evaluation: PolicyEvaluationSummarySchema.optional(),
+    failed_bundle_count: z.number().int().nonnegative().optional(),
+    truncated: z.boolean().optional(),
   })
   .loose();
 export type PolicyEvaluateResponse = z.infer<typeof PolicyEvaluateResponseSchema>;

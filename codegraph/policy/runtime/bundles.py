@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
 from pathlib import Path
 from typing import Any
 
+from codegraph.common.concurrency import bounded_futures
 from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
+from codegraph.config import settings
 from codegraph.db import shared_neo4j_driver
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.source_analysis import analyze_policy_indicators
@@ -375,17 +377,14 @@ def build_policy_input(
     )
     hybrid_search = load_hybrid_search()
 
-    workers = min(32, (os.cpu_count() or 4) + 4)
     method_index = {snapshot["signature"]: snapshot for snapshot in methods if snapshot.get("signature")}
     taint_finder = TaintPathFinder(method_index)
     bundles: list[dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        future_to_idx = {
-            pool.submit(build_evidence_bundle, method, hybrid_search, method_index, None, taint_finder): idx
-            for idx, method in enumerate(methods)
-        }
-        for future in as_completed(future_to_idx):
-            bundles[future_to_idx[future]] = future.result()
+    build = partial(
+        build_evidence_bundle, search_service=hybrid_search, method_index=method_index, taint_path_finder=taint_finder,
+    )
+    for index, future in bounded_futures(build, methods, max_workers=settings.policy_workers):
+        bundles[index] = future.result()
 
     return serialize_policy_input_envelope(
         bundles=bundles,

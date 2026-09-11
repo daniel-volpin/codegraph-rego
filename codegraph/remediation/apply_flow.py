@@ -28,7 +28,6 @@ from codegraph.remediation.result_models import (
     apply_result,
     early_error_result,
     generation_error_result,
-    partial_error_result,
 )
 from codegraph.remediation.validation import extract_assistant_content
 from codegraph.remediation.verification import build_verification_summary
@@ -99,7 +98,9 @@ def _final_error(status: str, verification: dict[str, Any], *, restore_failed: b
     if status == "OK":
         return None
     if restore_failed:
-        return "Rollback failed: workspace/graph left in candidate state"
+        primary_error = verification.get("error")
+        rollback_error = "Rollback failed: workspace/graph may be left in candidate state"
+        return f"{primary_error}; {rollback_error}" if primary_error else rollback_error
     return verification.get("error") or "Apply verification failed"
 
 
@@ -518,6 +519,8 @@ def _execute_apply_fix_inner(
     live_workspace_modified = False
     graph_modified = False
     restore_failed = False
+    cleanup: dict[str, bool | None] = {"graph_restored": None, "file_restored": None}
+    after_trace_raw = None
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -525,31 +528,12 @@ def _execute_apply_fix_inner(
             write_source_preserving_format(temp_file_path, replacement.updated_content, source_encoding, source_newline)
             compilation = service._compile_project(temp_build_root, build_command=build_command)
 
-            try:
-                if mode == "apply":
-                    live_workspace_modified = True
-                    write_source_preserving_format(resolved_path, replacement.updated_content, source_encoding, source_newline)
+            if mode == "apply":
+                live_workspace_modified = True
+                write_source_preserving_format(resolved_path, replacement.updated_content, source_encoding, source_newline)
 
-                graph_modified = True
-                process_single_file_content(file_path, replacement.updated_content)
-            except Exception as exc:  # pragma: no cover - runtime guard
-                _err = {"err": str(exc), "err_type": type(exc).__name__, "file_path": str(resolved_path)}
-                if LOGGER.isEnabledFor(logging.DEBUG):
-                    LOGGER.exception("Failed to re-ingest updated file", extra=_err)
-                else:
-                    LOGGER.error("Failed to re-ingest updated file", extra=_err)
-                return partial_error_result(
-                    violation_id=violation_id,
-                    error=str(exc),
-                    target_method=target_method,
-                    file_path=file_path,
-                    rule_id=context.get("rule_id"),
-                    updated_source_code=replacement.updated_method,
-                    diff=diff,
-                    compilation=compilation,
-                    generation=replacement.generation_payload,
-                    confidence=replacement.confidence,
-                )
+            graph_modified = True
+            process_single_file_content(file_path, replacement.updated_content)
 
             evaluator = PolicyEvaluator()
             after_eval = evaluator.evaluate(
@@ -557,7 +541,6 @@ def _execute_apply_fix_inner(
                 source_path_override=temp_file_path.as_posix() if mode == "dry_run" else None,
             )
 
-            after_trace_raw = None
             try:
                 after_trace_raw = evaluator.trace(
                     target_method,
@@ -585,29 +568,21 @@ def _execute_apply_fix_inner(
             LOGGER.exception("Apply remediation failed", extra=_err)
         else:
             LOGGER.error("Apply remediation failed", extra=_err)
-        return partial_error_result(
-            violation_id=violation_id,
-            error=str(exc),
-            target_method=target_method,
-            file_path=file_path,
-            rule_id=context.get("rule_id"),
-            updated_source_code=replacement.updated_method,
-            diff=diff,
-            compilation=compilation,
-            generation=replacement.generation_payload,
-            confidence=replacement.confidence,
-        )
+        apply_successful = False
+        verification = {**verification, "error": str(exc), "baseline": baseline_violations}
     finally:
         if graph_modified and _should_restore(mode, apply_successful):
-            restore_failed = restore_failed or not _restore_graph(file_path, original_content)
+            cleanup["graph_restored"] = _restore_graph(file_path, original_content)
         if live_workspace_modified and _should_restore(mode, apply_successful):
-            restore_failed = restore_failed or not _restore_file(
+            cleanup["file_restored"] = _restore_file(
                 resolved_path,
                 original_content,
                 source_encoding,
                 source_newline,
             )
+        restore_failed = any(restored is False for restored in cleanup.values())
 
+    verification["cleanup"] = cleanup
     status = _final_status(
         mode=mode,
         verification=verification,

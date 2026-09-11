@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
@@ -5,14 +7,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import faiss
-import numpy as np
 from neo4j import GraphDatabase
-from sentence_transformers import SentenceTransformer
 
 from codegraph.config import settings
+
+if TYPE_CHECKING:
+    import numpy as np
+    from sentence_transformers import SentenceTransformer
 
 CONTEXT_LINES_BEFORE = 5
 CONTEXT_LINES_AFTER = 20
@@ -173,6 +176,8 @@ def _encode_missing_vectors(
 
 
 def _build_faiss_index(vectors_np: np.ndarray, index_path: Path) -> int | None:
+    import faiss
+
     if vectors_np.ndim != 2 or vectors_np.shape[0] == 0:
         return None
     dim = int(vectors_np.shape[1])
@@ -207,6 +212,8 @@ class EmbeddingService:
         4. Build a FAISS index for fast vector search and save it to disk.
         5. Save the mapping from FAISS index to method signatures as a JSON file.
         """
+        import numpy as np
+
         if progress_callback:
             progress_callback("embedding", "Fetching methods from Neo4j…", 82.0)
         method_snippets = _fetch_method_snippets()
@@ -224,6 +231,8 @@ class EmbeddingService:
 
         vectors_by_sig = dict(plan.vectors_by_sig)
         if plan.snippets_to_encode:
+            from sentence_transformers import SentenceTransformer
+
             if progress_callback:
                 progress_callback("embedding", f"Encoding {len(plan.snippets_to_encode)} methods…", 86.0)
             model = SentenceTransformer(settings.embedding_model_name)

@@ -82,8 +82,14 @@ This document describes the HTTP API surface and the frontend integration patter
   - `max_per_violation_id?: number`
   - `rule_ids?: string[]` (repeat the parameter to filter server-side to an explicit rule subset)
 - Response:
-  - HTTP `200` on success — at least `violations: Violation[]` plus `opa_output`, `enriched`.
+  - HTTP `200` on success — `violations: Violation[]` plus scan metadata:
+    - `evaluation.status: "complete" | "partial" | "failed"`
+    - `evaluation.attempted_bundles`, `evaluation.evaluated_bundles`, `evaluation.failed_bundles`
+    - `evaluation.omitted_findings`, `evaluation.excluded_findings`
+    - `evaluation.truncated`, `evaluation.scope_limited`, `evaluation.rule_ids`
+    - optional `failed_bundles[]`, `failed_bundle_count`, and top-level `truncated`/`limits` when limit filters are supplied
   - HTTP `5xx` on failure — `{ "error": string, ... }`.
+- `complete` means all selected bundles were evaluated successfully, not exhaustive workspace or parser coverage. `scope_limited` records a configured bundle cap, not a measured omitted-bundle count. `omitted_findings` counts findings removed by result caps; `excluded_findings` counts findings excluded by rule filters.
 - Violation schema (from `codegraph/policy/integration.py`, mirrored as `ViolationSchema`):
   - `violation_id: string` (also accepts `rule_id` for backward compatibility)
   - `target_method: string`, `file_path: string`, `severity: string`
@@ -104,8 +110,9 @@ This document describes the HTTP API surface and the frontend integration patter
 
 ### `POST /policy/evaluate_with_llm`
 - Router: `api/routers/policy.py`
-- Request JSON: `{ "limit": number, "model"?: string|null, "rule_ids"?: string[]|null }`
-- Response HTTP `200`: `{ "violations": Violation[], "enriched": object[] }`
+- Request JSON: `{ "limit": number, "model"?: string|null, "max_bundles"?: number|null, "max_total_violations"?: number|null, "max_per_violation_id"?: number|null, "rule_ids"?: string[]|null }`
+- Response HTTP `200`: the full `/policy/evaluate` payload plus `enriched: object[]`.
+  - Important: explanation enrichment is capped by `limit`, but the returned `violations` list and `evaluation` metadata remain the full evaluated result (no explained-only truncation).
 
 ### `GET /policy/catalog`
 - Router: `api/routers/policy.py`
@@ -160,6 +167,8 @@ This document describes the HTTP API surface and the frontend integration patter
 - Implementation: `codegraph/remediation/service.py` → `apply_fix()`.
 - Note: `status="FAIL"` is an application-level outcome (verification failed), not a transport error.
 - The frontend hardcodes `mode="dry_run"` in `applyRemediation`.
+- Cleanup metadata: `verification.cleanup.graph_restored` and `verification.cleanup.file_restored` report post-run restoration outcomes explicitly.
+- Cleanup values are `true`/`false`, or `null` when restoration was not required. Dry runs still temporarily mutate the shared graph; restoration reporting is not candidate isolation.
 
 ---
 
@@ -178,7 +187,7 @@ This document describes the HTTP API surface and the frontend integration patter
 | `fetchHealth` | `GET /health` | 15 s polling; renders per-subsystem booleans |
 | `searchCode` | `POST /search` | Mutation; per-call AbortController cancels previous in-flight searches |
 | `evaluatePolicies` | `GET /policy/evaluate` | Supports repeated `rule_ids` query params for benchmark/demo-focused server-side filtering |
-| `evaluatePoliciesWithLLM` | `POST /policy/evaluate_with_llm` | JSON body `{"limit", "model", "rule_ids"}` |
+| `evaluatePoliciesWithLLM` | `POST /policy/evaluate_with_llm` | JSON body accepts `limit`, `model`, and optional evaluate caps (`max_bundles`, `max_total_violations`, `max_per_violation_id`, `rule_ids`); returns full findings + metadata plus `enriched` |
 | `fetchPolicyCatalog` | `GET /policy/catalog` | Renders catalog entries |
 | `explainPolicyViolationOne` | `POST /policy/explain_one` | 5 min timeout; per-row AbortController in `useExplainMutation` |
 | `saveViolationReview` / `fetchViolationReviews` | `POST`/`GET /policy/reviews` | Triage review persistence |

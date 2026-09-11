@@ -68,7 +68,10 @@ def _infer_provider(api_base: str | None) -> str:
 def _build_client(*, api_base: str | None, api_key: str | None) -> OpenAI:
     # LM Studio accepts any api_key token for OpenAI-compatible mode.
     effective_api_key = api_key or ("lm-studio" if _is_lm_studio_api_base(api_base) else None)
-    kwargs: dict[str, Any] = {}
+    kwargs: dict[str, Any] = {
+        "timeout": settings.llm_timeout_seconds,
+        "max_retries": settings.llm_max_retries,
+    }
     if api_base:
         kwargs["base_url"] = api_base
     if effective_api_key is not None:
@@ -81,6 +84,9 @@ def _extract_message_content(response: Any, *, allow_reasoning_content: bool = F
     if not choices:
         raise LLMUnavailableError("LLM returned an empty response.")
     message = getattr(choices[0], "message", None)
+    refusal = getattr(message, "refusal", None)
+    if isinstance(refusal, str) and refusal:
+        raise LLMUnavailableError("LLM refused the request.")
     content = getattr(message, "content", "") if message is not None else ""
     if isinstance(content, list):
         parts: list[str] = []
@@ -102,6 +108,9 @@ def _extract_message_content(response: Any, *, allow_reasoning_content: bool = F
 
 
 def _extract_responses_output_text(response: Any) -> str:
+    status = getattr(response, "status", None)
+    if isinstance(status, str) and status != "completed":
+        raise LLMUnavailableError(f"LLM response is {status}.")
     output_text = getattr(response, "output_text", None)
     if isinstance(output_text, str) and output_text.strip():
         return output_text.strip()
@@ -111,6 +120,8 @@ def _extract_responses_output_text(response: Any) -> str:
     for item in output_items:
         content = getattr(item, "content", None) or []
         for part in content:
+            if getattr(part, "type", None) == "refusal":
+                raise LLMUnavailableError("LLM refused the request.")
             if getattr(part, "type", None) == "output_text":
                 text = getattr(part, "text", None)
                 if isinstance(text, str):
@@ -151,7 +162,7 @@ class _GenerationConfig:
     api_base: str | None
     model: str
     max_tokens: int | None
-    temperature: float
+    temperature: float | None
     use_chat_completions: bool
     extra_body: dict[str, Any]
 
@@ -172,8 +183,14 @@ def _generation_config(request: LLMRequest) -> _GenerationConfig:
         api_base=api_base,
         model=request.model or settings.llm_model or "gpt-4o-mini",
         max_tokens=request.max_tokens if request.max_tokens is not None else settings.llm_max_tokens_explanation,
-        temperature=request.temperature if request.temperature is not None else settings.llm_temperature,
-        use_chat_completions=bool(request.response_format) and is_lm_studio,
+        temperature=(
+            (request.temperature if request.temperature is not None else settings.llm_temperature)
+            if settings.llm_send_temperature else None
+        ),
+        use_chat_completions=(
+            settings.llm_api_mode == "chat_completions"
+            or (settings.llm_api_mode == "auto" and is_lm_studio)
+        ),
         extra_body=extra_body,
     )
 
@@ -189,7 +206,8 @@ def _set_common_span_attributes(
     span.set_attribute("llm.model", config.model)
     span.set_attribute("llm.provider", _infer_provider(config.api_base))
     span.set_attribute("llm.base_url", config.api_base or "")
-    span.set_attribute("llm.temperature", config.temperature)
+    if config.temperature is not None:
+        span.set_attribute("llm.temperature", config.temperature)
     span.set_attribute("llm.max_tokens", config.max_tokens if config.max_tokens is not None else -1)
     span.set_attribute("llm.task_type", task_type)
     span.set_attribute("llm.response_format", str(request.response_format is not None))
@@ -225,8 +243,9 @@ def _chat_completion_params(request: LLMRequest, config: _GenerationConfig) -> d
     params: dict[str, Any] = {
         "model": config.model,
         "messages": list(request.messages),
-        "temperature": config.temperature,
     }
+    if config.temperature is not None:
+        params["temperature"] = config.temperature
     if config.max_tokens is not None:
         params["max_tokens"] = config.max_tokens
     if request.stop is not None:
@@ -242,8 +261,9 @@ def _responses_params(request: LLMRequest, config: _GenerationConfig) -> dict[st
     params: dict[str, Any] = {
         "model": config.model,
         "input": list(request.messages),
-        "temperature": config.temperature,
     }
+    if config.temperature is not None:
+        params["temperature"] = config.temperature
     if config.max_tokens is not None:
         params["max_output_tokens"] = config.max_tokens
     if request.response_format is not None:
@@ -279,13 +299,14 @@ def _generate_with_responses(client: OpenAI, request: LLMRequest, config: _Gener
 class OpenAICompatibleTransport(LLMTransport):
     def generate(self, request: LLMRequest, *, task_type: str = "", retry_index: int = 0) -> str:
         config = _generation_config(request)
-        client = _build_client(api_base=config.api_base, api_key=settings.llm_api_key)
 
         with _tracer.start_as_current_span("llm.generate") as span:
             _set_common_span_attributes(span, request, config, task_type=task_type, retry_index=retry_index)
 
             t0 = time.monotonic()
+            client = None
             try:
+                client = _build_client(api_base=config.api_base, api_key=settings.llm_api_key)
                 if config.use_chat_completions:
                     return _generate_with_chat_completions(client, request, config, span)
                 return _generate_with_responses(client, request, config, span)
@@ -309,3 +330,7 @@ class OpenAICompatibleTransport(LLMTransport):
                 if request.raise_on_error:
                     raise LLMUnavailableError(error_msg) from exc
                 return f"[LLM unavailable: {error_msg}]"
+            finally:
+                span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
+                if client is not None:
+                    client.close()

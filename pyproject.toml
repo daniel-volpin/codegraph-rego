@@ -3,7 +3,7 @@ name = "codegraph"
 version = "0.5.0"
 description = "Benchmark-backed JVM security and compliance framework with graph-structured evidence"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
     { name = "Daniel Volpin" },

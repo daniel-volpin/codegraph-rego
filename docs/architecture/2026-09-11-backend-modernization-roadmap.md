@@ -6,6 +6,27 @@ Reviewed baseline: `15d4366` (main after frontend PR #242)
 
 Status: proposed roadmap; backend implementation and deployment are not approved by this document.
 
+## Execution progress (2026-09-11)
+
+First-batch groundwork is complete, but roadmap gates are not:
+
+- Completed groundwork:
+  - focused baseline environment at `build/backend-review-venv` (Python 3.11.15),
+    OPA 1.15.1 installation/verification, targeted policy-contract checks.
+  - backend validation snapshot reported by the implementation stream:
+    `758` passed, `27` skipped (`26` Semgrep unavailable, `1` missing
+    `/tmp/owasp-benchmark` checkout), `50` subtests; Ruff passing.
+  - frontend snapshot reported by the implementation stream: `52` tests across
+    `15` files plus lint/build passing.
+  - independent non-Astra reviewer reported no significant findings in the
+    current uncommitted implementation batch.
+- Still pending: formal completion of W0-W9 acceptance gates, including parser
+  identity migration, isolated candidate verification, atomic retrieval
+  publication, durable run controller, total model-budget controls, and new
+  deterministic-promotion evidence.
+
+No live graph/corpus reruns or paid-model evaluation are claimed in this progress note.
+
 ## Recommendation
 
 Keep CodeGraph's symbolic-first architecture. Modernize the boundaries that make
@@ -394,14 +415,12 @@ These are routing suggestions, not a claim about current pricing or that any
 model is inherently reliable. Begin with a small packet and compare correctness,
 rework and total usage before assigning larger ones.
 
-The standing home-server contract currently reserves subagents for independent
-diff review or wide multi-repository exploration. It does **not** authorize
-implementation-worker subagents for this single repository. Under that contract,
-execute packets sequentially in a cheaper-model lead session, then return to Astra
-for the integration review. A worker fan-out requires an explicit authorized
-change to the delegation policy; this roadmap does not silently make that change.
+The standing home-server lean policy allows bounded single-repository
+implementation workers when file ownership and approval gates are explicit.
+Prefer direct execution for tiny tasks and use one integration review pass after
+worker completion; do not run repeated broad worker/lead re-review loops.
 
-If worker delegation becomes permitted:
+Implementation-worker protocol:
 
 - Each worker owns one packet and a non-overlapping worktree; W2 and W3 interfaces
   are frozen together before splitting implementation. Shared core files are

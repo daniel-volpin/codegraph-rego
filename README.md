@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml)
 [![Release: v0.5.0](https://img.shields.io/badge/release-v0.5.0-blue)](https://github.com/daniel-volpin/codegraph-rego/releases/tag/v0.5.0)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](./pyproject.toml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](./pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Citation](https://img.shields.io/badge/citation-CITATION.cff-orange)](./CITATION.cff)
 
@@ -35,7 +35,7 @@ If you are evaluating thesis claims, start with:
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - Node.js 22+ and Yarn 1.22+
 - Neo4j 5.x
 - OPA `v1.15.1` on `PATH` (required for `make policy-check` and OPA evaluation)
@@ -199,8 +199,13 @@ Important environment variables:
 - `LLM_MODEL`
 - `LLM_API_BASE`
 - `LLM_API_KEY`
+- `LLM_API_MODE` (`auto`, `responses`, `chat_completions`; default `auto`)
+- `LLM_TIMEOUT_SECONDS` (default `60`; per SDK HTTP operation, not total run deadline)
+- `LLM_MAX_RETRIES` (default `0`, allowed `0..2`)
+- `LLM_SEND_TEMPERATURE` (default `true`)
 - `LLM_TEMPERATURE`
 - `LLM_CONCURRENCY`
+- `POLICY_WORKERS` (default `2`; per scan, at most `2 * workers` queued tasks)
 - `REMEDIATION_CONFIDENCE_THRESHOLD_APPLY`
 - `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW`
 - `REMEDIATION_CONFIDENCE_TEMPERATURE`

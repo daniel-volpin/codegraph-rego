@@ -1,5 +1,5 @@
 # Backend Dockerfile
-FROM python:3.14-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -42,6 +42,7 @@ COPY app.py ./
 COPY api ./api
 COPY codegraph ./codegraph
 COPY configs ./configs
+COPY policy ./policy
 
 # Expose port
 EXPOSE 8000
