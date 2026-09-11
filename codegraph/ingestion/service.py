@@ -11,6 +11,7 @@ from javalang.tree import (
 )
 from neo4j import GraphDatabase
 
+from codegraph.common.snippet_utils import find_java_block_end_line, find_java_statement_end_line
 from codegraph.config import settings
 from codegraph.db import ensure_constraints
 from codegraph.ingestion.models import FieldEntity, MethodEntity
@@ -30,32 +31,25 @@ def _line_from_position(position: tuple[int, int] | None) -> int | None:
     return getattr(position, "line", None)
 
 
-def _infer_block_end_line(lines: list[str], start_line: int | None) -> int | None:
-    if not start_line or start_line <= 0 or start_line > len(lines):
-        return start_line
-    open_braces = 0
-    seen_body = False
-    for idx in range(start_line - 1, len(lines)):
-        line = lines[idx]
-        if "{" in line:
-            brace_count = line.count("{")
-            open_braces += brace_count
-            if brace_count:
-                seen_body = True
-        if "}" in line and seen_body:
-            open_braces -= line.count("}")
-            if open_braces <= 0:
-                return idx + 1
-    return start_line
+def _column_from_position(position: tuple[int, int] | None) -> int | None:
+    if not position:
+        return None
+    raw = position[1] if isinstance(position, tuple) else getattr(position, "column", None)
+    if raw is None:
+        return None
+    return max(0, int(raw) - 1)
 
 
-def _infer_statement_end_line(lines: list[str], start_line: int | None) -> int | None:
-    if not start_line or start_line <= 0 or start_line > len(lines):
-        return start_line
-    for idx in range(start_line - 1, len(lines)):
-        if ";" in lines[idx]:
-            return idx + 1
-    return start_line
+def _infer_block_end_line(
+    lines: list[str], start_line: int | None, start_column: int | None = None
+) -> int | None:
+    return find_java_block_end_line(lines, start_line, start_column=start_column)
+
+
+def _infer_statement_end_line(
+    lines: list[str], start_line: int | None, start_column: int | None = None
+) -> int | None:
+    return find_java_statement_end_line(lines, start_line, start_column=start_column)
 
 
 def link_extends_classes_batch(tx, relations: list[dict[str, str]]) -> None:
@@ -248,12 +242,16 @@ def walk_class_declarations(
             field_annotations = [getattr(ann, "name", str(ann)) for ann in getattr(field, "annotations", [])]
             field_modifiers = list(getattr(field, "modifiers", []) or [])
             base_line = _line_from_position(getattr(field, "position", None))
+            base_col = _column_from_position(getattr(field, "position", None))
             for declarator in getattr(field, "declarators", []):
                 field_name = getattr(declarator, "name", None)
                 if not field_name:
                     continue
                 start_line = _line_from_position(getattr(declarator, "position", None)) or base_line
-                end_line = _infer_statement_end_line(file_lines, start_line)
+                start_column = _column_from_position(getattr(declarator, "position", None))
+                if start_column is None:
+                    start_column = base_col
+                end_line = _infer_statement_end_line(file_lines, start_line, start_column)
                 entity = FieldEntity(
                     class_fqn=class_fqn,
                     name=field_name,
@@ -288,9 +286,11 @@ def walk_class_declarations(
                 if hasattr(p.type, "name")
             ]
             method_start_line = _line_from_position(getattr(method, "position", None))
+            method_start_col = _column_from_position(getattr(method, "position", None))
+            method_body = getattr(method, "body", None)
             method_end_line = (
-                _infer_block_end_line(file_lines, method_start_line)
-                if getattr(method, "body", None)
+                _infer_block_end_line(file_lines, method_start_line, method_start_col)
+                if method_body is not None
                 else method_start_line
             )
             calls: list[str] = []
@@ -354,8 +354,12 @@ def walk_class_declarations(
                 if hasattr(p.type, "name")
             ]
             ctor_start_line = _line_from_position(getattr(ctor, "position", None))
+            ctor_start_col = _column_from_position(getattr(ctor, "position", None))
+            ctor_body = getattr(ctor, "body", None)
             ctor_end_line = (
-                _infer_block_end_line(file_lines, ctor_start_line) if getattr(ctor, "body", None) else ctor_start_line
+                _infer_block_end_line(file_lines, ctor_start_line, ctor_start_col)
+                if ctor_body is not None
+                else ctor_start_line
             )
             methods.append(
                 MethodEntity(
