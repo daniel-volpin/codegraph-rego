@@ -27,7 +27,11 @@ from codegraph.llm.integration import (
 from codegraph.policy.review_store import append_review_jsonl, resolve_review_store_path
 from codegraph.policy.service import (
     catalog as get_policy_catalog_payload,
+)
+from codegraph.policy.service import (
     evaluate as evaluate_policies,
+)
+from codegraph.policy.service import (
     export_sarif,
 )
 

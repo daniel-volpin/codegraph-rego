@@ -97,7 +97,7 @@ def evaluate_constant_boolean(expr: str, int_constants: dict[str, int]) -> bool 
     for var, value in int_constants.items():
         normalized = re.sub(rf"\b{re.escape(var)}\b", str(value), normalized)
     normalized = normalized.replace("&&", " and ").replace("||", " or ")
-    if re.search(r"[A-Za-z_]", normalized):
+    if re.search(r"\b(?!and\b|or\b)[A-Za-z_][A-Za-z0-9_]*\b", normalized):
         return None
     if not re.fullmatch(r"[0-9\s()+\-*/%<>=!&|.andor]+", normalized):
         return None
