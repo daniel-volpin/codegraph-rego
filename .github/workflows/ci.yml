@@ -28,6 +28,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Detect changed paths
@@ -217,4 +218,3 @@ jobs:
 
       - name: Build frontend
         run: yarn build
-
