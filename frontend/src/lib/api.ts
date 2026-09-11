@@ -25,10 +25,45 @@ import {
   type UploadStatus,
 } from "./schemas";
 import { buildRuntimeApiUrl, getRuntimeApiBase } from "./runtimeConfig";
+import {
+  DEMO_APPLY_RESULT,
+  DEMO_DIFFS,
+  DEMO_EXPLANATION,
+  DEMO_HEALTH,
+  DEMO_POLICY_CATALOG,
+  DEMO_POLICY_EVALUATION,
+  DEMO_PREVIEWS,
+  DEMO_SEARCH_MATCHES,
+  DEMO_UPLOAD_RESPONSE,
+  DEMO_UPLOAD_STATUS,
+} from "./demoData";
 
 const defaultHeaders = {
   Accept: "application/json",
 };
+
+export const DEMO_MODE_STORAGE_KEY = "codegraph_demo_mode";
+
+export function isDemoMode(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("demo") === "true") return true;
+    return localStorage.getItem(DEMO_MODE_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function setDemoMode(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(DEMO_MODE_STORAGE_KEY, enabled ? "true" : "false");
+    window.dispatchEvent(new Event("demo-mode-changed"));
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 // ---- Error classes ----
 
@@ -109,6 +144,10 @@ function withTimeoutSignal(external: AbortSignal | undefined, ms: number): Abort
 // ---- Endpoints ----
 
 export async function uploadZip(file: File, signal?: AbortSignal): Promise<UploadResponse> {
+  if (isDemoMode()) {
+    return DEMO_UPLOAD_RESPONSE;
+  }
+
   const formData = new FormData();
   formData.append("file", file);
 
@@ -122,6 +161,17 @@ export async function uploadZip(file: File, signal?: AbortSignal): Promise<Uploa
 }
 
 export async function searchCode(query: string, signal?: AbortSignal): Promise<SearchResponse> {
+  if (isDemoMode()) {
+    const q = query.toLowerCase();
+    const filteredMatches = DEMO_SEARCH_MATCHES.matches.filter((m) =>
+      m.toLowerCase().includes(q) || q.includes("hash") || q.includes("crypto") || q.includes("pass") || q.includes("sql") || q.length === 0,
+    );
+    return {
+      matches: filteredMatches.length > 0 ? filteredMatches : DEMO_SEARCH_MATCHES.matches,
+      contexts: DEMO_SEARCH_MATCHES.contexts,
+    };
+  }
+
   const response = await fetch(`${getRuntimeApiBase()}/search`, {
     method: "POST",
     headers: {
@@ -150,6 +200,20 @@ export async function evaluatePolicies(
   args?: PolicyEvaluateOptions,
   signal?: AbortSignal,
 ): Promise<PolicyEvaluateResponse> {
+  if (isDemoMode()) {
+    if (args?.ruleIds && args.ruleIds.length > 0) {
+      const allowed = new Set(args.ruleIds);
+      const filtered = (DEMO_POLICY_EVALUATION.violations ?? []).filter((v) =>
+        v.rule_id ? allowed.has(v.rule_id) : true,
+      );
+      return {
+        ...DEMO_POLICY_EVALUATION,
+        violations: filtered,
+      };
+    }
+    return DEMO_POLICY_EVALUATION;
+  }
+
   const params = new URLSearchParams();
   if (typeof args?.maxBundles === "number") {
     params.set("max_bundles", String(args.maxBundles));
@@ -193,6 +257,10 @@ export async function evaluatePoliciesWithLLM(
   },
   signal?: AbortSignal,
 ): Promise<PolicyEvaluateResponse> {
+  if (isDemoMode()) {
+    return DEMO_POLICY_EVALUATION;
+  }
+
   const response = await fetch(`${getRuntimeApiBase()}/policy/evaluate_with_llm`, {
     method: "POST",
     headers: {
@@ -220,6 +288,10 @@ export async function evaluatePoliciesWithLLM(
 export async function fetchPolicyCatalog(
   signal?: AbortSignal,
 ): Promise<PolicyCatalogResponse> {
+  if (isDemoMode()) {
+    return DEMO_POLICY_CATALOG;
+  }
+
   const response = await fetch(`${getRuntimeApiBase()}/policy/catalog`, {
     method: "GET",
     headers: defaultHeaders,
@@ -239,6 +311,10 @@ export async function explainPolicyViolationOne(
   payload: PolicyExplainOneRequest,
   signal?: AbortSignal,
 ): Promise<PolicyExplainOneResponse> {
+  if (isDemoMode()) {
+    return DEMO_EXPLANATION;
+  }
+
   const response = await fetch(`${getRuntimeApiBase()}/policy/explain_one`, {
     method: "POST",
     headers: {
@@ -269,6 +345,14 @@ export async function saveViolationReview(
   payload: PolicyReviewCreateRequest,
   signal?: AbortSignal,
 ): Promise<PolicyReviewCreateResponse> {
+  if (isDemoMode()) {
+    return {
+      status: "OK",
+      review_id: "demo-review-1",
+      scrub_warnings: [],
+    };
+  }
+
   const response = await fetch(`${getRuntimeApiBase()}/policy/reviews`, {
     method: "POST",
     headers: {
@@ -286,6 +370,13 @@ export async function fetchViolationReviews(
   args: { violationKey?: string; limit?: number } = {},
   signal?: AbortSignal,
 ): Promise<PolicyReviewListResponse> {
+  if (isDemoMode()) {
+    return {
+      status: "OK",
+      reviews: [],
+    };
+  }
+
   const params = new URLSearchParams();
   if (args.violationKey) {
     params.set("violation_key", args.violationKey);
@@ -307,6 +398,10 @@ export async function fetchViolationReviews(
 }
 
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthCheckResponse> {
+  if (isDemoMode()) {
+    return DEMO_HEALTH;
+  }
+
   const response = await fetch(`${getRuntimeApiBase()}/health`, {
     method: "GET",
     headers: defaultHeaders,
@@ -320,6 +415,10 @@ export async function fetchUploadStatus(
   requestId?: string | null,
   signal?: AbortSignal,
 ): Promise<UploadStatus> {
+  if (isDemoMode()) {
+    return DEMO_UPLOAD_STATUS;
+  }
+
   const url = buildRuntimeApiUrl("/upload/status");
   if (requestId) {
     url.searchParams.set("request_id", requestId);
@@ -339,6 +438,27 @@ export async function previewRemediation(
   filePath?: string,
   signal?: AbortSignal,
 ): Promise<RemediationPreviewResponse> {
+  if (isDemoMode()) {
+    return (
+      DEMO_PREVIEWS[violationId] ?? {
+        status: "OK",
+        violation_id: violationId,
+        rule_id: violationId,
+        target_method: targetMethod,
+        file_path: filePath,
+        diff: DEMO_DIFFS[violationId] ?? DEMO_DIFFS["ISO-A.10-WEAK-HASH"],
+        confidence: {
+          score: 0.9,
+          band: "apply",
+          threshold_apply: 0.75,
+          threshold_review: 0.5,
+          rationale: "Demo mode bounded remediation preview.",
+        },
+        error: null,
+      }
+    );
+  }
+
   const response = await fetch(`${getRuntimeApiBase()}/remediation/preview`, {
     method: "POST",
     headers: {
@@ -366,6 +486,15 @@ export async function applyRemediation(
   payload: ApplyRemediationPayload,
   signal?: AbortSignal,
 ): Promise<RemediationApplyResponse> {
+  if (isDemoMode()) {
+    return {
+      ...DEMO_APPLY_RESULT,
+      violation_id: payload.violation_id,
+      target_method: payload.target_method,
+      file_path: payload.file_path,
+    };
+  }
+
   const response = await fetch(`${getRuntimeApiBase()}/remediation/apply`, {
     method: "POST",
     headers: {

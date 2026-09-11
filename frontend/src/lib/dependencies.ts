@@ -16,46 +16,46 @@ interface BackendDependencyLabel {
 
 export const BACKEND_DEPENDENCY_LABELS: Record<BackendDependencyKey, BackendDependencyLabel> = {
   startup: {
-    description: "Startup preload (graph sync, indexes)",
-    homeLabel: "Startup preload",
-    shortLabel: "startup",
-    aliases: ["startup", "preload"],
+    description: "Workspace runtime & index sync",
+    homeLabel: "Workspace initialization",
+    shortLabel: "runtime",
+    aliases: ["startup", "preload", "workspace", "initialization"],
   },
   startup_ready: {
-    description: "Startup preload (graph sync, indexes)",
-    homeLabel: "Startup preload",
-    shortLabel: "startup",
-    aliases: ["startup", "preload"],
+    description: "Workspace runtime & index sync",
+    homeLabel: "Workspace initialization",
+    shortLabel: "runtime",
+    aliases: ["startup", "preload", "workspace", "initialization"],
   },
   neo4j: {
-    description: "Neo4j graph database",
-    homeLabel: "Graph database",
+    description: "Neo4j code knowledge graph",
+    homeLabel: "Code knowledge graph",
     shortLabel: "graph",
-    aliases: ["neo4j", "graph database", "graph"],
+    aliases: ["neo4j", "graph database", "graph", "knowledge graph"],
   },
   faiss_index: {
-    description: "FAISS semantic search index",
-    homeLabel: "Search index",
+    description: "Semantic code search index",
+    homeLabel: "Semantic search index",
     shortLabel: "search index",
-    aliases: ["faiss", "faiss index", "search index"],
+    aliases: ["faiss", "faiss index", "search index", "vector index"],
   },
   signature_map: {
-    description: "Method signature map",
-    homeLabel: "Signature map",
-    shortLabel: "signatures",
-    aliases: ["signature map", "signatures"],
+    description: "Method symbol & signature catalog",
+    homeLabel: "Method symbol catalog",
+    shortLabel: "symbol catalog",
+    aliases: ["signature map", "signatures", "symbol catalog", "symbols"],
   },
   embedding_model: {
-    description: "Embedding model",
-    homeLabel: "Embeddings",
+    description: "Neural code embedding engine",
+    homeLabel: "Neural embeddings",
     shortLabel: "embeddings",
-    aliases: ["embedding", "embeddings", "embedding model"],
+    aliases: ["embedding", "embeddings", "embedding model", "neural model"],
   },
   opa: {
-    description: "OPA policy engine",
-    homeLabel: "Policy engine",
-    shortLabel: "OPA",
-    aliases: ["opa", "policy engine"],
+    description: "OPA policy compliance engine",
+    homeLabel: "Policy compliance engine",
+    shortLabel: "policy engine",
+    aliases: ["opa", "policy engine", "rego", "compliance engine"],
   },
 };
 
@@ -86,3 +86,4 @@ export const messageMentionsBackendDependency = (
 
   return COMMON_BACKEND_FAILURE_TERMS.some((term) => normalized.includes(term));
 };
+

@@ -194,7 +194,6 @@ test.beforeEach(async ({ page }) => {
 const pageShells = [
   { name: "home", path: "/", heading: /CodeGraph Workspace|Security Research Dashboard/i },
   { name: "upload", path: "/upload", heading: "Upload Codebase" },
-  { name: "search", path: "/search", heading: "Semantic Search" },
   { name: "policy", path: "/policy", heading: "Policy Evaluation" },
   { name: "settings", path: "/settings", heading: "Settings" },
 ];
@@ -208,17 +207,6 @@ for (const route of pageShells) {
     await page.screenshot({ path: testInfo.outputPath(`${route.name}.png`), fullPage: true });
   });
 }
-
-test("@thesis search submits and renders backend results", async ({ page }) => {
-  await page.goto("/search");
-  await page.getByPlaceholder("Describe a method, vulnerability pattern, or control...").fill("password hashing logic");
-  await page.getByRole("button", { name: "Search" }).click();
-
-  await expect(
-    page.getByText("com.acme.HashController.hashPassword(String)").first(),
-  ).toBeVisible();
-  await expect(page.getByText("Search failed")).toHaveCount(0);
-});
 
 test("@thesis upload submits and renders detected Java roots", async ({ page }) => {
   await page.route("**/api/upload", async (route) => {
@@ -268,13 +256,13 @@ test("@thesis policy scan renders findings and remediation artifacts", async ({ 
   await expect(page.getByText("4. Remediation & Virtual Verification")).toBeVisible();
 });
 
-test("@thesis responsive drawer navigation reaches search", async ({ page }, testInfo) => {
+test("@thesis responsive drawer navigation reaches policy", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === "desktop-1280x900", "drawer is hidden on desktop");
 
   await page.goto("/");
   await page.getByRole("button", { name: "Open navigation" }).click();
-  await page.getByRole("link", { name: "Search", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Semantic Search" })).toBeVisible();
+  await page.getByRole("link", { name: "Policy Workbench", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Policy Evaluation" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath("mobile-drawer-search.png"), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath("mobile-drawer-policy.png"), fullPage: true });
 });

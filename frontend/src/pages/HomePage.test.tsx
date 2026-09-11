@@ -49,8 +49,8 @@ describe("HomePage", () => {
     renderWithProviders(<HomePage />);
 
     expect(await screen.findByText("Healthy")).toBeInTheDocument();
-    expect(screen.getByText("Startup preload")).toBeInTheDocument();
-    expect(screen.getByText("Signature map")).toBeInTheDocument();
+    expect(screen.getByText("Workspace initialization")).toBeInTheDocument();
+    expect(screen.getByText("Method symbol catalog")).toBeInTheDocument();
     expect(screen.getAllByText("Available")).toHaveLength(6);
     expect(await screen.findByText(/no uploaded workspace yet/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /1\. upload a codebase/i })).toHaveAttribute("href", "/upload");

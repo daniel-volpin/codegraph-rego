@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { type Table, flexRender } from "@tanstack/react-table";
-import { Scale } from "lucide-react";
+import { Scale, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { Card } from "../../ui/card";
 import ViolationFinding from "./ViolationFinding";
@@ -38,19 +38,18 @@ const ViolationGroupTable = ({
   const rows = table.getRowModel().rows;
 
   return (
-    <Card data-testid="policy-results-region" className="min-w-0 overflow-hidden">
+    <Card data-testid="policy-results-region" className="min-w-0 overflow-hidden shadow-xs border-zinc-200/80 dark:border-zinc-800">
       {viewPreset === "framework_demo" && (
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Showing the benchmark-aligned categories used in the thesis framework demo. Switch to All findings to inspect
-          the full policy surface.
+        <div className="border-b border-zinc-200 bg-zinc-50/70 px-4 py-2.5 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+          Showing benchmark-aligned categories for thesis framework evaluation. Switch to full view in controls to inspect all policy rules.
         </div>
       )}
       <div
         data-testid="policy-group-table-scroll"
         className="max-w-full overflow-x-auto 2xl:max-h-[calc(100vh-11rem)]"
       >
-        <table className="w-full table-fixed border-collapse text-sm">
-          <thead className="bg-slate-100 text-left text-slate-700">
+        <table className="w-full table-fixed border-collapse text-xs">
+          <thead className="border-b border-zinc-200 bg-zinc-100/75 text-left text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
@@ -63,15 +62,20 @@ const ViolationGroupTable = ({
                       key={header.id}
                       scope="col"
                       aria-sort={canSort ? ariaSort : undefined}
-                      className={`px-3 py-2 font-semibold overflow-hidden ${colWidthClass(header.column.id)}`}
+                      className={`px-3.5 py-2.5 font-semibold uppercase tracking-wider text-[11px] overflow-hidden ${colWidthClass(header.column.id)}`}
                     >
                       {header.isPlaceholder ? <span className="sr-only">Expand rule group</span> : canSort ? (
                         <button
                           type="button"
-                          className="inline-flex items-center gap-1"
+                          className="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-100 font-semibold"
                           onClick={header.column.getToggleSortingHandler()}
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
+                          {sortDir === "asc" ? (
+                            <ChevronUp className="h-3 w-3" />
+                          ) : sortDir === "desc" ? (
+                            <ChevronDown className="h-3 w-3" />
+                          ) : null}
                         </button>
                       ) : (
                         flexRender(header.column.columnDef.header, header.getContext())
@@ -82,28 +86,28 @@ const ViolationGroupTable = ({
               </tr>
             ))}
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-zinc-200/70 dark:divide-zinc-800/70">
             {rows.map((row) => (
               <Fragment key={row.id}>
-                <tr className="border-t border-slate-200">
+                <tr className="hover:bg-zinc-50/70 dark:hover:bg-zinc-900/40 transition-colors">
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
-                      className={`px-3 py-2 align-top overflow-hidden ${colWidthClass(cell.column.id)}`}
+                      className={`px-3.5 py-2.5 align-middle overflow-hidden ${colWidthClass(cell.column.id)}`}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
                 </tr>
                 {row.getIsExpanded() && (
-                  <tr className="border-t border-slate-100 bg-slate-50">
-                    <td className="px-4 py-4" colSpan={columnCount}>
-                      <div className="space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
+                  <tr className="bg-zinc-50/80 dark:bg-zinc-950/50">
+                    <td className="p-4" colSpan={columnCount}>
+                      <div className="space-y-3.5">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200/60 pb-3 dark:border-zinc-800">
                           <div>
-                            <p className="text-sm font-semibold text-slate-900">{row.original.ruleId}</p>
-                            <p className="text-sm text-slate-600">
-                              {row.original.findingCount} findings across {row.original.fileCount} files
+                            <p className="font-mono text-xs font-semibold text-zinc-900 dark:text-zinc-100">{row.original.ruleId}</p>
+                            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                              {row.original.findingCount} finding{row.original.findingCount === 1 ? "" : "s"} across {row.original.fileCount} file{row.original.fileCount === 1 ? "" : "s"}
                             </p>
                           </div>
                           <Badge variant={ruleGroupStatusVariant(row.original)}>
@@ -111,7 +115,7 @@ const ViolationGroupTable = ({
                           </Badge>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                           {row.original.findings.map((finding) => (
                             <ViolationFinding
                               key={finding.id}
@@ -133,8 +137,8 @@ const ViolationGroupTable = ({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={columnCount} className="py-12 text-center">
-                  <Scale aria-hidden="true" className="mx-auto h-10 w-10 text-slate-300" />
-                  <p className="mt-3 text-sm text-slate-500">
+                  <Scale aria-hidden="true" className="mx-auto h-9 w-9 text-zinc-300 dark:text-zinc-600" />
+                  <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400 font-medium">
                     {emptyMessage ??
                     (hasEvaluationResult
                       ? "No rule groups matched the current policy scan."
@@ -151,3 +155,4 @@ const ViolationGroupTable = ({
 };
 
 export default ViolationGroupTable;
+

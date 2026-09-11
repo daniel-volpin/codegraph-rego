@@ -54,8 +54,8 @@ describe("HealthStatus", () => {
     expect(summary).toHaveAccessibleName(/backend status: healthy\. collapse dependency details/i);
 
     const region = screen.getByRole("region", { name: /backend dependency status/i });
-    expect(region).toHaveTextContent("Neo4j graph database");
-    expect(region).toHaveTextContent("OPA policy engine");
+    expect(region).toHaveTextContent("Neo4j code knowledge graph");
+    expect(region).toHaveTextContent("OPA policy compliance engine");
   });
 
   it("shows degraded count and failure detail without relying on color", async () => {
@@ -78,8 +78,8 @@ describe("HealthStatus", () => {
     expect(screen.getByText("opa executable not found on PATH")).toBeInTheDocument();
 
     const region = screen.getByRole("region", { name: /backend dependency status/i });
-    expect(within(region).getByText(/neo4j graph database/i).parentElement).toHaveTextContent(/unavailable/i);
-    expect(within(region).getByText(/opa policy engine/i).parentElement).toHaveTextContent(/unavailable/i);
+    expect(within(region).getByText(/neo4j code knowledge graph/i).parentElement).toHaveTextContent(/unavailable/i);
+    expect(within(region).getByText(/opa policy compliance engine/i).parentElement).toHaveTextContent(/unavailable/i);
   });
 
   it("shows backend detail strings for every degraded dependency family", async () => {

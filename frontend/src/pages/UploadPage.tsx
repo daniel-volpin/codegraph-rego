@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileArchive, UploadCloud } from "lucide-react";
+import { FileArchive, UploadCloud, CheckCircle2, AlertCircle, Copy, FolderGit2 } from "lucide-react";
 import { fetchUploadStatus, uploadZip } from "../lib/api";
 import type { UploadResponse, UploadStatus } from "../lib/types";
 import { useClearActivity, useUpsertActivity } from "../store/activity";
@@ -11,6 +11,7 @@ import {
   persistLastUpload,
   readPersistedLastUpload,
 } from "../lib/persistence";
+import { copyTextToClipboard } from "../lib/utils";
 import { toast } from "sonner";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -43,9 +44,6 @@ const UploadPage = () => {
     mutationFn: (file: File) => uploadZip(file),
     onSuccess: (data) => {
       setResult(data);
-      // The backend can return HTTP 200 with an error envelope. Don't treat
-      // that as a successful ingest: don't toast success, don't persist it as
-      // the last-good upload, and don't evict the existing workspace caches.
       if (data.error || data.status === "error") {
         toast.error(`Upload failed: ${data.error ?? "Unknown error."}`);
         return;
@@ -66,11 +64,6 @@ const UploadPage = () => {
     },
   });
 
-  // Bind the status query to the per-upload request_id so concurrent
-  // uploads in other tabs/sessions don't clobber this one's progress.
-  // When result.request_id is absent (no upload yet, or an older
-  // response stored before the field existed) we fall back to the
-  // back-compat path that returns the latest job.
   const trackedRequestId = result?.request_id ?? null;
   const { streamConnected } = useUploadStatusStream(trackedRequestId);
   const { data: statusData, refetch: refetchStatus } = useQuery({
@@ -82,8 +75,6 @@ const UploadPage = () => {
       const activeStatus = nextStatus ?? localStatus;
       const shouldTrack = uploadMutation.isPending || Boolean(activeStatus && !activeStatus.complete);
       if (!shouldTrack) return false;
-      // Prefer SSE push updates. Fallback to bounded polling only when stream
-      // is unavailable/disconnected.
       return streamConnected ? false : 5000;
     },
   });
@@ -134,9 +125,6 @@ const UploadPage = () => {
     };
   }, [clearActivity]);
 
-  // A stray drop outside the dropzone would otherwise navigate the browser
-  // to the zip file and destroy the upload session. Neutralize document-level
-  // drops while this page is mounted; the dropzone handles its own.
   useEffect(() => {
     const prevent = (event: DragEvent) => {
       event.preventDefault();
@@ -205,20 +193,23 @@ const UploadPage = () => {
         : "Running";
 
   return (
-    <div className="space-y-4">
-      <Card className="p-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Upload Codebase</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-600">
-          Upload a ZIP archive for ingestion. The backend parses source structure, builds graph entities, and refreshes semantic embeddings.
-        </p>
+    <div className="space-y-6">
+      <Card className="p-6 sm:p-8">
+        <div className="max-w-3xl space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Upload Codebase</h1>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Ingest Java source code archives into the CodeGraph engine. The backend parses AST nodes, populates
+            Neo4j graph relationships, and rebuilds FAISS semantic embeddings.
+          </p>
+        </div>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <label
             data-testid="upload-dropzone"
-            className={`group flex min-h-80 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-8 text-center transition focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 ${
+            className={`group relative flex min-h-72 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center transition-all ${
               isDragActive
-                ? "border-indigo-500 bg-indigo-50"
-                : "border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50"
+                ? "border-indigo-600 bg-indigo-50/50 scale-[0.99]"
+                : "border-slate-300/80 bg-slate-50/40 hover:border-indigo-400 hover:bg-indigo-50/20"
             }`}
             onDragOver={(event) => {
               event.preventDefault();
@@ -232,8 +223,6 @@ const UploadPage = () => {
               acceptFile(event.dataTransfer.files?.[0]);
             }}
           >
-            {/* sr-only (not display:none) keeps the input keyboard-focusable,
-                so the dropzone can be operated without a pointer. */}
             <input
               ref={inputRef}
               type="file"
@@ -243,14 +232,14 @@ const UploadPage = () => {
               aria-label="Select ZIP archive with Java sources"
               onChange={(event) => acceptFile(event.target.files?.[0])}
             />
-            <div className="mb-4 rounded-full bg-white p-3 shadow-sm ring-1 ring-slate-200">
-              <FileArchive aria-hidden="true" className="h-8 w-8 text-indigo-600" />
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-subtle ring-1 ring-slate-200/80 transition-transform group-hover:scale-105">
+              <FileArchive aria-hidden="true" className="h-7 w-7 text-indigo-600" />
             </div>
-            <p className="text-xl font-semibold text-slate-900">
-              {selectedFile ? "File selected" : "Select or drop a ZIP archive"}
+            <p className="text-base sm:text-lg font-semibold text-slate-900">
+              {selectedFile ? "File selected" : "Select or drag & drop a ZIP archive"}
             </p>
-            <p className="mt-1 text-sm text-slate-500">
-              Click to browse, or drag a .zip with Java sources (ideally under src/main/java) onto this area.
+            <p className="mt-1 max-w-md text-xs sm:text-sm text-slate-500">
+              Upload a .zip containing Java source roots (e.g. <code className="font-mono text-slate-700">src/main/java</code>).
             </p>
             {selectedFile && (
               <Badge variant="secondary" className="mt-4 max-w-full truncate px-3 py-1 text-xs">
@@ -259,22 +248,32 @@ const UploadPage = () => {
             )}
           </label>
 
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <p className="text-xs text-slate-500">
-              Uploading replaces the active workspace and re-runs ingestion and indexing.
+              Ingesting a new archive replaces the active workspace and re-evaluates graph indices.
             </p>
-            <Button type="submit" disabled={isProcessing || !selectedFile}>
-              <UploadCloud aria-hidden="true" className="mr-1 h-4 w-4" />
-              {isProcessing ? "Processing..." : "Upload & Ingest"}
+            <Button
+              type="submit"
+              disabled={isProcessing || !selectedFile}
+              className="min-w-40 shadow-xs"
+            >
+              <UploadCloud aria-hidden="true" className="mr-1.5 h-4 w-4" />
+              {isProcessing ? "Ingesting Codebase..." : "Upload & Ingest"}
             </Button>
           </div>
         </form>
       </Card>
 
+      {/* Real-Time Processing Status Card */}
       {status && (
-        <Card className="p-4">
+        <Card className="p-5 border-slate-200/90 shadow-soft">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-slate-800">{status.message || "Processing upload"}</p>
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-indigo-600 animate-ping" />
+              <p className="text-sm font-semibold text-slate-900">
+                {status.message || "Processing upload"}
+              </p>
+            </div>
             <Badge variant={statusTone}>{statusLabel}</Badge>
           </div>
           <div
@@ -283,46 +282,92 @@ const UploadPage = () => {
             aria-valuemax={100}
             aria-valuenow={progressValue}
             aria-label="Upload and ingestion progress"
-            className="h-2 overflow-hidden rounded-full bg-slate-100"
+            className="h-2.5 overflow-hidden rounded-full bg-slate-100"
           >
             <div
-              className="h-full bg-indigo-600 transition-all"
+              className="h-full bg-gradient-to-r from-indigo-600 to-indigo-500 transition-all duration-300 ease-out"
               style={{ width: `${progressValue}%` }}
             />
+          </div>
+          <div className="mt-2 flex justify-between text-[11px] font-mono text-slate-500">
+            <span>Phase: {status.phase}</span>
+            <span>{progressValue}%</span>
           </div>
         </Card>
       )}
 
+      {/* Result & Partition Summary */}
       {result && (
-        <Card className={`p-4 ${result.error ? "border-rose-200 bg-rose-50" : "border-emerald-200 bg-emerald-50"}`}>
-          <p className={`text-sm font-medium ${result.error ? "text-rose-700" : "text-emerald-700"}`}>
-            {result.error ? `Upload failed: ${result.error}` : "Codebase processed successfully."}
-          </p>
+        <Card
+          className={`p-6 ${
+            result.error
+              ? "border-rose-200 bg-rose-50/50"
+              : "border-emerald-200/80 bg-gradient-to-br from-white via-white to-emerald-50/20"
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            {result.error ? (
+              <AlertCircle className="h-5 w-5 text-rose-600 shrink-0" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+            )}
+            <p className={`text-sm font-semibold ${result.error ? "text-rose-800" : "text-emerald-800"}`}>
+              {result.error ? `Upload failed: ${result.error}` : "Codebase ingested and indexed successfully."}
+            </p>
+          </div>
+
           {!result.error && detectedRoots.length > 0 && (
-            <div className="mt-3 space-y-3">
+            <div className="mt-5 space-y-4 border-t border-slate-100 pt-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Detected modules</p>
+                <div className="flex items-center gap-2">
+                  <FolderGit2 className="h-4 w-4 text-slate-500" />
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+                    Detected Modules ({detectedModules.length})
+                  </p>
+                </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {detectedModules.map((moduleLabel) => (
-                    <Badge key={moduleLabel} variant="secondary">
+                    <Badge key={moduleLabel} variant="secondary" className="px-2.5 py-1 font-mono text-xs">
                       {moduleLabel}
                     </Badge>
                   ))}
                 </div>
               </div>
+
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Detected Java roots</p>
-                <div className="mt-2 space-y-2">
-                  {detectedRoots.map((root) => (
-                    <p key={root} className="break-all text-sm text-slate-700">
-                      <span className="mr-2 inline-flex min-w-[7rem] rounded bg-white px-2 py-0.5 text-xs font-medium text-slate-600">
-                        {deriveModuleLabel(root)}
-                      </span>
-                      <code className="rounded bg-white px-1 py-0.5">
-                        {relativeToUploadedWorkspace(root)}
-                      </code>
-                    </p>
-                  ))}
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+                  Detected Java Roots ({detectedRoots.length})
+                </p>
+                <div className="mt-2 divide-y divide-slate-100 rounded-xl border border-slate-200/80 bg-white">
+                  {detectedRoots.map((root) => {
+                    const relPath = relativeToUploadedWorkspace(root);
+                    return (
+                      <div
+                        key={root}
+                        className="flex items-center justify-between gap-3 p-3 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="rounded bg-slate-100 px-2 py-0.5 font-mono font-medium text-slate-700 shrink-0">
+                            {deriveModuleLabel(root)}
+                          </span>
+                          <code className="font-mono text-slate-600 truncate" title={root}>
+                            {relPath}
+                          </code>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const ok = await copyTextToClipboard(relPath);
+                            if (ok) toast.success("Root path copied.");
+                          }}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          title="Copy root path"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -334,3 +379,4 @@ const UploadPage = () => {
 };
 
 export default UploadPage;
+

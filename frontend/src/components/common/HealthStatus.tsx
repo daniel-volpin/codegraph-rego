@@ -128,7 +128,7 @@ const HealthStatus = () => {
             setOpen((current) => !current);
           }
         }}
-        className={`flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 [&::-webkit-details-marker]:hidden ${summaryTone}`}
+        className={`flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 shadow-2xs [&::-webkit-details-marker]:hidden ${summaryTone}`}
       >
         <SummaryIcon aria-hidden="true" className="h-3.5 w-3.5" />
         {summaryLabel}
@@ -143,7 +143,7 @@ const HealthStatus = () => {
           id={panelId}
           role="region"
           aria-label="Backend dependency status"
-          className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white p-3 shadow-lg"
+          className="absolute right-0 z-40 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-3.5 shadow-lg animate-in fade-in zoom-in-95 duration-100"
         >
           {unreachable ? (
             <div className="space-y-2 text-sm text-slate-700">

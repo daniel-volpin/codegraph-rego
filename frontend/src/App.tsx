@@ -7,7 +7,6 @@ import { reportError } from "./lib/observability";
 
 const HomePage = lazy(() => import("./pages/HomePage"));
 const UploadPage = lazy(() => import("./pages/UploadPage"));
-const SearchPage = lazy(() => import("./pages/SearchPage"));
 const PolicyPage = lazy(() => import("./pages/PolicyPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
@@ -56,7 +55,6 @@ const App = () => {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/upload" element={<UploadPage />} />
-            <Route path="/search" element={<SearchPage />} />
             <Route path="/policy" element={<PolicyPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/upload" replace />} />

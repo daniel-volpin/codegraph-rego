@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles, SlidersHorizontal } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
 import { Switch } from "../../ui/switch";
@@ -34,24 +34,29 @@ const ControlsPanel = ({
   policyCatalogIsError,
   frameworkDemoScopeSource,
 }: ControlsPanelProps) => (
-  <Card className="p-6">
+  <Card className="p-5 shadow-xs border-zinc-200/80 dark:border-zinc-800">
     <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_auto] lg:items-center">
       <div className="grid gap-4 xl:grid-cols-2">
         <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-slate-600">View mode</label>
-          <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Scan Scope
+          </label>
+          <div className="flex items-center gap-3.5 rounded-lg border border-zinc-200 bg-zinc-50/70 px-3.5 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
             <Switch
               checked={viewPreset === "framework_demo"}
               onCheckedChange={(checked) => onViewPresetChange(checked ? "framework_demo" : "all")}
               aria-label="Framework demo focus"
               aria-describedby={VIEW_MODE_DESCRIPTION_ID}
             />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900">Framework demo focus</p>
-              <p id={VIEW_MODE_DESCRIPTION_ID} className="text-xs text-slate-500">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" />
+                <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Benchmark Demo Scope</p>
+              </div>
+              <p id={VIEW_MODE_DESCRIPTION_ID} className="text-[11px] text-zinc-500 dark:text-zinc-400">
                 {viewPreset === "framework_demo"
-                  ? "On. Show only the benchmark-aligned framework categories."
-                  : "Off. Show the full policy surface for the current upload."}
+                  ? "On: Evaluates benchmark categories & research rules."
+                  : "Off: Evaluates entire policy catalog across all rules."}
               </p>
             </div>
           </div>
@@ -60,40 +65,38 @@ const ControlsPanel = ({
         <div className="space-y-1.5">
           <label
             htmlFor={MODULE_FILTER_SELECT_ID}
-            className="block text-xs font-medium text-slate-600"
+            className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
           >
-            Module filter
+            Target Module
           </label>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <select
-              id={MODULE_FILTER_SELECT_ID}
-              value={moduleFilter}
-              onChange={(event) => onModuleFilterChange(event.target.value)}
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            >
-              <option value="all">All modules</option>
-              {availableModules.map((module) => (
-                <option key={module} value={module}>
-                  {module}
-                </option>
-              ))}
-            </select>
-            <p className="mt-2 text-xs text-slate-500">
-              Filter findings to one uploaded module while keeping the active upload workspace unchanged.
-            </p>
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+              <select
+                id={MODULE_FILTER_SELECT_ID}
+                value={moduleFilter}
+                onChange={(event) => onModuleFilterChange(event.target.value)}
+                className="w-full bg-transparent text-xs font-medium text-zinc-900 focus:outline-hidden dark:text-zinc-100"
+              >
+                <option value="all">All scanned modules</option>
+                {availableModules.map((module) => (
+                  <option key={module} value={module}>
+                    {module}
+                  </option>
+                ))}
+              </select>
+            </div>
             {viewPreset === "framework_demo" && policyCatalogIsError && (
-              <p className="mt-2 text-xs text-amber-700">
-                Framework demo metadata could not be loaded from the backend. Falling back to the legacy thesis demo
-                rule set.
+              <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+                Backend demo metadata unavailable; using thesis fallback demo rules.
               </p>
             )}
             {viewPreset === "framework_demo" &&
               !policyCatalogIsLoading &&
               frameworkDemoScopeSource === "legacy_fallback" &&
               !policyCatalogIsError && (
-                <p className="mt-2 text-xs text-amber-700">
-                  Backend demo metadata is unavailable on this server response. Using the legacy thesis demo rule set
-                  for compatibility.
+                <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+                  Using benchmark demo rule scope for compatibility.
                 </p>
               )}
           </div>
@@ -110,7 +113,7 @@ const ControlsPanel = ({
               ? "Evaluate only the benchmark-aligned framework demo categories."
               : "Evaluate the full policy surface for the current upload."
           }
-          className="w-full lg:min-w-[18rem] lg:w-auto"
+          className="w-full lg:min-w-[17rem] lg:w-auto font-medium"
         >
           {evalIsFetching ? (
             <>
@@ -131,3 +134,4 @@ const ControlsPanel = ({
 );
 
 export default ControlsPanel;
+
