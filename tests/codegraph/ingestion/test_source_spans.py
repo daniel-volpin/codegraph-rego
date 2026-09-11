@@ -14,9 +14,9 @@ _TEST_WORK_ROOT = Path(__file__).resolve().parents[3] / ".copilot-source-span-te
 
 @contextmanager
 def java_workspace(file_name: str, source: str) -> Iterator[tuple[Path, object]]:
-    _TEST_WORK_ROOT.mkdir(exist_ok=True)
+    _TEST_WORK_ROOT.mkdir(parents=True, exist_ok=True)
     case_dir = _TEST_WORK_ROOT / uuid.uuid4().hex
-    case_dir.mkdir()
+    case_dir.mkdir(parents=True, exist_ok=True)
     try:
         source_path = case_dir / file_name
         source_path.parent.mkdir(parents=True, exist_ok=True)
