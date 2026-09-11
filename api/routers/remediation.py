@@ -7,6 +7,8 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from api.models.validation import (
+    AgenticRemediationRequest,
+    AgenticRemediationResponse,
     RemediationApplyRequest,
     RemediationApplyResponse,
     RemediationPreviewRequest,
@@ -15,6 +17,7 @@ from api.models.validation import (
 from codegraph.remediation.orchestration import (
     apply_remediation,
     preview_virtual_remediation,
+    run_agentic_remediation,
 )
 
 router = APIRouter()
@@ -63,3 +66,16 @@ async def remediation_apply(payload: RemediationApplyRequest):
         max_attempts=payload.max_attempts,
     )
     return JSONResponse(result, status_code=_http_status_for_result(result))
+
+
+@router.post("/remediation/agentic", response_model=AgenticRemediationResponse)
+async def remediation_agentic(payload: AgenticRemediationRequest):
+    result = await asyncio.to_thread(
+        run_agentic_remediation,
+        payload.finding,
+        workspace_root=payload.workspace_root,
+        max_turns=payload.max_turns,
+        model=payload.model,
+    )
+    return JSONResponse(result, status_code=_http_status_for_result(result))
+

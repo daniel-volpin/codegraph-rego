@@ -218,3 +218,25 @@ class RemediationApplyResponse(BaseModel):
     generation: RemediationGenerationResponse | None = None
     confidence: dict | None = None
     error: str | None = None
+
+
+class AgenticRemediationRequest(BaseModel):
+    finding: dict[str, Any]
+    workspace_root: str | None = None
+    max_turns: int = Field(8, ge=1, le=20)
+    model: str | None = None
+
+
+class AgenticRemediationResponse(BaseModel):
+    status: str
+    rule_id: str | None = None
+    method_key: str | None = None
+    target_method: str | None = None
+    workspace_root: str | None = None
+    modified_files: list[str] = Field(default_factory=list)
+    diff: str = ""
+    verification: dict | None = None
+    reason: str = ""
+    iterations: int = 0
+    turns_count: int = 0
+    error: str | None = None
