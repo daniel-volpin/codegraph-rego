@@ -2,6 +2,7 @@
 // re-export surface so consumers don't have to know whether a given type
 // originated from a schema or a request DTO.
 export type {
+  AgenticRemediationResponse,
   HealthCheckResponse,
   HealthStartupStatus,
   PolicyBenchmarkCategory,
@@ -26,6 +27,7 @@ export type {
 } from "./schemas";
 
 export type {
+  AgenticRemediationPayload,
   ApplyRemediationPayload,
   PolicyEvaluateOptions,
   PolicyExplainOneRequest,

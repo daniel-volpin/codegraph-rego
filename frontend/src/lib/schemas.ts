@@ -325,6 +325,26 @@ export type RemediationApplyResponse = z.infer<
   typeof RemediationApplyResponseSchema
 >;
 
+export const AgenticRemediationResponseSchema = z
+  .object({
+    status: z.string(),
+    rule_id: z.string().nullable().optional(),
+    method_key: z.string().nullable().optional(),
+    target_method: z.string().nullable().optional(),
+    workspace_root: z.string().nullable().optional(),
+    modified_files: z.array(z.string()).default([]),
+    diff: z.string().default(""),
+    verification: z.record(z.string(), z.unknown()).nullable().optional(),
+    reason: z.string().default(""),
+    iterations: z.number().default(0),
+    turns_count: z.number().default(0),
+    error: z.string().nullable().optional(),
+  })
+  .loose();
+export type AgenticRemediationResponse = z.infer<
+  typeof AgenticRemediationResponseSchema
+>;
+
 // ---- Health ----
 
 export const HealthStartupStatusSchema = z
