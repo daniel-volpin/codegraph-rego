@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
+  <title id="title">CodeGraph</title>
+  <desc id="description">Benchmark-backed JVM security and compliance analysis</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#07111f"/>
+      <stop offset="100%" stop-color="#102a43"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#34d399"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" rx="36" fill="url(#background)"/>
+  <g fill="none" stroke="url(#accent)" stroke-width="8">
+    <path d="M125 215 L260 140 L395 215 L395 365 L260 440 L125 365 Z"/>
+    <path d="M260 140 L260 290 M125 215 L260 290 L395 215 M260 290 L260 440"/>
+  </g>
+  <g fill="#e2e8f0">
+    <circle cx="260" cy="140" r="18"/>
+    <circle cx="125" cy="215" r="18"/>
+    <circle cx="395" cy="215" r="18"/>
+    <circle cx="260" cy="290" r="18"/>
+    <circle cx="125" cy="365" r="18"/>
+    <circle cx="395" cy="365" r="18"/>
+    <circle cx="260" cy="440" r="18"/>
+  </g>
+  <text x="490" y="270" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="96" font-weight="700">CodeGraph</text>
+  <rect x="493" y="306" width="610" height="8" rx="4" fill="url(#accent)"/>
+  <text x="490" y="375" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="34">Benchmark-backed JVM security</text>
+  <text x="490" y="420" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="34">and compliance analysis</text>
+  <text x="490" y="490" fill="#7dd3fc" font-family="Arial, Helvetica, sans-serif" font-size="25">Neo4j  |  OPA/Rego  |  Grounded explanations  |  Bounded remediation</text>
+</svg>

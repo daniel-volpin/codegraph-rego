@@ -68,6 +68,10 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "deps(ui)"
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
     groups:
       frontend-observability:
         patterns:
@@ -200,6 +204,10 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "deps(docker-backend)"
+    ignore:
+      - dependency-name: "maven"
+        update-types:
+          - "version-update:semver-major"
     groups:
       docker-backend-minor-patch:
         update-types:
@@ -220,6 +228,10 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "deps(docker-frontend)"
+    ignore:
+      - dependency-name: "node"
+        update-types:
+          - "version-update:semver-major"
     groups:
       docker-frontend-minor-patch:
         update-types:

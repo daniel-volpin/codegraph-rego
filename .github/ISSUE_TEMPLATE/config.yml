@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/daniel-volpin/codegraph-rego/security/advisories/new
+    about: Report vulnerabilities privately. Do not open a public issue.
+  - name: Reproducibility guide
+    url: https://github.com/daniel-volpin/codegraph-rego/blob/main/REPRODUCIBILITY.md
+    about: Check the supported environment and canonical evaluation commands.

@@ -1,0 +1,81 @@
+name: Bug report
+description: Report a reproducible problem in CodeGraph
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve CodeGraph. Do not include source code, credentials, or other sensitive data.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I am not reporting a security vulnerability. Security reports belong in [GitHub Private Vulnerability Reporting](https://github.com/daniel-volpin/codegraph-rego/security/advisories/new).
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest safe sequence of commands or actions that reproduces the problem.
+      placeholder: |
+        1. Run ...
+        2. Upload ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Installation or local development
+        - Java ingestion or graph construction
+        - Search or retrieval
+        - Policy evaluation
+        - Explanation
+        - Remediation
+        - Frontend
+        - Benchmark or evaluation tooling
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: revision
+    attributes:
+      label: CodeGraph version or commit
+      placeholder: v0.6.0 or a git commit SHA
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include operating system and relevant Python, Node.js, Java, OPA, Neo4j, and container-runtime versions.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste a minimal, redacted error or stack trace. Do not attach secrets or confidential source code.
+      render: shell
