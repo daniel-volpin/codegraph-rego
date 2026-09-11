@@ -74,6 +74,56 @@ AGENT_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "find_files",
+            "description": "Find files in the workspace matching a glob pattern (e.g. '**/*.java', 'pom.xml', '**/*Repository.java').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern (default: '**/*').",
+                    }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_code",
+            "description": "Search for text or regex patterns across files in the workspace.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Regex or substring pattern to search for.",
+                    }
+                },
+                "required": ["pattern"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_graph_context",
+            "description": "Query the Neo4j knowledge graph for callers, callees, and field declarations of a method or type.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol_name": {
+                        "type": "string",
+                        "description": "Name or signature of the method/type to query (e.g. 'getUserName' or 'SqlDemo').",
+                    }
+                },
+                "required": ["symbol_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "run_verification",
             "description": "Trigger the 3-gate verification pipeline on the current workspace: compilation, regression tests, and OPA policy evaluation.",
             "parameters": {
@@ -134,6 +184,36 @@ class AgentToolExecutor:
                 rel = args.get("relative_path", "")
                 content = self.env.read_file(rel)
                 return AgentToolResult(call_id=tool_call.call_id, name=name, output=content, success=True)
+
+            elif name == "find_files":
+                pattern = args.get("pattern", "**/*")
+                files = self.env.find_files(pattern)
+                return AgentToolResult(
+                    call_id=tool_call.call_id,
+                    name=name,
+                    output=json.dumps(files, indent=2),
+                    success=True,
+                )
+
+            elif name == "search_code":
+                pattern = args.get("pattern", "")
+                results = self.env.search_code(pattern)
+                return AgentToolResult(
+                    call_id=tool_call.call_id,
+                    name=name,
+                    output=json.dumps(results, indent=2),
+                    success=True,
+                )
+
+            elif name == "search_graph_context":
+                symbol = args.get("symbol_name", "")
+                context = self.env.search_graph_context(symbol)
+                return AgentToolResult(
+                    call_id=tool_call.call_id,
+                    name=name,
+                    output=json.dumps(context, indent=2),
+                    success=True,
+                )
 
             elif name == "edit_file":
                 rel = args.get("relative_path", "")

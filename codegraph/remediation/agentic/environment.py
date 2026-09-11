@@ -5,6 +5,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import logging
+import re
 import shutil
 import subprocess
 import tempfile
@@ -56,6 +57,63 @@ class IsolatedWorktreeEnvironment:
         if not target.is_file():
             raise FileNotFoundError(f"File not found: {relative_path}")
         return target.read_text(encoding="utf-8")
+
+    def find_files(self, pattern: str = "**/*") -> list[str]:
+        """Find matching files in the scratch workspace."""
+        matches: list[str] = []
+        for p in self.scratch_root.glob(pattern):
+            if p.is_file():
+                if any(part in self.IGNORED_DIRS for part in p.relative_to(self.scratch_root).parts):
+                    continue
+                if p.suffix.lower() in self.IGNORED_EXTENSIONS:
+                    continue
+                matches.append(p.relative_to(self.scratch_root).as_posix())
+        return sorted(matches)
+
+    def search_code(self, pattern: str, max_results: int = 20) -> list[dict[str, Any]]:
+        """Search text/regex patterns across workspace source files."""
+        results: list[dict[str, Any]] = []
+        regex = re.compile(pattern, re.IGNORECASE)
+        for rel in self.find_files("**/*"):
+            p = self.scratch_root / rel
+            try:
+                text = p.read_text(encoding="utf-8")
+                for line_idx, line in enumerate(text.splitlines(), start=1):
+                    if regex.search(line):
+                        results.append({"file": rel, "line": line_idx, "content": line.strip()})
+                        if len(results) >= max_results:
+                            return results
+            except Exception:
+                continue
+        return results
+
+    def search_graph_context(self, symbol_name: str) -> dict[str, Any]:
+        """Search graph callers and callees for a method or type from Neo4j."""
+        from codegraph.db import shared_neo4j_driver
+
+        try:
+            driver = shared_neo4j_driver()
+            with driver.session() as session:
+                records = session.run(
+                    """
+                    MATCH (m:Method)
+                    WHERE m.name = $name OR m.signature CONTAINS $name OR m.method_key CONTAINS $name
+                    OPTIONAL MATCH (caller:Method)-[:CALLS]->(m)
+                    OPTIONAL MATCH (m)-[:CALLS]->(callee:Method)
+                    OPTIONAL MATCH (m)-[:USES]->(f:Field)
+                    RETURN m.signature AS signature,
+                           m.method_key AS method_key,
+                           m.file_path AS file_path,
+                           collect(DISTINCT caller.signature) AS callers,
+                           collect(DISTINCT callee.signature) AS callees,
+                           collect(DISTINCT f.name) AS uses_fields
+                    LIMIT 5
+                    """,
+                    {"name": symbol_name},
+                ).data()
+                return {"matches": records}
+        except Exception as exc:
+            return {"error": f"Graph query unavailable: {exc}"}
 
     def write_file(self, relative_path: str, content: str) -> None:
         target = self.resolve_path(relative_path)
