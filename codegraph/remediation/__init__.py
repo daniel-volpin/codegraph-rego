@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from codegraph.remediation.attempts import (
+    ReplacementAttemptOutcome,
+    run_replacement_attempts,
+)
 from codegraph.remediation.capabilities import (
     RemediationCapability,
     default_supported_remediation_rule_ids,
@@ -25,12 +29,14 @@ __all__ = [
     "AgenticRemediationService",
     "RemediationCapability",
     "RemediationService",
+    "ReplacementAttemptOutcome",
     "apply_remediation",
     "default_supported_remediation_rule_ids",
     "get_remediation_capability",
     "preview_virtual_remediation",
     "remediation_capability_dict",
     "run_agentic_remediation",
+    "run_replacement_attempts",
     "unified_diff",
 ]
 
