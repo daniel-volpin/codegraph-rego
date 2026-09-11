@@ -242,6 +242,59 @@ class Settings(BaseSettings):
         "outputs/policy_ui_reviews/reviews.jsonl",
         description="Append-only JSONL store for UI triage/review records.",
     )
+    java_parser_jar: Path = Field(
+        PROJECT_ROOT / "tools/java-parser/target/codegraph-java-parser.jar",
+        validation_alias=AliasChoices("JAVA_PARSER_JAR", "java_parser_jar"),
+        description="Executable JDT parser fat jar used by the Python process-boundary adapter.",
+    )
+    java_parser_timeout_seconds: float = Field(
+        30.0,
+        gt=0.0,
+        le=120.0,
+        validation_alias=AliasChoices("JAVA_PARSER_TIMEOUT_SECONDS", "java_parser_timeout_seconds"),
+        description="Per Java parser subprocess deadline in seconds.",
+    )
+    java_parser_heap_mb: int = Field(
+        384,
+        ge=128,
+        le=2048,
+        validation_alias=AliasChoices("JAVA_PARSER_HEAP_MB", "java_parser_heap_mb"),
+        description="Maximum heap for each fresh Java parser subprocess.",
+    )
+    java_parser_max_concurrent_requests: int = Field(
+        1,
+        ge=1,
+        le=2,
+        validation_alias=AliasChoices("JAVA_PARSER_MAX_CONCURRENT_REQUESTS", "java_parser_max_concurrent_requests"),
+        description="Process-local cap on active Java parser subprocess requests.",
+    )
+    java_parser_queue_timeout_seconds: float = Field(
+        5.0,
+        gt=0.0,
+        le=120.0,
+        validation_alias=AliasChoices("JAVA_PARSER_QUEUE_TIMEOUT_SECONDS", "java_parser_queue_timeout_seconds"),
+        description="Maximum queue wait for Java parser subprocess admission.",
+    )
+    java_parser_max_source_bytes: int = Field(
+        4 * 1024 * 1024,
+        ge=1 * 1024 * 1024,
+        le=4 * 1024 * 1024,
+        validation_alias=AliasChoices("JAVA_PARSER_MAX_SOURCE_BYTES", "java_parser_max_source_bytes"),
+        description="Maximum source bytes accepted by the Java parser adapter.",
+    )
+    java_parser_max_output_bytes: int = Field(
+        16 * 1024 * 1024,
+        ge=1 * 1024 * 1024,
+        le=16 * 1024 * 1024,
+        validation_alias=AliasChoices("JAVA_PARSER_MAX_OUTPUT_BYTES", "java_parser_max_output_bytes"),
+        description="Maximum stdout bytes accepted from the Java parser subprocess.",
+    )
+    java_parser_language_level: str = Field(
+        "25",
+        pattern=r"^(?:[89]|1[0-9]|2[0-5])$",
+        validation_alias=AliasChoices("JAVA_PARSER_LANGUAGE_LEVEL", "java_parser_language_level"),
+        description="Default JDT language level passed to the Java parser.",
+    )
 
     model_config = SettingsConfigDict(extra="ignore")
 

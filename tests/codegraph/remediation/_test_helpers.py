@@ -1,11 +1,6 @@
 import json
 import unittest
 
-try:
-    import javalang  # noqa: F401
-except ImportError:  # pragma: no cover - environment guard
-    javalang = None
-
 
 def _structured_apply_edits(
     *,
@@ -49,34 +44,40 @@ def _structured_no_fix(reason: str) -> str:
 class ViolationContextBuilder:
     def __init__(self):
         self.violation_id = "ISO-A.10-WEAK-HASH"
+        self.method_key = "workspace@revision:Example.java#file:Example.java#type:Foo#method:hash/0/#range:0-1"
         self.target_method = "com.example.Foo.hash()"
         self.file_path = "Example.java"
         self.source_code = "public void hash() { }"
         self.exact_method_source = "public void hash() { }"
 
-    def with_violation_id(self, violation_id: str) -> "ViolationContextBuilder":
+    def with_violation_id(self, violation_id: str) -> ViolationContextBuilder:
         self.violation_id = violation_id
         return self
 
-    def with_target_method(self, target_method: str) -> "ViolationContextBuilder":
+    def with_target_method(self, target_method: str) -> ViolationContextBuilder:
         self.target_method = target_method
         return self
 
-    def with_file_path(self, file_path: str) -> "ViolationContextBuilder":
+    def with_method_key(self, method_key: str) -> ViolationContextBuilder:
+        self.method_key = method_key
+        return self
+
+    def with_file_path(self, file_path: str) -> ViolationContextBuilder:
         self.file_path = file_path
         return self
 
-    def with_source_code(self, source_code: str) -> "ViolationContextBuilder":
+    def with_source_code(self, source_code: str) -> ViolationContextBuilder:
         self.source_code = source_code
         return self
 
-    def with_exact_method_source(self, exact_method_source: str) -> "ViolationContextBuilder":
+    def with_exact_method_source(self, exact_method_source: str) -> ViolationContextBuilder:
         self.exact_method_source = exact_method_source
         return self
 
     def build(self) -> dict:
         return {
             "violation": {"violation_id": self.violation_id, "reason": "test"},
+            "method_key": self.method_key,
             "target_method": self.target_method,
             "file_path": self.file_path,
             "rule_id": self.violation_id,
@@ -98,7 +99,7 @@ class ProposalResponseBuilder:
         self.raw_response_valid = True
         self.raw_output = None
 
-    def with_no_fix(self, reason: str = "") -> "ProposalResponseBuilder":
+    def with_no_fix(self, reason: str = "") -> ProposalResponseBuilder:
         self.decision = "no_fix"
         self.edits = []
         self.replacement_lines = None
@@ -107,7 +108,7 @@ class ProposalResponseBuilder:
         self.raw_response_valid = True
         return self
 
-    def with_error(self, schema_error: str) -> "ProposalResponseBuilder":
+    def with_error(self, schema_error: str) -> ProposalResponseBuilder:
         self.schema_error = schema_error
         self.raw_response_valid = False
         self.raw_output = '{"decision":"apply_edits"}'
@@ -115,7 +116,7 @@ class ProposalResponseBuilder:
 
     def with_edits(
         self, start_line: int = 1, original_lines: list[str] = None, replacement_lines: list[str] = None
-    ) -> "ProposalResponseBuilder":
+    ) -> ProposalResponseBuilder:
         if original_lines is None:
             original_lines = ["public void test() {}"]
         if replacement_lines is None:
@@ -155,7 +156,6 @@ class ProposalResponseBuilder:
         }
 
 
-@unittest.skipIf(javalang is None, "javalang not installed")
 class RemediationTestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

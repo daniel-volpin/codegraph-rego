@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -329,7 +329,7 @@ def main() -> int:
     )
 
     payload = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "benchmark_root": context.benchmark_root.as_posix(),
         "ground_truth_file": context.truth_path.as_posix(),
         "ground_truth_schema": context.truth_schema,

@@ -4,8 +4,8 @@ import pytest
 
 from codegraph.ingestion.snapshots import (
     AmbiguousMethodError,
-    SharedLineReplacementError,
     StaleSourceError,
+    UnsupportedSourceError,
     create_source_snapshot_from_bytes,
     sha256_hex,
 )
@@ -22,6 +22,23 @@ class Sample {\r
   }\r
 }\r
 """
+
+
+def test_snapshot_surfaces_failed_file_diagnostics_before_method_selection() -> None:
+    source = b"""class Crypto {
+  void hash() {
+    java.security.MessageDigest.getInstance("MD5");
+  }
+}
+"""
+    with pytest.raises(UnsupportedSourceError, match="NoSuchAlgorithmException"):
+        create_source_snapshot_from_bytes(
+            workspace_root="/workspace",
+            source_path="/workspace/Crypto.java",
+            source_bytes=source,
+            method_selector="Crypto#hash()",
+            expected_source_sha256=sha256_hex(source),
+        )
 
 
 def test_snapshot_identity_distinguishes_arrays_varargs_and_constructors() -> None:
@@ -92,7 +109,7 @@ interface Demo {
         expected_source_sha256=sha256_hex(source),
     )
 
-    assert snapshot.method_source == "  void absent();\n"
+    assert snapshot.method_source == "void absent();"
     assert "neighbor" not in snapshot.method_source
 
 
@@ -116,14 +133,55 @@ def test_snapshot_refuses_ambiguous_legacy_selector_and_stale_hash() -> None:
         )
 
 
-def test_snapshot_refuses_unsafe_shared_line_replacement() -> None:
+def test_snapshot_uses_verified_byte_range_for_same_line_declarations() -> None:
     source = b"package demo;\nclass Shared { void a() {} void b() {}\n}\n"
 
-    with pytest.raises(SharedLineReplacementError):
+    snapshot = create_source_snapshot_from_bytes(
+        workspace_root="/workspace",
+        source_path="/workspace/Shared.java",
+        source_bytes=source,
+        method_selector="demo.Shared#a()",
+        expected_source_sha256=sha256_hex(source),
+    )
+
+    assert snapshot.method_source == "void a() {}"
+    assert "void b()" not in snapshot.method_source
+
+
+def test_snapshot_supports_generic_parameter_identity_from_jdt_source() -> None:
+    source = b"""package demo;
+import java.util.Map;
+class GenericSample {
+  void take(Map<String, Integer> values) {
+  }
+}
+"""
+
+    snapshot = create_source_snapshot_from_bytes(
+        workspace_root="/workspace",
+        source_path="/workspace/GenericSample.java",
+        source_bytes=source,
+        method_selector="demo.GenericSample#take(Map<String,Integer>)",
+        expected_source_sha256=sha256_hex(source),
+    )
+
+    assert snapshot.identity.parameters[0].type_name == "Map<String,Integer>"
+    assert snapshot.identity.selector == "demo.GenericSample#take(Map<String,Integer>)"
+
+
+def test_snapshot_source_only_selector_requires_exact_declaring_type() -> None:
+    source = b"""package demo;
+class ExactOnly {
+  void hash() {
+  }
+}
+"""
+
+    with pytest.raises(AmbiguousMethodError, match="method_selector_not_found"):
         create_source_snapshot_from_bytes(
             workspace_root="/workspace",
-            source_path="/workspace/Shared.java",
+            source_path="/workspace/ExactOnly.java",
             source_bytes=source,
-            method_selector="demo.Shared#a()",
+            method_selector="ExactOnly#hash()",
             expected_source_sha256=sha256_hex(source),
         )

@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from codegraph.ingestion.snapshots import create_source_snapshot_from_bytes, sha256_hex
+from codegraph.remediation.candidate import build_candidate_overlay
 from codegraph.remediation.editing import resolve_file_path
 
 
@@ -33,7 +35,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class ReplaceMethodShapeValidationTests(unittest.TestCase):
+class CandidateMethodShapeValidationTests(unittest.TestCase):
     SOURCE = (
         "class Example {\n"
         "    public void doWork(String input) {\n"
@@ -41,33 +43,35 @@ class ReplaceMethodShapeValidationTests(unittest.TestCase):
         "    }\n"
         "}\n"
     )
-    TARGET = "com.example.Example.doWork(String)"
+    def setUp(self) -> None:
+        source_bytes = self.SOURCE.encode("utf-8")
+        self.baseline = create_source_snapshot_from_bytes(
+            workspace_root="/workspace",
+            source_path="/workspace/Example.java",
+            source_bytes=source_bytes,
+            method_selector="Example#doWork(String)",
+            expected_source_sha256=sha256_hex(source_bytes),
+        )
 
     def test_valid_full_method_replacement_succeeds(self) -> None:
-        from codegraph.remediation.editing import replace_method_in_source
-
         replacement = [
             "    public void doWork(String input) {",
             '        System.out.println("SHA-256");',
             "    }",
         ]
-        new_source, _, updated = replace_method_in_source(self.SOURCE, replacement, self.TARGET)
-        self.assertIn("SHA-256", new_source)
-        self.assertIn("SHA-256", updated)
+        overlay = build_candidate_overlay(self.baseline, "\n".join(replacement).encode("utf-8"))
+        self.assertIn("SHA-256", overlay.candidate_file_source)
+        self.assertIn("SHA-256", overlay.candidate_method_source)
 
     def test_collapsed_replacement_is_rejected(self) -> None:
-        from codegraph.remediation.editing import replace_method_in_source
-
         # A degenerate single-line replacement must not be spliced in silently.
         with self.assertRaises(ValueError):
-            replace_method_in_source(self.SOURCE, ['        System.out.println("SHA-256");'], self.TARGET)
+            build_candidate_overlay(self.baseline, b'        System.out.println("SHA-256");')
 
     def test_wrong_method_name_replacement_is_rejected(self) -> None:
-        from codegraph.remediation.editing import replace_method_in_source
-
         replacement = [
             "    public void somethingElse(String input) {",
             "    }",
         ]
         with self.assertRaises(ValueError):
-            replace_method_in_source(self.SOURCE, replacement, self.TARGET)
+            build_candidate_overlay(self.baseline, "\n".join(replacement).encode("utf-8"))

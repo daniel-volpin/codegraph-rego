@@ -1,4 +1,6 @@
-.PHONY: install backend-dev dev test policy-check policy-fmt lint format neo4j-up neo4j-down docker-up docker-down clean help
+.PHONY: install java-parser-build backend-dev dev test policy-check policy-fmt lint format neo4j-up neo4j-down docker-up docker-down clean help
+
+MVN ?= mvn
 
 # Default target
 .DEFAULT_GOAL := help
@@ -8,6 +10,12 @@ install: ## Install dependencies using uv and yarn
 	@./scripts/setup_benchmark_env.sh
 	@echo "Installing frontend dependencies..."
 	@cd frontend && yarn install
+
+java-parser-build: ## Build the JDT adapter (requires JDK 21 and Maven)
+	@$(MVN) --batch-mode --no-transfer-progress \
+		--settings tools/java-parser/settings.xml \
+		-Dmaven.repo.local="$(CURDIR)/build/jdt-tools/m2" \
+		--file tools/java-parser/pom.xml package
 
 backend-dev: ## Start Neo4j via Docker Compose and run the backend locally
 	@./scripts/start_backend_dev.sh

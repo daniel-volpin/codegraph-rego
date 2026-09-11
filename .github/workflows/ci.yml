@@ -24,13 +24,13 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: true
 
       - name: Detect changed paths
         id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@v4.0.3
         with:
           filters: |
             backend:
@@ -45,6 +45,7 @@ jobs:
               - 'configs/**'
               - 'policy/**'
               - 'scripts/**'
+              - 'tools/java-parser/**'
               - 'tests/**'
             frontend:
               - '.github/workflows/ci.yml'
@@ -60,36 +61,46 @@ jobs:
       UV_CACHE_DIR: ~/.cache/uv
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: "3.14.7"
+
+      - name: Set up Java
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build Java parser adapter
+        run: make java-parser-build
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           enable-cache: false
+          version: "0.12.13"
 
       - name: Cache uv and virtualenv
-        uses: actions/cache@v5
+        uses: actions/cache@v6.1.0
         with:
           path: |
             ~/.cache/uv
             .venv
-          key: uv-${{ runner.os }}-py311-${{ hashFiles('uv.lock') }}
+          key: uv-${{ runner.os }}-py314-${{ hashFiles('.python-version', 'uv.lock') }}
           restore-keys: |
-            uv-${{ runner.os }}-py311-
+            uv-${{ runner.os }}-py314-
 
       - name: Install backend dependencies
         run: uv sync --locked
 
       - name: Install OPA
         env:
-          OPA_VERSION: v1.15.1
+          OPA_VERSION: v1.20.2
         run: |
           curl -fsSL -o /usr/local/bin/opa "https://github.com/open-policy-agent/opa/releases/download/${OPA_VERSION}/opa_linux_amd64_static"
           chmod +x /usr/local/bin/opa
@@ -114,14 +125,14 @@ jobs:
         working-directory: frontend
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24.21.0"
           cache: "yarn"
           cache-dependency-path: frontend/yarn.lock
 

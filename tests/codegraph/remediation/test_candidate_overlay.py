@@ -9,7 +9,7 @@ BASE = b"""package demo;\r
 class Crypto {\r
   int keep = 1;\r
 \r
-  public void hash() {\r
+  public void hash() throws Exception {\r
     java.security.MessageDigest.getInstance("MD5");\r
   }\r
 \r
@@ -29,7 +29,7 @@ def test_candidate_overlay_preserves_surrounding_bytes_and_uses_crlf() -> None:
 
     overlay = build_candidate_overlay(
         snapshot,
-        b"""  public void hash() {
+        b"""  public void hash() throws Exception {
     java.security.MessageDigest.getInstance("SHA-256");
   }""",
     )

@@ -213,6 +213,7 @@ class DirectCallTestBase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             callee_path = Path(tmpdir) / "Helper.java"
             callee_path.write_text("\n".join(java_body_lines), encoding="utf-8")
+            byte_length = len(callee_path.read_bytes())
             method_snapshot = {
                 "class_fqn": fqn,
                 "calls": [sig] + (extra_snapshot_calls or []),
@@ -223,6 +224,8 @@ class DirectCallTestBase(unittest.TestCase):
                     "class_fqn": fqn,
                     "name": name,
                     "file_path": callee_path.as_posix(),
+                    "start_byte": 0,
+                    "end_byte": byte_length,
                     "start_line": start_line,
                     "end_line": end_line,
                 }

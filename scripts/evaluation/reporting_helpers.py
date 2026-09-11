@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +82,7 @@ def build_report(outputs_root: Path, specs: list[RunSpec]) -> dict[str, Any]:
     comparisons = build_comparisons(run_summaries)
     return {
         "report_version": 2,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "outputs_root": str(outputs_root.resolve()),
         "support_tiers": SUPPORT_TIERS,
         "runs": run_summaries,

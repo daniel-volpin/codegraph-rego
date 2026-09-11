@@ -9,9 +9,9 @@ This module implements a closed-loop remediation flow for the thesis:
 5) Re-run the same OPA/Rego policies on the virtual bundle.
 
 The virtual-preview path leaves the codebase, Neo4j graph, and filesystem
-untouched. The dry_run apply path transiently re-ingests the candidate into the
-live Neo4j graph to re-evaluate it, then restores the original; the filesystem is
-never modified in dry_run.
+untouched. The apply path verifies candidates with target-scoped local OPA
+evidence before any source write; graph publication is handled outside this
+module after the active workspace is refreshed.
 """
 
 from __future__ import annotations
@@ -42,9 +42,7 @@ from codegraph.remediation.confidence import (
     assess_remediation_confidence,
 )
 from codegraph.remediation.context import (
-    apply_annotation_heuristic,
-    apply_fallback_graph_heuristics,
-    apply_logger_heuristic,
+    ContextSourceRefusalError,
     build_virtual_graph_context,
     dedupe_fields,
     gather_violation_context,
@@ -60,11 +58,6 @@ from codegraph.remediation.contracts import (
 from codegraph.remediation.editing import (
     apply_method_edits,
     extract_method_span,
-    infer_method_end_line,
-    normalize_type_name,
-    params_match,
-    parse_signature,
-    replace_method_in_source,
     resolve_file_path,
 )
 from codegraph.remediation.metrics import summarize_retry_error
@@ -200,15 +193,32 @@ class RemediationService:
     def preview_virtual_fix(
         self,
         violation_id: str,
-        target_method: str | None = None,
+        method_key: str,
         file_path: str | None = None,
     ) -> dict[str, Any]:
-        context = self.get_violation_context(violation_id, target_method, file_path)
+        if not method_key:
+            return {
+                "status": "INVALID",
+                "error": "method_key is required",
+                "violation_id": violation_id,
+                "method_key": method_key,
+            }
+        try:
+            context = self.get_violation_context(violation_id, method_key=method_key, file_path=file_path)
+        except ContextSourceRefusalError as exc:
+            return {
+                "status": exc.status,
+                "error": exc.reason,
+                "violation_id": violation_id,
+                "method_key": method_key,
+                "file_path": file_path or exc.file_path,
+            }
         if context is None:
             return {
                 "status": "NOT_FOUND",
                 "error": f"Violation {violation_id} not found",
                 "violation_id": violation_id,
+                "method_key": method_key,
             }
 
         rule_id = context.get("rule_id")
@@ -219,6 +229,7 @@ class RemediationService:
                 "error": capability.reason_code,
                 "violation_id": violation_id,
                 "rule_id": rule_id,
+                "method_key": context.get("method_key"),
                 "target_method": context.get("target_method"),
                 "file_path": context.get("file_path"),
             }
@@ -268,6 +279,7 @@ class RemediationService:
                 "status": "GENERATION_ERROR",
                 "error": schema_error or "generation_error: missing edits",
                 "violation_id": violation_id,
+                "method_key": context.get("method_key"),
                 "target_method": context.get("target_method"),
                 "file_path": context.get("file_path"),
                 "rule_id": rule_id,
@@ -291,6 +303,7 @@ class RemediationService:
                 "status": "VERIFICATION_ERROR",
                 "error": str(exc),
                 "violation_id": violation_id,
+                "method_key": context.get("method_key"),
                 "target_method": context.get("target_method"),
                 "file_path": context.get("file_path"),
                 "rule_id": context.get("rule_id"),
@@ -316,6 +329,7 @@ class RemediationService:
             "status": "OK",
             "violation_id": violation_id,
             "rule_id": context.get("rule_id"),
+            "method_key": context.get("method_key"),
             "target_method": context.get("target_method"),
             "file_path": context.get("file_path"),
             "updated_source_code": updated_source,
@@ -331,7 +345,7 @@ class RemediationService:
         self,
         violation_id: str,
         *,
-        target_method: str | None = None,
+        method_key: str,
         file_path: str | None = None,
         mode: str = "dry_run",
         max_attempts: int = 2,
@@ -339,35 +353,45 @@ class RemediationService:
         build_command: str | None = None,
         prompt_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        return execute_apply_fix(
-            service=self,
-            violation_id=violation_id,
-            target_method=target_method,
-            file_path=file_path,
-            mode=mode,
-            max_attempts=max_attempts,
-            raw_capture_dir=raw_capture_dir,
-            build_command=build_command,
-            prompt_context=prompt_context,
-        )
+        try:
+            return execute_apply_fix(
+                service=self,
+                violation_id=violation_id,
+                method_key=method_key,
+                file_path=file_path,
+                mode=mode,
+                max_attempts=max_attempts,
+                raw_capture_dir=raw_capture_dir,
+                build_command=build_command,
+                prompt_context=prompt_context,
+            )
+        except ContextSourceRefusalError as exc:
+            return {
+                "status": exc.status,
+                "error": exc.reason,
+                "violation_id": violation_id,
+                "method_key": method_key,
+                "file_path": file_path or exc.file_path,
+            }
 
     def get_violation_context(
         self,
         violation_id: str,
-        target_method: str | None = None,
+        method_key: str,
         file_path: str | None = None,
     ) -> dict[str, Any] | None:
+        if not method_key:
+            return None
         workspace_root = self._resolve_policy_workspace_root(file_path)
         return gather_violation_context(
             violation_id,
-            target_method=target_method,
+            method_key=method_key,
             file_path=file_path,
             policy_cache_key=workspace_root,
             evaluate_policies_fn=lambda: evaluate_policies(workspace_root=workspace_root),
             load_policy_catalog_fn=load_policy_catalog,
             policy_evaluator_cls=PolicyEvaluator,
             resolve_file_path_fn=self._resolve_file_path,
-            extract_method_span_fn=self._extract_method_span,
             build_remediation_plan_fn=build_remediation_plan,
             logger=LOGGER,
         )
@@ -424,18 +448,6 @@ class RemediationService:
         return sanitize_method_snippet(source_code)
 
     @staticmethod
-    def _apply_fallback_graph_heuristics(snippet: str, context: dict[str, Any]) -> dict[str, Any]:
-        return apply_fallback_graph_heuristics(snippet, context)
-
-    @staticmethod
-    def _apply_logger_heuristic(snippet: str, context: dict[str, Any]) -> dict[str, Any]:
-        return apply_logger_heuristic(snippet, context)
-
-    @staticmethod
-    def _apply_annotation_heuristic(snippet: str, context: dict[str, Any]) -> dict[str, Any]:
-        return apply_annotation_heuristic(snippet, context)
-
-    @staticmethod
     def _dedupe_fields(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return dedupe_fields(fields)
 
@@ -463,19 +475,6 @@ class RemediationService:
     def _compile_project(build_root: Path | None, build_command: str | None = None) -> dict[str, Any]:
         return compile_project(build_root, build_command=build_command, run_command=subprocess.run)
 
-    @staticmethod
-    def _parse_signature(signature: str) -> tuple[str, list[str]]:
-        return parse_signature(signature)
-
-    @staticmethod
-    def _normalize_type_name(type_name: str) -> str:
-        return normalize_type_name(type_name)
-
-    @classmethod
-    def _params_match(cls, expected: list[str], actual: list[str]) -> bool:
-        _ = cls
-        return params_match(expected, actual)
-
     @classmethod
     def _extract_method_span(
         cls,
@@ -494,20 +493,6 @@ class RemediationService:
     ) -> tuple[list[str], str]:
         _ = cls
         return apply_method_edits(original_lines, edits, target_method)
-
-    @classmethod
-    def _replace_method_in_source(
-        cls,
-        source: str,
-        updated_method_lines: list[str],
-        target_method: str,
-    ) -> tuple[str, str, str]:
-        _ = cls
-        return replace_method_in_source(source, updated_method_lines, target_method)
-
-    @staticmethod
-    def _infer_method_end_line(lines: list[str], start_line: int) -> int | None:
-        return infer_method_end_line(lines, start_line)
 
     def _build_virtual_bundle(
         self,

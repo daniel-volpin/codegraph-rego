@@ -16,10 +16,11 @@ Real-world apps are secondary workflow case studies, not the primary evidence su
 
 ## Commands
 
-### Backend (Python 3.11+, managed with uv)
+### Backend (Python 3.14+, managed with uv; version pinned in `.python-version`)
 
 ```bash
-make install                        # uv sync + frontend yarn install
+make install                        # JDT adapter + uv sync + frontend yarn install
+make java-parser-build              # rebuild required JDT adapter (JDK 21+, Maven)
 uv run python -m pytest -q          # all backend tests (or .venv/bin/python -m pytest)
 uv run python -m pytest tests/codegraph/remediation/ -q      # one test directory
 uv run python -m pytest tests/codegraph/test_config.py -q    # one test file
@@ -85,7 +86,8 @@ Two strict backend boundaries (see `docs/architecture/repo-layout.md`):
 Key subsystems inside `codegraph/`:
 
 - `config.py` — central pydantic-settings `Settings`; the only sanctioned way to read configuration.
-- `ingestion/` — parses Java (javalang) into the Neo4j graph.
+- `java/` — strict typed boundary to the bounded Eclipse JDT adapter in `tools/java-parser/`.
+- `ingestion/` — maps Java facts into the Neo4j graph; parser failures never select a legacy backend.
 - `search/` + `embedding/` — hybrid lexical/vector search over the graph (sentence-transformers + FAISS).
 - `policy/` — `runtime/opa.py` builds the **authoritative violation response shape**; `runtime/bundles.py` builds the evidence bundle fed to OPA; `runtime/catalog.py` loads `policy/catalog.json`; `analysis/` holds the per-family source heuristics (injection, crypto, command). Rego rules live in top-level `policy/*.rego` and **must stay aligned with `policy/catalog.json`**.
 - `llm/` — OpenAI-compatible client/transport, JSON-schema structured output, and per-task prompting. Explanation returns concise `Citation / Why / Fix`; remediation uses a strict contract of `decision` / `replacement_method_lines` / `reason` (malformed payloads surface as `GENERATION_ERROR`, never parser hacks). Explanation and remediation may use different models.

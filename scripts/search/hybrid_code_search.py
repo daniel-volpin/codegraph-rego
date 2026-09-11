@@ -8,11 +8,11 @@ import argparse
 import json
 import sys
 
-from codegraph import config
-
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run hybrid semantic code search.")
+    parser = argparse.ArgumentParser(
+        description="Search the active graph/index generation using CodeGraph runtime settings.",
+    )
     parser.add_argument("query", help="Natural language query to search for")
     parser.add_argument(
         "-k",
@@ -20,18 +20,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=5,
         help="Number of semantic matches to return (default: %(default)s)",
-    )
-    parser.add_argument("--index-path", default=config.FAISS_INDEX_PATH, help="FAISS index path")
-    parser.add_argument("--signature-map", default=config.SIGNATURE_MAP_PATH_FULL, help="Signature map path")
-    parser.add_argument(
-        "--legacy-signature-map",
-        default=config.SIGNATURE_MAP_PATH,
-        help="Legacy signature map path",
-    )
-    parser.add_argument(
-        "--model",
-        default=config.EMBEDDING_MODEL_NAME,
-        help="SentenceTransformer model id",
     )
     parser.add_argument(
         "--json",
@@ -45,25 +33,18 @@ def _print_results(matches: list[str], contexts: list[list[dict]], as_json: bool
     if as_json:
         print(json.dumps({"matches": matches, "contexts": contexts}, indent=2))
         return
-    for idx, sig in enumerate(matches, start=1):
-        print(f"[{idx}] {sig}")
-        for neighbor in contexts[idx - 1]:
-            rel = neighbor.get("relationship")
-            node_type = neighbor.get("type")
-            target = neighbor.get("target")
-            print(f"    - {rel}: ({node_type}) {target}")
+    for idx, method_key in enumerate(matches, start=1):
+        print(f"[{idx}] {method_key}")
+        for context in contexts[idx - 1]:
+            print(f"    {context['method']}")
+            for neighbor in context["neighbors"]:
+                print(f"    - ({neighbor['type']}) {neighbor['display']} [{neighbor['id']}]")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     from codegraph.search import service as search_service
-
-    # Override module-level constants to honor CLI inputs.
-    search_service.FAISS_INDEX_PATH = args.index_path
-    search_service.SIGNATURE_MAP_PATH = args.legacy_signature_map
-    search_service.SIGNATURE_MAP_PATH_FULL = args.signature_map
-    search_service.EMBEDDING_MODEL_NAME = args.model
 
     matches, contexts = search_service.run_search(args.query, k=args.top_k)
     _print_results(matches, contexts, as_json=args.json)

@@ -1,20 +1,20 @@
+from __future__ import annotations
+
+import hashlib
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
+from importlib import import_module
+from pathlib import Path
+from typing import Any
 
-import javalang
-from javalang.tree import (
-    ClassDeclaration,
-    InterfaceDeclaration,
-    MemberReference,
-    MethodInvocation,
-)
 from neo4j import GraphDatabase
 
-from codegraph.common.snippet_utils import find_java_block_end_line, find_java_statement_end_line
 from codegraph.config import settings
 from codegraph.db import ensure_constraints
-from codegraph.ingestion.models import FieldEntity, MethodEntity
+from codegraph.ingestion.models import ClassEntity, FieldEntity, MethodEntity
+from codegraph.java.models import FieldDeclarationDTO, MethodDeclarationDTO, ParsedJavaFileDTO, TypeDeclarationDTO
 
 LOGGER = logging.getLogger(__name__)
 
@@ -23,804 +23,835 @@ class IngestionError(RuntimeError):
     """Raised when ingestion cannot complete successfully."""
 
 
-def _line_from_position(position: tuple[int, int] | None) -> int | None:
-    if not position:
+ProgressCallback = Callable[[str, str, float], None]
+GRAPH_SCHEMA_VERSION = "codegraph-jdt/v1"
+
+
+@dataclass(frozen=True)
+class WorkspacePublication:
+    workspace_id: str
+    revision_id: str
+    previous_revision_id: str | None
+
+
+@dataclass(frozen=True)
+class ExtractedCodeStructure:
+    workspace_id: str
+    revision_id: str
+    parser_backend: str
+    parser_version: str
+    adapter_version: str
+    source_fingerprint: str
+    classpath_fingerprint: str | None
+    source_files: tuple[dict[str, Any], ...] = ()
+    classes: tuple[ClassEntity, ...] = ()
+    methods: tuple[MethodEntity, ...] = ()
+    fields: tuple[FieldEntity, ...] = ()
+    nested_relations: tuple[tuple[str, str], ...] = ()
+    extends_relations: tuple[tuple[str, str, str], ...] = ()
+    implements_relations: tuple[tuple[str, str, str], ...] = ()
+    calls_relations: tuple[tuple[str, str, str], ...] = ()
+    call_evidence: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    method_field_relations: tuple[tuple[str, str], ...] = ()
+    diagnostics: tuple[dict[str, Any], ...] = ()
+
+
+def _parse_java_source(*args, **kwargs) -> ParsedJavaFileDTO:
+    try:
+        service = import_module("codegraph.java.service")
+    except ModuleNotFoundError as exc:
+        raise IngestionError("Java parser service is unavailable; rebuild/provision the JDT parser adapter.") from exc
+    return service.parse_java_source(*args, **kwargs)
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _workspace_id(root_dir: str) -> str:
+    return hashlib.sha256(str(Path(root_dir).resolve()).encode("utf-8")).hexdigest()[:16]
+
+
+def _revision_id(parsed_files: Iterable[ParsedJavaFileDTO]) -> str:
+    digest = hashlib.sha256()
+    digest.update(GRAPH_SCHEMA_VERSION.encode("utf-8"))
+    digest.update(b"\0")
+    for parsed in sorted(parsed_files, key=lambda item: item.relative_path):
+        provenance = parsed.provenance
+        digest.update(parsed.relative_path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(parsed.source_sha256.encode("ascii"))
+        digest.update(b"\0")
+        digest.update(provenance.backend.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(provenance.backend_version.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(provenance.adapter_version.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(provenance.language_level or "").encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(provenance.classpath_fingerprint or "").encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _namespaced_key(workspace_id: str, revision_id: str, relative_path: str, source_key: str) -> str:
+    return f"{workspace_id}@{revision_id}:{relative_path}#{source_key}"
+
+
+def _range_start_line(dto_range) -> int | None:
+    return dto_range.start_line if dto_range and dto_range.status == "verified" else None
+
+
+def _range_end_line(dto_range) -> int | None:
+    return dto_range.end_line if dto_range and dto_range.status == "verified" else None
+
+
+def _range_start_byte(dto_range) -> int | None:
+    return dto_range.start_byte if dto_range and dto_range.status == "verified" else None
+
+
+def _range_end_byte(dto_range) -> int | None:
+    return dto_range.end_byte if dto_range and dto_range.status == "verified" else None
+
+
+def _type_display(type_ref) -> str | None:
+    if type_ref is None:
         return None
-    if isinstance(position, tuple):
-        return position[0]
-    return getattr(position, "line", None)
+    suffix = "[]" * int(type_ref.array_dimensions or 0)
+    if type_ref.varargs:
+        suffix = "..." + suffix
+    return (type_ref.qualified_name or type_ref.source or type_ref.descriptor) + suffix if (
+        type_ref.qualified_name or type_ref.source or type_ref.descriptor
+    ) else None
 
 
-def _column_from_position(position: tuple[int, int] | None) -> int | None:
-    if not position:
-        return None
-    raw = position[1] if isinstance(position, tuple) else getattr(position, "column", None)
-    if raw is None:
-        return None
-    return max(0, int(raw) - 1)
-
-
-def _infer_block_end_line(
-    lines: list[str], start_line: int | None, start_column: int | None = None
-) -> int | None:
-    return find_java_block_end_line(lines, start_line, start_column=start_column)
-
-
-def _infer_statement_end_line(
-    lines: list[str], start_line: int | None, start_column: int | None = None
-) -> int | None:
-    return find_java_statement_end_line(lines, start_line, start_column=start_column)
-
-
-def link_extends_classes_batch(tx, relations: list[dict[str, str]]) -> None:
-    tx.run(
-        """
-        UNWIND $relations AS rel
-        MATCH (child:Class {fqn: rel.child_fqn})
-        MATCH (parent:Class {fqn: rel.parent_fqn})
-        MERGE (child)-[:EXTENDS]->(parent)
-        """,
-        relations=relations,
+def _field_entity(
+    parsed: ParsedJavaFileDTO,
+    field_dto: FieldDeclarationDTO,
+    *,
+    workspace_id: str,
+    revision_id: str,
+    absolute_path: str,
+) -> FieldEntity:
+    return FieldEntity(
+        field_key=_namespaced_key(workspace_id, revision_id, parsed.relative_path, field_dto.source_key),
+        declaring_type_key=_namespaced_key(workspace_id, revision_id, parsed.relative_path, field_dto.declaring_type_source_key),
+        workspace_id=workspace_id,
+        revision_id=revision_id,
+        relative_path=parsed.relative_path,
+        class_fqn=None,
+        name=field_dto.name,
+        type=_type_display(field_dto.type),
+        modifiers=list(field_dto.modifiers),
+        annotations=list(field_dto.annotation_names),
+        file_path=absolute_path,
+        start_line=_range_start_line(field_dto.declaration_range),
+        end_line=_range_end_line(field_dto.declaration_range),
+        start_byte=_range_start_byte(field_dto.declaration_range),
+        end_byte=_range_end_byte(field_dto.declaration_range),
+        source_sha256=parsed.source_sha256,
+        parser_backend=parsed.provenance.backend,
+        parser_version=parsed.provenance.backend_version,
+        adapter_version=parsed.provenance.adapter_version,
+        resolution_status=field_dto.resolution_status,
+        binding_origin=field_dto.binding_origin,
+        binding_key=field_dto.binding_key,
+        range_status=field_dto.declaration_range.status,
     )
 
 
-def link_implements_classes_batch(tx, relations: list[dict[str, str]]) -> None:
-    tx.run(
-        """
-        UNWIND $relations AS rel
-        MATCH (cls:Class {fqn: rel.class_fqn})
-        MATCH (iface:Class {fqn: rel.interface_fqn})
-        MERGE (cls)-[:IMPLEMENTS]->(iface)
-        """,
-        relations=relations,
+def _class_entity(
+    parsed: ParsedJavaFileDTO,
+    type_dto: TypeDeclarationDTO,
+    *,
+    workspace_id: str,
+    revision_id: str,
+    absolute_path: str,
+) -> ClassEntity:
+    return ClassEntity(
+        type_key=_namespaced_key(workspace_id, revision_id, parsed.relative_path, type_dto.source_key),
+        workspace_id=workspace_id,
+        revision_id=revision_id,
+        relative_path=parsed.relative_path,
+        fqn=type_dto.qualified_name,
+        binary_name=type_dto.binary_name,
+        name=type_dto.name,
+        kind=type_dto.kind,
+        nesting_path=list(type_dto.nesting_path),
+        enclosing_type_key=(
+            _namespaced_key(workspace_id, revision_id, parsed.relative_path, type_dto.enclosing_type_source_key)
+            if type_dto.enclosing_type_source_key
+            else None
+        ),
+        modifiers=list(type_dto.modifiers),
+        annotations=list(type_dto.annotation_names),
+        file_path=absolute_path,
+        start_line=_range_start_line(type_dto.declaration_range),
+        end_line=_range_end_line(type_dto.declaration_range),
+        start_byte=_range_start_byte(type_dto.declaration_range),
+        end_byte=_range_end_byte(type_dto.declaration_range),
+        source_sha256=parsed.source_sha256,
+        parser_backend=parsed.provenance.backend,
+        parser_version=parsed.provenance.backend_version,
+        adapter_version=parsed.provenance.adapter_version,
+        resolution_status=type_dto.resolution_status,
+        binding_origin=type_dto.binding_origin,
+        binding_key=type_dto.binding_key,
+        range_status=type_dto.declaration_range.status,
     )
 
 
-def link_uses_batch(tx, relations: list[dict[str, str]]) -> None:
-    tx.run(
-        """
-        UNWIND $relations AS rel
-        MATCH (m:Method {signature: rel.method_sig})
-        MATCH (c:Class {fqn: rel.class_fqn})
-        MERGE (m)-[:USES]->(c)
-        """,
-        relations=relations,
+def _method_entity(
+    parsed: ParsedJavaFileDTO,
+    method_dto: MethodDeclarationDTO,
+    *,
+    workspace_id: str,
+    revision_id: str,
+    absolute_path: str,
+) -> MethodEntity:
+    return MethodEntity(
+        method_key=_namespaced_key(workspace_id, revision_id, parsed.relative_path, method_dto.source_key),
+        declaring_type_key=_namespaced_key(
+            workspace_id, revision_id, parsed.relative_path, method_dto.declaring_type_source_key
+        ),
+        workspace_id=workspace_id,
+        revision_id=revision_id,
+        relative_path=parsed.relative_path,
+        class_fqn=method_dto.declaring_type_qualified_name,
+        signature=method_dto.display_signature,
+        full_signature=method_dto.full_signature,
+        name=method_dto.name,
+        params=[f"{_type_display(param.type) or ''} {param.name}".strip() for param in method_dto.parameters],
+        annotations=list(method_dto.annotation_names),
+        return_type=_type_display(method_dto.return_type),
+        modifiers=list(method_dto.modifiers),
+        file_path=absolute_path,
+        calls=[],
+        uses=[],
+        start_line=_range_start_line(method_dto.declaration_range),
+        end_line=_range_end_line(method_dto.declaration_range),
+        start_byte=_range_start_byte(method_dto.declaration_range),
+        end_byte=_range_end_byte(method_dto.declaration_range),
+        source_sha256=parsed.source_sha256,
+        parser_backend=parsed.provenance.backend,
+        parser_version=parsed.provenance.backend_version,
+        adapter_version=parsed.provenance.adapter_version,
+        language_level=parsed.provenance.language_level,
+        resolution_status=method_dto.resolution_status,
+        binding_origin=method_dto.binding_origin,
+        resolved_binding_key=method_dto.resolved_binding_key,
+        resolved_descriptor=method_dto.resolved_descriptor,
+        range_status=method_dto.declaration_range.status,
     )
 
 
-def link_depends_on_batch(tx, relations: list[dict[str, str]]) -> None:
-    tx.run(
-        """
-        UNWIND $relations AS rel
-        MATCH (c1:Class {fqn: rel.class_fqn})
-        MATCH (c2:Class {fqn: rel.dep_class_fqn})
-        MERGE (c1)-[:DEPENDS_ON]->(c2)
-        """,
-        relations=relations,
+def _parser_generation_key(parsed: ParsedJavaFileDTO) -> tuple[str, str, str, str | None, str | None]:
+    provenance = parsed.provenance
+    return (
+        provenance.backend,
+        provenance.backend_version,
+        provenance.adapter_version,
+        provenance.language_level,
+        provenance.classpath_fingerprint,
     )
 
 
-def link_calls_batch(tx, relations: list[dict[str, str]]) -> None:
-    tx.run(
-        """
-        UNWIND $relations AS rel
-        MATCH (caller:Method {signature: rel.caller_sig})
-        MATCH (callee:Method {signature: rel.callee_sig})
-        MERGE (caller)-[:CALLS]->(callee)
-        """,
-        relations=relations,
+def _validate_parsed_generation(parsed_files: list[ParsedJavaFileDTO]) -> tuple[str, str, str, str | None]:
+    if not parsed_files:
+        raise IngestionError("No Java parser results were produced; refusing to publish an empty graph revision.")
+    failed = [parsed.relative_path for parsed in parsed_files if parsed.coverage == "failed"]
+    if failed:
+        raise IngestionError(f"JDT failed parser coverage for {', '.join(sorted(failed))}; refusing graph publication.")
+    generation_keys = {_parser_generation_key(parsed) for parsed in parsed_files}
+    if len(generation_keys) != 1:
+        raise IngestionError("JDT mixed parser generation detected; refusing graph publication.")
+    backend, backend_version, adapter_version, _language_level, classpath_fingerprint = next(iter(generation_keys))
+    return backend, backend_version, adapter_version, classpath_fingerprint
+
+
+def extract_entities_from_parsed_files(
+    parsed_files: list[ParsedJavaFileDTO],
+    *,
+    workspace_id: str,
+    revision_id: str,
+    root_dir: str | None = None,
+) -> ExtractedCodeStructure:
+    classes: list[ClassEntity] = []
+    fields: list[FieldEntity] = []
+    methods: list[MethodEntity] = []
+    nested: list[tuple[str, str]] = []
+    extends: list[tuple[str, str, str]] = []
+    implements: list[tuple[str, str, str]] = []
+    calls: list[tuple[str, str, str]] = []
+    call_evidence: list[dict[str, Any]] = []
+    method_fields: list[tuple[str, str]] = []
+    diagnostics: list[dict[str, Any]] = []
+    binding_to_method_key: dict[str, str] = {}
+    field_binding_to_key: dict[str, str] = {}
+    type_binding_to_key: dict[str, str] = {}
+    local_method_keys: set[str] = set()
+    parser_backend, parser_version, adapter_version, classpath_fingerprint = _validate_parsed_generation(parsed_files)
+    source_files: list[dict[str, Any]] = []
+
+    for parsed in parsed_files:
+        absolute_path = str(Path(root_dir, parsed.relative_path).resolve()) if root_dir else parsed.relative_path
+        source_files.append(
+            {
+                "workspace_id": workspace_id,
+                "revision_id": revision_id,
+                "relative_path": parsed.relative_path,
+                "file_path": absolute_path,
+                "source_sha256": parsed.source_sha256,
+                "source_byte_length": parsed.source_byte_length,
+                "coverage": parsed.coverage,
+                "parser_backend": parsed.provenance.backend,
+                "parser_version": parsed.provenance.backend_version,
+                "adapter_version": parsed.provenance.adapter_version,
+                "diagnostics": [
+                    {
+                        "severity": diagnostic.severity,
+                        "phase": diagnostic.phase,
+                        "code": diagnostic.code,
+                        "message": diagnostic.message,
+                        "coverage_impact": diagnostic.coverage_impact,
+                    }
+                    for diagnostic in parsed.diagnostics
+                ],
+            }
+        )
+        for type_dto in parsed.types:
+            entity = _class_entity(parsed, type_dto, workspace_id=workspace_id, revision_id=revision_id, absolute_path=absolute_path)
+            classes.append(entity)
+            if type_dto.binding_key and type_dto.binding_origin == "source":
+                type_binding_to_key[type_dto.binding_key] = entity.type_key
+            if entity.enclosing_type_key:
+                nested.append((entity.type_key, entity.enclosing_type_key))
+        for field_dto in parsed.fields:
+            entity = _field_entity(parsed, field_dto, workspace_id=workspace_id, revision_id=revision_id, absolute_path=absolute_path)
+            fields.append(entity)
+            if field_dto.binding_key:
+                field_binding_to_key[field_dto.binding_key] = entity.field_key
+        for method_dto in parsed.methods:
+            entity = _method_entity(parsed, method_dto, workspace_id=workspace_id, revision_id=revision_id, absolute_path=absolute_path)
+            methods.append(entity)
+            local_method_keys.add(entity.method_key)
+            if method_dto.resolved_binding_key:
+                binding_to_method_key[method_dto.resolved_binding_key] = entity.method_key
+        diagnostics.extend(
+            {
+                "relative_path": parsed.relative_path,
+                "severity": diagnostic.severity,
+                "phase": diagnostic.phase,
+                "code": diagnostic.code,
+                "message": diagnostic.message,
+                "coverage_impact": diagnostic.coverage_impact,
+            }
+            for diagnostic in parsed.diagnostics
+        )
+
+    type_key_by_source_key = {entity.type_key.rsplit("#", 1)[-1]: entity.type_key for entity in classes}
+    for parsed in parsed_files:
+        for type_dto in parsed.types:
+            child_key = _namespaced_key(workspace_id, revision_id, parsed.relative_path, type_dto.source_key)
+            if type_dto.superclass and type_dto.superclass.binding_origin == "source":
+                parent_key = type_binding_to_key.get(type_dto.superclass.binding_key or "")
+                if parent_key:
+                    extends.append((child_key, parent_key, type_dto.superclass.resolution_status))
+            for interface in type_dto.interfaces:
+                parent_key = None
+                if interface.binding_origin == "source":
+                    parent_key = type_binding_to_key.get(interface.binding_key or "")
+                if parent_key is None and interface.source:
+                    parent_key = type_key_by_source_key.get(interface.source)
+                if parent_key:
+                    implements.append((child_key, parent_key, interface.resolution_status))
+
+    for parsed in parsed_files:
+        for method_dto in parsed.methods:
+            caller_key = _namespaced_key(workspace_id, revision_id, parsed.relative_path, method_dto.source_key)
+            for invocation in method_dto.invocations:
+                target_key = None
+                if invocation.target_method_source_key:
+                    candidate_key = _namespaced_key(
+                        workspace_id, revision_id, parsed.relative_path, invocation.target_method_source_key
+                    )
+                    if candidate_key in local_method_keys:
+                        target_key = candidate_key
+                if target_key is None and invocation.resolution_status == "resolved" and invocation.binding_origin == "source":
+                    target_key = binding_to_method_key.get(invocation.resolved_binding_key or "")
+                if target_key:
+                    calls.append(
+                        (
+                            caller_key,
+                            target_key,
+                            _namespaced_key(workspace_id, revision_id, parsed.relative_path, invocation.source_key),
+                        )
+                    )
+                    continue
+                call_evidence.append(
+                    {
+                        "call_key": _namespaced_key(workspace_id, revision_id, parsed.relative_path, invocation.source_key),
+                        "caller_key": caller_key,
+                        "name": invocation.name,
+                        "qualifier": invocation.qualifier_source,
+                        "argument_count": invocation.argument_count,
+                        "resolution_status": invocation.resolution_status,
+                        "binding_origin": invocation.binding_origin,
+                        "resolved_binding_key": invocation.resolved_binding_key,
+                        "resolved_descriptor": invocation.resolved_descriptor,
+                        "unresolved_reason": invocation.unresolved_reason,
+                        "start_byte": _range_start_byte(invocation.invocation_range),
+                        "end_byte": _range_end_byte(invocation.invocation_range),
+                    }
+                )
+            for field_use in method_dto.field_uses:
+                field_key = field_binding_to_key.get(field_use.field_binding_key or "")
+                if field_key:
+                    method_fields.append((caller_key, field_key))
+
+    return ExtractedCodeStructure(
+        workspace_id=workspace_id,
+        revision_id=revision_id,
+        parser_backend=parser_backend,
+        parser_version=parser_version,
+        adapter_version=adapter_version,
+        source_fingerprint=_revision_id(parsed_files),
+        classpath_fingerprint=classpath_fingerprint,
+        source_files=tuple(source_files),
+        classes=tuple(classes),
+        methods=tuple(methods),
+        fields=tuple(fields),
+        nested_relations=tuple(dict.fromkeys(nested)),
+        extends_relations=tuple(extends),
+        implements_relations=tuple(implements),
+        calls_relations=tuple(dict.fromkeys(calls)),
+        call_evidence=tuple(call_evidence),
+        method_field_relations=tuple(dict.fromkeys(method_fields)),
+        diagnostics=tuple(diagnostics),
     )
 
 
-def create_field(tx, field: FieldEntity) -> None:
-    tx.run(
-        """
-        MERGE (cls:Class {fqn: $class_fqn})
-        MERGE (f:Field {class_fqn: $class_fqn, name: $name})
-        SET f.type = $field_type,
-            f.modifiers = $modifiers,
-            f.annotations = $annotations,
-            f.file_path = $file_path,
-            f.start_line = $start_line,
-            f.end_line = $end_line
-        MERGE (cls)-[:DECLARES_FIELD]->(f)
-        """,
-        class_fqn=field.class_fqn,
-        name=field.name,
-        field_type=field.type,
-        modifiers=field.modifiers,
-        annotations=field.annotations,
-        file_path=field.file_path,
-        start_line=field.start_line,
-        end_line=field.end_line,
+def _normalize_source_roots(root_dir: str, source_roots: Sequence[str | os.PathLike[str]] | None) -> tuple[Path, ...]:
+    roots = source_roots if source_roots is not None else (root_dir,)
+    normalized = tuple(Path(root).resolve() for root in roots)
+    missing = [str(root) for root in normalized if not root.is_dir()]
+    if missing:
+        raise IngestionError(f"Source root directories do not exist: {', '.join(missing)}")
+    return normalized
+
+
+def collect_code_structure(
+    root_dir: str,
+    progress_callback: ProgressCallback | None = None,
+    *,
+    source_roots: Sequence[str | os.PathLike[str]] | None = None,
+) -> ExtractedCodeStructure:
+    parser_source_roots = _normalize_source_roots(root_dir, source_roots)
+    java_files: list[str] = []
+    for root, _, files in os.walk(root_dir):
+        for file_name in files:
+            if file_name.endswith(".java"):
+                java_files.append(os.path.join(root, file_name))
+    parsed_files: list[ParsedJavaFileDTO] = []
+    for index, file_path in enumerate(sorted(java_files), start=1):
+        relative_path = os.path.relpath(file_path, root_dir).replace(os.sep, "/")
+        if progress_callback:
+            progress_callback("parsing", f"Parsing {relative_path}", min(20.0 + 40.0 * index / (len(java_files) or 1), 60.0))
+        source_bytes = Path(file_path).read_bytes()
+        parsed = _parse_java_source(
+            source_bytes,
+            relative_path=relative_path,
+            source_roots=parser_source_roots,
+            classpath=(),
+            resolve_bindings=True,
+            language_level=None,
+        )
+        if parsed.source_sha256 != _sha256_bytes(source_bytes):
+            raise IngestionError(f"Parser source hash mismatch for {relative_path}; refusing ingestion")
+        parsed_files.append(parsed)
+    revision_id = _revision_id(parsed_files)
+    return extract_entities_from_parsed_files(
+        parsed_files,
+        workspace_id=_workspace_id(root_dir),
+        revision_id=revision_id,
+        root_dir=root_dir,
     )
 
 
-def link_method_annotation_batch(tx, relations: list[dict[str, str]]) -> None:
+def _chunked(values, size: int):
+    for index in range(0, len(values), size):
+        yield values[index : index + size]
+
+
+def create_workspace_revision(tx, structure: ExtractedCodeStructure) -> None:
     tx.run(
         """
-        UNWIND $relations AS rel
-        MATCH (m:Method {signature: rel.method_sig})
-        MERGE (ann:Annotation {name: rel.annotation})
-        MERGE (m)-[:ANNOTATED_WITH]->(ann)
+        MERGE (wr:WorkspaceRevision {workspace_id: $workspace_id, revision_id: $revision_id})
+        ON CREATE SET wr.status = 'staged', wr.active = false
+        SET wr.schema_version = $schema_version,
+            wr.parser_backend = $parser_backend,
+            wr.parser_version = $parser_version,
+            wr.adapter_version = $adapter_version,
+            wr.source_fingerprint = $source_fingerprint,
+            wr.classpath_fingerprint = $classpath_fingerprint
         """,
-        relations=relations,
+        workspace_id=structure.workspace_id,
+        revision_id=structure.revision_id,
+        schema_version=GRAPH_SCHEMA_VERSION,
+        parser_backend=structure.parser_backend,
+        parser_version=structure.parser_version,
+        adapter_version=structure.adapter_version,
+        source_fingerprint=structure.source_fingerprint,
+        classpath_fingerprint=structure.classpath_fingerprint,
     )
 
 
-def link_method_field_use_batch(tx, relations: list[dict[str, str]]) -> None:
+def create_source_file_batch(tx, source_files: tuple[dict[str, Any], ...]) -> None:
     tx.run(
         """
-        UNWIND $relations AS rel
-        MATCH (m:Method {signature: rel.method_sig})
-        MATCH (f:Field {class_fqn: rel.class_fqn, name: rel.field_name})
-        MERGE (m)-[:USES]->(f)
+        UNWIND $source_files AS item
+        MATCH (wr:WorkspaceRevision {workspace_id: item.workspace_id, revision_id: item.revision_id})
+        MERGE (sf:SourceFile {workspace_id: item.workspace_id, revision_id: item.revision_id, relative_path: item.relative_path})
+        SET sf.file_path = item.file_path,
+            sf.source_sha256 = item.source_sha256,
+            sf.source_byte_length = item.source_byte_length,
+            sf.coverage = item.coverage,
+            sf.parser_backend = item.parser_backend,
+            sf.parser_version = item.parser_version,
+            sf.adapter_version = item.adapter_version,
+            sf.diagnostics = item.diagnostics
+        MERGE (wr)-[:HAS_FILE]->(sf)
         """,
-        relations=relations,
+        source_files=list(source_files),
     )
 
 
-def create_class_and_method(tx, m: MethodEntity) -> None:
+def create_class_batch(tx, classes: tuple[ClassEntity, ...]) -> None:
     tx.run(
         """
-        MERGE (cls:Class {fqn: $class_fqn})
-        MERGE (m:Method {signature: $sig})
-        SET m.name = $name,
-            m.params = $params,
-            m.annotations = $annotations,
-            m.return_type = $return_type,
-            m.modifiers = $modifiers,
-            m.file_path = $file_path,
-            m.full_signature = $full_signature,
-            m.start_line = $start_line,
-            m.end_line = $end_line
+        UNWIND $classes AS item
+        MATCH (wr:WorkspaceRevision {workspace_id: item.workspace_id, revision_id: item.revision_id})
+        MERGE (sf:SourceFile {workspace_id: item.workspace_id, revision_id: item.revision_id, relative_path: item.relative_path})
+        MERGE (cls:Class {type_key: item.type_key})
+        SET cls.fqn = item.fqn,
+            cls.binary_name = item.binary_name,
+            cls.name = item.name,
+            cls.kind = item.kind,
+            cls.nesting_path = item.nesting_path,
+            cls.modifiers = item.modifiers,
+            cls.annotations = item.annotations,
+            cls.file_path = item.file_path,
+            cls.relative_path = item.relative_path,
+            cls.workspace_id = item.workspace_id,
+            cls.revision_id = item.revision_id,
+            cls.start_line = item.start_line,
+            cls.end_line = item.end_line,
+            cls.start_byte = item.start_byte,
+            cls.end_byte = item.end_byte,
+            cls.source_sha256 = item.source_sha256,
+            cls.parser_backend = item.parser_backend,
+            cls.parser_version = item.parser_version,
+            cls.adapter_version = item.adapter_version,
+            cls.resolution_status = item.resolution_status,
+            cls.binding_origin = item.binding_origin,
+            cls.binding_key = item.binding_key,
+            cls.range_status = item.range_status
+        MERGE (wr)-[:HAS_FILE]->(sf)
+        MERGE (sf)-[:DECLARES_TYPE]->(cls)
+        """,
+        classes=[item.model_dump() for item in classes],
+    )
+
+
+def create_method_batch(tx, methods: tuple[MethodEntity, ...]) -> None:
+    tx.run(
+        """
+        UNWIND $methods AS item
+        MATCH (cls:Class {type_key: item.declaring_type_key})
+        MERGE (m:Method {method_key: item.method_key})
+        SET m.signature = item.signature,
+            m.full_signature = item.full_signature,
+            m.name = item.name,
+            m.params = item.params,
+            m.annotations = item.annotations,
+            m.return_type = item.return_type,
+            m.modifiers = item.modifiers,
+            m.file_path = item.file_path,
+            m.relative_path = item.relative_path,
+            m.workspace_id = item.workspace_id,
+            m.revision_id = item.revision_id,
+            m.declaring_type_key = item.declaring_type_key,
+            m.class_fqn = item.class_fqn,
+            m.start_line = item.start_line,
+            m.end_line = item.end_line,
+            m.start_byte = item.start_byte,
+            m.end_byte = item.end_byte,
+            m.source_sha256 = item.source_sha256,
+            m.parser_backend = item.parser_backend,
+            m.parser_version = item.parser_version,
+            m.adapter_version = item.adapter_version,
+            m.language_level = item.language_level,
+            m.resolution_status = item.resolution_status,
+            m.binding_origin = item.binding_origin,
+            m.resolved_binding_key = item.resolved_binding_key,
+            m.resolved_descriptor = item.resolved_descriptor,
+            m.range_status = item.range_status
         MERGE (cls)-[:DECLARES]->(m)
         """,
-        class_fqn=m.class_fqn,
-        sig=m.signature,
-        full_signature=m.full_signature,
-        name=m.name,
-        params=m.params,
-        annotations=m.annotations,
-        return_type=m.return_type,
-        modifiers=m.modifiers,
-        file_path=m.file_path,
-        start_line=m.start_line,
-        end_line=m.end_line,
+        methods=[item.model_dump() for item in methods],
     )
 
 
-def link_nested_classes_batch(tx, relations: list[dict[str, str]]) -> None:
+def create_field_batch(tx, fields: tuple[FieldEntity, ...]) -> None:
+    tx.run(
+        """
+        UNWIND $fields AS item
+        MATCH (cls:Class {type_key: item.declaring_type_key})
+        MERGE (f:Field {field_key: item.field_key})
+        SET f.name = item.name,
+            f.type = item.type,
+            f.modifiers = item.modifiers,
+            f.annotations = item.annotations,
+            f.file_path = item.file_path,
+            f.relative_path = item.relative_path,
+            f.workspace_id = item.workspace_id,
+            f.revision_id = item.revision_id,
+            f.declaring_type_key = item.declaring_type_key,
+            f.class_fqn = item.class_fqn,
+            f.start_line = item.start_line,
+            f.end_line = item.end_line,
+            f.start_byte = item.start_byte,
+            f.end_byte = item.end_byte,
+            f.source_sha256 = item.source_sha256,
+            f.parser_backend = item.parser_backend,
+            f.parser_version = item.parser_version,
+            f.adapter_version = item.adapter_version,
+            f.resolution_status = item.resolution_status,
+            f.binding_origin = item.binding_origin,
+            f.binding_key = item.binding_key,
+            f.range_status = item.range_status
+        MERGE (cls)-[:DECLARES_FIELD]->(f)
+        """,
+        fields=[item.model_dump() for item in fields],
+    )
+
+
+def link_nested_classes_batch(tx, relations: tuple[tuple[str, str], ...]) -> None:
     tx.run(
         """
         UNWIND $relations AS rel
-        MATCH (child:Class {fqn: rel.child_fqn})
-        MATCH (parent:Class {fqn: rel.parent_fqn})
+        MATCH (child:Class {type_key: rel[0]})
+        MATCH (parent:Class {type_key: rel[1]})
         MERGE (child)-[:NESTED_IN]->(parent)
         """,
-        relations=relations,
+        relations=list(relations),
     )
 
 
-def walk_class_declarations(
-    type_decls,
-    package: str,
-    file_path: str,
-    file_lines: list[str],
-    parent_fqn: str | None = None,
-):
-    methods: list[MethodEntity] = []
-    nested_relations: list[tuple[str, str]] = []
-    extends_relations: list[tuple[str, str]] = []
-    implements_relations: list[tuple[str, str]] = []
-    uses_relations: list[tuple[str, str]] = []
-    depends_on_relations: list[tuple[str, str]] = []
-    calls_relations: list[tuple[str, str]] = []
-    field_entities: list[FieldEntity] = []
-    method_field_relations: list[tuple[str, str, str]] = []
-
-    for decl in type_decls:
-        if not isinstance(decl, (ClassDeclaration, InterfaceDeclaration)):
-            continue
-        class_name = getattr(decl, "name", "UnknownClass")
-        class_fqn = f"{package}.{class_name}" if not parent_fqn else f"{parent_fqn}${class_name}"
-        if parent_fqn:
-            nested_relations.append((class_fqn, parent_fqn))
-
-        if getattr(decl, "extends", None):
-            ext = getattr(decl, "extends")
-            extends_relations.append((class_fqn, f"{package}.{getattr(ext, 'name', str(ext))}"))
-
-        if getattr(decl, "implements", None):
-            for impl in getattr(decl, "implements"):
-                implements_relations.append((class_fqn, f"{package}.{getattr(impl, 'name', str(impl))}"))
-
-        declared_fields: dict[str, FieldEntity] = {}
-        for field in getattr(decl, "fields", []):
-            field_type = getattr(field.type, "name", str(field.type))
-            depends_on_relations.append((class_fqn, f"{package}.{field_type}"))
-            field_annotations = [getattr(ann, "name", str(ann)) for ann in getattr(field, "annotations", [])]
-            field_modifiers = list(getattr(field, "modifiers", []) or [])
-            base_line = _line_from_position(getattr(field, "position", None))
-            base_col = _column_from_position(getattr(field, "position", None))
-            for declarator in getattr(field, "declarators", []):
-                field_name = getattr(declarator, "name", None)
-                if not field_name:
-                    continue
-                start_line = _line_from_position(getattr(declarator, "position", None)) or base_line
-                start_column = _column_from_position(getattr(declarator, "position", None))
-                if start_column is None:
-                    start_column = base_col
-                end_line = _infer_statement_end_line(file_lines, start_line, start_column)
-                entity = FieldEntity(
-                    class_fqn=class_fqn,
-                    name=field_name,
-                    type=field_type,
-                    modifiers=field_modifiers,
-                    annotations=field_annotations,
-                    file_path=file_path,
-                    start_line=start_line,
-                    end_line=end_line,
-                )
-                field_entities.append(entity)
-                declared_fields[field_name] = entity
-
-        for method in getattr(decl, "methods", []):
-            param_types = [
-                getattr(p.type, "name", str(p.type))
-                for p in getattr(method, "parameters", [])
-                if getattr(p, "type", None) is not None
-            ]
-            method_name = getattr(method, "name", "unknown_method")
-            method_sig = f"{class_fqn}.{method_name}()"
-            full_sig = f"{class_fqn}.{method_name}({','.join(param_types)})"
-            params = [
-                f"{getattr(p.type, 'name', str(p.type))} {p.name}"
-                for p in getattr(method, "parameters", [])
-                if getattr(p, "type", None) is not None
-            ]
-            annotations = [getattr(ann, "name", str(ann)) for ann in getattr(method, "annotations", [])]
-            uses_types = [
-                f"{package}.{getattr(p.type, 'name', str(p.type))}"
-                for p in getattr(method, "parameters", [])
-                if hasattr(p.type, "name")
-            ]
-            method_start_line = _line_from_position(getattr(method, "position", None))
-            method_start_col = _column_from_position(getattr(method, "position", None))
-            method_body = getattr(method, "body", None)
-            method_end_line = (
-                _infer_block_end_line(file_lines, method_start_line, method_start_col)
-                if method_body is not None
-                else method_start_line
-            )
-            calls: list[str] = []
-            field_usage: set[str] = set()
-            if getattr(method, "body", None):
-                for _, node in method:
-                    if isinstance(node, MethodInvocation):
-                        qualifier = getattr(node, "qualifier", None)
-                        member = getattr(node, "member", None)
-                        if qualifier:
-                            called_fqn = f"{package}.{qualifier}.{member}()"
-                        else:
-                            called_fqn = f"{class_fqn}.{member}()"
-                        calls.append(called_fqn)
-                        calls_relations.append((method_sig, called_fqn))
-                    if isinstance(node, MemberReference):
-                        qualifier = getattr(node, "qualifier", None)
-                        member = getattr(node, "member", None)
-                        if member in declared_fields and (qualifier is None or qualifier == "this"):
-                            field_usage.add(member)
-
-            methods.append(
-                MethodEntity(
-                    class_fqn=class_fqn,
-                    signature=method_sig,
-                    full_signature=full_sig,
-                    name=method_name,
-                    params=params,
-                    annotations=annotations,
-                    return_type=getattr(getattr(method, "return_type", None), "name", None),
-                    modifiers=list(getattr(method, "modifiers", [])),
-                    file_path=file_path,
-                    calls=calls,
-                    uses=uses_types,
-                    start_line=method_start_line,
-                    end_line=method_end_line,
-                )
-            )
-            for used_type in uses_types:
-                uses_relations.append((method_sig, used_type))
-            for field_name in field_usage:
-                method_field_relations.append((method_sig, class_fqn, field_name))
-
-        for ctor in getattr(decl, "constructors", []):
-            ctor_param_types = [
-                getattr(p.type, "name", str(p.type))
-                for p in getattr(ctor, "parameters", [])
-                if getattr(p, "type", None) is not None
-            ]
-            ctor_sig = f"{class_fqn}.{class_name}()"
-            ctor_full_sig = f"{class_fqn}.{class_name}({','.join(ctor_param_types)})"
-            params = [
-                f"{getattr(p.type, 'name', str(p.type))} {p.name}"
-                for p in getattr(ctor, "parameters", [])
-                if getattr(p, "type", None) is not None
-            ]
-            annotations = [getattr(ann, "name", str(ann)) for ann in getattr(ctor, "annotations", [])]
-            uses_types = [
-                f"{package}.{getattr(p.type, 'name', str(p.type))}"
-                for p in getattr(ctor, "parameters", [])
-                if hasattr(p.type, "name")
-            ]
-            ctor_start_line = _line_from_position(getattr(ctor, "position", None))
-            ctor_start_col = _column_from_position(getattr(ctor, "position", None))
-            ctor_body = getattr(ctor, "body", None)
-            ctor_end_line = (
-                _infer_block_end_line(file_lines, ctor_start_line, ctor_start_col)
-                if ctor_body is not None
-                else ctor_start_line
-            )
-            methods.append(
-                MethodEntity(
-                    class_fqn=class_fqn,
-                    signature=ctor_sig,
-                    full_signature=ctor_full_sig,
-                    name=class_name,
-                    params=params,
-                    annotations=annotations,
-                    return_type=None,
-                    modifiers=list(getattr(ctor, "modifiers", [])),
-                    file_path=file_path,
-                    calls=[],
-                    uses=uses_types,
-                    start_line=ctor_start_line,
-                    end_line=ctor_end_line,
-                )
-            )
-            for used_type in uses_types:
-                uses_relations.append((ctor_sig, used_type))
-
-        body_types = [
-            node for node in getattr(decl, "body", []) if isinstance(node, (ClassDeclaration, InterfaceDeclaration))
-        ]
-        (
-            inner_methods,
-            inner_nested,
-            inner_extends,
-            inner_implements,
-            inner_uses,
-            inner_depends,
-            inner_calls,
-            inner_fields,
-            inner_method_fields,
-        ) = walk_class_declarations(body_types, package, file_path, file_lines, class_fqn)
-        methods += inner_methods
-        nested_relations += inner_nested
-        extends_relations += inner_extends
-        implements_relations += inner_implements
-        uses_relations += inner_uses
-        depends_on_relations += inner_depends
-        calls_relations += inner_calls
-        field_entities += inner_fields
-        method_field_relations += inner_method_fields
-
-    return (
-        methods,
-        nested_relations,
-        extends_relations,
-        implements_relations,
-        uses_relations,
-        depends_on_relations,
-        calls_relations,
-        field_entities,
-        method_field_relations,
+def link_extends_classes_batch(tx, relations: tuple[tuple[str, str, str], ...]) -> None:
+    tx.run(
+        """
+        UNWIND $relations AS rel
+        MATCH (child:Class {type_key: rel[0]})
+        MATCH (parent:Class {type_key: rel[1]})
+        MERGE (child)-[r:EXTENDS]->(parent)
+        SET r.resolution_status = rel[2]
+        """,
+        relations=list(relations),
     )
 
 
-def extract_entities_from_file(file_path: str):
-    try:
-        with open(file_path, encoding="utf-8") as f:
-            content = f.read()
-        tree = javalang.parse.parse(content)
-    except Exception as exc:
-        LOGGER.warning("Could not parse %s: %s", file_path, exc)
-        return [], [], [], [], [], [], [], [], []
-
-    package = getattr(tree, "package", None)
-    package_name = package.name if package and hasattr(package, "name") else "unknown"
-    return walk_class_declarations(
-        getattr(tree, "types", []),
-        package_name,
-        file_path,
-        content.splitlines(),
+def link_implements_classes_batch(tx, relations: tuple[tuple[str, str, str], ...]) -> None:
+    tx.run(
+        """
+        UNWIND $relations AS rel
+        MATCH (cls:Class {type_key: rel[0]})
+        MATCH (iface:Class {type_key: rel[1]})
+        MERGE (cls)-[r:IMPLEMENTS]->(iface)
+        SET r.resolution_status = rel[2]
+        """,
+        relations=list(relations),
     )
 
 
-def extract_entities_from_content(file_path: str, content: str):
-    try:
-        tree = javalang.parse.parse(content)
-    except Exception as exc:
-        LOGGER.warning("Could not parse in-memory content for %s: %s", file_path, exc)
-        return [], [], [], [], [], [], [], [], []
-
-    package = getattr(tree, "package", None)
-    package_name = package.name if package and hasattr(package, "name") else "unknown"
-    return walk_class_declarations(
-        getattr(tree, "types", []),
-        package_name,
-        file_path,
-        content.splitlines(),
+def link_calls_batch(tx, relations: tuple[tuple[str, str, str], ...]) -> None:
+    tx.run(
+        """
+        UNWIND $relations AS rel
+        MATCH (caller:Method {method_key: rel[0]})
+        MATCH (callee:Method {method_key: rel[1]})
+        MERGE (caller)-[r:CALLS {call_key: rel[2]}]->(callee)
+        """,
+        relations=list(relations),
     )
 
 
-def collect_code_structure(root_dir: str, progress_callback: Callable[[str, str, float], None] | None = None):
-    all_methods: list[MethodEntity] = []
-    all_nested: list[tuple[str, str]] = []
-    all_extends: list[tuple[str, str]] = []
-    all_implements: list[tuple[str, str]] = []
-    all_uses: list[tuple[str, str]] = []
-    all_depends: list[tuple[str, str]] = []
-    all_calls: list[tuple[str, str]] = []
-    all_fields: list[FieldEntity] = []
-    all_method_field_relations: list[tuple[str, str, str]] = []
-    java_files: list[str] = []
-
-    for root, _, files in os.walk(root_dir):
-        for file in files:
-            if file.endswith(".java"):
-                java_files.append(os.path.join(root, file))
-
-    file_count = len(java_files)
-    total_files = file_count or 1
-    base_progress = 20.0
-    span = 40.0
-
-    for index, file_path in enumerate(java_files, start=1):
-        rel_path = os.path.relpath(file_path, root_dir)
-        if progress_callback:
-            pct = min(base_progress + (span * index / total_files), 60.0)
-            progress_callback("parsing", f"Parsing {rel_path}", pct)
-        (
-            methods,
-            nested,
-            extends,
-            implements,
-            uses,
-            depends,
-            calls,
-            fields,
-            method_field_uses,
-        ) = extract_entities_from_file(file_path)
-        all_methods.extend(methods)
-        all_nested.extend(nested)
-        all_extends.extend(extends)
-        all_implements.extend(implements)
-        all_uses.extend(uses)
-        all_depends.extend(depends)
-        all_calls.extend(calls)
-        all_fields.extend(fields)
-        all_method_field_relations.extend(method_field_uses)
-
-    LOGGER.info("Parsed %d Java files", file_count)
-    LOGGER.info("Found %d methods/constructors", len(all_methods))
-    LOGGER.info("Found %d nested class relations", len(all_nested))
-    LOGGER.info("Found %d extends relations", len(all_extends))
-    LOGGER.info("Found %d implements relations", len(all_implements))
-    LOGGER.info("Found %d uses relations", len(all_uses))
-    LOGGER.info("Found %d depends_on relations", len(all_depends))
-    LOGGER.info("Found %d calls relations", len(all_calls))
-    LOGGER.info("Found %d fields", len(all_fields))
-    LOGGER.info("Found %d method-field use relations", len(all_method_field_relations))
-    if progress_callback:
-        progress_callback("parsing", f"Parsed {file_count} Java files.", 60.0)
-    return (
-        all_methods,
-        all_nested,
-        all_extends,
-        all_implements,
-        all_uses,
-        all_depends,
-        all_calls,
-        all_fields,
-        all_method_field_relations,
+def create_call_evidence_batch(tx, call_evidence: tuple[dict[str, Any], ...]) -> None:
+    tx.run(
+        """
+        UNWIND $calls AS item
+        MATCH (caller:Method {method_key: item.caller_key})
+        MERGE (call:CallEvidence {call_key: item.call_key})
+        SET call.name = item.name,
+            call.qualifier = item.qualifier,
+            call.argument_count = item.argument_count,
+            call.resolution_status = item.resolution_status,
+            call.binding_origin = item.binding_origin,
+            call.resolved_binding_key = item.resolved_binding_key,
+            call.resolved_descriptor = item.resolved_descriptor,
+            call.unresolved_reason = item.unresolved_reason,
+            call.start_byte = item.start_byte,
+            call.end_byte = item.end_byte
+        MERGE (caller)-[:HAS_CALL]->(call)
+        """,
+        calls=list(call_evidence),
     )
+
+
+def link_method_field_use_batch(tx, relations: tuple[tuple[str, str], ...]) -> None:
+    tx.run(
+        """
+        UNWIND $relations AS rel
+        MATCH (m:Method {method_key: rel[0]})
+        MATCH (f:Field {field_key: rel[1]})
+        MERGE (m)-[:USES]->(f)
+        """,
+        relations=list(relations),
+    )
+
+
+def publish_workspace_revision(tx, structure: ExtractedCodeStructure) -> WorkspacePublication:
+    record = tx.run(
+        """
+        MERGE (aw:ActiveWorkspace {workspace_id: $workspace_id})
+        SET aw.publication_version = coalesce(aw.publication_version, 0) + 1
+        WITH aw
+        MATCH (wr:WorkspaceRevision {workspace_id: $workspace_id, revision_id: $revision_id})
+        OPTIONAL MATCH (aw)-[old:ACTIVE_REVISION]->(previous:WorkspaceRevision)
+        WITH aw, wr, collect(old) AS old_links, collect(previous.revision_id) AS previous_revisions
+        FOREACH (old IN old_links | DELETE old)
+        SET wr.status = 'active',
+            wr.active = true,
+            wr.published_at = datetime()
+        MERGE (aw)-[:ACTIVE_REVISION]->(wr)
+        RETURN previous_revisions
+        """,
+        workspace_id=structure.workspace_id,
+        revision_id=structure.revision_id,
+    ).single()
+    if record is None or not isinstance(record.get("previous_revisions"), list):
+        raise IngestionError("Workspace publication did not return its previous revision.")
+    previous = record["previous_revisions"]
+    if len(previous) > 1:
+        raise IngestionError("Workspace has multiple active revisions; refusing publication.")
+    return WorkspacePublication(structure.workspace_id, structure.revision_id, previous[0] if previous else None)
+
+
+def _rollback_workspace_revision(tx, publication: WorkspacePublication) -> None:
+    record = tx.run(
+        """
+        MATCH (aw:ActiveWorkspace {workspace_id: $workspace_id})
+        SET aw.publication_version = coalesce(aw.publication_version, 0) + 1
+        WITH aw
+        MATCH (aw)-[current:ACTIVE_REVISION]->(wr:WorkspaceRevision {revision_id: $revision_id})
+        OPTIONAL MATCH (previous:WorkspaceRevision {workspace_id: $workspace_id})
+        WHERE previous.revision_id = $previous_revision_id
+        WITH aw, current, wr, previous
+        WHERE $previous_revision_id IS NULL OR previous IS NOT NULL
+        DELETE current
+        SET wr.active = false, wr.status = 'staged'
+        FOREACH (prior IN CASE WHEN previous IS NULL THEN [] ELSE [previous] END |
+            MERGE (aw)-[:ACTIVE_REVISION]->(prior)
+            SET prior.active = true, prior.status = 'active'
+        )
+        RETURN aw.workspace_id AS workspace_id
+        """,
+        workspace_id=publication.workspace_id,
+        revision_id=publication.revision_id,
+        previous_revision_id=publication.previous_revision_id,
+    ).single()
+    if record is None:
+        raise IngestionError("Workspace revision changed or its predecessor is unavailable; refusing rollback.")
+
+
+def rollback_workspace_revision(publication: WorkspacePublication) -> None:
+    with GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass)) as driver:
+        with driver.session() as session:
+            session.execute_write(_rollback_workspace_revision, publication)
 
 
 def ingest_to_neo4j(
-    methods: list[MethodEntity],
-    nested_relations: list[tuple],
-    extends_relations: list[tuple],
-    implements_relations: list[tuple],
-    uses_relations: list[tuple],
-    depends_on_relations: list[tuple],
-    calls_relations: list[tuple],
-    field_entities: list[FieldEntity],
-    method_field_relations: list[tuple],
-    progress_callback: Callable[[str, str, float], None] | None = None,
-) -> None:
-    def execute_write_or_raise(session, label: str, func, *args) -> None:
+    structure: ExtractedCodeStructure, progress_callback: ProgressCallback | None = None,
+) -> WorkspacePublication:
+    def execute_write_or_raise(session, label: str, func, *args):
         try:
-            session.execute_write(func, *args)
+            return session.execute_write(func, *args)
         except Exception as exc:
             LOGGER.exception("Neo4j write failed during ingestion", extra={"ingestion_step": label})
             raise IngestionError(f"Neo4j write failed during {label}: {exc}") from exc
 
-    def chunked_iterable(iterable, size):
-        for i in range(0, len(iterable), size):
-            yield iterable[i : i + size]
-
     driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
-    with driver.session() as session:
-        annotation_count = sum(len(m.annotations) for m in methods)
-        unique_method_field_relations = list(dict.fromkeys(method_field_relations))
-
-        total_operations = (
-            len(methods)
-            + len(field_entities)
-            + (annotation_count // 5000)
-            + 1
-            + (len(nested_relations) // 5000)
-            + 1
-            + (len(extends_relations) // 5000)
-            + 1
-            + (len(implements_relations) // 5000)
-            + 1
-            + (len(uses_relations) // 5000)
-            + 1
-            + (len(depends_on_relations) // 5000)
-            + 1
-            + (len(calls_relations) // 5000)
-            + 1
-            + (len(unique_method_field_relations) // 5000)
-            + 1
-        ) or 1
-
-        processed = 0
-
-        def notify(label: str, index: int, total: int) -> None:
-            nonlocal processed
-            processed += 1
+    try:
+        with driver.session() as session:
             if progress_callback:
-                pct = min(60.0 + 20.0 * (processed / total_operations), 80.0)
-                progress_callback("ingesting", f"{label} ({index}/{total})", pct)
-
-        if progress_callback:
-            progress_callback("ingesting", "Persisting entities to Neo4j…", 60.0)
-
-        LOGGER.info("Ingesting %d methods/constructors into Neo4j", len(methods))
-        for idx, method in enumerate(methods, start=1):
-            execute_write_or_raise(session, "method persistence", create_class_and_method, method)
-            notify("Methods", idx, len(methods) or 1)
-
-        LOGGER.info("Ingesting %d fields into Neo4j", len(field_entities))
-        for idx, field in enumerate(field_entities, start=1):
-            execute_write_or_raise(session, "field persistence", create_field, field)
-            notify("Fields", idx, len(field_entities) or 1)
-
-        LOGGER.info("Linking %d method annotations", annotation_count)
-        relations_ma = [{"method_sig": m.signature, "annotation": ann} for m in methods for ann in m.annotations]
-        for idx, chunk in enumerate(chunked_iterable(relations_ma, 5000), start=1):
-            execute_write_or_raise(session, f"method annotation batch {idx}", link_method_annotation_batch, chunk)
-            notify("Method annotations chunks", idx, (len(relations_ma) // 5000) + 1)
-
-        LOGGER.info("Ingesting %d nested class relations", len(nested_relations))
-        relations_nested = [{"child_fqn": c, "parent_fqn": p} for c, p in nested_relations]
-        for idx, chunk in enumerate(chunked_iterable(relations_nested, 5000), start=1):
-            execute_write_or_raise(session, f"nested class relation batch {idx}", link_nested_classes_batch, chunk)
-            notify("Nested relations chunks", idx, (len(relations_nested) // 5000) + 1)
-
-        LOGGER.info("Ingesting %d extends relations", len(extends_relations))
-        relations_extends = [{"child_fqn": c, "parent_fqn": p} for c, p in extends_relations]
-        for idx, chunk in enumerate(chunked_iterable(relations_extends, 5000), start=1):
-            execute_write_or_raise(session, f"extends relation batch {idx}", link_extends_classes_batch, chunk)
-            notify("Extends relations chunks", idx, (len(relations_extends) // 5000) + 1)
-
-        LOGGER.info("Ingesting %d implements relations", len(implements_relations))
-        relations_impl = [{"class_fqn": c, "interface_fqn": p} for c, p in implements_relations]
-        for idx, chunk in enumerate(chunked_iterable(relations_impl, 5000), start=1):
-            execute_write_or_raise(session, f"implements relation batch {idx}", link_implements_classes_batch, chunk)
-            notify("Implements relations chunks", idx, (len(relations_impl) // 5000) + 1)
-
-        LOGGER.info("Ingesting %d uses relations", len(uses_relations))
-        relations_uses = [{"method_sig": m, "class_fqn": c} for m, c in uses_relations]
-        for idx, chunk in enumerate(chunked_iterable(relations_uses, 5000), start=1):
-            execute_write_or_raise(session, f"uses relation batch {idx}", link_uses_batch, chunk)
-            notify("Uses relations chunks", idx, (len(relations_uses) // 5000) + 1)
-
-        LOGGER.info("Ingesting %d depends_on relations", len(depends_on_relations))
-        relations_deps = [{"class_fqn": c1, "dep_class_fqn": c2} for c1, c2 in depends_on_relations]
-        for idx, chunk in enumerate(chunked_iterable(relations_deps, 5000), start=1):
-            execute_write_or_raise(session, f"depends_on relation batch {idx}", link_depends_on_batch, chunk)
-            notify("Depends_on relations chunks", idx, (len(relations_deps) // 5000) + 1)
-
-        LOGGER.info("Ingesting %d calls relations", len(calls_relations))
-        relations_calls = [{"caller_sig": c1, "callee_sig": c2} for c1, c2 in calls_relations]
-        for idx, chunk in enumerate(chunked_iterable(relations_calls, 5000), start=1):
-            execute_write_or_raise(session, f"calls relation batch {idx}", link_calls_batch, chunk)
-            notify("Calls relations chunks", idx, (len(relations_calls) // 5000) + 1)
-
-        LOGGER.info("Ingesting %d method-field use relations", len(unique_method_field_relations))
-        relations_mf = [
-            {"method_sig": sig, "class_fqn": cls, "field_name": name}
-            for sig, cls, name in unique_method_field_relations
-        ]
-        for idx, chunk in enumerate(chunked_iterable(relations_mf, 5000), start=1):
-            execute_write_or_raise(session, f"method-field use batch {idx}", link_method_field_use_batch, chunk)
-            notify("Method-field uses chunks", idx, (len(relations_mf) // 5000) + 1)
-
-        if progress_callback:
-            progress_callback("ingesting", "Neo4j ingestion complete.", 80.0)
-    driver.close()
+                progress_callback("ingesting", "Persisting parser generation to Neo4j…", 60.0)
+            execute_write_or_raise(session, "workspace revision persistence", create_workspace_revision, structure)
+            for chunk in _chunked(structure.source_files, 5000):
+                execute_write_or_raise(session, "source file persistence", create_source_file_batch, tuple(chunk))
+            for chunk in _chunked(structure.classes, 5000):
+                execute_write_or_raise(session, "class persistence", create_class_batch, tuple(chunk))
+            for chunk in _chunked(structure.methods, 5000):
+                execute_write_or_raise(session, "method persistence", create_method_batch, tuple(chunk))
+            for chunk in _chunked(structure.fields, 5000):
+                execute_write_or_raise(session, "field persistence", create_field_batch, tuple(chunk))
+            if structure.nested_relations:
+                execute_write_or_raise(session, "nested class relations", link_nested_classes_batch, structure.nested_relations)
+            if structure.extends_relations:
+                execute_write_or_raise(session, "extends class relations", link_extends_classes_batch, structure.extends_relations)
+            if structure.implements_relations:
+                execute_write_or_raise(session, "implements class relations", link_implements_classes_batch, structure.implements_relations)
+            if structure.calls_relations:
+                execute_write_or_raise(session, "resolved call relations", link_calls_batch, structure.calls_relations)
+            if structure.call_evidence:
+                execute_write_or_raise(session, "call evidence persistence", create_call_evidence_batch, structure.call_evidence)
+            if structure.method_field_relations:
+                execute_write_or_raise(session, "method-field use relations", link_method_field_use_batch, structure.method_field_relations)
+            publication = execute_write_or_raise(
+                session, "active revision publication", publish_workspace_revision, structure,
+            )
+    finally:
+        driver.close()
+    if progress_callback:
+        progress_callback("ingesting", "Neo4j ingestion complete.", 80.0)
+    return publication
 
 
 def ingest(
     java_root_dir: str,
-    progress_callback: Callable[[str, str, float], None] | None = None,
-    sync: bool = False,
-) -> None:
+    progress_callback: ProgressCallback | None = None,
+    *,
+    source_roots: Sequence[str | os.PathLike[str]] | None = None,
+) -> WorkspacePublication:
     java_root_dir = os.path.abspath(java_root_dir)
-    LOGGER.info("Parsing Java project at %s", java_root_dir)
     if not os.path.isdir(java_root_dir):
-        LOGGER.error("JAVA_ROOT_DIR does not exist: %s", java_root_dir)
         if progress_callback:
             progress_callback("error", f"JAVA_ROOT_DIR does not exist: {java_root_dir}", 100.0)
         raise IngestionError(f"JAVA_ROOT_DIR does not exist: {java_root_dir}")
     if progress_callback:
         progress_callback("connecting", "Checking Neo4j availability…", 10.0)
     try:
-        _driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
-        with _driver.session() as session:
+        driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
+        with driver.session() as session:
             session.run("RETURN 1 AS ok").consume()
-        _driver.close()
+        driver.close()
     except Exception as exc:
-        LOGGER.error("Could not connect to Neo4j: %s", exc)
         if progress_callback:
             progress_callback("error", f"Neo4j connection failed: {exc}", 100.0)
         raise IngestionError(f"Neo4j connection failed: {exc}") from exc
-
-    try:
-        ensure_constraints()
-    except Exception as exc:
-        LOGGER.warning("Could not ensure Neo4j constraints: %s", exc)
-
+    ensure_constraints()
+    structure = collect_code_structure(java_root_dir, progress_callback=progress_callback, source_roots=source_roots)
+    publication = ingest_to_neo4j(structure, progress_callback=progress_callback)
     if progress_callback:
-        progress_callback("parsing", "Scanning Java sources…", 15.0)
-
-    all_data = collect_code_structure(java_root_dir, progress_callback=progress_callback)
-    LOGGER.info("Ingesting parsed entities into Neo4j")
-    ingest_to_neo4j(*all_data, progress_callback=progress_callback)
-
-    if sync:
-        LOGGER.info("Syncing graph by checking for stale files")
-        if progress_callback:
-            progress_callback("sync", "Pruning stale files...", 80.0)
-
-        # Collect files seen in this scan
-        seen_paths = set()
-        # all_data[0] is methods, all_data[7] is fields
-        for m in all_data[0]:
-            seen_paths.add(m.file_path)
-        for f in all_data[7]:
-            seen_paths.add(f.file_path)
-
-        stale_count = 0
-        try:
-            driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
-            with driver.session() as session:
-                # Find all file paths currently in DB
-                result = session.run("MATCH (m:Method) RETURN DISTINCT m.file_path as p")
-                db_paths = {record["p"] for record in result}
-
-                # Also check fields in case there are files with fields but no methods (rare but possible)
-                result_fields = session.run("MATCH (f:Field) RETURN DISTINCT f.file_path as p")
-                db_paths.update({record["p"] for record in result_fields})
-
-                # Determine which are stale (in DB, not in scan, AND inside the root dir)
-                for path in db_paths:
-                    if path and path.startswith(java_root_dir) and path not in seen_paths:
-                        LOGGER.info("Pruning stale file from graph: %s", path)
-                        _purge_file_entities(path)
-                        stale_count += 1
-            driver.close()
-            LOGGER.info("Pruned %d stale files", stale_count)
-        except Exception as exc:
-            LOGGER.warning("Graph sync failed: %s", exc)
-
-    if progress_callback:
-        progress_callback("ingesting", "Ingestion complete.", 90.0 if sync else 80.0)
-    LOGGER.info("Ingestion complete")
-
-
-def _purge_file_entities(file_path: str) -> None:
-    driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
-    try:
-        with driver.session() as session:
-            session.run(
-                "MATCH (m:Method {file_path: $path}) DETACH DELETE m",
-                path=file_path,
-            ).consume()
-            session.run(
-                "MATCH (f:Field {file_path: $path}) DETACH DELETE f",
-                path=file_path,
-            ).consume()
-    finally:
-        driver.close()
-
-
-def purge_workspace_entities(root_dir: str) -> None:
-    """
-    Remove all file-backed graph entities under a workspace root.
-
-    This is used by the interactive upload workflow so a new uploaded project
-    fully replaces the prior `uploaded_code` workspace in Neo4j without
-    resetting unrelated benchmark or staged-evaluation graphs.
-    """
-
-    workspace_root = os.path.abspath(root_dir)
-    driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass))
-    LOGGER.info("Purging graph entities under workspace root %s", workspace_root)
-    try:
-        with driver.session() as session:
-            session.run(
-                "MATCH (m:Method) WHERE m.file_path STARTS WITH $prefix DETACH DELETE m",
-                prefix=workspace_root,
-            ).consume()
-            session.run(
-                "MATCH (f:Field) WHERE f.file_path STARTS WITH $prefix DETACH DELETE f",
-                prefix=workspace_root,
-            ).consume()
-            session.run(
-                "MATCH (a:Annotation) WHERE NOT EXISTS { MATCH (:Method)-[:ANNOTATED_WITH]->(a) } DETACH DELETE a"
-            ).consume()
-    finally:
-        driver.close()
-
-
-def process_single_file_content(
-    file_path: str,
-    content: str,
-    progress_callback: Callable[[str, str, float], None] | None = None,
-) -> None:
-    """Re-ingest a single Java source file from in-memory content."""
-
-    if progress_callback:
-        progress_callback("parsing", f"Parsing in-memory file: {os.path.basename(file_path)}", 20.0)
-
-    # Fail loudly if the candidate does not parse, BEFORE purging existing entities.
-    # Otherwise a parse failure silently leaves the file purged and the subsequent
-    # lookup fails opaquely as 'method_not_found' (remediation re-ingest path).
-    try:
-        javalang.parse.parse(content)
-    except Exception as exc:
-        raise IngestionError(f"Could not parse content for {file_path}: {exc}") from exc
-
-    (
-        methods,
-        nested_relations,
-        extends_relations,
-        implements_relations,
-        uses_relations,
-        depends_on_relations,
-        calls_relations,
-        field_entities,
-        method_field_relations,
-    ) = extract_entities_from_content(file_path, content)
-
-    _purge_file_entities(file_path)
-
-    ingest_to_neo4j(
-        methods,
-        nested_relations,
-        extends_relations,
-        implements_relations,
-        uses_relations,
-        depends_on_relations,
-        calls_relations,
-        field_entities,
-        method_field_relations,
-        progress_callback=progress_callback,
-    )
-
-    if progress_callback:
-        progress_callback("ingesting", "Single file ingestion complete", 80.0)
+        progress_callback("ingesting", "Ingestion complete.", 90.0)
+    return publication

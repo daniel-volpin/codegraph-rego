@@ -662,7 +662,7 @@ class GenerationParsingTests(RemediationTestBase):
             original_method_lines=original,
         )
         self.assertFalse(parsed["raw_response_valid"])
-        self.assertEqual(parsed["schema_error"], "invalid_java_syntax: multiline_string_literal")
+        self.assertIn("invalid_java_syntax: expected_exactly_one_method_declaration", parsed["schema_error"])
 
     def test_parse_structured_generation_rejects_method_name_mismatch(self):
         original = ["public void hash() { return; }"]

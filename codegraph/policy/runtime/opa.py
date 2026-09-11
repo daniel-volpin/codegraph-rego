@@ -8,7 +8,7 @@ import time
 import uuid
 from collections.abc import Mapping
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from codegraph.config import settings
@@ -51,7 +51,7 @@ def _generate_decision_id() -> str:
 
 
 def _now_iso_utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
 def build_violation_response(
@@ -63,21 +63,18 @@ def build_violation_response(
     evaluated_at: str | None = None,
 ) -> dict[str, Any]:
     violation_id = normalized.get("violation_id")
-    # Prefer the raw source for human-facing fields (citation grounding,
-    # evidence-card rendering, audit excerpts). ``source_code`` carries
-    # the lexically-active view used by Rego matching; ``source_code_raw``
-    # carries the original including comments and string-literal text.
-    # Bundles built before lexical anchoring landed only set
-    # ``source_code``, so fall back to it transparently.
-    source_code = bundle.get("source_code", "") or ""
-    source_code_raw = bundle.get("source_code_raw") or source_code
+    # Masked policy input is not a substitute for captured source evidence.
+    source_code_raw = bundle.get("source_code_raw") or ""
     start_line = bundle.get("start_line")
     end_line = bundle.get("end_line")
+    method_key = bundle.get("method_key")
     evidence = {
         "source_code": source_code_raw,
+        "source_sha256": bundle.get("parser", {}).get("source_sha256"),
         "graph_context": bundle.get("graph_context", {}),
         "vector_context": bundle.get("vector_context", []),
         "file_path": bundle.get("file_path"),
+        "method_key": method_key,
         "target_method": bundle.get("target_method"),
         "start_line": start_line,
         "end_line": end_line,
@@ -88,6 +85,7 @@ def build_violation_response(
         "violation_id": violation_id,
         "decision_id": decision_id or _generate_decision_id(),
         "evaluated_at": evaluated_at or _now_iso_utc(),
+        "method_key": method_key,
         "target_method": bundle.get("target_method"),
         "file_path": bundle.get("file_path"),
         "reason": normalized.get("reason"),

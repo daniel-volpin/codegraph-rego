@@ -15,7 +15,7 @@ import os
 import platform
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +26,7 @@ _PROJECT_ROOT = _HERE.parents[2]
 
 
 def _now_iso_utc() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _safe_run(cmd: list[str], *, cwd: Path | None = None, timeout: float = 5.0) -> dict[str, Any]:

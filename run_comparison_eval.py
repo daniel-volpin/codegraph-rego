@@ -206,6 +206,7 @@ def main() -> int:
                 violation_id = violation.get("violation_id") or "unknown"
                 target_method = violation.get("target_method") or ""
                 evidence = violation.get("evidence") or {}
+                method_key = violation.get("method_key") or evidence.get("method_key")
                 file_path = evidence.get("file_path") or violation.get("file_path") or ""
 
                 LOGGER.info(
@@ -224,7 +225,7 @@ def main() -> int:
                 det_outcome = build_deterministic_outcome(ctx, source_lines)
 
                 # --- LLM path ---
-                if violation_id and target_method and file_path:
+                if violation_id and method_key and file_path:
                     shadow_context = {
                         "deterministic_baseline_available": det_outcome.produced_edits,
                         "deterministic_diff_snippet": det_outcome.diff_snippet if det_outcome.produced_edits else None,
@@ -234,7 +235,7 @@ def main() -> int:
 
                     apply_result = apply_remediation(
                         str(violation_id),
-                        target_method=str(target_method),
+                        method_key=str(method_key),
                         file_path=str(file_path),
                         mode=args.mode,
                         max_attempts=args.max_attempts,

@@ -27,7 +27,8 @@ def _default_startup_status() -> dict[str, Any]:
         "ready": False,
         "phase": "pending",
         "checks": {
-            "ingestion": False,
+            "java_parser": False,
+            "graph_generation": False,
             "signature_map": False,
             "faiss_index": False,
             "embedding_model": False,
@@ -47,22 +48,29 @@ def _configure_runtime() -> None:
 
 def _load_startup_dependencies() -> dict[str, Any]:
     from codegraph.config import settings, validate_runtime_settings
-    from codegraph.ingestion.service import ingest
-    from codegraph.search.hybrid import load_embedding_model, load_faiss_index, load_signature_map
+    from codegraph.db import shared_neo4j_driver
+    from codegraph.search.hybrid import load_embedding_model, validate_retrieval_generation
 
     validate_runtime_settings()
 
     return {
         "embedding_model_name": settings.embedding_model_name,
-        "faiss_index_path": settings.faiss_index_path,
-        "java_root_dir": settings.java_root_dir,
-        "signature_map_path": settings.signature_map_path,
-        "signature_map_path_full": settings.signature_map_path_full,
-        "ingest": ingest,
+        "validate_generation": lambda: validate_retrieval_generation(shared_neo4j_driver()),
+        "check_java_parser": _check_java_parser,
         "load_embedding_model": load_embedding_model,
-        "load_faiss_index": load_faiss_index,
-        "load_signature_map": load_signature_map,
     }
+
+
+def _check_java_parser() -> None:
+    from codegraph.java.service import JavaParserProtocolError, parse_java_source
+
+    parsed = parse_java_source(
+        b"class CodeGraphReadiness {}",
+        relative_path="CodeGraphReadiness.java",
+        resolve_bindings=False,
+    )
+    if parsed.coverage != "complete" or len(parsed.types) != 1:
+        raise JavaParserProtocolError("Java parser did not analyze the readiness fixture completely.")
 
 
 async def _preload_resources(application: FastAPI) -> None:
@@ -71,23 +79,12 @@ async def _preload_resources(application: FastAPI) -> None:
     application.state.startup_status = startup_status
     try:
         deps = _load_startup_dependencies()
+        deps["check_java_parser"]()
+        startup_status["checks"]["java_parser"] = True
 
-        LOGGER.info("Starting automatic graph synchronization...")
-        try:
-            deps["ingest"](deps["java_root_dir"], sync=True)
-            startup_status["checks"]["ingestion"] = True
-        except Exception as exc:
-            LOGGER.error("Startup ingestion failed: %s", exc)
-            startup_status["errors"]["ingestion"] = str(exc)
-
-        try:
-            deps["load_signature_map"](deps["signature_map_path_full"])
-            startup_status["checks"]["signature_map"] = True
-        except Exception:
-            deps["load_signature_map"](deps["signature_map_path"])
-            startup_status["checks"]["signature_map"] = True
-
-        deps["load_faiss_index"](deps["faiss_index_path"])
+        deps["validate_generation"]()
+        startup_status["checks"]["graph_generation"] = True
+        startup_status["checks"]["signature_map"] = True
         startup_status["checks"]["faiss_index"] = True
 
         deps["load_embedding_model"](deps["embedding_model_name"])

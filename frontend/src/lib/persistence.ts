@@ -16,7 +16,7 @@ import { uniqueSortedModuleLabels } from "./workspace";
 // way that older stored payloads can no longer parse. The version is part
 // of the key so old entries get garbage-collected naturally.
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const evaluationKey = (preset: PolicyViewPreset) =>
   `codegraph:policy:eval:v${SCHEMA_VERSION}:${preset}`;

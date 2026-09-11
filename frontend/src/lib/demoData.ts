@@ -15,6 +15,7 @@ export const DEMO_HEALTH: HealthCheckResponse = {
   status: "ok",
   startup_ready: true,
   neo4j: true,
+  graph_generation: true,
   faiss_index: true,
   signature_map: true,
   embedding_model: true,
@@ -120,6 +121,7 @@ export const DEMO_VIOLATIONS: Violation[] = [
     violation_id: "ISO-A.10-WEAK-HASH",
     rule_id: "ISO-A.10-WEAK-HASH",
     target_method: "com.acme.security.AuthService.hashPassword(String)",
+    method_key: "demo@v1:AuthService.java#hashPassword",
     file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/security/AuthService.java",
     severity: "HIGH",
     reason: "Weak MD5 cryptographic hash function used in password derivation flow.",
@@ -164,6 +166,7 @@ export const DEMO_VIOLATIONS: Violation[] = [
     violation_id: "ISO-A.10-WEAK-CRYPTO",
     rule_id: "ISO-A.10-WEAK-CRYPTO",
     target_method: "com.acme.crypto.CipherUtil.encryptPayload(byte[])",
+    method_key: "demo@v1:CipherUtil.java#encryptPayload",
     file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/crypto/CipherUtil.java",
     severity: "HIGH",
     reason: "Broken DES cipher in ECB mode used for sensitive payload encryption.",
@@ -206,6 +209,7 @@ export const DEMO_VIOLATIONS: Violation[] = [
     violation_id: "ISO-A.8-SQL-INJECTION",
     rule_id: "ISO-A.8-SQL-INJECTION",
     target_method: "com.acme.repository.AccountRepository.findByUsername(String)",
+    method_key: "demo@v1:AccountRepository.java#findByUsername",
     file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/repository/AccountRepository.java",
     severity: "CRITICAL",
     reason: "Dynamic SQL query constructed via raw string concatenation.",
@@ -246,6 +250,7 @@ export const DEMO_VIOLATIONS: Violation[] = [
     violation_id: "ISO-A.8-PATH-TRAVERSAL",
     rule_id: "ISO-A.8-PATH-TRAVERSAL",
     target_method: "com.acme.storage.FileStorageService.loadFile(String)",
+    method_key: "demo@v1:FileStorageService.java#loadFile",
     file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/storage/FileStorageService.java",
     severity: "HIGH",
     reason: "Unvalidated filename passed to file system resolver without path normalization.",
@@ -412,10 +417,10 @@ export const DEMO_APPLY_RESULT: RemediationApplyResponse = {
 
 export const DEMO_SEARCH_MATCHES: SearchResponse = {
   matches: [
-    "com.acme.security.AuthService.hashPassword(String)",
-    "com.acme.crypto.CipherUtil.encryptPayload(byte[], SecretKey)",
-    "com.acme.repository.AccountRepository.findByUsername(String)",
-    "com.acme.storage.FileStorageService.loadFile(String)",
+    "demo@v1:AuthService.java#hashPassword",
+    "demo@v1:CipherUtil.java#encryptPayload",
+    "demo@v1:AccountRepository.java#findByUsername",
+    "demo@v1:FileStorageService.java#loadFile",
   ],
   contexts: [
     [

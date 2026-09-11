@@ -69,6 +69,7 @@ class TestPolicyContractSerialization(unittest.TestCase):
         bundle = serialize_policy_bundle(
             {
                 "target_method": "org.example.Foo.listUsers()",
+                "method_key": "workspace@revision:Foo.java#method:listUsers/0",
                 "graph_context": {},
                 "source_code": None,
                 "analysis_flags": None,
@@ -78,6 +79,7 @@ class TestPolicyContractSerialization(unittest.TestCase):
         self.assertEqual(
             set(bundle.keys()),
             {
+                "method_key",
                 "target_method",
                 "method_name",
                 "class_fqn",
@@ -93,6 +95,7 @@ class TestPolicyContractSerialization(unittest.TestCase):
                 "helper_summaries",
             },
         )
+        self.assertEqual(bundle["method_key"], "workspace@revision:Foo.java#method:listUsers/0")
         self.assertEqual(bundle["source_code"], "")
         self.assertEqual(bundle["source_code_raw"], "")
         self.assertIsNone(bundle["analysis_flags"])

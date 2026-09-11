@@ -23,6 +23,7 @@ class ActiveEmbeddingGeneration:
     index_sha256: str
     signature_map_sha256: str
     metadata_sha256: str
+    graph_generation: dict[str, Any] | None = None
 
 
 def sha256_file(path: Path) -> str:
@@ -162,4 +163,5 @@ def load_active_generation(manifest_path: str | Path) -> ActiveEmbeddingGenerati
         index_sha256=index_sha,
         signature_map_sha256=map_sha,
         metadata_sha256=metadata_sha,
+        graph_generation=generation.get("graph_generation") if isinstance(generation.get("graph_generation"), dict) else None,
     )

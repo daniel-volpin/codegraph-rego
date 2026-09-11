@@ -12,7 +12,7 @@ import logging
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +23,7 @@ LOGGER = logging.getLogger("codegraph.eval.experiments")
 
 
 def _utc_stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _run(cmd: list[str]) -> None:
@@ -227,7 +227,7 @@ def main() -> int:
 
     manifest = {
         "git_sha": _git_sha(repo_root),
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "timestamp_utc": datetime.now(UTC).isoformat(),
         "config_path": str(selection_path),
         "mapping_path": str(mapping_path),
         "owasp_root": os.environ.get("OWASP_BENCHMARK_ROOT"),

@@ -46,7 +46,7 @@ async def remediation_preview(payload: RemediationPreviewRequest):
     result = await asyncio.to_thread(
         preview_virtual_remediation,
         payload.violation_id,
-        target_method=payload.target_method,
+        method_key=payload.method_key,
         file_path=payload.file_path,
     )
     return JSONResponse(result, status_code=_http_status_for_result(result))
@@ -57,7 +57,7 @@ async def remediation_apply(payload: RemediationApplyRequest):
     result = await asyncio.to_thread(
         apply_remediation,
         payload.violation_id,
-        target_method=payload.target_method,
+        method_key=payload.method_key,
         file_path=payload.file_path,
         mode=payload.mode,
         max_attempts=payload.max_attempts,

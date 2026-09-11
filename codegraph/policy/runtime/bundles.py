@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 from functools import partial
@@ -7,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from codegraph.common.concurrency import bounded_futures
-from codegraph.common.snippet_utils import extract_code_snippet, extract_snippet_by_lines
 from codegraph.config import settings
 from codegraph.db import shared_neo4j_driver
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
@@ -64,19 +64,25 @@ def _combined_annotations(property_annotations: Any, annotation_nodes: Any) -> l
 
 
 def _snapshot_from_record(record: Any) -> dict[str, Any] | None:
+    method_key = record.get("method_key")
     signature = record.get("signature")
-    if not signature:
+    if not method_key or not signature:
         return None
     file_path = record.get("file_path")
     if is_test_source_path(file_path):
         return None
     return {
+        "method_key": method_key,
         "signature": signature,
         "name": record.get("name"),
         "class_fqn": record.get("class_fqn"),
+        "declaring_type_key": record.get("declaring_type_key"),
         "file_path": file_path,
+        "relative_path": record.get("relative_path"),
         "start_line": record.get("start_line"),
         "end_line": record.get("end_line"),
+        "start_byte": record.get("start_byte"),
+        "end_byte": record.get("end_byte"),
         "modifiers": record.get("modifiers") or [],
         "annotations": _combined_annotations(
             record.get("property_annotations"),
@@ -84,7 +90,118 @@ def _snapshot_from_record(record: Any) -> dict[str, Any] | None:
         ),
         "uses_fields": _sorted_used_fields(record.get("uses_fields")),
         "calls": _sorted_non_empty_strings(record.get("calls")),
+        "call_evidence": record.get("call_evidence") or [],
         "callers": _sorted_non_empty_strings(record.get("callers")),
+        "workspace_id": record.get("workspace_id"),
+        "revision_id": record.get("revision_id"),
+        "parser_backend": record.get("parser_backend"),
+        "parser_version": record.get("parser_version"),
+        "source_sha256": record.get("source_sha256"),
+        "range_status": record.get("range_status"),
+    }
+
+
+def _assert_jdt_graph_schema(session) -> None:
+    from codegraph.java.service import ADAPTER_VERSION, EXPECTED_BACKEND, JDT_BACKEND_VERSION
+
+    record = session.run(
+        """
+        CALL {
+            MATCH (m:Method) WHERE m.method_key IS NULL
+            RETURN count(m) AS incompatible_methods
+        }
+        OPTIONAL MATCH (:ActiveWorkspace)-[:ACTIVE_REVISION]->(wr:WorkspaceRevision)
+        WITH incompatible_methods, count(CASE WHEN
+            wr.schema_version IS NULL OR wr.schema_version <> 'codegraph-jdt/v1'
+            OR wr.parser_backend IS NULL OR wr.parser_backend <> $backend
+            OR wr.parser_version IS NULL OR wr.parser_version <> $parser_version
+            OR wr.adapter_version IS NULL OR wr.adapter_version <> $adapter_version
+            THEN wr END) AS incompatible_revisions
+        RETURN incompatible_methods + incompatible_revisions AS incompatible_count
+        """,
+        {"backend": EXPECTED_BACKEND, "parser_version": JDT_BACKEND_VERSION, "adapter_version": ADAPTER_VERSION},
+    ).single()
+    incompatible_count = int(record.get("incompatible_count") or 0) if record else 0
+    if incompatible_count:
+        raise RuntimeError(
+            "Incompatible graph state detected; explicit rebuild is required before policy/search evaluation."
+        )
+
+
+_ACTIVE_REVISION_MATCH = (
+    "MATCH (aw:ActiveWorkspace)-[:ACTIVE_REVISION]->(wr:WorkspaceRevision) "
+)
+_ACTIVE_REVISION_PREDICATE = (
+    "aw.workspace_id = m.workspace_id "
+    "  AND wr.workspace_id = m.workspace_id "
+    "  AND wr.revision_id = m.revision_id "
+    "  AND wr.schema_version = 'codegraph-jdt/v1' "
+)
+
+
+def validate_graph_generation(driver, *, workspace_root: str | None = None) -> dict[str, Any]:
+    """Validate that Neo4j contains only JDT identity graph state.
+
+    Readiness/startup callers should use this before policy or search preload.
+    It refuses old Method nodes without ``method_key`` and returns non-secret
+    generation metadata that can be reported in health details.
+    """
+    cypher = (
+        "MATCH (aw:ActiveWorkspace)-[:ACTIVE_REVISION]->(wr:WorkspaceRevision) "
+        "OPTIONAL MATCH (m:Method {workspace_id: wr.workspace_id, revision_id: wr.revision_id}) "
+    )
+    params: dict[str, Any] = {}
+    if workspace_root:
+        cypher += "WHERE m.file_path STARTS WITH $workspace_root OR m IS NULL "
+        params["workspace_root"] = workspace_root
+    cypher += (
+        "WITH wr, "
+        "     count(DISTINCT m) AS revision_method_count, "
+        "     count(DISTINCT CASE "
+        "       WHEN m.range_status = 'verified' AND m.start_byte IS NOT NULL AND m.end_byte IS NOT NULL "
+        "       THEN m END) AS revision_indexable_method_count "
+        "RETURN count(DISTINCT wr) AS workspace_revisions, "
+        "       sum(revision_method_count) AS method_count, "
+        "       sum(revision_indexable_method_count) AS indexable_method_count, "
+        "       collect(DISTINCT wr.schema_version) AS schema_versions, "
+        "       collect(DISTINCT wr.parser_backend) AS parser_backends, "
+        "       collect({"
+        "           workspace_id: wr.workspace_id, "
+        "           revision_id: wr.revision_id, "
+        "           schema_version: wr.schema_version, "
+        "           parser_backend: wr.parser_backend, "
+        "           parser_version: wr.parser_version, "
+        "           adapter_version: wr.adapter_version, "
+        "           method_count: revision_method_count, "
+        "           indexable_method_count: revision_indexable_method_count"
+        "       }) AS active_revisions"
+    )
+    with driver.session() as session:
+        _assert_jdt_graph_schema(session)
+        record = session.run(cypher, params).single()
+    return {
+        "workspace_revisions": int(record.get("workspace_revisions") or 0) if record else 0,
+        "method_count": int(record.get("method_count") or 0) if record else 0,
+        "indexable_method_count": int(record.get("indexable_method_count") or 0) if record else 0,
+        "schema_versions": _sorted_non_empty_strings(record.get("schema_versions") if record else []),
+        "parser_backends": _sorted_non_empty_strings(record.get("parser_backends") if record else []),
+        "active_revisions": sorted(
+            (
+                {
+                    "workspace_id": str(item.get("workspace_id") or ""),
+                    "revision_id": str(item.get("revision_id") or ""),
+                    "schema_version": str(item.get("schema_version") or ""),
+                    "parser_backend": str(item.get("parser_backend") or ""),
+                    "parser_version": str(item.get("parser_version") or ""),
+                    "adapter_version": str(item.get("adapter_version") or ""),
+                    "method_count": int(item.get("method_count") or 0),
+                    "indexable_method_count": int(item.get("indexable_method_count") or 0),
+                }
+                for item in (record.get("active_revisions") if record else []) or []
+                if isinstance(item, dict)
+            ),
+            key=lambda item: (item["workspace_id"], item["revision_id"]),
+        ),
     }
 
 
@@ -95,25 +212,39 @@ _METHOD_CONTEXT_AND_RETURN = (
     "OPTIONAL MATCH (m)-[:ANNOTATED_WITH]->(ann:Annotation) "
     "OPTIONAL MATCH (m)-[:USES]->(usedField:Field) "
     "OPTIONAL MATCH (m)-[:CALLS]->(callee:Method) "
+    "OPTIONAL MATCH (m)-[:HAS_CALL]->(call:CallEvidence) "
     "OPTIONAL MATCH (caller:Method)-[:CALLS]->(m) "
-    "RETURN coalesce(m.full_signature, m.signature) AS signature, "
+    "RETURN m.method_key AS method_key, "
+    "       m.signature AS signature, "
     "       m.name AS name, "
     "       m.file_path AS file_path, "
+    "       m.relative_path AS relative_path, "
     "       m.start_line AS start_line, "
     "       m.end_line AS end_line, "
+    "       m.start_byte AS start_byte, "
+    "       m.end_byte AS end_byte, "
     "       m.modifiers AS modifiers, "
     "       m.annotations AS property_annotations, "
-    "       cls.fqn AS class_fqn, "
+    "       m.class_fqn AS class_fqn, "
+    "       m.declaring_type_key AS declaring_type_key, "
     "       collect(DISTINCT ann.name) AS annotation_nodes, "
     "       collect(DISTINCT CASE WHEN usedField IS NULL "
     "                             THEN NULL "
     "                             ELSE {"
     "                                 name: usedField.name, "
     "                                 type: usedField.type, "
-    "                                 class_fqn: usedField.class_fqn"
+    "                                 class_fqn: usedField.class_fqn, "
+    "                                 field_key: usedField.field_key"
     "                             } END) AS uses_fields, "
-    "       collect(DISTINCT coalesce(callee.full_signature, callee.signature)) AS calls, "
-    "       collect(DISTINCT coalesce(caller.full_signature, caller.signature)) AS callers "
+    "       collect(DISTINCT callee.method_key) AS calls, "
+    "       collect(DISTINCT CASE WHEN call IS NULL THEN NULL ELSE properties(call) END) AS call_evidence, "
+    "       collect(DISTINCT caller.method_key) AS callers, "
+    "       m.workspace_id AS workspace_id, "
+    "       m.revision_id AS revision_id, "
+    "       m.parser_backend AS parser_backend, "
+    "       m.parser_version AS parser_version, "
+    "       m.source_sha256 AS source_sha256, "
+    "       m.range_status AS range_status "
 )
 
 
@@ -123,10 +254,10 @@ def fetch_methods_with_context(
     max_bundles: int | None = None,
     workspace_root: str | None = None,
 ) -> list[dict[str, Any]]:
-    cypher = "MATCH (m:Method) "
+    cypher = "MATCH (m:Method) " + _ACTIVE_REVISION_MATCH + "WHERE " + _ACTIVE_REVISION_PREDICATE
     params: dict[str, Any] = {}
     if workspace_root:
-        cypher += " WHERE m.file_path STARTS WITH $workspace_root "
+        cypher += " AND m.file_path STARTS WITH $workspace_root "
         params["workspace_root"] = workspace_root
     cypher += _METHOD_CONTEXT_AND_RETURN
     if isinstance(max_bundles, int) and max_bundles > 0:
@@ -134,6 +265,7 @@ def fetch_methods_with_context(
         params["max_bundles"] = max_bundles
     snapshots: list[dict[str, Any]] = []
     with driver.session() as session:
+        _assert_jdt_graph_schema(session)
         for rec in session.run(cypher, params):
             snapshot = _snapshot_from_record(rec)
             if snapshot is not None:
@@ -141,17 +273,18 @@ def fetch_methods_with_context(
     return snapshots
 
 
-def fetch_method_snapshot(driver, method_signature: str) -> dict[str, Any] | None:
+def fetch_method_snapshot(driver, method_key: str) -> dict[str, Any] | None:
     cypher = (
         "MATCH (m:Method) "
-        "WHERE coalesce(m.full_signature, m.signature) = $method_signature "
-        "   OR m.signature = $method_signature "
-        "   OR m.full_signature = $method_signature "
+        + _ACTIVE_REVISION_MATCH
+        + "WHERE m.method_key = $method_key AND "
+        + _ACTIVE_REVISION_PREDICATE
         + _METHOD_CONTEXT_AND_RETURN
         + "LIMIT 1"
     )
     with driver.session() as session:
-        record = session.run(cypher, method_signature=method_signature).single()
+        _assert_jdt_graph_schema(session)
+        record = session.run(cypher, method_key=method_key).single()
         return _snapshot_from_record(record) if record else None
 
 
@@ -183,16 +316,24 @@ def _resolve_bundle_source_path(
 
 def _extract_method_source(method_snapshot: dict[str, Any], source_path: Path | None) -> str:
     if source_path is None:
+        raise ValueError("policy_source_unavailable")
+    raw = source_path.read_bytes()
+    expected_hash = method_snapshot.get("source_sha256")
+    if not expected_hash or hashlib.sha256(raw).hexdigest() != expected_hash:
+        raise ValueError("policy_source_hash_mismatch")
+    start_byte = method_snapshot.get("start_byte")
+    end_byte = method_snapshot.get("end_byte")
+    range_status = method_snapshot.get("range_status")
+    if range_status == "absent" and start_byte is None and end_byte is None:
         return ""
-    source_code = extract_snippet_by_lines(
-        source_path.as_posix(),
-        method_snapshot.get("start_line"),
-        method_snapshot.get("end_line"),
-        padding=2,
-    )
-    if source_code or not method_snapshot.get("name"):
-        return source_code
-    return extract_code_snippet(source_path.as_posix(), method_snapshot.get("name", ""))
+    if (
+        range_status != "verified"
+        or type(start_byte) is not int
+        or type(end_byte) is not int
+        or not 0 <= start_byte < end_byte <= len(raw)
+    ):
+        raise ValueError("policy_source_range_invalid")
+    return raw[start_byte:end_byte].decode("utf-8")
 
 
 def _source_views(source_code: str) -> tuple[str, str]:
@@ -227,20 +368,20 @@ def _build_helper_summaries(
     )
 
 
-def _vector_context(search_service: HybridSearchService | None, method_signature: str) -> list[str]:
+def _vector_context(search_service: HybridSearchService | None, method_key: str) -> list[str]:
     if search_service is None:
         return []
     try:
-        return search_service.similar_to_signature(method_signature, top_k=3)
+        return search_service.similar_to_method_key(method_key, top_k=3)
     except Exception as exc:  # pragma: no cover - optional dependency
-        LOGGER.debug("Vector lookup failed for %s: %s", method_signature, exc)
+        LOGGER.debug("Vector lookup failed for %s: %s", method_key, exc)
         return []
 
 
-def _taint_paths(taint_path_finder: TaintPathFinder | None, method_signature: str) -> list[dict[str, Any]]:
+def _taint_paths(taint_path_finder: TaintPathFinder | None, method_key: str) -> list[dict[str, Any]]:
     if taint_path_finder is None:
         return []
-    return taint_path_finder.find_reachable_sinks(method_signature)
+    return taint_path_finder.find_reachable_sinks(method_key)
 
 
 def _record_evidence_span_attributes(
@@ -290,6 +431,7 @@ def build_evidence_bundle_from_source(
     supplied.
     """
     with _tracer.start_as_current_span("evidence.build") as span:
+        span.set_attribute("method_key", str(method_snapshot.get("method_key") or ""))
         span.set_attribute("method_signature", str(method_snapshot.get("signature") or ""))
         span.set_attribute("file_path", str(method_snapshot.get("file_path") or ""))
 
@@ -302,10 +444,12 @@ def build_evidence_bundle_from_source(
             method_snapshot=method_snapshot,
             method_index=method_index,
         )
+        method_key = method_snapshot.get("method_key")
         if vector_context is None:
-            vector_context = _vector_context(search_service, method_snapshot["signature"])
+            vector_context = _vector_context(search_service, method_key) if method_key else []
         bundle = build_policy_bundle(
             target_method=method_snapshot["signature"],
+            method_key=method_key,
             method_name=method_snapshot.get("name"),
             class_fqn=method_snapshot.get("class_fqn"),
             file_path=bundle_file_path if bundle_file_path is not None else method_snapshot.get("file_path"),
@@ -326,8 +470,16 @@ def build_evidence_bundle_from_source(
             helper_summaries=helper_summaries,
         )
         result = serialize_policy_bundle(bundle)
+        result["workspace_id"] = method_snapshot.get("workspace_id")
+        result["revision_id"] = method_snapshot.get("revision_id")
+        result["parser"] = {
+            "backend": method_snapshot.get("parser_backend"),
+            "version": method_snapshot.get("parser_version"),
+            "range_status": method_snapshot.get("range_status"),
+            "source_sha256": method_snapshot.get("source_sha256"),
+        }
 
-        taint_paths = _taint_paths(taint_path_finder, method_snapshot["signature"])
+        taint_paths = _taint_paths(taint_path_finder, method_key) if method_key else []
         result["taint_paths"] = taint_paths
 
         _record_evidence_span_attributes(
@@ -377,7 +529,7 @@ def build_policy_input(
     )
     hybrid_search = load_hybrid_search()
 
-    method_index = {snapshot["signature"]: snapshot for snapshot in methods if snapshot.get("signature")}
+    method_index = {snapshot["method_key"]: snapshot for snapshot in methods if snapshot.get("method_key")}
     taint_finder = TaintPathFinder(method_index)
     bundles: list[dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
     build = partial(

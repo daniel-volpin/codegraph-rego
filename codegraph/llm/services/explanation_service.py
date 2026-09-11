@@ -3,7 +3,6 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Literal
 
-from codegraph.common.snippet_utils import extract_code_snippet
 from codegraph.config import settings
 from codegraph.llm.client import generate_chat_completion
 from codegraph.llm.schema.explanation import (
@@ -16,10 +15,6 @@ from codegraph.llm.schema.explanation import (
 from codegraph.llm.tasks.explanation import build_explanation_evidence, build_explanation_prompt
 
 ExplanationParseMode = Literal["strict", "salvage"]
-
-
-def _read_code_snippet(file_path: str, needle: str, before: int = 8, after: int = 24) -> str:
-    return extract_code_snippet(file_path, needle, before=before, after=after)
 
 
 def _build_prompt(violation: dict[str, Any], code_snippet: str) -> list[dict[str, str]]:
@@ -41,15 +36,6 @@ def _build_prompt(violation: dict[str, Any], code_snippet: str) -> list[dict[str
 
 def _call_llm(messages: list[dict[str, str]], model: str) -> str:
     return generate_chat_completion(messages, model=model, task_type="explanation")
-
-
-def _method_name_from_signature(signature: Any) -> str:
-    if not isinstance(signature, str):
-        return ""
-    text = signature.strip()
-    if not text:
-        return ""
-    return text.split(".")[-1].split("(")[0]
 
 
 def _allow_salvage(parse_mode: ExplanationParseMode) -> bool:
@@ -78,10 +64,9 @@ def _parse_or_raise(
 def _explain_single_violation(violation: dict[str, Any], *, model: str) -> dict[str, Any]:
     evidence = violation.get("evidence") if isinstance(violation, dict) else None
     evidence = evidence if isinstance(evidence, dict) else {}
-    signature = violation.get("method") or violation.get("target_method") or evidence.get("target_method") or ""
-    method_name = _method_name_from_signature(signature)
-    file_path = violation.get("file_path") or evidence.get("file_path") or ""
-    snippet = _read_code_snippet(file_path, method_name)
+    snippet = evidence.get("source_code")
+    if not isinstance(snippet, str) or not snippet.strip():
+        raise ValueError("Captured source evidence is required; regenerate this finding from its workspace revision.")
     messages = _build_prompt(violation, snippet)
     explanation = _call_llm(messages, model=model)
     return {"violation": violation, "snippet": snippet, "explanation": explanation}

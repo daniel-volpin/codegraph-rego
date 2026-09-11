@@ -11,6 +11,8 @@
 htmlcov
 .venv
 .venv*
+build
+tools/java-parser/target
 __pycache__
 **/__pycache__
 **/__pycache__/**

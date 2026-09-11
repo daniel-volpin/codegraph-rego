@@ -246,17 +246,18 @@ def normalize_violation_payload(payload: Any) -> dict[str, Any] | None:
 
 
 class PolicyEvaluator:
-    """Evaluate policies against a single method signature."""
+    """Evaluate policies against a canonical method key."""
 
     def __init__(self) -> None:
         self._catalog = load_policy_catalog()
         self._rules = load_iso_rules()
 
-    def evaluate(self, method_signature: str, *, source_path_override: str | None = None) -> dict[str, Any]:
-        snapshot = runtime_bundles.fetch_method_snapshot(shared_neo4j_driver(), method_signature)
+    def evaluate(self, method_key: str, *, source_path_override: str | None = None) -> dict[str, Any]:
+        snapshot = runtime_bundles.fetch_method_snapshot(shared_neo4j_driver(), method_key)
         if not snapshot:
             return {
-                "target_method": method_signature,
+                "method_key": method_key,
+                "target_method": None,
                 "violations": [],
                 "error": "method_not_found",
             }
@@ -267,7 +268,8 @@ class PolicyEvaluator:
             opa_output = runtime_opa.evaluate_bundle(bundle)
         except RuntimeError as exc:
             return {
-                "target_method": method_signature,
+                "method_key": method_key,
+                "target_method": snapshot["signature"],
                 "violations": [],
                 "error": str(exc),
             }
@@ -281,15 +283,16 @@ class PolicyEvaluator:
             control_meta = runtime_catalog.resolve_catalog_entry(violation_id, catalog)
             violations.append(runtime_opa.build_violation_response(normalized, bundle, control_meta))
         return {
-            "target_method": method_signature,
+            "method_key": method_key,
+            "target_method": snapshot["signature"],
             "violations": violations,
             "rules_catalog": self._rules,
             "catalog": get_policy_catalog_entries(),
         }
 
-    def trace(self, method_signature: str, *, source_path_override: str | None = None) -> dict[str, Any]:
+    def trace(self, method_key: str, *, source_path_override: str | None = None) -> dict[str, Any]:
         """Shadow trace path: evaluates the bundle via package root to extract intermediate predicate definitions."""
-        snapshot = runtime_bundles.fetch_method_snapshot(shared_neo4j_driver(), method_signature)
+        snapshot = runtime_bundles.fetch_method_snapshot(shared_neo4j_driver(), method_key)
         if not snapshot:
             return {}
         bundle = build_evidence_bundle(

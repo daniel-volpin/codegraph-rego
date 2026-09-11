@@ -8,13 +8,14 @@ import tempfile
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from neo4j import GraphDatabase
 
 from codegraph.config import settings
+from codegraph.policy.runtime.bundles import validate_graph_generation
 from codegraph.search.artifacts import sha256_file
 
 if TYPE_CHECKING:
@@ -30,7 +31,8 @@ EmbeddingCache = dict[str, dict[str, object]]
 
 @dataclass(frozen=True)
 class _MethodSnippet:
-    signature: str
+    method_key: str
+    display_signature: str
     code: str
 
 
@@ -75,7 +77,7 @@ def _persist_embedding_cache(
     payload = {
         "model": model_name,
         "dim": dim,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
         "entries": entries,
     }
     path = Path(cache_path)
@@ -120,15 +122,17 @@ def _publish_generation_manifest(
     index_path: Path,
     signature_map_path: Path,
     metadata_path: Path,
+    graph_generation: dict[str, Any] | None = None,
 ) -> None:
     manifest = {
         "schema": "embedding_generation_manifest.v1",
-        "switched_at": datetime.now(timezone.utc).isoformat(),
+        "switched_at": datetime.now(UTC).isoformat(),
         "generation": {
             "id": generation_id,
             "model": model_name,
             "dim": dim,
             "count": count,
+            "graph_generation": graph_generation,
             "metadata": {
                 "index_path": str(index_path),
                 "index_sha256": sha256_file(index_path),
@@ -142,6 +146,34 @@ def _publish_generation_manifest(
     _atomic_write_json(manifest_path, manifest, indent=2)
 
 
+def _canonical_graph_generation(value: dict[str, Any] | None) -> dict[str, Any]:
+    value = value or {}
+    return {
+        "workspace_revisions": int(value.get("workspace_revisions") or 0),
+        "method_count": int(value.get("method_count") or 0),
+        "indexable_method_count": int(value.get("indexable_method_count") or 0),
+        "schema_versions": sorted(str(item) for item in (value.get("schema_versions") or []) if item),
+        "parser_backends": sorted(str(item) for item in (value.get("parser_backends") or []) if item),
+        "active_revisions": sorted(
+            (
+                {
+                    "workspace_id": str(item.get("workspace_id") or ""),
+                    "revision_id": str(item.get("revision_id") or ""),
+                    "schema_version": str(item.get("schema_version") or ""),
+                    "parser_backend": str(item.get("parser_backend") or ""),
+                    "parser_version": str(item.get("parser_version") or ""),
+                    "adapter_version": str(item.get("adapter_version") or ""),
+                    "method_count": int(item.get("method_count") or 0),
+                    "indexable_method_count": int(item.get("indexable_method_count") or 0),
+                }
+                for item in (value.get("active_revisions") or [])
+                if isinstance(item, dict)
+            ),
+            key=lambda item: (item["workspace_id"], item["revision_id"]),
+        ),
+    }
+
+
 def _cache_vector_dim(cache_entries: EmbeddingCache) -> int | None:
     sample = next(iter(cache_entries.values()), None)
     if not isinstance(sample, dict):
@@ -151,54 +183,70 @@ def _cache_vector_dim(cache_entries: EmbeddingCache) -> int | None:
 
 
 def _fetch_method_snippets() -> list[_MethodSnippet]:
-    from codegraph.common.snippet_utils import extract_snippet_by_lines
-
     snippets: list[_MethodSnippet] = []
     query = (
         "MATCH (m:Method) "
-        "RETURN coalesce(m.full_signature, m.signature) AS sig, "
-        "m.name AS name, m.file_path AS path, m.start_line AS start_line, m.end_line AS end_line"
+        "MATCH (aw:ActiveWorkspace)-[:ACTIVE_REVISION]->(wr:WorkspaceRevision) "
+        "WHERE m.method_key IS NOT NULL "
+        "AND aw.workspace_id = m.workspace_id "
+        "AND wr.workspace_id = m.workspace_id "
+        "AND wr.revision_id = m.revision_id "
+        "AND wr.schema_version = 'codegraph-jdt/v1' "
+        "AND m.range_status = 'verified' "
+        "AND m.start_byte IS NOT NULL "
+        "AND m.end_byte IS NOT NULL "
+        "RETURN m.method_key AS method_key, "
+        "m.signature AS display_signature, "
+        "m.file_path AS path, m.start_byte AS start_byte, m.end_byte AS end_byte, "
+        "m.source_sha256 AS source_sha256"
     )
     with GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass)) as driver:
         with driver.session() as session:
             for record in session.run(query):
                 path = record["path"]
-                name = record["name"]
-                signature = record["sig"]
-                start_line = record.get("start_line")
-                end_line = record.get("end_line")
-                code = ""
-                has_no_range = start_line is None and end_line is None
-                has_complete_range = isinstance(start_line, int) and isinstance(end_line, int)
-                if has_complete_range:
-                    code = extract_snippet_by_lines(path, start_line, end_line, padding=0, strict_range=True)
-                    if not code:
-                        LOGGER.warning(
-                            "Skipping method snippet for signature %s: invalid source range %s-%s in %s",
-                            signature,
-                            start_line,
-                            end_line,
-                            path,
-                        )
-                elif has_no_range:
-                    code = EmbeddingService.extract_method_snippet(path, name)
-                    if not code:
-                        LOGGER.warning(
-                            "Skipping method snippet for signature %s: missing or ambiguous range fallback in %s",
-                            signature,
-                            path,
-                        )
-                else:
-                    LOGGER.warning(
-                        "Skipping method snippet for signature %s: incomplete source range metadata start=%r end=%r in %s",
-                        signature,
-                        start_line,
-                        end_line,
-                        path,
+                method_key = record["method_key"]
+                display_signature = record["display_signature"]
+                start_byte = record.get("start_byte")
+                end_byte = record.get("end_byte")
+                has_complete_range = isinstance(start_byte, int) and isinstance(end_byte, int)
+                if not has_complete_range:
+                    raise RuntimeError(
+                        "Refusing to publish embedding artifacts: indexable method "
+                        f"{method_key} has incomplete byte range metadata start={start_byte!r} end={end_byte!r}"
                     )
-                if code:
-                    snippets.append(_MethodSnippet(signature=signature, code=code))
+                raw = Path(path).read_bytes()
+                expected_sha = record.get("source_sha256")
+                if isinstance(expected_sha, str) and expected_sha:
+                    actual_sha = hashlib.sha256(raw).hexdigest()
+                    if actual_sha != expected_sha:
+                        raise RuntimeError(
+                            "Refusing to publish embedding artifacts: source hash mismatch for "
+                            f"method key {method_key} in {path}"
+                        )
+                if end_byte < start_byte or end_byte > len(raw):
+                    raise RuntimeError(
+                        "Refusing to publish embedding artifacts: invalid byte range "
+                        f"{start_byte}-{end_byte} for method key {method_key} in {path}"
+                    )
+                try:
+                    code = raw[start_byte:end_byte].decode("utf-8")
+                except UnicodeDecodeError as exc:
+                    raise RuntimeError(
+                        "Refusing to publish embedding artifacts: source range is not UTF-8 for "
+                        f"method key {method_key} in {path}"
+                    ) from exc
+                if not code:
+                    raise RuntimeError(
+                        "Refusing to publish embedding artifacts: empty source range "
+                        f"{start_byte}-{end_byte} for method key {method_key} in {path}"
+                    )
+                snippets.append(_MethodSnippet(method_key=method_key, display_signature=display_signature, code=code))
     return snippets
+
+
+def _fetch_active_graph_generation() -> dict[str, Any]:
+    with GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass)) as driver:
+        return validate_graph_generation(driver)
 
 
 def _plan_embedding_work(
@@ -216,15 +264,15 @@ def _plan_embedding_work(
 
     for snippet in method_snippets:
         code_hash = _hash_text(snippet.code)
-        cached = cache_entries.get(snippet.signature) if cache_entries else None
+        cached = cache_entries.get(snippet.method_key) if cache_entries else None
         vector = cached.get("vector") if isinstance(cached, dict) else None
         cached_hash = cached.get("hash") if isinstance(cached, dict) else None
         if _cache_hit(vector, cached_hash, code_hash, cache_dim=cache_dim, rebuild_index=rebuild_index):
-            vectors_by_sig[snippet.signature] = list(vector) if isinstance(vector, list) else []
+            vectors_by_sig[snippet.method_key] = list(vector) if isinstance(vector, list) else []
             cached_hits += 1
             continue
         snippets_to_encode.append(snippet.code)
-        signatures_to_encode.append(snippet.signature)
+        signatures_to_encode.append(snippet.method_key)
         hashes_to_encode.append(code_hash)
 
     return _EmbeddingPlan(
@@ -287,12 +335,6 @@ class EmbeddingService:
     """
 
     @staticmethod
-    def extract_method_snippet(file_path: str, method_name: str) -> str:
-        from codegraph.common.snippet_utils import extract_code_snippet
-
-        return extract_code_snippet(file_path, method_name, before=CONTEXT_LINES_BEFORE, after=CONTEXT_LINES_AFTER)
-
-    @staticmethod
     def build_embeddings(
         progress_callback: ProgressCallback | None = None,
         *,
@@ -310,11 +352,18 @@ class EmbeddingService:
 
         if progress_callback:
             progress_callback("embedding", "Fetching methods from Neo4j…", 82.0)
+        graph_generation = _fetch_active_graph_generation()
         method_snippets = _fetch_method_snippets()
-        signatures = [snippet.signature for snippet in method_snippets]
+        signatures = [snippet.method_key for snippet in method_snippets]
+        indexable_method_count = int(graph_generation.get("indexable_method_count") or 0)
+        if len(signatures) != indexable_method_count:
+            raise RuntimeError(
+                f"Refusing to publish embedding artifacts: indexed snippet count does not match "
+                f"active graph indexable method count ({len(signatures)} snippets for {indexable_method_count} "
+                "indexable methods)"
+            )
         if not signatures:
-            LOGGER.warning("No method snippets found; skipping embedding build.")
-            return
+            raise RuntimeError("No indexable source methods found; cannot publish a search generation.")
 
         cache_entries: EmbeddingCache = (
             {} if rebuild_index else _load_embedding_cache(settings.embedding_cache_path, settings.embedding_model_name)
@@ -373,7 +422,7 @@ class EmbeddingService:
             "dim": dim,
             "metric": "cosine",
             "count": len(signatures),
-            "built_at": datetime.now(timezone.utc).isoformat(),
+            "built_at": datetime.now(UTC).isoformat(),
             "index_path": str(index_path),
             "signature_map": {"full": str(sigmap_full_path)},
             "cache_path": settings.embedding_cache_path,
@@ -383,6 +432,9 @@ class EmbeddingService:
         _write_json(metadata_path, metadata, indent=2)
         if dim is None:
             raise RuntimeError("Refusing to publish embedding artifacts: FAISS index is empty")
+        latest_graph_generation = _fetch_active_graph_generation()
+        if _canonical_graph_generation(latest_graph_generation) != _canonical_graph_generation(graph_generation):
+            raise RuntimeError("Refusing to publish embedding artifacts: active graph generation changed during build.")
         _publish_generation_manifest(
             manifest_path=Path(settings.embedding_metadata_path),
             generation_id=generation_id,
@@ -392,6 +444,7 @@ class EmbeddingService:
             index_path=index_path,
             signature_map_path=sigmap_full_path,
             metadata_path=metadata_path,
+            graph_generation=latest_graph_generation,
         )
         try:
             _persist_embedding_cache(settings.embedding_cache_path, settings.embedding_model_name, dim, cache_entries)

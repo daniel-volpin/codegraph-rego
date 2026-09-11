@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from codegraph.java.fragments import parse_source_file
 from codegraph.policy.runtime.bundles import build_evidence_bundle
 from codegraph.policy.runtime.opa import evaluate_bundle
 from codegraph.remediation.context import build_virtual_graph_context
@@ -56,14 +57,22 @@ def _violation_ids(violations: list[dict]) -> set[str]:
     return {str(v.get("violation_id")) for v in violations}
 
 
-def _snapshot(source: str, file_path: str, virtual_graph: dict) -> dict:
+def _snapshot(file_path: str, virtual_graph: dict) -> dict:
+    raw = Path(file_path).read_bytes()
+    parsed = parse_source_file(raw, relative_path=Path(file_path).name, resolve_bindings=False)
+    method = next(method for method in parsed.methods if method.name == "doPost")
     return {
+        "method_key": f"workspace@revision:{parsed.relative_path}#{method.source_key}",
         "signature": SIGNATURE,
         "name": "doPost",
         "class_fqn": CLASS_FQN,
         "file_path": file_path,
-        "start_line": 1,
-        "end_line": len(source.splitlines()),
+        "start_line": method.declaration_range.start_line,
+        "end_line": method.declaration_range.end_line,
+        "start_byte": method.declaration_range.start_byte,
+        "end_byte": method.declaration_range.end_byte,
+        "range_status": method.declaration_range.status,
+        "source_sha256": parsed.source_sha256,
         "modifiers": ["public"],
         "annotations": virtual_graph["annotations"],
         "uses_fields": virtual_graph["uses_fields"],
@@ -75,9 +84,12 @@ def _snapshot(source: str, file_path: str, virtual_graph: dict) -> dict:
 def _canonical_violation_ids(source: str, tmp_path: Path) -> set[str]:
     """On-disk path: method source in a real file, canonical evidence bundle."""
     java_file = tmp_path / "BenchmarkTest99001.java"
-    java_file.write_text(source, encoding="utf-8")
+    java_file.write_text(
+        "package org.owasp.benchmark.testcode;\nclass BenchmarkTest99001 {\n" + source + "\n}\n",
+        encoding="utf-8",
+    )
     virtual_graph = build_virtual_graph_context(source, base_graph={})
-    bundle = build_evidence_bundle(_snapshot(source, java_file.as_posix(), virtual_graph))
+    bundle = build_evidence_bundle(_snapshot(java_file.as_posix(), virtual_graph))
     return _violation_ids(evaluate_bundle(bundle))
 
 
@@ -136,14 +148,12 @@ def test_preview_is_read_only(tmp_path, monkeypatch) -> None:
     original_bytes = java_file.read_bytes()
 
     import codegraph.db as db
-    import codegraph.ingestion.service as ingestion_service
 
     def _forbidden(*_args, **_kwargs):
         raise AssertionError("preview must not touch the graph or ingestion pipeline")
 
     monkeypatch.setattr(db, "get_neo4j_driver", _forbidden)
     monkeypatch.setattr(db, "shared_neo4j_driver", _forbidden)
-    monkeypatch.setattr(ingestion_service, "process_single_file_content", _forbidden)
 
     source = STILL_VULNERABLE_MD5
     virtual_graph = build_virtual_graph_context(source, base_graph={})

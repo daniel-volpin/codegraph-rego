@@ -30,6 +30,7 @@ export interface ViolationRow {
   citation: string;
   module: string;
   targetMethod: string;
+  methodKey: string;
   filePath: string;
   reason: string;
   snippet: string;
@@ -85,11 +86,6 @@ export const compactTargetMethod = (value: string) => {
   return `${className}.${methodName}${suffix}`;
 };
 
-const extractMethodNameFromSignature = (targetMethod: string) => {
-  const match = targetMethod.match(/([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
-  return match ? match[1] : "";
-};
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -132,43 +128,6 @@ const labelsForViolation = (item: RawViolation, ruleId: string) => {
   return { controlLabel, cweLabel };
 };
 
-export const trimSnippetToMethod = (snippet: string, targetMethod: string) => {
-  if (!snippet.trim()) return "";
-  const methodName = extractMethodNameFromSignature(targetMethod);
-  if (!methodName) return snippet.trimEnd();
-  const lines = snippet.split("\n");
-  const declarationIndex = lines.findIndex((line) => new RegExp(`\\b${methodName}\\s*\\(`).test(line));
-  if (declarationIndex < 0) return snippet.trimEnd();
-  let start = declarationIndex;
-  while (start > 0) {
-    const previous = lines[start - 1].trim();
-    if (!previous || previous.startsWith("@")) {
-      start -= 1;
-      continue;
-    }
-    break;
-  }
-  let sawOpeningBrace = false;
-  let depth = 0;
-  let end = lines.length - 1;
-  for (let i = declarationIndex; i < lines.length; i += 1) {
-    const line = lines[i];
-    for (const char of line) {
-      if (char === "{") {
-        sawOpeningBrace = true;
-        depth += 1;
-      } else if (char === "}") {
-        depth -= 1;
-        if (sawOpeningBrace && depth === 0) {
-          end = i;
-          return lines.slice(start, end + 1).join("\n").trimEnd();
-        }
-      }
-    }
-  }
-  return lines.slice(start, end + 1).join("\n").trimEnd();
-};
-
 // `item` is already validated at the API boundary (PolicyEvaluateResponseSchema
 // parses each violation through ViolationSchema, applying defaults and
 // capability normalization). We read typed fields directly rather than
@@ -185,7 +144,7 @@ export const normalizeViolation = (item: RawViolation): ViolationRow => {
   const rawSnippet =
     item.code_snippet ?? item.evidence?.source_code ?? item.updated_source_code ?? "";
   return {
-    id: `${ruleId}:${targetMethod}:${filePath}`,
+    id: `${ruleId}:${item.method_key}`,
     ruleId,
     severity,
     controlLabel,
@@ -193,9 +152,10 @@ export const normalizeViolation = (item: RawViolation): ViolationRow => {
     citation: citationFor(item, filePath),
     module: deriveModuleLabel(filePath),
     targetMethod,
+    methodKey: item.method_key,
     filePath,
     reason: item.reason ?? item.description ?? "—",
-    snippet: trimSnippetToMethod(rawSnippet, targetMethod),
+    snippet: rawSnippet,
     remediation,
     raw: item,
   };

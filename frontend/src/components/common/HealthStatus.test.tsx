@@ -13,6 +13,7 @@ const healthyPayload = {
   status: "ok" as const,
   startup_ready: true,
   neo4j: true,
+  graph_generation: true,
   faiss_index: true,
   signature_map: true,
   embedding_model: true,

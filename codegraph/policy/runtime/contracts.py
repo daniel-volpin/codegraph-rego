@@ -260,6 +260,7 @@ class PolicyHelperSummaries:
 @dataclass(frozen=True)
 class PolicyBundle:
     target_method: str
+    method_key: str | None = None
     method_name: str | None = None
     class_fqn: str | None = None
     file_path: str | None = None
@@ -275,6 +276,7 @@ class PolicyBundle:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "method_key": self.method_key,
             "target_method": self.target_method,
             "method_name": self.method_name,
             "class_fqn": self.class_fqn,
@@ -308,6 +310,7 @@ class PolicyInputEnvelope:
 def build_policy_bundle(
     *,
     target_method: str,
+    method_key: Any = None,
     method_name: Any = None,
     class_fqn: Any = None,
     file_path: Any = None,
@@ -350,6 +353,7 @@ def build_policy_bundle(
 
     return PolicyBundle(
         target_method=target_method,
+        method_key=_normalize_optional_string(method_key),
         method_name=_normalize_optional_string(method_name),
         class_fqn=_normalize_optional_string(class_fqn),
         file_path=_normalize_optional_string(file_path),
@@ -379,6 +383,7 @@ def normalize_policy_bundle_mapping(raw: Mapping[str, Any]) -> PolicyBundle:
         raise TypeError("analysis_flags must be a mapping or None")
     return build_policy_bundle(
         target_method=raw.get("target_method"),
+        method_key=raw.get("method_key"),
         method_name=raw.get("method_name"),
         class_fqn=raw.get("class_fqn"),
         file_path=raw.get("file_path"),

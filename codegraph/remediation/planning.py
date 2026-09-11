@@ -3,15 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-import javalang
-from javalang.tree import (
-    Assignment,
-    ClassCreator,
-    MethodDeclaration,
-    MethodInvocation,
-    ReturnStatement,
-    VariableDeclarator,
-)
+from codegraph.java.fragments import JavaFragmentError, parse_strict_method_fragment
+from codegraph.java.models import InvocationDTO, MethodDeclarationDTO
 
 
 @dataclass(frozen=True)
@@ -47,44 +40,35 @@ def _sanitize_method_snippet(source_code: str) -> str:
     return "\n".join(lines)
 
 
-def _parse_method_wrapper(source_code: str) -> MethodDeclaration | None:
+def _parse_method_wrapper(source_code: str) -> MethodDeclarationDTO | None:
     snippet = _sanitize_method_snippet(source_code)
     if not snippet.strip():
         return None
-    wrapped = f"class RemediationPlanProbe {{\n{snippet}\n}}"
     try:
-        tree = javalang.parse.parse(wrapped)
-    except Exception:
+        return parse_strict_method_fragment(snippet.encode("utf-8"), require_body=False).method
+    except JavaFragmentError:
         return None
-    if not getattr(tree, "types", None):
-        return None
-    methods = getattr(tree.types[0], "methods", None) or []
-    return methods[0] if methods else None
 
 
-def _collect_terminal_invocation_contracts(method: MethodDeclaration) -> list[InvocationContract]:
-    def in_value_context(path: tuple[Any, ...]) -> bool:
-        return any(isinstance(ancestor, (VariableDeclarator, Assignment, ReturnStatement)) for ancestor in path)
+def _source_kind(invocation: InvocationDTO) -> str:
+    qualifier = invocation.qualifier_source or ""
+    if qualifier.startswith("new "):
+        return "constructor_chain"
+    if len(invocation.chain_members) > 1 or "." in qualifier:
+        return "factory_chain"
+    return "direct_call"
 
+
+def _collect_terminal_invocation_contracts(method: MethodDeclarationDTO) -> list[InvocationContract]:
     counts: dict[tuple[str, int, str], int] = {}
-    for path, node in method:
-        if not in_value_context(path):
+    for invocation in method.invocations:
+        if not invocation.terminal_chain_member or invocation.kind != "method":
             continue
-        if isinstance(node, ClassCreator):
-            selectors = [selector for selector in (node.selectors or []) if isinstance(selector, MethodInvocation)]
-            if not selectors:
-                continue
-            terminal = selectors[-1]
-            key = (terminal.member, len(terminal.arguments or []), "constructor_chain")
-            counts[key] = counts.get(key, 0) + 1
+        source_kind = _source_kind(invocation)
+        if source_kind == "direct_call":
             continue
-        if isinstance(node, MethodInvocation) and node.qualifier and node.selectors:
-            selectors = [selector for selector in node.selectors if isinstance(selector, MethodInvocation)]
-            if not selectors:
-                continue
-            terminal = selectors[-1]
-            key = (terminal.member, len(terminal.arguments or []), "factory_chain")
-            counts[key] = counts.get(key, 0) + 1
+        key = (invocation.name, invocation.argument_count, source_kind)
+        counts[key] = counts.get(key, 0) + 1
 
     contracts = [
         InvocationContract(
@@ -135,10 +119,10 @@ def validate_remediation_plan(plan: RemediationPlan | None, updated_source: str)
         return "plan_invariant_violation: parse_error"
 
     invocation_counts: dict[tuple[str, int], int] = {}
-    for _, node in method:
-        if not isinstance(node, MethodInvocation):
+    for invocation in method.invocations:
+        if invocation.kind != "method":
             continue
-        key = (node.member, len(node.arguments or []))
+        key = (invocation.name, invocation.argument_count)
         invocation_counts[key] = invocation_counts.get(key, 0) + 1
 
     for contract in plan.terminal_invocation_contracts:

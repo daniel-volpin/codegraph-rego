@@ -13,6 +13,7 @@ class CompilationResult(TypedDict, total=False):
 class ApplyMetadata(TypedDict):
     violation_id: str
     rule_id: str | None
+    method_key: str | None
     target_method: str
     file_path: str
     attempt_count: int
@@ -27,6 +28,7 @@ class _ApplyFixResultRequired(TypedDict):
 class ApplyFixResult(_ApplyFixResultRequired, total=False):
     error: str | None
     rule_id: str | None
+    method_key: str | None
     target_method: str | None
     file_path: str | None
     updated_source_code: str | None
@@ -49,6 +51,7 @@ def early_error_result(
     violation_id: str,
     error: str,
     rule_id: Any = None,
+    method_key: str | None = None,
     target_method: str | None = None,
     file_path: str | None = None,
 ) -> ApplyFixResult:
@@ -59,6 +62,8 @@ def early_error_result(
     }
     if rule_id is not None:
         result["rule_id"] = rule_id
+    if method_key is not None:
+        result["method_key"] = method_key
     if target_method is not None:
         result["target_method"] = target_method
     if file_path is not None:
@@ -74,6 +79,7 @@ def generation_error_result(
     target_method: str,
     file_path: str,
     rule_id: Any,
+    method_key: str | None = None,
     attempt_count: int,
     llm_output: Any,
     errors: list[str],
@@ -88,6 +94,7 @@ def generation_error_result(
         "target_method": target_method,
         "file_path": file_path,
         "rule_id": rule_id,
+        "method_key": method_key,
         "attempt_count": attempt_count,
         "llm_output": llm_output,
         "errors": errors,
@@ -104,6 +111,7 @@ def partial_error_result(
     target_method: str,
     file_path: str,
     rule_id: Any,
+    method_key: str | None = None,
     updated_source_code: str | None = None,
     diff: str | None = None,
     compilation: CompilationResult | None = None,
@@ -118,6 +126,7 @@ def partial_error_result(
         "target_method": target_method,
         "file_path": file_path,
         "rule_id": rule_id,
+        "method_key": method_key,
     }
     if updated_source_code is not None:
         result["updated_source_code"] = updated_source_code
@@ -139,6 +148,7 @@ def apply_result(
     *,
     violation_id: str,
     rule_id: Any,
+    method_key: str | None,
     target_method: str,
     file_path: str,
     updated_source_code: str,
@@ -156,6 +166,7 @@ def apply_result(
         "status": status,
         "violation_id": violation_id,
         "rule_id": rule_id,
+        "method_key": method_key,
         "target_method": target_method,
         "file_path": file_path,
         "updated_source_code": updated_source_code,

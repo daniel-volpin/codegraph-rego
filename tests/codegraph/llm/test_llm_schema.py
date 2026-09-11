@@ -5,11 +5,6 @@ from codegraph.llm.schema.explanation import (
     parse_structured_explanation_strict,
 )
 
-try:
-    import javalang  # noqa: F401
-except ImportError:  # pragma: no cover - environment guard
-    javalang = None
-
 
 class TestLlmSchema(unittest.TestCase):
     def test_explanation_strict_rejects_preamble_but_salvage_accepts(self) -> None:
@@ -58,11 +53,6 @@ class TestLlmSchema(unittest.TestCase):
         self.assertEqual(strict["schema_error"], "invalid_json: malformed remediation generation payload")
         self.assertTrue(salvage["raw_response_valid"])
         self.assertIn("SHA-256", salvage["replacement_method_code"])
-
-    test_remediation_strict_rejects_preamble_but_salvage_accepts = unittest.skipIf(
-        javalang is None, "javalang not installed"
-    )(test_remediation_strict_rejects_preamble_but_salvage_accepts)
-
 
 if __name__ == "__main__":
     unittest.main()

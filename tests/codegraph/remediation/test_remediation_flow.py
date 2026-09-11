@@ -5,6 +5,8 @@ from unittest.mock import Mock, patch
 
 from tests.codegraph.remediation._test_helpers import RemediationTestBase, _structured_apply_edits, _structured_no_fix
 
+DEFAULT_METHOD_KEY = "workspace@revision:Example.java#file:Example.java#type:Foo#method:hash/0/#range:0-1"
+
 
 class RemediationFlowTests(RemediationTestBase):
     def test_propose_method_edits_uses_structured_generation_contract(self):
@@ -152,7 +154,7 @@ class RemediationFlowTests(RemediationTestBase):
             "baseline_violations": [],
         }
 
-        out = remediation.preview_virtual_fix("ISO-A.12.4.1")
+        out = remediation.preview_virtual_fix("ISO-A.12.4.1", method_key=DEFAULT_METHOD_KEY)
         self.assertEqual(out.get("status"), "INVALID")
         self.assertEqual(out.get("error"), "unsupported_rule_for_auto_fix")
         llm_client.assert_not_called()
@@ -179,7 +181,7 @@ class RemediationFlowTests(RemediationTestBase):
             "exact_method_source": original_method,
         }
 
-        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-RANDOM")
+        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-RANDOM", method_key=DEFAULT_METHOD_KEY)
         self.assertEqual(out.get("status"), "NO_FIX")
         self.assertEqual(out["generation"]["decision"], "no_fix")
         self.assertEqual(out["generation"]["replacement_method_lines"], None)
@@ -212,7 +214,7 @@ class RemediationFlowTests(RemediationTestBase):
         }
 
         with patch.object(svc_mod, "evaluate_bundle", return_value=[]):
-            out = remediation.preview_virtual_fix("ISO-A.10-WEAK-RANDOM")
+            out = remediation.preview_virtual_fix("ISO-A.10-WEAK-RANDOM", method_key=DEFAULT_METHOD_KEY)
 
         self.assertEqual(out.get("status"), "OK")
         self.assertEqual(out.get("opa_status"), "PASS")
@@ -247,7 +249,7 @@ class RemediationFlowTests(RemediationTestBase):
         }
 
         with patch.object(svc_mod, "evaluate_bundle", return_value=[]):
-            out = remediation.preview_virtual_fix("ISO-A.10-WEAK-CRYPTO")
+            out = remediation.preview_virtual_fix("ISO-A.10-WEAK-CRYPTO", method_key=DEFAULT_METHOD_KEY)
 
         self.assertEqual(out.get("status"), "OK")
         self.assertEqual(out["generation"]["decision"], "apply_edits")
@@ -285,7 +287,7 @@ class RemediationFlowTests(RemediationTestBase):
             "baseline_violations": [],
         }
 
-        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-CRYPTO")
+        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-CRYPTO", method_key=DEFAULT_METHOD_KEY)
         self.assertEqual(out.get("status"), "NO_FIX")
         self.assertEqual(out["generation"]["decision"], "no_fix")
         self.assertIn("broader protocol context", out["generation"]["reason"])
@@ -309,7 +311,7 @@ class RemediationFlowTests(RemediationTestBase):
             "exact_method_source": original_method,
         }
 
-        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-HASH")
+        out = remediation.preview_virtual_fix("ISO-A.10-WEAK-HASH", method_key=DEFAULT_METHOD_KEY)
         self.assertEqual(out.get("status"), "GENERATION_ERROR")
         self.assertFalse(out["generation"]["raw_response_valid"])
         self.assertIn("invalid_java_syntax", out["error"])

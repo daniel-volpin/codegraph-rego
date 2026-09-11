@@ -34,6 +34,7 @@ const EvidenceSchema = z
 // the full original payload when we hand `violation.raw` back.
 export const ViolationSchema = z
   .object({
+    method_key: z.string().min(1),
     violation_id: z.string().optional(),
     rule_id: z.string().optional(),
     target_method: z.string().optional(),
@@ -281,6 +282,7 @@ export type RemediationCompilationResult = z.infer<
 
 export const RemediationPreviewResponseSchema = z
   .object({
+    method_key: z.string().nullable().optional(),
     status: z.string(),
     violation_id: z.string(),
     rule_id: z.string().nullable().optional(),
@@ -303,6 +305,7 @@ export type RemediationPreviewResponse = z.infer<
 
 export const RemediationApplyResponseSchema = z
   .object({
+    method_key: z.string().nullable().optional(),
     status: z.string(),
     violation_id: z.string(),
     rule_id: z.string().nullable().optional(),
@@ -339,6 +342,7 @@ export const HealthCheckResponseSchema = z
     status: z.enum(["ok", "degraded"]).catch("degraded"),
     startup_ready: z.boolean(),
     neo4j: z.boolean(),
+    graph_generation: z.boolean(),
     faiss_index: z.boolean(),
     signature_map: z.boolean(),
     embedding_model: z.boolean(),

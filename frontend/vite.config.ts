@@ -20,6 +20,13 @@ function readPackageVersion(): string {
 }
 
 const APP_VERSION = readPackageVersion();
+const forkedDomTests = ["src/lib/runtimeConfig.test.ts"];
+const nodeTests = [
+  "src/lib/api.test.ts",
+  "src/lib/dependencies.test.ts",
+  "src/components/features/policy/policyUtils.test.ts",
+  "src/viteConfig.test.ts",
+];
 
 export default defineConfig({
   define: {
@@ -27,12 +34,39 @@ export default defineConfig({
   },
   plugins: [tailwindcss(), react()],
   test: {
-    environment: "jsdom",
     globals: true,
-    setupFiles: "./src/test/setup.ts",
     css: true,
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     exclude: ["tests/e2e/**"],
+    projects: [
+      {
+        test: {
+          name: "dom-vm",
+          pool: "vmForks",
+          vmMemoryLimit: "512MB",
+          environment: "jsdom",
+          setupFiles: "./src/test/setup.ts",
+          include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+          exclude: [...forkedDomTests, ...nodeTests],
+        },
+      },
+      {
+        test: {
+          name: "dom-forks",
+          pool: "forks",
+          environment: "jsdom",
+          setupFiles: "./src/test/setup.ts",
+          include: forkedDomTests,
+        },
+      },
+      {
+        test: {
+          name: "node-forks",
+          pool: "forks",
+          environment: "node",
+          include: nodeTests,
+        },
+      },
+    ],
   },
   server: {
     port: 5173,

@@ -1,130 +1,151 @@
 from __future__ import annotations
 
+import shutil
 import unittest
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
-from codegraph.common.snippet_utils import (
-    extract_snippet_by_lines,
-    find_java_block_end_line,
-    find_java_statement_end_line,
-    find_java_statement_end_position,
-    select_unique_line_or_refuse,
-)
-from codegraph.ingestion.service import extract_entities_from_content
+from codegraph.ingestion.service import collect_code_structure
+
+_TEST_WORK_ROOT = Path(__file__).resolve().parents[3] / ".copilot-source-span-test-work"
 
 
-class JavaLexicalBoundaryTests(unittest.TestCase):
-    def test_block_end_ignores_braces_in_strings_chars_and_comments(self) -> None:
-        lines = [
-            "class Demo {",
-            "  void tricky() {",
-            '    String s = "escaped quote \\\" and brace } not code";',
-            "    char c = '}';",
-            "    // comment with }",
-            "    /* block { comment } still comment */",
-            "    if (true) {",
-            "      int x = 1;",
-            "    }",
-            "  }",
-            "}",
-        ]
-        self.assertEqual(find_java_block_end_line(lines, 2), 10)
+@contextmanager
+def java_workspace(file_name: str, source: str) -> Iterator[tuple[Path, object]]:
+    _TEST_WORK_ROOT.mkdir(exist_ok=True)
+    case_dir = _TEST_WORK_ROOT / uuid.uuid4().hex
+    case_dir.mkdir()
+    try:
+        source_path = case_dir / file_name
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_text(source, encoding="utf-8")
+        yield case_dir, collect_code_structure(case_dir.as_posix())
+    finally:
+        shutil.rmtree(case_dir, ignore_errors=True)
+        try:
+            _TEST_WORK_ROOT.rmdir()
+        except OSError:
+            pass
 
-    def test_block_end_handles_nested_blocks(self) -> None:
-        lines = [
-            "class Demo {",
-            "  void nested() {",
-            "    if (true) {",
-            "      while (false) {",
-            "      }",
-            "    }",
-            "  }",
-            "}",
-        ]
-        self.assertEqual(find_java_block_end_line(lines, 2), 7)
 
-    def test_unbalanced_block_is_rejected(self) -> None:
-        lines = [
-            "class Demo {",
-            "  void broken() {",
-            "    if (true) {",
-            "      int x = 1;",
-            "  ",
-        ]
-        with self.assertRaises(ValueError):
-            find_java_block_end_line(lines, 2)
+def _method_text(source: str, method) -> str:
+    source_bytes = source.encode("utf-8")
+    assert method.start_byte is not None
+    assert method.end_byte is not None
+    return source_bytes[method.start_byte : method.end_byte].decode("utf-8")
 
-    def test_unbalanced_statement_is_rejected(self) -> None:
-        lines = [
-            "class Demo {",
-            "  int x = 1",
-            "}",
-        ]
-        with self.assertRaises(ValueError):
-            find_java_statement_end_line(lines, 2)
 
-    def test_name_only_ambiguity_refuses_and_start_hint_selects_unique(self) -> None:
-        lines = [
-            "public class O {",
-            "  public void over(int x) {}",
-            "  public void over(String x) {}",
-            "}",
-        ]
-        self.assertIsNone(select_unique_line_or_refuse(lines, "over("))
-        self.assertEqual(select_unique_line_or_refuse(lines, "over(", start_line_hint=3), 3)
+class JdtRangeBoundaryTests(unittest.TestCase):
+    def test_jdt_range_ignores_braces_in_strings_chars_comments_and_text_blocks(self) -> None:
+        source = '''package demo;
+class Demo {
+  void tricky() {
+    String s = "escaped quote \\" and brace } not code";
+    char c = '}';
+    // comment with }
+    /* block { comment } still comment */
+    String text = """
+      braces } and semicolons ; stay in text
+      """;
+    if (text != null) {
+      System.out.println(text);
+    }
+  }
+}
+'''
+        with java_workspace("Demo.java", source) as (_root, structure):
+            method = {m.full_signature: m for m in structure.methods}["demo.Demo.tricky()"]
 
-    def test_start_hint_mismatch_refuses_without_fallback(self) -> None:
-        lines = [
-            "class O {",
-            "  void over(int x) {}",
-            "  void over(String x) {}",
-            "}",
-        ]
-        self.assertIsNone(select_unique_line_or_refuse(lines, "over(", start_line_hint=1))
+        self.assertEqual(method.start_line, 3)
+        self.assertEqual(method.end_line, 14)
+        self.assertIn("braces } and semicolons ;", _method_text(source, method))
 
-    def test_unescaped_newline_in_string_is_rejected(self) -> None:
-        lines = [
-            "class Demo {",
-            "  void broken() {",
-            '    String s = "unterminated',
-            '    still string";',
-            "  }",
-            "}",
-        ]
-        with self.assertRaises(ValueError):
-            find_java_block_end_line(lines, 2)
+    def test_jdt_range_handles_nested_blocks_and_lambda_statement_semicolons(self) -> None:
+        source = """package demo;
+class Demo {
+  void nested() {
+    Runnable r = () -> { int x = 1; System.out.println(x); };
+    if (true) {
+      while (System.currentTimeMillis() < 0) {
+      }
+    }
+  }
+}
+"""
+        with java_workspace("Demo.java", source) as (_root, structure):
+            method = {m.full_signature: m for m in structure.methods}["demo.Demo.nested()"]
 
-    def test_statement_end_ignores_nested_semicolons_in_initializer(self) -> None:
-        lines = [
-            "class Demo {",
-            "  Runnable r = () -> { int x = 1; System.out.println(x); };",
-            "}",
-        ]
-        self.assertEqual(find_java_statement_end_line(lines, 2), 2)
+        self.assertEqual(method.start_line, 3)
+        self.assertEqual(method.end_line, 9)
+        self.assertIn("Runnable r = () ->", _method_text(source, method))
 
-    def test_statement_depth_underflow_is_rejected(self) -> None:
-        lines = [
-            "class Demo {",
-            "  int x = ) ;",
-            "}",
-        ]
-        with self.assertRaises(ValueError):
-            find_java_statement_end_line(lines, 2)
+    def test_jdt_rejects_unbalanced_or_unparseable_sources_before_spans(self) -> None:
+        source = """class Broken {
+  void broken() {
+    if (true) {
+      int x = ) ;
+}
+"""
+        from codegraph.ingestion.service import IngestionError
 
-    def test_statement_end_position_skips_nested_same_line_semicolons(self) -> None:
-        lines = [
-            "class Demo {",
-            "  Runnable r = () -> { int x = 1; System.out.println(x); };",
-            "}",
-        ]
-        self.assertEqual(find_java_statement_end_position(lines, 2), (2, 58))
+        with self.assertRaises(IngestionError):
+            with java_workspace("Broken.java", source):
+                pass
 
-    def test_extract_snippet_by_lines_strict_rejects_out_of_file_end(self) -> None:
-        with TemporaryDirectory() as tmp:
-            path = Path(tmp) / "Demo.java"
-            path.write_text("class Demo {\n  void a() {}\n}\n", encoding="utf-8")
-            self.assertEqual(extract_snippet_by_lines(str(path), 2, 99, strict_range=True), "")
+    def test_jdt_source_keys_disambiguate_overloads_without_needle_lookup(self) -> None:
+        source = """package demo;
+class O {
+  public void over(int x) {}
+  public void over(String x) {}
+}
+"""
+        with java_workspace("O.java", source) as (_root, structure):
+            overloads = [method for method in structure.methods if method.name == "over"]
+
+        self.assertEqual({method.full_signature for method in overloads}, {"demo.O.over(int)", "demo.O.over(java.lang.String)"})
+        self.assertEqual(len({method.method_key for method in overloads}), 2)
+        self.assertTrue(all("#method:over/" in method.method_key for method in overloads))
+
+    def test_jdt_bodyless_interface_method_has_absent_range_not_neighbor_body(self) -> None:
+        source = """package demo;
+interface Demo {
+  void contract();
+  default void implemented() {
+    int x = 1;
+  }
+}
+"""
+        with java_workspace("Demo.java", source) as (_root, structure):
+            methods = {m.full_signature: m for m in structure.methods}
+
+        bodyless = methods["demo.Demo.contract()"]
+        implemented = methods["demo.Demo.implemented()"]
+        self.assertEqual(bodyless.range_status, "verified")
+        self.assertEqual(bodyless.start_line, 3)
+        self.assertEqual(bodyless.end_line, 3)
+        self.assertEqual(implemented.start_line, 4)
+        self.assertEqual(implemented.end_line, 6)
+
+    def test_jdt_multiline_annotation_starts_range_at_annotation(self) -> None:
+        source = """package demo;
+class Annotated {
+  @SuppressWarnings({
+    "unchecked",
+    "deprecation"
+  })
+  void annotated() {
+    int x = 1;
+  }
+}
+"""
+        with java_workspace("Annotated.java", source) as (_root, structure):
+            method = {m.full_signature: m for m in structure.methods}["demo.Annotated.annotated()"]
+
+        self.assertEqual(method.start_line, 3)
+        self.assertEqual(method.end_line, 9)
+        self.assertEqual(method.annotations, ["SuppressWarnings"])
 
 
 class IngestionMethodSpanTests(unittest.TestCase):
@@ -152,15 +173,16 @@ class Sample {
   }
 }
 """
-        methods, *_ = extract_entities_from_content("Sample.java", source)
+        with java_workspace("Sample.java", source) as (_root, structure):
+            methods = structure.methods
         by_full_sig = {m.full_signature: m for m in methods}
 
         parse = by_full_sig["demo.Sample.parse(T)"]
-        self.assertEqual(parse.start_line, 4)
+        self.assertEqual(parse.start_line, 3)
         self.assertEqual(parse.end_line, 13)
 
         over_int = by_full_sig["demo.Sample.over(int)"]
-        over_str = by_full_sig["demo.Sample.over(String)"]
+        over_str = by_full_sig["demo.Sample.over(java.lang.String)"]
         self.assertEqual(over_int.start_line, 15)
         self.assertEqual(over_int.end_line, 17)
         self.assertEqual(over_str.start_line, 19)
@@ -179,7 +201,8 @@ class EmptyBodies {
   }
 }
 """
-        methods, *_ = extract_entities_from_content("EmptyBodies.java", source)
+        with java_workspace("EmptyBodies.java", source) as (_root, structure):
+            methods = structure.methods
         by_full_sig = {m.full_signature: m for m in methods}
         self.assertEqual(by_full_sig["demo.EmptyBodies.empty()"].end_line, 4)
         self.assertEqual(by_full_sig["demo.EmptyBodies.EmptyBodies()"].end_line, 6)
@@ -192,7 +215,8 @@ class SharedLine { void a() {} void b() {
 }
 }
 """
-        methods, *_ = extract_entities_from_content("SharedLine.java", source)
+        with java_workspace("SharedLine.java", source) as (_root, structure):
+            methods = structure.methods
         by_full_sig = {m.full_signature: m for m in methods}
         self.assertEqual(by_full_sig["demo.SharedLine.a()"].end_line, 2)
         self.assertEqual(by_full_sig["demo.SharedLine.b()"].end_line, 4)
@@ -204,7 +228,8 @@ class C { void f() {
 }
 }
 """
-        methods, *_ = extract_entities_from_content("C.java", source)
+        with java_workspace("C.java", source) as (_root, structure):
+            methods = structure.methods
         by_full_sig = {m.full_signature: m for m in methods}
         self.assertEqual(by_full_sig["demo.C.f()"].start_line, 2)
         self.assertEqual(by_full_sig["demo.C.f()"].end_line, 4)
@@ -217,7 +242,8 @@ class FieldInit {
   };
 }
 """
-        _, _, _, _, _, _, _, fields, _ = extract_entities_from_content("FieldInit.java", source)
+        with java_workspace("FieldInit.java", source) as (_root, structure):
+            fields = structure.fields
         self.assertEqual(len(fields), 1)
         self.assertEqual(fields[0].name, "obj")
         self.assertEqual(fields[0].end_line, 5)
@@ -227,7 +253,8 @@ class FieldInit {
  void f() {}
 }
 """
-        _, _, _, _, _, _, _, fields, _ = extract_entities_from_content("C.java", source)
+        with java_workspace("C.java", source) as (_root, structure):
+            fields = structure.fields
         self.assertEqual(len(fields), 1)
         self.assertEqual(fields[0].name, "x")
         self.assertEqual(fields[0].start_line, 1)
@@ -238,7 +265,8 @@ class FieldInit {
   int a = 1, b = 2;
 }
 """
-        _, _, _, _, _, _, _, fields, _ = extract_entities_from_content("Multi.java", source)
+        with java_workspace("Multi.java", source) as (_root, structure):
+            fields = structure.fields
         self.assertEqual({field.name for field in fields}, {"a", "b"})
         self.assertTrue(all(field.end_line == 2 for field in fields))
 

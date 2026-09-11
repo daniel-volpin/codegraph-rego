@@ -51,14 +51,12 @@ class CleanedAndRawAreDistinctInBundle(unittest.TestCase):
         self.assertIn("MD5", violation["code_snippet"])
         self.assertIn("MD5", violation["evidence"]["source_code"])
 
-    def test_violation_response_falls_back_when_raw_field_absent(self) -> None:
-        """Bundles produced before the source_code_raw field existed must
-        still work — the absence falls back to source_code.
-        """
-        legacy_bundle = {
+    def test_empty_raw_source_does_not_expose_masked_input_as_evidence(self) -> None:
+        bundle = {
             "target_method": "X.y()",
             "file_path": "X.java",
             "source_code": "int x = 1;",
+            "source_code_raw": "",
             "start_line": 1,
             "end_line": 1,
             "graph_context": {},
@@ -68,11 +66,12 @@ class CleanedAndRawAreDistinctInBundle(unittest.TestCase):
         }
         violation = build_violation_response(
             {"violation_id": "ISO-A.8-SQL-INJECTION", "reason": "test"},
-            legacy_bundle,
+            bundle,
             control_meta=None,
         )
-        self.assertEqual(violation["code_snippet"], "int x = 1;")
-        self.assertEqual(violation["evidence"]["source_code"], "int x = 1;")
+        self.assertFalse(violation["snippet_available"])
+        self.assertEqual(violation["code_snippet"], "")
+        self.assertEqual(violation["evidence"]["source_code"], "")
 
 
 if __name__ == "__main__":

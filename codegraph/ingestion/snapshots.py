@@ -4,13 +4,16 @@ import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
-import javalang
-from javalang.tokenizer import LexerError
-from javalang.tree import ClassDeclaration, ConstructorDeclaration, InterfaceDeclaration, MethodDeclaration
-
-from codegraph.common.snippet_utils import find_java_block_end_position, find_java_statement_end_position
+from codegraph.java.fragments import (
+    JavaFragmentError,
+    method_field_use_facts,
+    method_invocation_facts,
+    parse_source_file,
+    require_verified_range,
+)
+from codegraph.java.models import MethodDeclarationDTO, ParsedJavaFileDTO, SourceRangeDTO, TypeRefDTO
 
 
 class SnapshotError(ValueError):
@@ -27,10 +30,6 @@ class StaleSourceError(SnapshotError):
 
 class UnsupportedSourceError(SnapshotError):
     """Raised when Java source cannot be parsed by the current parser."""
-
-
-class SharedLineReplacementError(SnapshotError):
-    """Raised when line-based replacement would affect neighboring code."""
 
 
 @dataclass(frozen=True)
@@ -55,10 +54,15 @@ class MethodIdentity:
     parameters: tuple[ParameterIdentity, ...]
     is_constructor: bool
     selector: str
-    legacy_signature: str
     syntactic_signature: str
+    source_key: str
+    declaration_key: str
+    canonical_key: str
     source_sha256: str
-    identity_status: Literal["resolved_syntactic", "ambiguous"]
+    identity_status: Literal["resolved_syntactic", "unresolved_syntactic"]
+    resolution_status: str
+    resolved_descriptor: str | None = None
+    resolved_binding_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +76,8 @@ class SourceSnapshot:
     method_sha256: str
     method_source: str
     method_bytes: bytes
+    start_byte: int
+    end_byte: int
     start_line: int
     end_line: int
     start_column: int
@@ -79,42 +85,16 @@ class SourceSnapshot:
     newline: str
     annotations: tuple[str, ...] = ()
     modifiers: tuple[str, ...] = ()
+    observed_invocations: tuple[dict[str, object], ...] = ()
+    observed_field_uses: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True)
 class _Selector:
     declaring_type: str
     name: str
-    parameters: tuple[ParameterIdentity, ...] | None
-    legacy_empty_params: bool
-
-
-@dataclass(frozen=True)
-class _Declaration:
-    declaring_type: str
-    name: str
     parameters: tuple[ParameterIdentity, ...]
-    is_constructor: bool
-    start_line: int
-    start_column: int
-    end_line: int
-    end_column: int
-    annotations: tuple[str, ...]
-    modifiers: tuple[str, ...]
-
-    @property
-    def selector(self) -> str:
-        params = ",".join(param.selector_text for param in self.parameters)
-        return f"{self.declaring_type}#{self.name}({params})"
-
-    @property
-    def legacy_signature(self) -> str:
-        return f"{self.declaring_type}.{self.name}()"
-
-    @property
-    def syntactic_signature(self) -> str:
-        params = ",".join(param.selector_text for param in self.parameters)
-        return f"{self.declaring_type}.{self.name}({params})"
+    canonical_key: str | None = None
 
 
 def sha256_hex(data: bytes | str) -> str:
@@ -138,208 +118,198 @@ def _workspace_relative_path(workspace_root: str | Path, source_path: str | Path
         raise SnapshotError("source_path_outside_workspace") from exc
 
 
-def _line_bytes(source_bytes: bytes) -> list[bytes]:
-    return source_bytes.splitlines(keepends=True)
-
-
 def _newline_for(source_bytes: bytes) -> str:
     return "\r\n" if b"\r\n" in source_bytes else "\n"
 
 
-def _type_parts_and_dimensions(type_node: Any) -> tuple[tuple[str, ...], int]:
-    if type_node is None:
-        return (), 0
-    parts: list[str] = []
-    dimensions = 0
-    current = type_node
-    while current is not None:
-        if getattr(current, "arguments", None):
-            raise UnsupportedSourceError("unsupported_parameter_type: generic_type_arguments")
-        name = getattr(current, "name", None)
-        if not name:
-            text = str(current)
-            if "." in text:
-                parts.extend(part for part in text.split(".") if part)
-                break
-            if text:
-                parts.append(text)
-                break
-        else:
-            parts.append(str(name))
-        dimensions += len(getattr(current, "dimensions", None) or [])
-        current = getattr(current, "sub_type", None)
-    return tuple(parts), dimensions
+def _strip_array_suffix(value: str) -> tuple[str, int]:
+    text = value.strip()
+    dims = 0
+    while text.endswith("[]"):
+        dims += 1
+        text = text[:-2].strip()
+    return text, dims
 
 
-def _parameter_identity(param: Any) -> ParameterIdentity:
-    type_node = getattr(param, "type", None)
-    type_parts, array_dimensions = _type_parts_and_dimensions(type_node)
-    return ParameterIdentity(
-        type_name=".".join(type_parts),
-        array_dimensions=array_dimensions,
-        varargs=bool(getattr(param, "varargs", False)),
-    )
+def _type_source_identity(type_ref: TypeRefDTO) -> ParameterIdentity:
+    source = type_ref.source or type_ref.qualified_name
+    if not source:
+        raise UnsupportedSourceError("unsupported_parameter_type: missing_syntax")
+    text, suffix_dims = _strip_array_suffix(source)
+    if text.endswith("..."):
+        text = text[:-3].strip()
+    if not text:
+        raise UnsupportedSourceError("unsupported_parameter_type: empty")
+    dimensions = type_ref.array_dimensions or suffix_dims
+    if type_ref.varargs and dimensions > 0:
+        dimensions -= 1
+    return ParameterIdentity(text, dimensions, bool(type_ref.varargs))
 
 
-def _annotation_names(node: Any) -> tuple[str, ...]:
-    return tuple(
-        str(getattr(annotation, "name", "")).split(".")[-1]
-        for annotation in (getattr(node, "annotations", None) or [])
-        if getattr(annotation, "name", None)
-    )
-
-
-def _modifiers(node: Any) -> tuple[str, ...]:
-    return tuple(sorted(str(modifier) for modifier in (getattr(node, "modifiers", None) or []) if modifier))
-
-
-def _parse_parameter_text(text: str) -> ParameterIdentity:
+def _parameter_identity_text(text: str) -> ParameterIdentity:
     raw = text.strip()
     varargs = raw.endswith("...")
     if varargs:
-        raw = raw[:-3]
-    dimensions = raw.count("[]")
-    raw = raw.replace("[]", "").strip()
+        raw = raw[:-3].strip()
+    raw, dimensions = _strip_array_suffix(raw)
     if not raw:
         raise SnapshotError("invalid_method_selector")
     return ParameterIdentity(raw, dimensions, varargs)
 
 
+def _split_selector_parameters(params_text: str) -> tuple[str, ...]:
+    parts: list[str] = []
+    current: list[str] = []
+    generic_depth = 0
+    for char in params_text:
+        if char == "<":
+            generic_depth += 1
+        elif char == ">":
+            generic_depth -= 1
+            if generic_depth < 0:
+                raise SnapshotError("invalid_method_selector")
+        if char == "," and generic_depth == 0:
+            part = "".join(current).strip()
+            if part:
+                parts.append(part)
+            current = []
+            continue
+        current.append(char)
+    if generic_depth != 0:
+        raise SnapshotError("invalid_method_selector")
+    part = "".join(current).strip()
+    if part:
+        parts.append(part)
+    return tuple(parts)
+
+
 def parse_method_selector(selector: str) -> _Selector:
     raw = selector.strip()
-    match = re.fullmatch(r"(.+?)(?:#|\.)([A-Za-z_$][A-Za-z0-9_$]*)\((.*)\)", raw)
+    if "#file:" in raw:
+        canonical = raw.split("#", 1)[1]
+        method_name = raw.rsplit("#method:", 1)[-1].split("/", 1)[0]
+        if not method_name:
+            raise SnapshotError("invalid_method_selector")
+        return _Selector(declaring_type="", name=method_name, parameters=(), canonical_key=canonical)
+    match = re.fullmatch(r"([^#()]+)#([A-Za-z_$][A-Za-z0-9_$]*)\((.*)\)", raw)
+    if not match:
+        match = re.fullmatch(r"(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)\((.*)\)", raw)
     if not match:
         raise SnapshotError("invalid_method_selector")
     declaring_type, name, params_text = match.groups()
-    legacy_empty = "#" not in raw and params_text.strip() == ""
-    if legacy_empty:
-        parameters = None
-    elif params_text.strip():
-        parameters = tuple(_parse_parameter_text(part) for part in params_text.split(",") if part.strip())
-    else:
-        parameters = ()
-    return _Selector(declaring_type=declaring_type, name=name, parameters=parameters, legacy_empty_params=legacy_empty)
+    parameters = tuple(_parameter_identity_text(part) for part in _split_selector_parameters(params_text)) if params_text.strip() else ()
+    return _Selector(declaring_type=declaring_type, name=name, parameters=parameters)
 
 
-def _iter_type_declarations(type_decls: Any, package: str, parent_fqn: str | None = None):
-    for decl in type_decls or []:
-        if not isinstance(decl, (ClassDeclaration, InterfaceDeclaration)):
+def _signature(declaring_type: str, name: str, params: tuple[ParameterIdentity, ...]) -> str:
+    return f"{declaring_type}.{name}({','.join(param.selector_text for param in params)})"
+
+
+def _selector(declaring_type: str, name: str, params: tuple[ParameterIdentity, ...]) -> str:
+    return f"{declaring_type}#{name}({','.join(param.selector_text for param in params)})"
+
+
+def _method_parameters(method: MethodDeclarationDTO) -> tuple[ParameterIdentity, ...]:
+    return tuple(_type_source_identity(parameter.type) for parameter in method.parameters)
+
+
+def _method_declaring_type(method: MethodDeclarationDTO) -> str:
+    return method.declaring_type_qualified_name or method.declaring_type_source_key
+
+
+def _method_selector(method: MethodDeclarationDTO) -> str:
+    return _selector(_method_declaring_type(method), method.name, _method_parameters(method))
+
+
+def _select_method(parsed: ParsedJavaFileDTO, selector: _Selector) -> MethodDeclarationDTO:
+    candidates = []
+    for method in parsed.methods:
+        if selector.canonical_key is not None:
+            if method.source_key == selector.canonical_key or method.declaration_key == selector.canonical_key:
+                candidates.append(method)
             continue
-        class_name = getattr(decl, "name", "UnknownClass")
-        class_fqn = f"{package}.{class_name}" if not parent_fqn else f"{parent_fqn}${class_name}"
-        yield decl, class_fqn
-        body_types = [
-            node for node in getattr(decl, "body", []) if isinstance(node, (ClassDeclaration, InterfaceDeclaration))
-        ]
-        yield from _iter_type_declarations(body_types, package, class_fqn)
+        declaring_type = _method_declaring_type(method)
+        if declaring_type != selector.declaring_type or method.name != selector.name:
+            continue
+        if _method_parameters(method) == selector.parameters:
+            candidates.append(method)
+    if len(candidates) != 1:
+        raise AmbiguousMethodError("ambiguous_method_selector" if candidates else "method_selector_not_found")
+    return candidates[0]
 
 
-def _collect_declarations(text: str) -> tuple[_Declaration, ...]:
+def _column_from_byte(source_bytes: bytes, offset: int) -> int:
+    line_start = source_bytes.rfind(b"\n", 0, offset) + 1
+    return len(source_bytes[line_start:offset].decode("utf-8"))
+
+
+def _invocation_facts(method: MethodDeclarationDTO) -> tuple[dict[str, object], ...]:
+    return method_invocation_facts(method)
+
+
+def _field_use_facts(method: MethodDeclarationDTO) -> tuple[dict[str, object], ...]:
+    return method_field_use_facts(method)
+
+
+def _snapshot_from_parsed(
+    *,
+    workspace_root: str | Path,
+    source_path: str | Path,
+    source_bytes: bytes,
+    parsed: ParsedJavaFileDTO,
+    method: MethodDeclarationDTO,
+) -> SourceSnapshot:
+    declaration_range: SourceRangeDTO
     try:
-        tree = javalang.parse.parse(text)
-    except (javalang.parser.JavaSyntaxError, LexerError, TypeError, IndexError) as exc:
-        raise UnsupportedSourceError(f"unsupported_source: {exc.__class__.__name__}") from exc
-    package = getattr(tree, "package", None)
-    package_name = package.name if package and hasattr(package, "name") else "unknown"
-    lines = text.splitlines()
-    declarations: list[_Declaration] = []
-    for decl, class_fqn in _iter_type_declarations(getattr(tree, "types", []), package_name):
-        for method in getattr(decl, "methods", []) or []:
-            if not isinstance(method, MethodDeclaration) or not method.position:
-                continue
-            start_line = int(method.position.line)
-            parser_col = max(0, int(method.position.column) - 1)
-            start_col = _declaration_line_start_column(text, start_line, parser_col)
-            try:
-                if getattr(method, "body", None) is None:
-                    end_line, end_col = find_java_statement_end_position(lines, start_line, parser_col)
-                else:
-                    end_line, end_col = find_java_block_end_position(lines, start_line, parser_col)
-            except ValueError as exc:
-                raise UnsupportedSourceError(f"unsupported_source: {exc}") from exc
-            declarations.append(
-                _Declaration(
-                    declaring_type=class_fqn,
-                    name=method.name,
-                    parameters=tuple(_parameter_identity(param) for param in (method.parameters or [])),
-                    is_constructor=False,
-                    start_line=start_line,
-                    start_column=start_col,
-                    end_line=end_line,
-                    end_column=end_col,
-                    annotations=_annotation_names(method),
-                    modifiers=_modifiers(method),
-                )
-            )
-        for ctor in getattr(decl, "constructors", []) or []:
-            if not isinstance(ctor, ConstructorDeclaration) or not ctor.position:
-                continue
-            start_line = int(ctor.position.line)
-            parser_col = max(0, int(ctor.position.column) - 1)
-            start_col = _declaration_line_start_column(text, start_line, parser_col)
-            try:
-                end_line, end_col = find_java_block_end_position(lines, start_line, parser_col)
-            except ValueError as exc:
-                raise UnsupportedSourceError(f"unsupported_source: {exc}") from exc
-            declarations.append(
-                _Declaration(
-                    declaring_type=class_fqn,
-                    name=getattr(decl, "name", class_fqn.rsplit(".", 1)[-1]),
-                    parameters=tuple(_parameter_identity(param) for param in (ctor.parameters or [])),
-                    is_constructor=True,
-                    start_line=start_line,
-                    start_column=start_col,
-                    end_line=end_line,
-                    end_column=end_col,
-                    annotations=_annotation_names(ctor),
-                    modifiers=_modifiers(ctor),
-                )
-            )
-    return tuple(declarations)
-
-
-def _declaration_line_start_column(text: str, start_line: int, parser_column: int) -> int:
-    line = text.splitlines()[start_line - 1]
-    leading = len(line) - len(line.lstrip())
-    prefix = line[leading:parser_column].strip()
-    if not prefix or all(part in {"public", "private", "protected", "static", "final", "synchronized"} for part in prefix.split()):
-        return leading
-    return parser_column
-
-
-def _select_declaration(declarations: tuple[_Declaration, ...], selector: _Selector) -> _Declaration:
-    matches = [
-        decl
-        for decl in declarations
-        if decl.declaring_type == selector.declaring_type
-        and decl.name == selector.name
-        and (selector.parameters is None or decl.parameters == selector.parameters)
-    ]
-    if len(matches) != 1:
-        raise AmbiguousMethodError("ambiguous_method_selector" if matches else "method_selector_not_found")
-    if selector.legacy_empty_params:
-        same_name = [
-            decl for decl in declarations if decl.declaring_type == selector.declaring_type and decl.name == selector.name
-        ]
-        if len(same_name) != 1:
-            raise AmbiguousMethodError("ambiguous_legacy_method_selector")
-    return matches[0]
-
-
-def _assert_safe_line_bounds(source_bytes: bytes, decl: _Declaration) -> None:
-    text = _decode_source(source_bytes)
-    lines = text.splitlines(keepends=True)
-    start_line = lines[decl.start_line - 1]
-    end_line = lines[decl.end_line - 1]
-    prefix = start_line[: decl.start_column]
-    suffix = end_line[decl.end_column + 1 :]
-    if prefix.strip() or suffix.strip():
-        raise SharedLineReplacementError("unsafe_shared_line_replacement")
-
-
-def _method_bytes(source_bytes: bytes, decl: _Declaration) -> bytes:
-    lines = _line_bytes(source_bytes)
-    return b"".join(lines[decl.start_line - 1 : decl.end_line])
+        declaration_range = require_verified_range(method.declaration_range, "declaration")
+    except JavaFragmentError as exc:
+        raise UnsupportedSourceError(str(exc)) from exc
+    assert declaration_range.start_byte is not None and declaration_range.end_byte is not None
+    method_bytes = source_bytes[declaration_range.start_byte : declaration_range.end_byte]
+    method_source = _decode_source(method_bytes)
+    declaring_type = _method_declaring_type(method)
+    params = _method_parameters(method)
+    workspace_relative = _workspace_relative_path(workspace_root, source_path)
+    canonical_key = f"{workspace_relative}#{method.source_key}"
+    identity = MethodIdentity(
+        workspace_relative_path=workspace_relative,
+        declaring_type=declaring_type,
+        name=method.name,
+        parameters=params,
+        is_constructor=method.kind in {"constructor", "compact_constructor"},
+        selector=_selector(declaring_type, method.name, params),
+        syntactic_signature=_signature(declaring_type, method.name, params),
+        source_key=method.source_key,
+        declaration_key=method.declaration_key,
+        canonical_key=canonical_key,
+        source_sha256=sha256_hex(source_bytes),
+        identity_status="resolved_syntactic" if method.resolution_status == "resolved" else "unresolved_syntactic",
+        resolution_status=method.resolution_status,
+        resolved_descriptor=method.resolved_descriptor,
+        resolved_binding_key=method.resolved_binding_key,
+    )
+    return SourceSnapshot(
+        identity=identity,
+        source_path=Path(source_path).as_posix(),
+        workspace_root=Path(workspace_root).as_posix(),
+        full_file_bytes=source_bytes,
+        full_file_text=_decode_source(source_bytes),
+        file_sha256=sha256_hex(source_bytes),
+        method_sha256=sha256_hex(method_bytes),
+        method_source=method_source,
+        method_bytes=method_bytes,
+        start_byte=declaration_range.start_byte,
+        end_byte=declaration_range.end_byte,
+        start_line=declaration_range.start_line or 1,
+        end_line=declaration_range.end_line or 1,
+        start_column=_column_from_byte(source_bytes, declaration_range.start_byte),
+        end_column=_column_from_byte(source_bytes, declaration_range.end_byte),
+        newline=_newline_for(source_bytes),
+        annotations=tuple(method.annotation_names),
+        modifiers=tuple(method.modifiers),
+        observed_invocations=_invocation_facts(method),
+        observed_field_uses=_field_use_facts(method),
+    )
 
 
 def create_source_snapshot_from_bytes(
@@ -353,42 +323,20 @@ def create_source_snapshot_from_bytes(
     file_hash = sha256_hex(source_bytes)
     if not expected_source_sha256 or expected_source_sha256 != file_hash:
         raise StaleSourceError("stale_source_hash")
-    text = _decode_source(source_bytes)
+    _decode_source(source_bytes)
+    workspace_relative = _workspace_relative_path(workspace_root, source_path)
     selector = parse_method_selector(method_selector)
-    declarations = _collect_declarations(text)
-    declaration = _select_declaration(declarations, selector)
-    _assert_safe_line_bounds(source_bytes, declaration)
-    method_bytes = _method_bytes(source_bytes, declaration)
-    method_source = _decode_source(method_bytes)
-    identity = MethodIdentity(
-        workspace_relative_path=_workspace_relative_path(workspace_root, source_path),
-        declaring_type=declaration.declaring_type,
-        name=declaration.name,
-        parameters=declaration.parameters,
-        is_constructor=declaration.is_constructor,
-        selector=declaration.selector,
-        legacy_signature=declaration.legacy_signature,
-        syntactic_signature=declaration.syntactic_signature,
-        source_sha256=file_hash,
-        identity_status="resolved_syntactic",
-    )
-    return SourceSnapshot(
-        identity=identity,
-        source_path=Path(source_path).as_posix(),
-        workspace_root=Path(workspace_root).as_posix(),
-        full_file_bytes=source_bytes,
-        full_file_text=text,
-        file_sha256=file_hash,
-        method_sha256=sha256_hex(method_bytes),
-        method_source=method_source,
-        method_bytes=method_bytes,
-        start_line=declaration.start_line,
-        end_line=declaration.end_line,
-        start_column=declaration.start_column,
-        end_column=declaration.end_column,
-        newline=_newline_for(source_bytes),
-        annotations=declaration.annotations,
-        modifiers=declaration.modifiers,
+    try:
+        parsed = parse_source_file(source_bytes, relative_path=workspace_relative, resolve_bindings=True)
+        method = _select_method(parsed, selector)
+    except JavaFragmentError as exc:
+        raise UnsupportedSourceError(str(exc)) from exc
+    return _snapshot_from_parsed(
+        workspace_root=workspace_root,
+        source_path=source_path,
+        source_bytes=source_bytes,
+        parsed=parsed,
+        method=method,
     )
 
 

@@ -142,6 +142,7 @@ def build_no_fix_response(
         "status": "NO_FIX",
         "error": f"{NO_FIX_PREFIX} {reason}",
         "violation_id": violation_id,
+        "method_key": context.get("method_key"),
         "target_method": context.get("target_method"),
         "file_path": context.get("file_path"),
         "rule_id": context.get("rule_id"),

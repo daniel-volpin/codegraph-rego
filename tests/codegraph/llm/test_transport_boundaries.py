@@ -2,6 +2,7 @@ import logging
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import httpx2
 import pytest
 
 from codegraph.config import Settings
@@ -138,7 +139,7 @@ def test_close_failure_after_success_raise_on_error_false_returns_unavailable(mo
     monkeypatch.setattr(transport, "settings", Settings(_env_file=None, llm_api_key="test-key"))
     client = Mock()
     client.responses.create.return_value = SimpleNamespace(output_text="answer", status="completed")
-    client.close.side_effect = OSError("close boom")
+    client.close.side_effect = httpx2.HTTPError("close boom")
     monkeypatch.setattr(transport, "OpenAI", Mock(return_value=client))
 
     result = transport.OpenAICompatibleTransport().generate(LLMRequest(messages=[], raise_on_error=False))
@@ -151,7 +152,7 @@ def test_close_failure_after_success_raise_on_error_true_raises_unavailable(monk
     monkeypatch.setattr(transport, "settings", Settings(_env_file=None, llm_api_key="test-key"))
     client = Mock()
     client.responses.create.return_value = SimpleNamespace(output_text="answer", status="completed")
-    client.close.side_effect = OSError("close boom")
+    client.close.side_effect = httpx2.HTTPError("close boom")
     monkeypatch.setattr(transport, "OpenAI", Mock(return_value=client))
 
     with pytest.raises(LLMUnavailableError, match="cleanup failed"):
@@ -162,7 +163,7 @@ def test_close_failure_does_not_mask_generation_failure_raise_on_error_false(mon
     monkeypatch.setattr(transport, "settings", Settings(_env_file=None, llm_api_key="test-key"))
     client = Mock()
     client.responses.create.side_effect = TimeoutError("timed out")
-    client.close.side_effect = OSError("close boom")
+    client.close.side_effect = httpx2.HTTPError("close boom")
     monkeypatch.setattr(transport, "OpenAI", Mock(return_value=client))
 
     result = transport.OpenAICompatibleTransport().generate(LLMRequest(messages=[], raise_on_error=False))
@@ -174,7 +175,7 @@ def test_close_failure_does_not_mask_generation_failure_raise_on_error_true(monk
     monkeypatch.setattr(transport, "settings", Settings(_env_file=None, llm_api_key="test-key"))
     client = Mock()
     client.responses.create.side_effect = TimeoutError("timed out")
-    client.close.side_effect = OSError("close boom")
+    client.close.side_effect = httpx2.HTTPError("close boom")
     monkeypatch.setattr(transport, "OpenAI", Mock(return_value=client))
 
     with pytest.raises(LLMUnavailableError, match="timed out"):
@@ -188,12 +189,14 @@ def test_base_exception_abort_propagates_and_still_closes_client_once(
     monkeypatch.setattr(transport, "settings", Settings(_env_file=None, llm_api_key="test-key"))
     client = Mock()
     client.responses.create.side_effect = abort_exc
-    client.close.side_effect = OSError("close boom")
+    client.close.side_effect = httpx2.HTTPError("close boom")
     monkeypatch.setattr(transport, "OpenAI", Mock(return_value=client))
 
-    with caplog.at_level(logging.WARNING, logger="codegraph.llm.transport.openai_compatible"):
-        with pytest.raises(type(abort_exc), match=str(abort_exc)):
-            transport.OpenAICompatibleTransport().generate(LLMRequest(messages=[], raise_on_error=False))
+    with (
+        caplog.at_level(logging.WARNING, logger="codegraph.llm.transport.openai_compatible"),
+        pytest.raises(type(abort_exc), match=str(abort_exc)),
+    ):
+        transport.OpenAICompatibleTransport().generate(LLMRequest(messages=[], raise_on_error=False))
     client.close.assert_called_once()
     close_logs = [record.message for record in caplog.records if "Failed to close LLM client cleanly" in record.message]
     assert len(close_logs) == 1

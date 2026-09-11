@@ -50,21 +50,31 @@ class EnsureConstraintsTests(unittest.TestCase):
 
         joined = "\n".join(driver.statements)
         # Uniqueness constraints
-        self.assertIn("class_fqn_unique", joined)
+        self.assertIn("workspace_revision_unique", joined)
+        self.assertIn("REQUIRE (wr.workspace_id, wr.revision_id) IS UNIQUE", joined)
+        self.assertIn("source_file_unique", joined)
+        self.assertIn("REQUIRE (sf.workspace_id, sf.revision_id, sf.relative_path) IS UNIQUE", joined)
+        self.assertIn("class_type_key_unique", joined)
         self.assertIn("(c:Class)", joined)
-        self.assertIn("REQUIRE c.fqn IS UNIQUE", joined)
-        self.assertIn("method_signature_unique", joined)
-        self.assertIn("REQUIRE m.signature IS UNIQUE", joined)
-        self.assertIn("field_unique", joined)
-        self.assertIn("REQUIRE (f.class_fqn, f.name) IS UNIQUE", joined)
+        self.assertIn("REQUIRE c.type_key IS UNIQUE", joined)
+        self.assertIn("method_key_unique", joined)
+        self.assertIn("REQUIRE m.method_key IS UNIQUE", joined)
+        self.assertIn("field_key_unique", joined)
+        self.assertIn("REQUIRE f.field_key IS UNIQUE", joined)
+        self.assertIn("call_evidence_key_unique", joined)
+        self.assertIn("REQUIRE c.call_key IS UNIQUE", joined)
         self.assertIn("annotation_unique", joined)
         self.assertIn("REQUIRE a.name IS UNIQUE", joined)
 
         # Lookup indexes
         self.assertIn("method_full_signature_index", joined)
         self.assertIn("ON (m.full_signature)", joined)
+        self.assertIn("method_display_signature_index", joined)
+        self.assertIn("ON (m.signature)", joined)
         self.assertIn("method_file_path_index", joined)
         self.assertIn("ON (m.file_path)", joined)
+        self.assertIn("method_workspace_revision_index", joined)
+        self.assertIn("ON (m.workspace_id, m.revision_id)", joined)
 
     def test_every_statement_is_idempotent(self) -> None:
         driver = _CapturingDriver()

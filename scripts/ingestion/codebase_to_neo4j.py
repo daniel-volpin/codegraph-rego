@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from codegraph import config
+from codegraph.config import settings
 
 
 def _progress(phase: str, message: str, progress: float) -> None:
@@ -17,24 +17,18 @@ def _progress(phase: str, message: str, progress: float) -> None:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ingest Java sources into Neo4j.")
+    parser = argparse.ArgumentParser(
+        description="Publish a JDT workspace revision. Neo4j connection uses CodeGraph runtime settings.",
+    )
     parser.add_argument(
         "--java-root",
-        default=config.JAVA_ROOT_DIR,
+        default=settings.java_root_dir,
         help="Path to Java source root (default: %(default)s)",
     )
-    parser.add_argument("--neo4j-uri", default=config.NEO4J_URI, help="Neo4j Bolt URI")
-    parser.add_argument("--neo4j-user", default=config.NEO4J_USER, help="Neo4j username")
-    parser.add_argument("--neo4j-pass", default=config.NEO4J_PASS, help="Neo4j password")
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print effective settings without writing to Neo4j",
-    )
-    parser.add_argument(
-        "--sync",
-        action="store_true",
-        help="Prune stale files from the graph",
+        help="Print the workspace to be published without accessing Neo4j",
     )
     return parser.parse_args(argv)
 
@@ -44,20 +38,12 @@ def main(argv: list[str] | None = None) -> int:
 
     from codegraph.ingestion import service as ingestion_service
 
-    # Allow CLI overrides without re-importing the module.
-    ingestion_service.NEO4J_URI = args.neo4j_uri
-    ingestion_service.NEO4J_USER = args.neo4j_user
-    ingestion_service.NEO4J_PASS = args.neo4j_pass
-
     if args.dry_run:
         print("Dry run: would ingest with settings:")
         print(f"  java_root : {args.java_root}")
-        print(f"  neo4j_uri : {args.neo4j_uri}")
-        print(f"  neo4j_user: {args.neo4j_user}")
-        print(f"  sync      : {args.sync}")
         return 0
 
-    ingestion_service.ingest(args.java_root, progress_callback=_progress, sync=args.sync)
+    ingestion_service.ingest(args.java_root, progress_callback=_progress)
     return 0
 
 

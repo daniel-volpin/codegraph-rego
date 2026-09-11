@@ -1,13 +1,17 @@
 # Reproducibility Guide
 
-This file is the shortest path to rerun the thesis-final evaluation pipeline.
+This file describes the evaluation workflow for the current source baseline.
+Published thesis-final results retain their original commit, dependencies, and
+OPA 1.15.1 provenance. Reproducing those exact results requires that recorded
+revision; runs of this modernized branch are new evidence, not historical reruns.
 
 ## 1. Prerequisites
 
-- Python 3.11+
+- Python 3.14+ (the pinned development and CI runtime is 3.14.7)
+- uv 0.12.13+
 - Neo4j 5.x
-- OPA `v1.15.1` on `PATH` (required for `make policy-check` and OPA policy evaluation)
-- Java JDK (8+ or newer) and Maven for remediation build re-verification (release validation was performed with OpenJDK 26.0.1)
+- OPA `v1.20.2` on `PATH` (required for `make policy-check` and OPA policy evaluation)
+- JDK 21+ and Maven for the JDT adapter; the analyzed project's build may require its own configured Java release
 - local checkout of `BenchmarkJava`
 - LM Studio, OpenAI, or another OpenAI-compatible LLM endpoint for explanation/remediation runs
 
@@ -52,6 +56,14 @@ matching defaults — keep it in sync when adding new variables.
 | `OWASP_BENCHMARK_ROOT` | _unset_ | Absolute path to the local `BenchmarkJava` checkout. Required for benchmark eval scripts. |
 | `CODEGRAPH_HOST` | `127.0.0.1` | Bind host for the backend service. Loopback by default for safe local-only operation. |
 | `CODEGRAPH_OPA_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OPA eval subprocesses. |
+| `JAVA_PARSER_JAR` | `tools/java-parser/target/codegraph-java-parser.jar` | Explicit path to the Eclipse JDT parser fat jar. Build with `make java-parser-build`; the Python adapter never downloads or builds it at runtime. |
+| `JAVA_PARSER_TIMEOUT_SECONDS` | `30.0` | Per-request deadline for the fresh JVM parser process. |
+| `JAVA_PARSER_HEAP_MB` | `384` | Heap cap passed as `-Xmx` to each parser JVM. |
+| `JAVA_PARSER_MAX_CONCURRENT_REQUESTS` | `1` | Process-local Java parser admission cap (`1..2`); initial correctness uses a fresh JVM and AST per request. |
+| `JAVA_PARSER_QUEUE_TIMEOUT_SECONDS` | `5.0` | Maximum wait for Java parser admission before failing fast. |
+| `JAVA_PARSER_MAX_SOURCE_BYTES` | `4194304` | Maximum UTF-8 Java source payload accepted by the Python adapter. |
+| `JAVA_PARSER_MAX_OUTPUT_BYTES` | `16777216` | Maximum stdout JSON payload accepted from the parser process. |
+| `JAVA_PARSER_LANGUAGE_LEVEL` | `25` | Default JDT language level sent in parser requests. |
 | `LLM_API_BASE` | `http://localhost:1234/v1` | OpenAI-compatible base URL (LM Studio, vLLM, etc.). |
 | `LLM_API_KEY` | _unset_ | API key sent to the LLM endpoint. Use `lm-studio` for LM Studio. |
 | `LLM_MODEL` | `qwen3.5-9b-mlx` | Default explanation model. |

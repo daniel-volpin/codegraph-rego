@@ -9,7 +9,7 @@ The wider roadmap remains staged follow-up work. This document grants no deploym
 
 ## Execution progress (2026-09-11)
 
-The focused environment uses Python 3.11.15 and OPA 1.15.1 without embedding
+The initial focused environment used Python 3.11.15 and OPA 1.15.1 without embedding
 packages, model downloads, or a persistent OPA service. The integrated offline
 backend run passed 822 tests and 78 subtests, with 27 explicit skips: 26 need
 Semgrep and one needs the missing `/tmp/owasp-benchmark` checkout. Ruff and strict
@@ -225,6 +225,191 @@ Primary references:
 [ASTRewrite](https://help.eclipse.org/latest/topic/org.eclipse.jdt.doc.isv/reference/api/org/eclipse/jdt/core/dom/rewrite/ASTRewrite.html),
 [published versions](https://repo.maven.apache.org/maven2/org/eclipse/jdt/org.eclipse.jdt.core/maven-metadata.xml).
 Research root `trace_id`: unavailable.
+
+#### Active implementation: clean JDT cutover
+
+The user authorized implementation and explicitly requires no working legacy
+backend or fallback path. Work is isolated on `feat/jdt-parser-foundation` from
+`219c26e`; the provider and scoped-verification foundations remain separate commits.
+
+Three bounded workers own independent surfaces:
+
+| Packet | Ownership | Completion condition |
+| --- | --- | --- |
+| Typed contract | `codegraph/java/models.py`, exports, model tests | Immutable strict wire records with source/binary/unknown binding provenance, exact ranges, and complete candidate-shape metadata. |
+| Java extractor | `tools/java-parser/`, controlled Java fixtures, extractor tests | Runnable pinned JDT 3.47.0 adapter; real compiler facts and bounded, offline analysis without target-project execution. |
+| Python transport | `codegraph/java/service.py`, new config fields, transport tests | Validated original-source requests, strict result decoding, bounded process resources and admission, explicit failures, and reliable cancellation/reaping. |
+
+The canonical entrypoint is:
+
+```python
+parse_java_source(
+    source_bytes: bytes,
+    *,
+    relative_path: str,
+    source_roots: tuple[Path, ...] = (),
+    classpath: tuple[Path, ...] = (),
+    resolve_bindings: bool = True,
+    language_level: str | None = None,
+) -> ParsedJavaFileDTO
+```
+
+After freezing that contract and establishing the runnable adapter, migrate the
+four parser consumers, graph identities and their callers, packaging, and CI.
+Finish by removing the `javalang` dependency, imports, alternative parser
+implementations, ambiguous signature lookups, and migration-only compatibility
+branches. Existing persisted state that cannot satisfy the new identity contract
+must require an explicit rebuild, not a silent compatibility read.
+
+Historical thesis evidence stays archived and unchanged; it is not an active
+legacy execution path. Missing JDT, unsupported source, unresolved bindings,
+invalid ranges, and stale revisions must produce visible errors or refusals.
+There is no automatic downgrade to a different parser, guessed symbol, or
+name-only source edit.
+
+Java and `javac` 21.0.12.1 are already available. A missing Maven prerequisite was
+resolved with publisher-SHA512-verified Maven 3.9.11 under ignored
+`build/jdt-tools/` (11 MiB unpacked), not a host-global installation. Maven builds
+the trusted adapter only, with an isolated local dependency cache/settings file.
+Builds remain serialized on the loaded three-vCPU VM.
+
+#### Integration handoff: VM implementation, Mac acceptance
+
+On 2026-09-11 the user assigned the later full local run to an agent on their
+Mac, where the complete runtime has sufficient resources. Finish the coherent
+source cutover here; do not expand this packet into new features or spend the
+shared VM's resources on model downloads, full benchmarks, or live graph runs.
+The Mac run is a pending acceptance gate, not evidence already obtained.
+
+Current implementation milestones:
+
+- Strict JDT transport, resource limits, subprocess cleanup, and native range
+  DTOs are implemented.
+- HTTP/frontend remediation requests now require `method_key`; signatures are
+  display evidence. Finding-cache keys include the workspace revision.
+- Startup is read-only and requires compatible graph/index generations.
+- `javalang` has been removed from the dependency manifest and lockfile.
+- Frontend brace-based snippet cropping and explanation-time name/file lookup
+  have been removed; captured source evidence is preserved.
+- Native extractor corrections are complete, including explicit language levels,
+  failed-file diagnostics, compact constructor APIs, erased descriptors, and
+  streamed analysis-input fingerprints.
+- Upload publication now returns a predecessor receipt so failed embedding
+  creation can restore the previous active graph, including the first-upload
+  case where no previous workspace exists.
+- Focused graph/retrieval acceptance is complete; live Neo4j concurrency and
+  runtime acceptance remain assigned to the Mac.
+- Remediation selects the canonical key and captured file hash, then compiles,
+  verifies, and writes identical candidate bytes using isolated workspaces.
+  Public-path regressions now exercise the real candidate-path containment
+  boundary, not only mocked verifier responses. Non-passing verification,
+  skipped builds, and concurrent source edits refuse success. Temporary
+  cleanup finishes before source writes and graph publication.
+- Orphaned string-replacement and brace-counting helpers are removed. Failed
+  JDT file diagnostics surface before method selection; malformed policy
+  catalogs return structured verification errors instead of escaping.
+
+The user authorized feature-branch publication and an unmerged PR on
+2026-09-11. This does not authorize merge, deployment, or a live graph rebuild.
+Publishing must still use an available governed route.
+
+The Mac agent should use the existing project prerequisites (JDK 21+, Maven,
+Python 3.14.7, Node 24 LTS, Yarn, uv 0.12.13+, and pinned OPA), then run:
+
+```sh
+./scripts/setup_benchmark_env.sh
+uv run ruff check .
+uv run python -m pytest -q
+PATH="$PWD/.venv/bin:$PATH" make policy-check
+cd frontend
+yarn install --frozen-lockfile
+yarn lint
+yarn test
+yarn build
+```
+
+After these gates, exercise the real application against a disposable local
+Neo4j database and a new retrieval-artifact directory: upload modern Java with
+overloads/records, evaluate policy evidence, search the matching generation,
+and preview/verify a controlled candidate. Confirm dry-run source/graph
+immutability, stale-revision refusal, missing-classpath diagnostics, and failed
+publication recovery. Use controlled model fixtures unless paid model calls
+are separately authorized. Preserve historical benchmark artifacts; do not use
+production credentials or reinterpret old signature-keyed graphs as JDT state.
+
+The requested delivery is a clean feature branch and an unmerged PR for that
+Mac acceptance. The current host exposes no governed push/PR capability for
+this repository. Do not bypass that restriction with raw publishing commands.
+If publishing remains unavailable, export a verified Git bundle containing
+`feat/jdt-parser-foundation` and its unpublished prerequisite commits; the Mac
+agent can import it into the user's existing clone and publish the branch/PR
+there under the user's authorization.
+
+After transferring the bundle to the Mac, import it without resetting existing
+local work or force-updating an existing branch:
+
+```sh
+git bundle verify /path/to/codegraph-jdt-foundation.bundle
+git fetch /path/to/codegraph-jdt-foundation.bundle \
+  refs/heads/feat/jdt-parser-foundation:refs/heads/feat/jdt-parser-foundation
+git switch feat/jdt-parser-foundation
+```
+
+Use the PR title `feat: establish a clean JDT and Python 3.14 baseline`.
+Describe the breaking parser/identity migration, immutable graph publication,
+isolated remediation, dependency/runtime refresh, and deferred Mac acceptance.
+Keep the PR unmerged until the disposable runtime and E2E acceptance above
+are complete. Root `trace_id`: unavailable.
+
+#### Stable dependency refresh
+
+On 2026-09-11 the user expanded acceptance to current stable dependencies and
+clean major-version migrations. This is additional work, not evidence that
+the earlier source handoff or production acceptance is complete.
+
+- Maven Central still lists JDT 3.47.0 as current. The adapter now uses Gson
+  2.14.0, compiler plugin 3.16.0, and shade plugin 3.6.2. Maven 3.9.16 is the
+  current stable build baseline; Maven 4 release candidates and compiler-plugin
+  4 betas are deliberately excluded.
+- OPA 1.20.2 replaces 1.15.1 for new runs. Historical thesis artifacts retain
+  their original provenance. Setup checks the cached executable's version,
+  verifies downloaded checksums and versions before replacement, and refuses
+  failed upgrades without treating the older binary as a successful fallback.
+- Node 24.21.0 is the current LTS target for CI and frontend packaging. At the
+  user's request, Python is now 3.14.7 across `.python-version`, CI, and the
+  digest-pinned backend image, with a Python 3.14 minimum. JDK 21 remains the
+  supported Java execution baseline, not a claim to be the newest JDK.
+- Dependabot now covers the Maven adapter. Blanket major-version ignores are
+  removed; major upgrades can open individual reviewable PRs instead of being
+  hidden indefinitely. No automatic merging is enabled.
+- Python direct dependencies now resolve to current compatible releases,
+  including OpenAI 3.13.0 and sentence-transformers 6.0.1. SDK cleanup uses
+  HTTPX2's exception hierarchy directly. The Python upgrade removes the old
+  runtime dependency forks: NumPy is 2.5.3 and SciPy is 1.18.1.
+- Python 3.14 acceptance uses `build/python314-review-venv`, not either older
+  review environment. The native FAISS/NumPy round-trip is now a persisted
+  regression. Ruff targets Python 3.14 with the existing lint policy explicitly
+  selected, rather than silently adopting a different policy from new defaults.
+- Remaining transitive version gaps are upstream compatibility constraints:
+  Pydantic 2.13.5 pins pydantic-core 2.46.5, Torch 2.14.0 pins its Linux CUDA
+  family, and SymPy 1.14.0 requires mpmath below 1.4. Do not override these
+  independently merely to make an outdated-package report empty.
+- Frontend migration uses React 19.3, Vite 8.3, Vitest 5, ESLint 10 flat
+  configuration, TanStack Table 9, and TypeScript 6.0.3. TypeScript 7 is held
+  only because the current typescript-eslint peer range requires below 6.1.
+- Frontend tests use memory-bounded `vmForks` for the default jsdom project,
+  regular forks for environment/module-reset cases, and Node for explicit
+  DOM-free tests. New TypeScript tests remain discoverable by default, and
+  project routing is covered by regression cases. Per-file isolation remains
+  enabled. VM setup supplies Node's TransformStream before loading MSW.
+- The worker measured 54 tests at 34.30 seconds with default forks versus
+  27.12 and 27.00 seconds with the selected projects. Shuffled seed 1705 took
+  36.70 seconds, so shared-host timings are not a guaranteed speedup. The
+  final lead run, including five discovery regressions, passed 59 tests in
+  22.23 seconds; lint and production build also passed.
+- Heavy ML execution, container builds, and real application E2E remain Mac
+  acceptance gates. Native JDT parsing and FAISS/NumPy persistence were
+  exercised here; no production-ready runtime claim follows from unit gates.
 
 ## Recommendation
 

@@ -181,6 +181,7 @@ const policyResponseWithFinding = (): PolicyEvaluateResponse => ({
     {
       violation_id: "ISO-A.8-SQL-INJECTION",
       target_method: "com.acme.DemoController.search(String)",
+      method_key: "test@revision:DemoController.java#search",
       file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/DemoController.java",
       severity: "high",
       reason: "Query string is built from request input.",

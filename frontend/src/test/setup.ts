@@ -1,8 +1,14 @@
 import "fake-indexeddb/auto";
 import "@testing-library/jest-dom/vitest";
+import { TransformStream } from "node:stream/web";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { cleanup } from "@testing-library/react";
-import { server } from "./server";
+
+if (!globalThis.TransformStream) {
+  globalThis.TransformStream = TransformStream;
+}
+
+const { server } = await import("./server");
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });

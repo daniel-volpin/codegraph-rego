@@ -7,7 +7,7 @@ No additional Neo4j queries are needed at evaluation time.
 Usage::
 
     finder = TaintPathFinder(method_index)
-    paths  = finder.find_reachable_sinks("com.example.Foo.bar()")
+    paths  = finder.find_reachable_sinks("workspace@revision:Foo.java#method:bar")
     # [{"sink_type": "sql", "hops": 2}, {"sink_type": "path", "hops": 3}]
 """
 
@@ -19,7 +19,6 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
-from codegraph.common.snippet_utils import extract_snippet_by_lines
 from codegraph.policy.source_analysis_core import (
     CMDI_PATTERNS,
     LDAP_PATTERNS,
@@ -75,17 +74,17 @@ class TaintPathFinder:
 
     def find_reachable_sinks(
         self,
-        signature: str,
+        method_key: str,
         max_depth: int = 4,
     ) -> list[dict[str, Any]]:
-        """BFS the call graph from *signature*, returning reachable sink types.
+        """BFS the call graph from *method_key*, returning reachable sink types.
 
         Sink detection starts at depth 1 (direct callees of the evaluated
         method) so as not to duplicate the single-method ``analysis_flags``
         detection performed by the standard policy pipeline.
 
         Args:
-            signature: Full or short method signature to start from.
+            method_key: Canonical Method.method_key to start from.
             max_depth: Maximum number of CALLS hops to follow (default 4).
 
         Returns:
@@ -93,8 +92,8 @@ class TaintPathFinder:
             reachable sink type, using the minimum hop count.
         """
         found: dict[str, int] = {}  # sink_type → minimum hop count
-        visited: set[str] = {signature}
-        queue: deque[tuple[str, int]] = deque([(signature, 0)])
+        visited: set[str] = {method_key}
+        queue: deque[tuple[str, int]] = deque([(method_key, 0)])
 
         while queue:
             current, depth = queue.popleft()
@@ -117,36 +116,34 @@ class TaintPathFinder:
             if snapshot is None:
                 continue
 
-            for callee_sig in snapshot.get("calls") or ():
-                if callee_sig and callee_sig in self._index and callee_sig not in visited:
-                    visited.add(callee_sig)
-                    queue.append((callee_sig, depth + 1))
+            for callee_key in snapshot.get("calls") or ():
+                if callee_key and callee_key in self._index and callee_key not in visited:
+                    visited.add(callee_key)
+                    queue.append((callee_key, depth + 1))
 
         return [{"sink_type": st, "hops": h} for st, h in found.items()]
 
-    def _load_source(self, signature: str) -> str:
-        """Return source code for *signature*, loading from disk if needed."""
-        if signature in self._source_cache:
-            return self._source_cache[signature]
+    def _load_source(self, method_key: str) -> str:
+        """Return source code for *method_key*, loading from disk if needed."""
+        if method_key in self._source_cache:
+            return self._source_cache[method_key]
 
-        snapshot = self._index.get(signature)
+        snapshot = self._index.get(method_key)
         if snapshot is None:
-            self._source_cache[signature] = ""
+            self._source_cache[method_key] = ""
             return ""
 
         resolved = _resolve_path(snapshot.get("file_path"))
         if resolved is None:
-            self._source_cache[signature] = ""
+            self._source_cache[method_key] = ""
             return ""
 
-        source = (
-            extract_snippet_by_lines(
-                resolved.as_posix(),
-                snapshot.get("start_line"),
-                snapshot.get("end_line"),
-                padding=0,
-            )
-            or ""
-        )
-        self._source_cache[signature] = source
+        start_byte = snapshot.get("start_byte")
+        end_byte = snapshot.get("end_byte")
+        if not isinstance(start_byte, int) or not isinstance(end_byte, int) or end_byte < start_byte:
+            self._source_cache[method_key] = ""
+            return ""
+        raw = resolved.read_bytes()
+        source = raw[start_byte:end_byte].decode("utf-8") if end_byte <= len(raw) else ""
+        self._source_cache[method_key] = source
         return source

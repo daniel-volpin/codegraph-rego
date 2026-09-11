@@ -25,11 +25,36 @@ def _write_case(root: Path, source: str, candidate: str) -> tuple[Path, Path]:
 
 BASE_SOURCE = """package demo;
 class Crypto {
-  public void hash() {
+  public void hash() throws java.security.NoSuchAlgorithmException {
     java.security.MessageDigest.getInstance("MD5");
   }
 }
 """
+
+
+def test_invalid_policy_catalog_returns_structured_error(monkeypatch, tmp_path) -> None:
+    from codegraph.remediation import scoped_verification
+
+    source, candidate = _write_case(tmp_path, BASE_SOURCE, "public void hash() {}")
+    policy = tmp_path / "policy"
+    policy.mkdir()
+    (policy / "catalog.json").write_text('{"controls": {}}', encoding="utf-8")
+    monkeypatch.setattr(scoped_verification, "create_source_snapshot", lambda **_kwargs: object())
+    monkeypatch.setattr(scoped_verification, "_opa_version", lambda: "test-engine")
+
+    result = verify_candidate(
+        workspace_root=tmp_path,
+        source=source,
+        method_selector="demo.Crypto#hash()",
+        candidate=candidate,
+        rule_id="ISO-A.10-WEAK-HASH",
+        expected_source_sha256=sha256_hex(source.read_bytes()),
+        policy_dir=policy,
+        work_dir=tmp_path / "work",
+    )
+    assert result["status"] == "OPA_ERROR"
+    assert result["error"] == "policy_catalog_invalid"
+    assert source.read_text(encoding="utf-8") == BASE_SOURCE
 
 
 @pytest.mark.skipif(not OPA_AVAILABLE, reason="opa binary not found on PATH")
@@ -39,21 +64,19 @@ def test_scoped_verification_reports_policy_pass_without_build_or_graph(monkeypa
     source_path, candidate_path = _write_case(
         root,
         BASE_SOURCE,
-        """  public void hash() {
+        """  public void hash() throws java.security.NoSuchAlgorithmException {
     java.security.MessageDigest.getInstance("SHA-256");
   }
 """,
     )
 
     import codegraph.db as db
-    import codegraph.ingestion.service as ingestion_service
     import codegraph.remediation.verification as build_verification
 
     def forbidden(*_args, **_kwargs):
         raise AssertionError("scoped verification must not access graph or ingestion writes")
 
     monkeypatch.setattr(db, "shared_neo4j_driver", forbidden)
-    monkeypatch.setattr(ingestion_service, "process_single_file_content", forbidden)
     monkeypatch.setattr(build_verification, "compile_project", forbidden)
     original_bytes = source_path.read_bytes()
 

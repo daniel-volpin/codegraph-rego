@@ -3,13 +3,9 @@
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from itertools import islice
-from typing import TypeVar
-
-T = TypeVar("T")
-U = TypeVar("U")
 
 
-def bounded_futures(
+def bounded_futures[T, U](
     function: Callable[[T], U], values: Iterable[T], *, max_workers: int,
 ) -> Iterator[tuple[int, Future[U]]]:
     if max_workers < 1:

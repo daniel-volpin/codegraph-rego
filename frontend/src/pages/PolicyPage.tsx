@@ -4,10 +4,7 @@ import {
   type ColumnDef,
   type ExpandedState,
   type SortingState,
-  getCoreRowModel,
-  getExpandedRowModel,
-  getSortedRowModel,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -38,6 +35,7 @@ import {
   severityVariant,
   uniqueRuleIds,
 } from "../components/features/policy/policyUtils";
+import { type PolicyTableFeatures, policyTableFeatures } from "../components/features/policy/tableFeatures";
 import { Card } from "../components/ui/card";
 
 const evalQueryKey = (preset: PolicyViewPreset) =>
@@ -267,35 +265,32 @@ const PolicyPage = () => {
     [findings, uploadedModules],
   );
 
-  useEffect(() => {
-    if (moduleFilter !== "all" && !availableModules.includes(moduleFilter)) {
-      setModuleFilter("all");
-    }
-  }, [availableModules, moduleFilter]);
+  const effectiveModuleFilter =
+    moduleFilter === "all" || availableModules.includes(moduleFilter) ? moduleFilter : "all";
 
   const filteredFindings = useMemo(
-    () => (moduleFilter === "all" ? findings : findings.filter((f) => f.module === moduleFilter)),
-    [findings, moduleFilter],
+    () => (effectiveModuleFilter === "all" ? findings : findings.filter((f) => f.module === effectiveModuleFilter)),
+    [effectiveModuleFilter, findings],
   );
 
-  useEffect(() => {
-    if (filteredFindings.length === 0) {
-      setSelectedFindingId(null);
-      return;
-    }
-    if (!selectedFindingId || !filteredFindings.some((f) => f.id === selectedFindingId)) {
-      setSelectedFindingId(filteredFindings[0].id);
-    }
-  }, [filteredFindings, selectedFindingId]);
+  const effectiveSelectedFindingId =
+    selectedFindingId && filteredFindings.some((f) => f.id === selectedFindingId)
+      ? selectedFindingId
+      : (filteredFindings[0]?.id ?? null);
 
   const selectedFinding = useMemo(
-    () => filteredFindings.find((f) => f.id === selectedFindingId) ?? null,
-    [filteredFindings, selectedFindingId],
+    () => filteredFindings.find((f) => f.id === effectiveSelectedFindingId) ?? null,
+    [effectiveSelectedFindingId, filteredFindings],
   );
 
   const visibleModules = useMemo(
-    () => (moduleFilter === "all" ? availableModules : availableModules.includes(moduleFilter) ? [moduleFilter] : []),
-    [availableModules, moduleFilter],
+    () =>
+      effectiveModuleFilter === "all"
+        ? availableModules
+        : availableModules.includes(effectiveModuleFilter)
+          ? [effectiveModuleFilter]
+          : [],
+    [availableModules, effectiveModuleFilter],
   );
 
   const data = useMemo(() => groupViolationsByRule(filteredFindings), [filteredFindings]);
@@ -337,7 +332,7 @@ const PolicyPage = () => {
 
   // ---- Table ----
 
-  const columns = useMemo<ColumnDef<ViolationGroupRow>[]>(
+  const columns = useMemo<ColumnDef<PolicyTableFeatures, ViolationGroupRow>[]>(
     () => [
       {
         id: "expander",
@@ -394,16 +389,13 @@ const PolicyPage = () => {
     [],
   );
 
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table hook
-  const table = useReactTable({
+  const table = useTable({
     data,
     columns,
+    features: policyTableFeatures,
     state: { sorting, expanded },
     onSortingChange: setSorting,
     onExpandedChange: setExpanded,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getExpandedRowModel: getExpandedRowModel(),
     getRowCanExpand: () => true,
   });
 
@@ -421,7 +413,7 @@ const PolicyPage = () => {
       <ControlsPanel
         viewPreset={viewPreset}
         onViewPresetChange={setViewPreset}
-        moduleFilter={moduleFilter}
+        moduleFilter={effectiveModuleFilter}
         onModuleFilterChange={setModuleFilter}
         availableModules={availableModules}
         evalIsFetching={evalQuery.isFetching}
@@ -465,7 +457,7 @@ const PolicyPage = () => {
           table={table}
           columnCount={columns.length}
           viewPreset={viewPreset}
-          selectedFindingId={selectedFindingId}
+          selectedFindingId={effectiveSelectedFindingId}
           onSelectFinding={setSelectedFindingId}
           expandedFindingByGroup={expandedFindingByGroup}
           onToggleFinding={toggleFindingExpanded}

@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
+import httpx2
 from openai import OpenAI
 
 from codegraph.config import settings
@@ -17,7 +17,7 @@ from codegraph.telemetry import get_tracer
 
 logger = logging.getLogger("codegraph.llm.transport.openai_compatible")
 _tracer = get_tracer("codegraph.llm.transport")
-_CLIENT_CLOSE_EXCEPTIONS = (RuntimeError, OSError, httpx.HTTPError)
+_CLIENT_CLOSE_EXCEPTIONS = (RuntimeError, OSError, httpx2.HTTPError)
 
 
 def _summarize_exception(exc: Exception) -> str:
@@ -246,9 +246,7 @@ def _set_usage_attributes(span: Any, usage: Any, token_names: Mapping[str, str])
     if token_names["total"]:
         total_tokens = _token_count(usage, token_names["total"])
     else:
-        total_tokens = (prompt_tokens if prompt_tokens > 0 else 0) + (
-            completion_tokens if completion_tokens > 0 else 0
-        )
+        total_tokens = max(0, prompt_tokens) + max(0, completion_tokens)
     span.set_attribute("llm.prompt_tokens", prompt_tokens)
     span.set_attribute("llm.completion_tokens", completion_tokens)
     span.set_attribute("llm.total_tokens", total_tokens or -1)
@@ -320,7 +318,7 @@ class OpenAICompatibleTransport(LLMTransport):
 
             t0 = time.monotonic()
             client = None
-            close_error: RuntimeError | OSError | httpx.HTTPError | None = None
+            close_error: RuntimeError | OSError | httpx2.HTTPError | None = None
             output_text: str | None = None
             generation_error_message: str | None = None
             generation_exception: LLMUnavailableError | None = None

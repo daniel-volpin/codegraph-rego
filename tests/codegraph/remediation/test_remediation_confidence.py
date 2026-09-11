@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from codegraph.ingestion.snapshots import create_source_snapshot_from_bytes, sha256_hex
 from codegraph.remediation.confidence import ConfidenceFeatures, assess_remediation_confidence
 from codegraph.remediation.service import RemediationService
 
@@ -48,17 +49,32 @@ class RemediationConfidenceTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             src_path = Path(tmp) / "Example.java"
             src_path.write_text("class Example { void hash() {} }\n", encoding="utf-8")
+            source_bytes = src_path.read_bytes()
+            snapshot = create_source_snapshot_from_bytes(
+                workspace_root=tmp,
+                source_path=src_path,
+                source_bytes=source_bytes,
+                method_selector="Example#hash()",
+                expected_source_sha256=sha256_hex(source_bytes),
+            )
+            method_key = f"workspace@revision:Example.java#{snapshot.identity.source_key}"
 
             remediation = RemediationService(llm_client=lambda *_args, **_kwargs: "")
             remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
                 "violation": {"violation_id": "ISO-A.10-WEAK-HASH", "reason": "md5"},
-                "target_method": "com.example.Foo.hash()",
+                "method_key": method_key,
+                "target_method": snapshot.identity.syntactic_signature,
                 "file_path": src_path.as_posix(),
                 "rule_id": "ISO-A.10-WEAK-HASH",
-                "evidence": {"source_code": "public void hash() { }", "graph_context": {}, "vector_context": []},
+                "evidence": {
+                    "source_code": snapshot.method_source,
+                    "source_sha256": snapshot.file_sha256,
+                    "graph_context": {},
+                    "vector_context": [],
+                },
                 "catalog_entry": {"title": "Cryptography (Weak Hash)"},
                 "baseline_violations": [],
-                "exact_method_source": "public void hash() { }",
+                "exact_method_source": snapshot.method_source,
             }
             remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
             remediation.propose_method_edits = (  # type: ignore[method-assign]
@@ -72,16 +88,12 @@ class RemediationConfidenceTests(unittest.TestCase):
                     },
                 }
             )
-            remediation._replace_method_in_source = (  # type: ignore[method-assign]
-                lambda *_args, **_kwargs: ("class Example { void hash() {} }\n", "void hash() {}", "void hash() {}")
-            )
-
             with patch("codegraph.remediation.service.settings.remediation_confidence_gate_enabled", True):
                 with patch("codegraph.remediation.service.settings.remediation_confidence_threshold_apply", 0.99):
                     with patch("codegraph.remediation.service.settings.remediation_confidence_threshold_review", 0.5):
                         out = remediation.apply_fix(
                             "ISO-A.10-WEAK-HASH",
-                            target_method="com.example.Foo.hash()",
+                            method_key=method_key,
                             file_path=src_path.as_posix(),
                             mode="apply",
                         )
@@ -90,6 +102,7 @@ class RemediationConfidenceTests(unittest.TestCase):
             self.assertIn("confidence gate", out.get("error", ""))
             self.assertIsInstance(out.get("confidence"), dict)
             self.assertNotEqual(out["confidence"].get("band"), "apply")
+            self.assertEqual(src_path.read_bytes(), source_bytes)
 
 
 if __name__ == "__main__":

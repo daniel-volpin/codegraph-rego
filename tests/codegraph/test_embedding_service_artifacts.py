@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import hashlib
 import json
-import logging
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +9,26 @@ from types import SimpleNamespace
 import pytest
 
 from codegraph.embedding import service as embedding_service
+
+_GRAPH_GENERATION = {
+    "workspace_revisions": 1,
+    "method_count": 2,
+    "indexable_method_count": 1,
+    "schema_versions": ["codegraph-jdt/v1"],
+    "parser_backends": ["eclipse-jdt"],
+    "active_revisions": [
+        {
+            "workspace_id": "workspace",
+            "revision_id": "revision",
+            "schema_version": "codegraph-jdt/v1",
+            "parser_backend": "eclipse-jdt",
+            "parser_version": "3.47.0",
+            "adapter_version": "0.1.0",
+            "method_count": 2,
+            "indexable_method_count": 1,
+        }
+    ],
+}
 
 
 class _FakeVector:
@@ -85,8 +105,9 @@ def test_build_embeddings_writes_atomic_generation_manifest(tmp_path, monkeypatc
     monkeypatch.setattr(
         embedding_service,
         "_fetch_method_snippets",
-        lambda: [embedding_service._MethodSnippet(signature="pkg.A#a()", code="class A {}")],
+        lambda: [embedding_service._MethodSnippet(method_key="key:A#a", display_signature="pkg.A#a()", code="class A {}")],
     )
+    monkeypatch.setattr(embedding_service, "_fetch_active_graph_generation", lambda: _GRAPH_GENERATION)
     monkeypatch.setitem(sys.modules, "faiss", _fake_faiss_module())
     monkeypatch.setitem(sys.modules, "numpy", _fake_numpy_module())
     monkeypatch.setitem(
@@ -110,6 +131,7 @@ def test_build_embeddings_writes_atomic_generation_manifest(tmp_path, monkeypatc
     assert generation["model"] == "test-model"
     assert generation["dim"] == 1
     assert generation["count"] == 1
+    assert generation["graph_generation"] == _GRAPH_GENERATION
     metadata = generation["metadata"]
     for key in ("index_path", "signature_map_path", "metadata_path"):
         assert Path(metadata[key]).is_file()  # type: ignore[name-defined]
@@ -117,6 +139,41 @@ def test_build_embeddings_writes_atomic_generation_manifest(tmp_path, monkeypatc
         assert len(metadata[key]) == 64
     assert not Path(settings_obj.signature_map_path_full).exists()
     assert not Path(settings_obj.signature_map_path).exists()
+
+
+def test_build_embeddings_allows_implicit_constructor_but_indexes_only_verified_source_methods(tmp_path, monkeypatch) -> None:
+    settings_obj = _make_settings(tmp_path)
+    monkeypatch.setattr(embedding_service, "settings", settings_obj)
+    monkeypatch.setattr(
+        embedding_service,
+        "_fetch_method_snippets",
+        lambda: [
+            embedding_service._MethodSnippet(
+                method_key="workspace@revision:A.java#method:real",
+                display_signature="A.real()",
+                code="void real() {}",
+            )
+        ],
+    )
+    monkeypatch.setattr(embedding_service, "_fetch_active_graph_generation", lambda: _GRAPH_GENERATION)
+    monkeypatch.setitem(sys.modules, "faiss", _fake_faiss_module())
+    monkeypatch.setitem(sys.modules, "numpy", _fake_numpy_module())
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(
+            SentenceTransformer=lambda _name: SimpleNamespace(
+                encode=lambda *_a, **_k: _FakeArray([[1.0]], dtype="float32")
+            )
+        ),
+    )
+
+    embedding_service.EmbeddingService.build_embeddings()
+
+    manifest = json.loads((tmp_path / "index" / "embedding_metadata.json").read_text(encoding="utf-8"))
+    assert manifest["generation"]["count"] == 1
+    assert manifest["generation"]["graph_generation"]["method_count"] == 2
+    assert manifest["generation"]["graph_generation"]["indexable_method_count"] == 1
 
 
 def test_build_embeddings_leaves_previous_manifest_readable_on_publish_failure(tmp_path, monkeypatch) -> None:
@@ -133,8 +190,9 @@ def test_build_embeddings_leaves_previous_manifest_readable_on_publish_failure(t
     monkeypatch.setattr(
         embedding_service,
         "_fetch_method_snippets",
-        lambda: [embedding_service._MethodSnippet(signature="pkg.A#a()", code="class A1 {}")],
+        lambda: [embedding_service._MethodSnippet(method_key="key:A#a", display_signature="pkg.A#a()", code="class A1 {}")],
     )
+    monkeypatch.setattr(embedding_service, "_fetch_active_graph_generation", lambda: _GRAPH_GENERATION)
     fake_faiss = _fake_faiss_module()
     monkeypatch.setitem(sys.modules, "faiss", fake_faiss)
     monkeypatch.setitem(sys.modules, "numpy", _fake_numpy_module())
@@ -155,7 +213,7 @@ def test_build_embeddings_leaves_previous_manifest_readable_on_publish_failure(t
     monkeypatch.setattr(
         embedding_service,
         "_fetch_method_snippets",
-        lambda: [embedding_service._MethodSnippet(signature="pkg.A#a()", code="class A2 {}")],
+        lambda: [embedding_service._MethodSnippet(method_key="key:A#a", display_signature="pkg.A#a()", code="class A2 {}")],
     )
     monkeypatch.setattr(
         embedding_service,
@@ -178,7 +236,7 @@ def test_build_embeddings_leaves_previous_manifest_readable_on_publish_failure(t
         generation=bundle.generation,
         expected_model_name=settings_obj.embedding_model_name,
     )
-    assert results == ["pkg.A#a()"]
+    assert results == ["key:A#a"]
 
 
 def test_manifest_replace_failure_keeps_previous_manifest_and_leaves_no_temp_orphan(tmp_path, monkeypatch) -> None:
@@ -220,15 +278,18 @@ def test_manifest_serialize_failure_keeps_previous_manifest_and_leaves_no_temp_o
 
 def test_build_embeddings_rejects_vector_signature_count_mismatch_before_manifest_switch(tmp_path, monkeypatch) -> None:
     settings_obj = _make_settings(tmp_path)
+    graph_generation = {**_GRAPH_GENERATION, "indexable_method_count": 2}
+    graph_generation["active_revisions"] = [{**_GRAPH_GENERATION["active_revisions"][0], "indexable_method_count": 2}]
     monkeypatch.setattr(embedding_service, "settings", settings_obj)
     monkeypatch.setattr(
         embedding_service,
         "_fetch_method_snippets",
         lambda: [
-            embedding_service._MethodSnippet(signature="pkg.A#a()", code="class A {}"),
-            embedding_service._MethodSnippet(signature="pkg.B#b()", code="class B {}"),
+            embedding_service._MethodSnippet(method_key="key:A#a", display_signature="pkg.A#a()", code="class A {}"),
+            embedding_service._MethodSnippet(method_key="key:B#b", display_signature="pkg.B#b()", code="class B {}"),
         ],
     )
+    monkeypatch.setattr(embedding_service, "_fetch_active_graph_generation", lambda: graph_generation)
     monkeypatch.setitem(sys.modules, "faiss", _fake_faiss_module())
     monkeypatch.setitem(sys.modules, "numpy", _fake_numpy_module())
     monkeypatch.setitem(
@@ -250,9 +311,58 @@ def test_build_embeddings_rejects_vector_signature_count_mismatch_before_manifes
         embedding_service.EmbeddingService.build_embeddings()
 
 
+def test_build_embeddings_rejects_when_snippets_do_not_cover_indexable_methods(tmp_path, monkeypatch) -> None:
+    settings_obj = _make_settings(tmp_path)
+    graph_generation = {**_GRAPH_GENERATION, "indexable_method_count": 2}
+    graph_generation["active_revisions"] = [{**_GRAPH_GENERATION["active_revisions"][0], "indexable_method_count": 2}]
+    monkeypatch.setattr(embedding_service, "settings", settings_obj)
+    monkeypatch.setattr(
+        embedding_service,
+        "_fetch_method_snippets",
+        lambda: [embedding_service._MethodSnippet(method_key="key:A#a", display_signature="pkg.A#a()", code="class A {}")],
+    )
+    monkeypatch.setattr(embedding_service, "_fetch_active_graph_generation", lambda: graph_generation)
+
+    with pytest.raises(RuntimeError, match="indexable method"):
+        embedding_service.EmbeddingService.build_embeddings()
+
+
+def test_build_embeddings_rechecks_active_graph_generation_before_manifest_publish(tmp_path, monkeypatch) -> None:
+    settings_obj = _make_settings(tmp_path)
+    first = _GRAPH_GENERATION
+    second = {**_GRAPH_GENERATION, "active_revisions": [{**_GRAPH_GENERATION["active_revisions"][0], "revision_id": "new"}]}
+    generations = iter([first, second])
+    monkeypatch.setattr(embedding_service, "settings", settings_obj)
+    monkeypatch.setattr(
+        embedding_service,
+        "_fetch_method_snippets",
+        lambda: [embedding_service._MethodSnippet(method_key="key:A#a", display_signature="pkg.A#a()", code="class A {}")],
+    )
+    monkeypatch.setattr(embedding_service, "_fetch_active_graph_generation", lambda: next(generations))
+    monkeypatch.setitem(sys.modules, "faiss", _fake_faiss_module())
+    monkeypatch.setitem(sys.modules, "numpy", _fake_numpy_module())
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(
+            SentenceTransformer=lambda _name: SimpleNamespace(
+                encode=lambda *_a, **_k: _FakeArray([[1.0]], dtype="float32")
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        embedding_service,
+        "_publish_generation_manifest",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("must not publish stale graph generation")),
+    )
+
+    with pytest.raises(RuntimeError, match="active graph generation changed"):
+        embedding_service.EmbeddingService.build_embeddings()
+
+
 def test_fetch_method_snippets_prefers_exact_ranges_for_overloads(tmp_path, monkeypatch) -> None:
     java_file = tmp_path / "Overloads.java"
-    java_file.write_text(
+    content = (
         "\n".join(
             [
                 "class Overloads {",
@@ -265,24 +375,30 @@ def test_fetch_method_snippets_prefers_exact_ranges_for_overloads(tmp_path, monk
                 "}",
             ]
         )
-        + "\n",
-        encoding="utf-8",
+        + "\n"
     )
+    java_file.write_text(content, encoding="utf-8")
+    first_start = content.index("  void work()")
+    first_end = content.index("  void work(int n)")
+    second_start = first_end
+    second_end = content.index("}", second_start) + 1
 
     rows = [
         {
-            "sig": "Overloads#work()",
-            "name": "work",
+            "method_key": "key:Overloads#work",
+            "display_signature": "Overloads#work()",
             "path": str(java_file),
-            "start_line": 2,
-            "end_line": 4,
+            "start_byte": first_start,
+            "end_byte": first_end,
+            "source_sha256": hashlib.sha256(java_file.read_bytes()).hexdigest(),
         },
         {
-            "sig": "Overloads#work(int)",
-            "name": "work",
+            "method_key": "key:Overloads#work-int",
+            "display_signature": "Overloads#work(int)",
             "path": str(java_file),
-            "start_line": 5,
-            "end_line": 7,
+            "start_byte": second_start,
+            "end_byte": second_end,
+            "source_sha256": hashlib.sha256(java_file.read_bytes()).hexdigest(),
         },
     ]
 
@@ -315,7 +431,7 @@ def test_fetch_method_snippets_prefers_exact_ranges_for_overloads(tmp_path, monk
     assert "int first = 1;" not in snippets[1].code
 
 
-def test_fetch_method_snippets_rejects_ambiguous_missing_range_fallback(tmp_path, monkeypatch, caplog) -> None:
+def test_fetch_method_snippets_rejects_ambiguous_missing_range_fallback(tmp_path, monkeypatch) -> None:
     java_file = tmp_path / "Overloads.java"
     java_file.write_text(
         "\n".join(
@@ -329,9 +445,7 @@ def test_fetch_method_snippets_rejects_ambiguous_missing_range_fallback(tmp_path
         + "\n",
         encoding="utf-8",
     )
-    rows = [
-        {"sig": "Overloads#work()", "name": "work", "path": str(java_file), "start_line": None, "end_line": None}
-    ]
+    rows = [{"method_key": "key:Overloads#work", "display_signature": "Overloads#work()", "path": str(java_file), "start_byte": None, "end_byte": None}]
 
     class _Session:
         def __enter__(self):
@@ -354,13 +468,11 @@ def test_fetch_method_snippets_rejects_ambiguous_missing_range_fallback(tmp_path
             return _Session()
 
     monkeypatch.setattr(embedding_service.GraphDatabase, "driver", lambda *_args, **_kwargs: _Driver())
-    with caplog.at_level(logging.WARNING):
-        snippets = embedding_service._fetch_method_snippets()
-    assert snippets == []
-    assert "Skipping method snippet for signature Overloads#work()" in caplog.text
+    with pytest.raises(RuntimeError, match="incomplete byte range metadata"):
+        embedding_service._fetch_method_snippets()
 
 
-def test_fetch_method_snippets_rejects_incomplete_range_without_fallback(tmp_path, monkeypatch, caplog) -> None:
+def test_fetch_method_snippets_rejects_incomplete_range_without_fallback(tmp_path, monkeypatch) -> None:
     java_file = tmp_path / "Overloads.java"
     java_file.write_text(
         "\n".join(
@@ -374,9 +486,7 @@ def test_fetch_method_snippets_rejects_incomplete_range_without_fallback(tmp_pat
         + "\n",
         encoding="utf-8",
     )
-    rows = [
-        {"sig": "Overloads#work()", "name": "work", "path": str(java_file), "start_line": 2, "end_line": None}
-    ]
+    rows = [{"method_key": "key:Overloads#work", "display_signature": "Overloads#work()", "path": str(java_file), "start_byte": 2, "end_byte": None}]
 
     class _Session:
         def __enter__(self):
@@ -399,18 +509,14 @@ def test_fetch_method_snippets_rejects_incomplete_range_without_fallback(tmp_pat
             return _Session()
 
     monkeypatch.setattr(embedding_service.GraphDatabase, "driver", lambda *_args, **_kwargs: _Driver())
-    with caplog.at_level(logging.WARNING):
-        snippets = embedding_service._fetch_method_snippets()
-    assert snippets == []
-    assert "incomplete source range metadata" in caplog.text
+    with pytest.raises(RuntimeError, match="incomplete byte range metadata"):
+        embedding_service._fetch_method_snippets()
 
 
-def test_fetch_method_snippets_rejects_out_of_file_range_without_fallback(tmp_path, monkeypatch, caplog) -> None:
+def test_fetch_method_snippets_rejects_out_of_file_range_without_fallback(tmp_path, monkeypatch) -> None:
     java_file = tmp_path / "Overloads.java"
     java_file.write_text("class Overloads {\n  void work() {}\n}\n", encoding="utf-8")
-    rows = [
-        {"sig": "Overloads#work()", "name": "work", "path": str(java_file), "start_line": 2, "end_line": 20}
-    ]
+    rows = [{"method_key": "key:Overloads#work", "display_signature": "Overloads#work()", "path": str(java_file), "start_byte": 2, "end_byte": 2000}]
 
     class _Session:
         def __enter__(self):
@@ -433,10 +539,8 @@ def test_fetch_method_snippets_rejects_out_of_file_range_without_fallback(tmp_pa
             return _Session()
 
     monkeypatch.setattr(embedding_service.GraphDatabase, "driver", lambda *_args, **_kwargs: _Driver())
-    with caplog.at_level(logging.WARNING):
-        snippets = embedding_service._fetch_method_snippets()
-    assert snippets == []
-    assert "invalid source range 2-20" in caplog.text
+    with pytest.raises(RuntimeError, match="invalid byte range 2-2000"):
+        embedding_service._fetch_method_snippets()
 
 
 def test_manifest_write_failure_keeps_previous_manifest_and_leaves_no_temp_orphan(tmp_path, monkeypatch) -> None:

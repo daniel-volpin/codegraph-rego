@@ -12,7 +12,6 @@ from typing import Any
 from codegraph.ingestion.snapshots import (
     AmbiguousMethodError,
     MethodIdentity,
-    SharedLineReplacementError,
     SnapshotError,
     SourceSnapshot,
     StaleSourceError,
@@ -241,10 +240,15 @@ def _identity_dict(identity: MethodIdentity) -> dict[str, Any]:
         ],
         "is_constructor": identity.is_constructor,
         "selector": identity.selector,
-        "legacy_signature": identity.legacy_signature,
         "syntactic_signature": identity.syntactic_signature,
+        "source_key": identity.source_key,
+        "declaration_key": identity.declaration_key,
+        "canonical_key": identity.canonical_key,
         "source_sha256": identity.source_sha256,
         "identity_status": identity.identity_status,
+        "resolution_status": identity.resolution_status,
+        "resolved_descriptor": identity.resolved_descriptor,
+        "resolved_binding_key": identity.resolved_binding_key,
     }
 
 
@@ -295,7 +299,7 @@ def verify_candidate(
         except AmbiguousMethodError as exc:
             report = _status("AMBIGUOUS_METHOD", rule_id=rule_id, error=str(exc))
             return report
-        except (SharedLineReplacementError, UnsupportedSourceError) as exc:
+        except UnsupportedSourceError as exc:
             report = _status("UNSUPPORTED_SOURCE", rule_id=rule_id, error=str(exc))
             return report
         except (SnapshotError, OSError) as exc:
