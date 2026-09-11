@@ -4,6 +4,8 @@ import logging
 from functools import lru_cache
 from typing import Any
 
+from codegraph.config import settings
+from codegraph.remediation.agentic import AgenticRemediationService
 from codegraph.remediation.service import RemediationService
 
 LOGGER = logging.getLogger(__name__)
@@ -97,9 +99,6 @@ def run_agentic_remediation(
     model: str | None = None,
 ) -> dict[str, Any]:
     """Public orchestration wrapper for autonomous multi-turn agentic remediation."""
-    from codegraph.config import settings
-    from codegraph.remediation.agentic import AgenticRemediationService
-
     root = workspace_root or settings.upload_dir
     service = AgenticRemediationService()
     try:

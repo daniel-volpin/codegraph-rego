@@ -16,6 +16,11 @@ from api.routers.policy import router as policy_router
 from api.routers.remediation import router as remediation_router
 from api.routers.search import router as search_router
 from api.routers.upload import router as upload_router
+from codegraph.config import settings, validate_runtime_settings
+from codegraph.db import close_shared_neo4j_driver, shared_neo4j_driver
+from codegraph.java.service import JavaParserProtocolError, parse_java_source
+from codegraph.search.hybrid import load_embedding_model, validate_retrieval_generation
+from codegraph.telemetry import configure_telemetry, install_log_correlation
 
 LOGGER = logging.getLogger("codegraph.app")
 
@@ -47,10 +52,6 @@ def _configure_runtime() -> None:
 
 
 def _load_startup_dependencies() -> dict[str, Any]:
-    from codegraph.config import settings, validate_runtime_settings
-    from codegraph.db import shared_neo4j_driver
-    from codegraph.search.hybrid import load_embedding_model, validate_retrieval_generation
-
     validate_runtime_settings()
 
     return {
@@ -62,8 +63,6 @@ def _load_startup_dependencies() -> dict[str, Any]:
 
 
 def _check_java_parser() -> None:
-    from codegraph.java.service import JavaParserProtocolError, parse_java_source
-
     parsed = parse_java_source(
         b"class CodeGraphReadiness {}",
         relative_path="CodeGraphReadiness.java",
@@ -108,8 +107,6 @@ async def _lifespan(application: FastAPI):
     try:
         yield
     finally:
-        from codegraph.db import close_shared_neo4j_driver
-
         close_shared_neo4j_driver()
 
 
@@ -161,9 +158,6 @@ async def _generic_exception_handler(request: Request, exc: Exception) -> JSONRe
 
 def create_app() -> FastAPI:
     _configure_runtime()
-    from codegraph.config import settings
-    from codegraph.telemetry import configure_telemetry, install_log_correlation
-
     configure_telemetry()
     install_log_correlation()
 

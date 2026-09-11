@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from codegraph.policy.analysis.command import CommandFlowAnalyzer
+from codegraph.policy.analysis.crypto import CryptoIndicatorAnalyzer
+from codegraph.policy.analysis.injection import (
+    LDAPSafetyAnalyzer,
+    PathSafetyAnalyzer,
+    SQLSafetyAnalyzer,
+    XPathSafetyAnalyzer,
+)
 from codegraph.policy.analysis.patterns import (
     CMDI_PATTERNS,
     LDAP_PATTERNS,
@@ -245,15 +253,6 @@ def strip_java_lexical_noise(source: str, *, strip_string_literals: bool = True)
 
 class PolicyIndicatorAnalyzer:
     def __init__(self) -> None:
-        from codegraph.policy.analysis.command import CommandFlowAnalyzer
-        from codegraph.policy.analysis.crypto import CryptoIndicatorAnalyzer
-        from codegraph.policy.analysis.injection import (
-            LDAPSafetyAnalyzer,
-            PathSafetyAnalyzer,
-            SQLSafetyAnalyzer,
-            XPathSafetyAnalyzer,
-        )
-
         self._crypto = CryptoIndicatorAnalyzer()
         self._path_safety = PathSafetyAnalyzer()
         self._command_flow = CommandFlowAnalyzer()

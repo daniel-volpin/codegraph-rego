@@ -12,14 +12,12 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from threading import Condition
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from codegraph.config import Settings
-
-if TYPE_CHECKING:
-    from codegraph.java.models import ParsedJavaFileDTO
+from codegraph.config import Settings, get_settings
+from codegraph.java.models import ParsedJavaFileDTO
 
 REQUEST_SCHEMA_VERSION = "codegraph-java-request/v1"
 RESPONSE_SCHEMA_VERSION = "codegraph-java/v1"
@@ -266,7 +264,6 @@ class JavaParserService:
         try:
             response_json = json.loads(response_text)
             _verify_required_protocol_fields(response_json)
-            from codegraph.java.models import ParsedJavaFileDTO
 
             parsed = ParsedJavaFileDTO.model_validate_json(response_text)
         except ValidationError as exc:
@@ -307,9 +304,7 @@ def parse_java_source(
     resolve_bindings: bool = True,
     language_level: str | None = None,
 ) -> ParsedJavaFileDTO:
-    from codegraph import config
-
-    return JavaParserService(config.get_settings()).parse_java_source(
+    return JavaParserService(get_settings()).parse_java_source(
         source_bytes,
         relative_path=relative_path,
         source_roots=source_roots,

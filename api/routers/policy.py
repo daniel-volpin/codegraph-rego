@@ -25,8 +25,11 @@ from codegraph.llm.integration import (
     render_policy_explanation_structured,
 )
 from codegraph.policy.review_store import append_review_jsonl, resolve_review_store_path
-from codegraph.policy.service import catalog as get_policy_catalog_payload
-from codegraph.policy.service import evaluate as evaluate_policies
+from codegraph.policy.service import (
+    catalog as get_policy_catalog_payload,
+    evaluate as evaluate_policies,
+    export_sarif,
+)
 
 router = APIRouter()
 logger = logging.getLogger("codegraph.api.routers.policy")
@@ -54,8 +57,6 @@ async def policy_evaluate(
 @router.get("/policy/export/sarif")
 async def policy_export_sarif(rule_ids: list[str] | None = Query(default=None)):
     """Export security policy findings in standard OASIS SARIF v2.1.0 JSON format."""
-    from codegraph.policy.service import export_sarif
-
     sarif_doc = await asyncio.to_thread(export_sarif, rule_ids=rule_ids)
     return JSONResponse(
         sarif_doc,

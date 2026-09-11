@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -128,8 +129,6 @@ def ingest_and_evaluate_subset(
     reset_neo4j: bool,
     logger: logging.Logger | None = None,
 ) -> dict[str, Any]:
-    import shutil
-
     active_logger = logger or LOGGER
 
     if not shutil.which("opa"):

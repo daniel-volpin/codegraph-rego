@@ -7,7 +7,6 @@ import logging
 import os
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +17,7 @@ from codegraph.java.models import (
     ParsedJavaFileDTO,
     TypeDeclarationDTO,
 )
+from codegraph.java.service import parse_java_source
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,11 +59,7 @@ class ExtractedCodeStructure:
 
 
 def _parse_java_source(*args, **kwargs) -> ParsedJavaFileDTO:
-    try:
-        service = import_module("codegraph.java.service")
-    except ModuleNotFoundError as exc:
-        raise IngestionError("Java parser service is unavailable; rebuild/provision the JDT parser adapter.") from exc
-    return service.parse_java_source(*args, **kwargs)
+    return parse_java_source(*args, **kwargs)
 
 
 def _sha256_bytes(data: bytes) -> str:
