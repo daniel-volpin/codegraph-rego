@@ -12,7 +12,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from codegraph.policy.integration import evaluate_policies
 from codegraph.remediation.agentic.contracts import AgentVerificationStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -213,6 +212,8 @@ class IsolatedWorktreeEnvironment:
     def evaluate_policy(self, target_rule_id: str | None = None) -> tuple[bool, list[dict[str, Any]], list[str]]:
         """Run OPA policy scan on the scratch workspace."""
         try:
+            from codegraph.policy.integration import evaluate_policies
+
             res = evaluate_policies(workspace_root=self.scratch_root.as_posix())
             violations = res.get("violations", [])
             violation_ids = [str(v.get("violation_id")) for v in violations if v.get("violation_id")]
