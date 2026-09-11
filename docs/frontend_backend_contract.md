@@ -127,6 +127,12 @@ This document describes the HTTP API surface and the frontend integration patter
 - Compatibility snapshots: `policy/catalog.json`, `policy/iso_rules.json`
 - Frontend schema: `PolicyCatalogResponseSchema`.
 
+### `GET /policy/export/sarif`
+- Router: `api/routers/policy.py`
+- Query params: `rule_ids?: string[]` (optional rule ID filter)
+- Response HTTP `200`: OASIS SARIF v2.1.0 compliant JSON report (`application/sarif+json`).
+- Maps policy rule violations into standard SARIF rules, results, physical locations, and exact code snippet regions.
+
 ### `POST /policy/explain_one`
 - Router: `api/routers/policy.py`
 - Request JSON: `{ "violation": Violation, "include_graph_context"?: boolean, "model"?: string|null }` (the full violation object is sent back as `violation.raw` from the frontend; the loose Zod schema guarantees no fields are stripped on the round-trip)
@@ -201,6 +207,7 @@ This document describes the HTTP API surface and the frontend integration patter
 | `evaluatePolicies` | `GET /policy/evaluate` | Supports repeated `rule_ids` query params for benchmark/demo-focused server-side filtering |
 | `evaluatePoliciesWithLLM` | `POST /policy/evaluate_with_llm` | JSON body accepts `limit`, `model`, and optional evaluate caps (`max_bundles`, `max_total_violations`, `max_per_violation_id`, `rule_ids`); returns full findings + metadata plus `enriched` |
 | `fetchPolicyCatalog` | `GET /policy/catalog` | Renders catalog entries |
+| `exportPolicySarif` | `GET /policy/export/sarif` | Exports findings in standard OASIS SARIF v2.1.0 JSON format |
 | `explainPolicyViolationOne` | `POST /policy/explain_one` | 5 min timeout; per-row AbortController in `useExplainMutation` |
 | `saveViolationReview` / `fetchViolationReviews` | `POST`/`GET /policy/reviews` | Triage review persistence |
 | `previewRemediation` | `POST /remediation/preview` | Virtual fix; no disk writes; 5 min timeout |
