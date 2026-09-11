@@ -1,0 +1,48 @@
+name: Feature request
+description: Propose a focused improvement to CodeGraph
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CodeGraph is a benchmark-backed research artifact. Proposals should preserve reproducibility, explicit trust boundaries, and bounded claims.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and did not find an equivalent proposal.
+          required: true
+        - label: This request does not require weakening benchmark provenance, source-range validation, or remediation verification.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What research, contributor, or operator problem should this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Describe the desired behavior without prescribing unnecessary implementation detail.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe existing workflows or smaller alternatives that do not meet the need.
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evaluation impact
+      description: Note any affected benchmark categories, policy mappings, API contracts, or evidence artifacts.

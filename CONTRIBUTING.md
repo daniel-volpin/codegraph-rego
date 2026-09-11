@@ -26,10 +26,10 @@ CodeGraph is a **benchmark-backed research artifact**. To preserve scientific re
 
 ### Prerequisites
 
-- Python 3.10+
-- Node.js 22+ and Yarn 1.22+
-- OPA `v1.15.1` (installed into `.venv/bin` by `make install`)
-- Java JDK (8+ or newer) and Maven for remediation build re-verification (release validation was performed with OpenJDK 26.0.1)
+- Python 3.14+ (the project pins 3.14.7)
+- Node.js 24 LTS and Yarn 1.22+
+- OPA `v1.20.2` (installed into `.venv/bin` by `make install`)
+- JDK 21+ and Maven for the Eclipse JDT adapter and remediation build re-verification
 - Neo4j 5.x through a Docker- or Podman-compatible Compose runtime
 
 ### Environment Preparation
