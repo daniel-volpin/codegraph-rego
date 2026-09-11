@@ -44,6 +44,7 @@ const IDLE_UPLOAD_STATUS = {
 };
 
 const MOCK_POLICY_VIOLATION = {
+  method_key: "workspace@rev1:app/src/main/java/com/acme/Demo.java#method:hashPassword/1",
   violation_id: "ISO-A.10-WEAK-HASH",
   target_method: "com.acme.Demo.hashPassword(String)",
   file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/Demo.java",
@@ -229,14 +230,14 @@ test("@thesis upload submits and renders detected Java roots", async ({ page }) 
   await expect(page.getByText("File selected")).toBeVisible();
   await page.getByRole("button", { name: "Upload & Ingest" }).click();
 
-  await expect(page.getByText("Codebase processed successfully.")).toBeVisible();
+  await expect(page.getByText(/Codebase (ingested and indexed|processed) successfully\./)).toBeVisible();
   await expect(page.getByText("Detected modules")).toBeVisible();
   await expect(page.getByText("app/src/main/java")).toBeVisible();
 });
 
 test("@thesis policy scan renders findings and remediation artifacts", async ({ page }) => {
   await page.goto("/policy");
-  await page.getByRole("button", { name: "Run Full Policy Scan" }).click();
+  await page.getByTestId("policy-eval-run").click();
 
   await expect(page.getByText("ISO-A.10-WEAK-HASH").first()).toBeVisible();
   await expect(page.getByTitle("com.acme.Demo.hashPassword(String)")).toBeVisible();

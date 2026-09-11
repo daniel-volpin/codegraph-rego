@@ -97,6 +97,7 @@ class BundleBuilder:
             "target_method": self.target_method,
             "file_path": self.file_path,
             "source_code": self.source_code,
+            "source_code_raw": self.source_code,
             "graph_context": self.graph_context,
             "vector_context": self.vector_context,
         }

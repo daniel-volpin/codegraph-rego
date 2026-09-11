@@ -12,7 +12,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: `PATH="$HOME/.volta/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" yarn dev --host 127.0.0.1 --port ${serverPort}`,
+    command: `yarn dev --host 127.0.0.1 --port ${serverPort}`,
     port: serverPort,
     reuseExistingServer: true,
   },

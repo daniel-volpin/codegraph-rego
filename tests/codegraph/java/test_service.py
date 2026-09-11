@@ -48,9 +48,14 @@ def make_settings(scratch: Path, **overrides: object) -> Settings:
 
 def install_fake_java(scratch: Path, body: str, monkeypatch: pytest.MonkeyPatch) -> Path:
     java_bin = scratch / "bin"
-    java_bin.mkdir()
+    java_bin.mkdir(parents=True, exist_ok=True)
+    py_script = java_bin / "fake_java.py"
+    py_script.write_text(textwrap.dedent(body), encoding="utf-8")
     java = java_bin / "java"
-    java.write_text(f"#!{sys.executable}\n" + textwrap.dedent(body), encoding="utf-8")
+    java.write_text(
+        f'#!/bin/sh\nexec "{sys.executable}" "{py_script.resolve().as_posix()}" "$@"\n',
+        encoding="utf-8",
+    )
     java.chmod(java.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", java_bin.as_posix())
     return java

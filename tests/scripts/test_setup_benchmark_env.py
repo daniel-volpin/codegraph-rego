@@ -19,7 +19,12 @@ def setup_workspace(tmp_path):
 
     def executable(name, body):
         path = commands / name
-        path.write_text(f"#!{sys.executable}\n{body}", encoding="utf-8")
+        py_script = commands / f"{name}.py"
+        py_script.write_text(body, encoding="utf-8")
+        path.write_text(
+            f'#!/bin/sh\nexec "{sys.executable}" "{py_script.resolve().as_posix()}" "$@"\n',
+            encoding="utf-8",
+        )
         path.chmod(0o755)
 
     for name in ("java", "javac", "mvn", "make"):

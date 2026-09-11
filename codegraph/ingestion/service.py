@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 from collections.abc import Callable, Iterable, Sequence
@@ -508,6 +509,15 @@ def create_workspace_revision(tx, structure: ExtractedCodeStructure) -> None:
 
 
 def create_source_file_batch(tx, source_files: tuple[dict[str, Any], ...]) -> None:
+    serialized = []
+    for sf in source_files:
+        item = dict(sf)
+        diagnostics = item.get("diagnostics") or []
+        item["diagnostics"] = [
+            json.dumps(d) if isinstance(d, dict) else str(d)
+            for d in diagnostics
+        ]
+        serialized.append(item)
     tx.run(
         """
         UNWIND $source_files AS item
@@ -523,7 +533,7 @@ def create_source_file_batch(tx, source_files: tuple[dict[str, Any], ...]) -> No
             sf.diagnostics = item.diagnostics
         MERGE (wr)-[:HAS_FILE]->(sf)
         """,
-        source_files=list(source_files),
+        source_files=serialized,
     )
 
 
