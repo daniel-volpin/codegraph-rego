@@ -55,17 +55,38 @@ def _resolve_path(file_path: str | None) -> Path | None:
     return None
 
 
+def _ast_sinks_from_evidence(call_evidence: list[dict[str, Any]]) -> set[str]:
+    """Extract sink categories directly from AST-resolved invocation evidence."""
+    sinks: set[str] = set()
+    for call in call_evidence:
+        if not isinstance(call, dict):
+            continue
+        name = str(call.get("name") or "").lower()
+        qual = str(call.get("qualifier") or "").lower()
+        if name in {"executequery", "executeupdate", "execute", "executebatch"} or "java.sql" in qual or "statement" in qual:
+            sinks.add("sql")
+        if name in {"exec", "command", "start"} and ("runtime" in qual or "processbuilder" in qual or "process" in qual):
+            sinks.add("command")
+        if "file" in qual or "paths" in qual or "fileinputstream" in qual or "filereader" in qual:
+            sinks.add("path")
+        if "search" in name and ("dircontext" in qual or "ldap" in qual):
+            sinks.add("ldap")
+        if name in {"evaluate", "compile"} and "xpath" in qual:
+            sinks.add("xpath")
+    return sinks
+
+
 class TaintPathFinder:
     """Pre-computes which sink types are reachable from any method via BFS.
 
     The finder operates entirely in Python using the in-memory ``method_index``
-    built from Neo4j snapshots.  Source code for callees is loaded lazily from
+    built from Neo4j snapshots. Source code for callees is loaded lazily from
     disk and cached so each file is read at most once per evaluation run.
 
-    Only user-code methods (present in ``method_index``) are traversed.  The
+    Only user-code methods (present in ``method_index``) are traversed. The
     presence of an external sink API (e.g. ``java.sql.Statement.executeQuery``)
-    is inferred by checking callee source code for known sink patterns, since
-    external library methods do not have Method nodes in the graph.
+    is inferred by checking callee AST invocation evidence first, and falling back
+    to source code patterns when AST evidence is incomplete.
     """
 
     def __init__(self, method_index: dict[str, dict[str, Any]]) -> None:
@@ -100,14 +121,20 @@ class TaintPathFinder:
 
             # Detect sinks starting at depth 1 (callees, not the root method).
             if depth >= 1:
+                snapshot = self._index.get(current)
+                if snapshot:
+                    ast_sinks = _ast_sinks_from_evidence(snapshot.get("call_evidence") or [])
+                    for st in ast_sinks:
+                        if st not in found:
+                            found[st] = depth
                 source = self._load_source(current)
                 if source:
                     for sink_type, patterns in _SINK_SOURCE_PATTERNS.items():
                         if sink_type not in found and any(p.search(source) for p in patterns):
                             found[sink_type] = depth
-                    if len(found) == len(_SINK_SOURCE_PATTERNS):
-                        # All sink types found – no need to go deeper.
-                        break
+                if len(found) == len(_SINK_SOURCE_PATTERNS):
+                    # All sink types found – no need to go deeper.
+                    break
 
             if depth >= max_depth:
                 continue
