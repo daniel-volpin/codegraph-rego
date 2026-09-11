@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from codegraph.remediation.attempts import (
-    ReplacementAttemptOutcome,
-    run_replacement_attempts,
-)
 from codegraph.remediation.capabilities import (
     RemediationCapability,
     default_supported_remediation_rule_ids,
@@ -18,6 +14,10 @@ from codegraph.remediation.editing import unified_diff
 
 if TYPE_CHECKING:
     from codegraph.remediation.agentic import AgenticRemediationService
+    from codegraph.remediation.attempts import (
+        ReplacementAttemptOutcome,
+        run_replacement_attempts,
+    )
     from codegraph.remediation.orchestration import (
         apply_remediation,
         preview_virtual_remediation,
@@ -54,4 +54,8 @@ def __getattr__(name: str):
         from codegraph.remediation.agentic import AgenticRemediationService
 
         return AgenticRemediationService
+    if name in {"ReplacementAttemptOutcome", "run_replacement_attempts"}:
+        from codegraph.remediation import attempts
+
+        return getattr(attempts, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
