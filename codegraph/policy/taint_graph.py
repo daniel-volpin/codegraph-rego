@@ -127,11 +127,12 @@ class TaintPathFinder:
                     for st in ast_sinks:
                         if st not in found:
                             found[st] = depth
-                source = self._load_source(current)
-                if source:
-                    for sink_type, patterns in _SINK_SOURCE_PATTERNS.items():
-                        if sink_type not in found and any(p.search(source) for p in patterns):
-                            found[sink_type] = depth
+                if len(found) < len(_SINK_SOURCE_PATTERNS):
+                    source = self._load_source(current)
+                    if source:
+                        for sink_type, patterns in _SINK_SOURCE_PATTERNS.items():
+                            if sink_type not in found and any(p.search(source) for p in patterns):
+                                found[sink_type] = depth
                 if len(found) == len(_SINK_SOURCE_PATTERNS):
                     # All sink types found – no need to go deeper.
                     break

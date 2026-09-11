@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import difflib
 import logging
 import tempfile
 from dataclasses import dataclass, field
@@ -17,6 +16,7 @@ from codegraph.ingestion.snapshots import (
 from codegraph.policy.trace import PolicyStateTrace, filter_predicate_trace, project_trace_profile
 from codegraph.remediation.candidate import InvalidCandidateError, build_candidate_overlay
 from codegraph.remediation.capabilities import get_remediation_capability
+from codegraph.remediation.editing import unified_diff
 from codegraph.remediation.metrics import (
     capture_raw_llm_output,
     extract_testcase_id,
@@ -54,14 +54,7 @@ class _ReplacementAttemptOutcome:
 
 
 def _unified_diff(before: str, after: str, *, label: str = "method") -> str:
-    diff = difflib.unified_diff(
-        before.splitlines(),
-        after.splitlines(),
-        fromfile=f"{label} (before)",
-        tofile=f"{label} (after)",
-        lineterm="",
-    )
-    return "\n".join(diff)
+    return unified_diff(before, after, label=label)
 
 
 def _build_passed(compilation: CompilationResult) -> bool:

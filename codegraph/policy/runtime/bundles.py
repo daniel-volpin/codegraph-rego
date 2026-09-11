@@ -106,7 +106,7 @@ def _assert_jdt_graph_schema(session) -> None:
 
     record = session.run(
         """
-        CALL {
+        CALL () {
             MATCH (m:Method) WHERE m.method_key IS NULL
             RETURN count(m) AS incompatible_methods
         }
