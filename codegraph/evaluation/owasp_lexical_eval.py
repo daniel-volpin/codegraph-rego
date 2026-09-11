@@ -22,6 +22,7 @@ import csv
 import multiprocessing as mp
 import os
 import random
+import subprocess
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -104,9 +105,6 @@ def owasp_corpus_sha(owasp_root: Path) -> str | None:
     because BenchmarkJava's `master` branch is updated over time and the
     "v1.2" tag is not always what users have on disk.
     """
-
-    import subprocess
-
     git_dir = owasp_root / ".git"
     if not git_dir.exists():
         return None

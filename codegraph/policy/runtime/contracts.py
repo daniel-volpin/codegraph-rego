@@ -104,9 +104,7 @@ def _normalize_optional_int(value: Any) -> int | None:
 
 
 def _empty_analysis_flags_dict() -> dict[str, bool]:
-    from codegraph.policy.source_analysis_core import PolicyIndicatorAnalyzer
-
-    return PolicyIndicatorAnalyzer.empty_flags()
+    return {name: False for name in ANALYSIS_FLAG_NAMES}
 
 
 @dataclass(frozen=True)

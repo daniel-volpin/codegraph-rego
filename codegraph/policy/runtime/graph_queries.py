@@ -15,7 +15,7 @@ def is_test_source_path(file_path: Any) -> bool:
     if not isinstance(file_path, str):
         return False
     normalized = file_path.replace("\\", "/")
-    return "/src/test/" in normalized
+    return "/src/test/" in normalized or normalized.startswith("src/test/")
 
 
 def _sorted_non_empty_strings(values: Any) -> list[str]:

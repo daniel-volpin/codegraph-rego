@@ -82,7 +82,7 @@ class TestSarifExport(unittest.TestCase):
 
 
 class TestSarifExportApiEndpoint(unittest.TestCase):
-    @patch("codegraph.policy.service.export_sarif")
+    @patch("api.routers.policy.export_sarif")
     def test_sarif_export_endpoint_returns_json_response(self, mock_export):
         from api.routers.policy import router as policy_router
 

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from neo4j import Driver
 
 from codegraph.config import settings
+from codegraph.policy.runtime.graph_queries import validate_graph_generation
 from codegraph.search.artifacts import ActiveEmbeddingGeneration, ArtifactConsistencyError, load_active_generation
 
 if TYPE_CHECKING:
@@ -220,8 +221,6 @@ def _canonical_generation(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _validate_graph_generation(driver: Driver, *, workspace_root: str | None = None) -> dict[str, Any]:
-    from codegraph.policy.runtime.bundles import validate_graph_generation
-
     return validate_graph_generation(driver, workspace_root=workspace_root)
 
 

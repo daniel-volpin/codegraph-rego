@@ -13,7 +13,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from api.models.validation import HealthCheckResponse, LivenessResponse
+from codegraph.config import settings
 from codegraph.db import shared_neo4j_driver
+from codegraph.search.hybrid import load_embedding_model, validate_retrieval_generation
 
 router = APIRouter()
 
@@ -27,9 +29,6 @@ _OPA_VERSION_PATTERN = re.compile(r"^Version:\s*(?P<version>\S+)\s*$", re.MULTIL
 
 
 def _load_search_health_dependencies() -> dict[str, Any]:
-    from codegraph.config import settings
-    from codegraph.search.hybrid import load_embedding_model, validate_retrieval_generation
-
     return {
         "embedding_model_name": settings.embedding_model_name,
         "validate_generation": lambda: validate_retrieval_generation(shared_neo4j_driver()),
