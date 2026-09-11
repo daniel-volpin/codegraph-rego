@@ -4,28 +4,64 @@ Date: 2026-09-11
 
 Reviewed baseline: `15d4366` (main after frontend PR #242)
 
-Status: proposed roadmap; backend implementation and deployment are not approved by this document.
+Status: first modernization baseline implemented and validated locally.
+The wider roadmap remains staged follow-up work. This document grants no deployment approval.
 
 ## Execution progress (2026-09-11)
 
-First-batch groundwork is complete, but roadmap gates are not:
+The focused environment uses Python 3.11.15 and OPA 1.15.1 without embedding
+packages, model downloads, or a persistent OPA service. The integrated offline
+backend run passed 822 tests and 78 subtests, with 27 explicit skips: 26 need
+Semgrep and one needs the missing `/tmp/owasp-benchmark` checkout. Ruff and strict
+policy checks and the offline lockfile consistency check passed. One existing
+Starlette/HTTPX deprecation warning remains. The unchanged frontend passed 52 tests
+across 15 files, lint, and its production build.
 
-- Completed groundwork:
-  - focused baseline environment at `build/backend-review-venv` (Python 3.11.15),
-    OPA 1.15.1 installation/verification, targeted policy-contract checks.
-  - backend validation snapshot reported by the implementation stream:
-    `758` passed, `27` skipped (`26` Semgrep unavailable, `1` missing
-    `/tmp/owasp-benchmark` checkout), `50` subtests; Ruff passing.
-  - frontend snapshot reported by the implementation stream: `52` tests across
-    `15` files plus lint/build passing.
-  - independent non-Astra reviewer reported no significant findings in the
-    current uncommitted implementation batch.
-- Still pending: formal completion of W0-W9 acceptance gates, including parser
-  identity migration, isolated candidate verification, atomic retrieval
-  publication, durable run controller, total model-budget controls, and new
-  deterministic-promotion evidence.
+| Packet | Commit | Scope and promotion boundary |
+| --- | --- | --- |
+| W0/W1 foundation | `05fe32a` | Python/package alignment, honest scan/cleanup results, bounded policy workers, lazy ML imports, provider settings. |
+| W5 response handling | `b919ca2` | Reject truncated/refused outputs, preserve cleanup and cancellation semantics, prevent duplicate generation on internal errors. |
+| W7 shadow safeguards | `715f2e8` | Reject unsupported, ambiguous, conflicting, or non-operative plans; no recipe promotion. |
+| W4 contract coverage | `d245573` | Real-OPA positive/negative input contracts for all eight benchmark categories; not new corpus metrics. |
+| W2 source-span prerequisite | `eef455e` | Lexical-noise-aware source ranges, parser-column anchoring and explicit ambiguity refusal; graph identities unchanged. |
+| W6 artifact generations | `ecb5d96` | Atomic manifest publication and per-search pinned artifacts with validation; see [migration notes](2026-09-11-retrieval-generations.md). |
+| Migration CLI | `f4540bb` | Rebuild command uses canonical configuration and honors its overrides; help works without ML or graph access. |
+| Cross-packet integration | `51dc84f` | Embeddings use strict stored source ranges; invalid/ambiguous targets are rejected, and CLI tests remain isolated across imports. |
 
-No live graph/corpus reruns or paid-model evaluation are claimed in this progress note.
+The initial foundation received an independent non-Astra review. Subsequent
+workers implemented and tested separate owned packets; the lead reviewed their
+integration and only concrete correction diffs, without additional reviewers.
+No live graph/corpus rerun, packaged-container execution, real embedding inference,
+or paid-model evaluation is claimed. Original thesis artifacts remain unchanged.
+Root `trace_id` is unavailable; no comparative cost or latency improvement is claimed.
+
+### Current milestone: clean baseline before integration
+
+The owner has clarified that the completed thesis is a historical baseline, not
+a requirement to freeze the application. Post-thesis changes may improve
+architecture, tooling, policies, and behavior when justified and validated.
+Preserve the recorded thesis artifacts and label new measurements separately;
+do not attribute later behavior or results to the original thesis implementation.
+
+The active retrieval-generation and Java source-span corrections are complete.
+The integrated offline backend, canonical-artifact, policy, and lint gates passed.
+The baseline and migration requirements are committed before considering a
+governed merge; nothing has been pushed, deployed, or rebuilt against the live graph.
+
+This milestone does not complete the whole roadmap: modern parser and graph
+identity migration, isolated candidate workers, durable run budgets/orchestration,
+deterministic recipe promotion, and comparative corpus/resource evidence remain
+separate follow-up work. No pending packet is implicitly approved for deployment.
+The legacy standalone search CLI also still uses obsolete configuration constants;
+the managed application search path and required embedding-rebuild CLI are the
+surfaces modernized in this milestone.
+
+The first worker wave exposed gaps in failure-boundary tests: mocked coordinators
+did not prove atomic publication, and happy-path cleanup did not cover
+cancellation. Future dispatches name these invariants up front and require
+public-path regressions with only external dependencies mocked. Review corrections
+stay scoped to concrete findings; no additional reviewer is added by default.
+These are process adjustments, not measured efficiency claims.
 
 ## Recommendation
 

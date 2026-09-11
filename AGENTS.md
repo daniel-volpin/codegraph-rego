@@ -37,6 +37,7 @@ Keep this file short. Detailed project context lives in `CLAUDE.md` and `copilot
 - Follow the shared lean delegation policy in `../home-server-docs/generated/AGENT_PLATFORM_CONTEXT.md` when working on the home server. Repo guidance never overrides active higher-priority restrictions.
 - Use bounded roadmap packets with explicit file ownership and frozen interfaces; serialize shared ingestion, policy, and remediation contracts. Keep tiny changes inline.
 - Workers implement and run targeted tests, fixing failures before handing off the diff, results, and blockers. The lead performs one integration review, not a repeat investigation; further review targets concrete findings or high-risk changes.
+- Put failure boundaries in the dispatch: stale inputs, repeated calls after failure, cancellation, and concurrent publication where relevant. Exercise the real public path; mock external dependencies, not both the coordinator and the behavior under test. Include affected callers in the same targeted run to expose import/cache interactions. Handoffs distinguish demonstrated behavior from untested assumptions.
 - Preserve canonical thesis artifacts and approval gates. Development-agent delegation does not authorize paid CodeGraph model calls, live graph changes, push, merge, or deployment.
 
 ## Benchmark Rules

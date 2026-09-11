@@ -212,6 +212,21 @@ Important environment variables:
 
 Use [`.env.example`](./.env.example) as the local template.
 
+### Post-thesis modernization baseline
+
+Policy scans expose completeness and omitted findings instead of treating failed
+evaluation as a clean result. Policy workers and provider requests have explicit
+resource controls; remediation reports restoration outcomes independently.
+Source-span extraction handles quoted/comment delimiters, and shadow repairs
+refuse ambiguous or unsupported edits.
+
+Managed embeddings now use atomically published, validated generations. Existing
+legacy indexes require a rebuild before managed search; see the
+[retrieval migration notes](docs/architecture/2026-09-11-retrieval-generations.md).
+This is not isolated candidate verification or a durable autonomous repair
+pipeline. The [modernization roadmap](docs/architecture/2026-09-11-backend-modernization-roadmap.md)
+separates completed groundwork from the next stages.
+
 ## Repository Guide
 
 - [`app.py`](./app.py): FastAPI entrypoint for `uvicorn app:app`
