@@ -15,17 +15,20 @@ def build_zip(entries: list[tuple[str, bytes]], compression: int = zipfile.ZIP_S
     payload = io.BytesIO()
     with zipfile.ZipFile(payload, "w", compression=compression) as archive:
         for path, content in entries:
-            archive.writestr(path, content)
+            info = zipfile.ZipInfo(path, date_time=(2026, 1, 1, 0, 0, 0))
+            info.compress_type = compression
+            archive.writestr(info, content)
     return payload.getvalue()
 
 
 def build_symlink_zip() -> bytes:
     payload = io.BytesIO()
     with zipfile.ZipFile(payload, "w") as archive:
-        link_info = zipfile.ZipInfo("escape")
+        link_info = zipfile.ZipInfo("escape", date_time=(2026, 1, 1, 0, 0, 0))
         link_info.external_attr = (0o120777 << 16) | 0xA000
         archive.writestr(link_info, "/etc/passwd")
-        archive.writestr("src/main/java/A.java", b"class A {}")
+        file_info = zipfile.ZipInfo("src/main/java/A.java", date_time=(2026, 1, 1, 0, 0, 0))
+        archive.writestr(file_info, b"class A {}")
     return payload.getvalue()
 
 
@@ -67,6 +70,7 @@ def test_find_java_roots_returns_sorted_roots(tmp_path: Path) -> None:
             {"max_compression_ratio": 2.0},
         ),
     ],
+    ids=["max_total_size", "max_entries", "max_compression_ratio"],
 )
 def test_safe_extract_zip_rejects_invalid_archives(
     tmp_path: Path,
