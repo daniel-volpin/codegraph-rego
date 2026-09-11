@@ -49,6 +49,9 @@ select = ["E4", "E7", "E9", "F", "I", "UP"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+    "e2e: End-to-end integration tests requiring live external services (e.g. Neo4j).",
+]
 filterwarnings = [
     "ignore:.*SwigPyPacked has no __module__ attribute.*:DeprecationWarning",
     "ignore:.*SwigPyObject has no __module__ attribute.*:DeprecationWarning",
