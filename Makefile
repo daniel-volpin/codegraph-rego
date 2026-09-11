@@ -49,6 +49,9 @@ test: ## Run backend unit & integration tests
 test-e2e: ## Run live end-to-end acceptance tests (requires running Neo4j)
 	@OTEL_SDK_DISABLED=true uv run python -m pytest tests/e2e -v
 
+benchmark-guard: ## Verify canonical benchmark artifacts and policy contract golden fixtures
+	@OTEL_SDK_DISABLED=true uv run python -m pytest tests/test_canonical_artifacts.py tests/codegraph/policy/test_policy_contract_golden.py -v
+
 policy-check: ## Validate OPA/Rego policies (check-only; fails on format drift)
 	@opa check --strict policy/
 	@opa fmt --list --fail policy/

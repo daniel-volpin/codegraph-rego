@@ -51,6 +51,18 @@ async def policy_evaluate(
     return JSONResponse(result, status_code=status)
 
 
+@router.get("/policy/export/sarif")
+async def policy_export_sarif(rule_ids: list[str] | None = Query(default=None)):
+    """Export security policy findings in standard OASIS SARIF v2.1.0 JSON format."""
+    from codegraph.policy.service import export_sarif
+
+    sarif_doc = await asyncio.to_thread(export_sarif, rule_ids=rule_ids)
+    return JSONResponse(
+        sarif_doc,
+        headers={"Content-Type": "application/sarif+json; charset=utf-8"},
+    )
+
+
 @router.post("/policy/evaluate_with_llm", response_model=PolicyEvaluateResponse)
 async def policy_evaluate_with_llm(payload: PolicyEvaluateWithLLMRequest):
     res = await asyncio.to_thread(

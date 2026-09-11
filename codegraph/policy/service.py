@@ -5,6 +5,7 @@ from typing import Any
 
 from codegraph.config import settings
 from codegraph.policy.integration import evaluate_policies, get_policy_catalog_payload
+from codegraph.policy.sarif import export_findings_to_sarif
 
 
 def evaluate(
@@ -26,6 +27,13 @@ def evaluate(
         rule_ids=rule_ids,
         workspace_root=resolved_workspace_root,
     )
+
+
+def export_sarif(*, workspace_root: str | None = None, rule_ids: list[str] | None = None) -> dict[str, Any]:
+    """Run policy evaluation and export findings as a standard SARIF v2.1.0 document."""
+    res = evaluate(workspace_root=workspace_root, rule_ids=rule_ids)
+    violations = res.get("violations") or []
+    return export_findings_to_sarif(violations, workspace_root=workspace_root)
 
 
 def catalog() -> dict[str, Any]:
