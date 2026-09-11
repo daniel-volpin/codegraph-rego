@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from codegraph.config import settings
@@ -39,7 +40,7 @@ class RemediationGenerationService:
         )
 
         retry_index = len(previous_errors or [])
-        try:
+        if _supports_structured_generation_kwargs(self._llm_client):
             response = self._llm_client(
                 messages,
                 model=model,
@@ -52,7 +53,7 @@ class RemediationGenerationService:
                 task_type="remediation",
                 retry_index=retry_index,
             )
-        except TypeError:
+        else:
             response = self._llm_client(messages, task_type="remediation", retry_index=retry_index)
 
         parsed = parse_structured_generation_response(
@@ -72,3 +73,28 @@ class RemediationGenerationService:
             schema_error=parsed.get("schema_error"),
         )
         return parsed
+
+
+def _supports_structured_generation_kwargs(llm_client: Any) -> bool:
+    try:
+        signature = inspect.signature(llm_client)
+    except (TypeError, ValueError):
+        return True
+
+    parameters = signature.parameters.values()
+    if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in parameters):
+        return True
+
+    names = set(signature.parameters)
+    required_structured_kwargs = {
+        "model",
+        "temperature",
+        "max_tokens",
+        "ttl_seconds",
+        "stop",
+        "response_format",
+        "raise_on_error",
+        "task_type",
+        "retry_index",
+    }
+    return required_structured_kwargs.issubset(names)

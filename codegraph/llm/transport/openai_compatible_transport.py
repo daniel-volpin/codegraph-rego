@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
 from openai import OpenAI
 
 from codegraph.config import settings
@@ -15,6 +16,7 @@ from codegraph.telemetry import get_tracer
 
 logger = logging.getLogger("codegraph.llm.transport.openai_compatible")
 _tracer = get_tracer("codegraph.llm.transport")
+_CLIENT_CLOSE_EXCEPTIONS = (RuntimeError, OSError, httpx.HTTPError)
 
 
 def _summarize_exception(exc: Exception) -> str:
@@ -83,6 +85,13 @@ def _extract_message_content(response: Any, *, allow_reasoning_content: bool = F
     choices = getattr(response, "choices", None)
     if not choices:
         raise LLMUnavailableError("LLM returned an empty response.")
+    finish_reason = getattr(choices[0], "finish_reason", None)
+    if isinstance(finish_reason, str):
+        normalized_finish_reason = finish_reason.strip().lower()
+        if normalized_finish_reason == "length":
+            raise LLMUnavailableError("LLM response is incomplete (finish_reason=length).")
+        if normalized_finish_reason == "content_filter":
+            raise LLMUnavailableError("LLM response was blocked by content filtering.")
     message = getattr(choices[0], "message", None)
     refusal = getattr(message, "refusal", None)
     if isinstance(refusal, str) and refusal:
@@ -111,17 +120,22 @@ def _extract_responses_output_text(response: Any) -> str:
     status = getattr(response, "status", None)
     if isinstance(status, str) and status != "completed":
         raise LLMUnavailableError(f"LLM response is {status}.")
-    output_text = getattr(response, "output_text", None)
-    if isinstance(output_text, str) and output_text.strip():
-        return output_text.strip()
 
     output_items = getattr(response, "output", None) or []
-    text_parts: list[str] = []
     for item in output_items:
         content = getattr(item, "content", None) or []
         for part in content:
             if getattr(part, "type", None) == "refusal":
                 raise LLMUnavailableError("LLM refused the request.")
+
+    output_text = getattr(response, "output_text", None)
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text.strip()
+
+    text_parts: list[str] = []
+    for item in output_items:
+        content = getattr(item, "content", None) or []
+        for part in content:
             if getattr(part, "type", None) == "output_text":
                 text = getattr(part, "text", None)
                 if isinstance(text, str):
@@ -305,18 +319,21 @@ class OpenAICompatibleTransport(LLMTransport):
 
             t0 = time.monotonic()
             client = None
+            output_text: str | None = None
+            generation_error_message: str | None = None
+            generation_exception: LLMUnavailableError | None = None
+            generation_cause: Exception | None = None
             try:
                 client = _build_client(api_base=config.api_base, api_key=settings.llm_api_key)
                 if config.use_chat_completions:
-                    return _generate_with_chat_completions(client, request, config, span)
-                return _generate_with_responses(client, request, config, span)
+                    output_text = _generate_with_chat_completions(client, request, config, span)
+                else:
+                    output_text = _generate_with_responses(client, request, config, span)
             except LLMUnavailableError as exc:
                 error_msg = str(exc) or "LLM returned an empty response."
+                generation_exception = exc
+                generation_error_message = error_msg
                 span.set_attribute("llm.error", error_msg)
-                span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
-                if request.raise_on_error:
-                    raise
-                return f"[LLM unavailable: {error_msg}]"
             except Exception as exc:  # pragma: no cover - runtime guard
                 logger.exception(
                     "LLM completion failed (model=%s api_base=%s endpoint=%s)",
@@ -325,12 +342,35 @@ class OpenAICompatibleTransport(LLMTransport):
                     "chat.completions" if config.use_chat_completions else "responses",
                 )
                 error_msg = _humanize_llm_failure(exc, api_base=config.api_base)
+                generation_exception = LLMUnavailableError(error_msg)
+                generation_error_message = error_msg
+                generation_cause = exc
                 span.set_attribute("llm.error", error_msg)
-                span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
-                if request.raise_on_error:
-                    raise LLMUnavailableError(error_msg) from exc
-                return f"[LLM unavailable: {error_msg}]"
             finally:
                 span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
+                close_error: RuntimeError | OSError | httpx.HTTPError | None = None
                 if client is not None:
-                    client.close()
+                    try:
+                        client.close()
+                    except _CLIENT_CLOSE_EXCEPTIONS as exc:
+                        close_error = exc
+                        span.set_attribute("llm.close_error", _summarize_exception(exc))
+                        logger.warning("Failed to close LLM client cleanly: %s", _summarize_exception(exc))
+
+            if generation_error_message is not None:
+                if request.raise_on_error and generation_exception is not None:
+                    if generation_cause is not None:
+                        raise generation_exception from generation_cause
+                    raise generation_exception
+                return f"[LLM unavailable: {generation_error_message}]"
+
+            if close_error is not None:
+                close_error_message = f"LLM client cleanup failed: {_summarize_exception(close_error)}"
+                span.set_attribute("llm.error", close_error_message)
+                if request.raise_on_error:
+                    raise LLMUnavailableError(close_error_message) from close_error
+                return f"[LLM unavailable: {close_error_message}]"
+
+            if output_text is not None:
+                return output_text
+            raise LLMUnavailableError("LLM returned an empty response.")
