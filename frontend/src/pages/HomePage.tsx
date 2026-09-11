@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Check, Scale, Search, ShieldCheck, Sparkles, UploadCloud, X, GitGraph, FileCode2 } from "lucide-react";
+import { ArrowRight, Check, Scale, ShieldCheck, Sparkles, UploadCloud, X, GitGraph, FileCode2 } from "lucide-react";
 import { fetchHealth } from "../lib/api";
 import type { HealthCheckResponse, UploadResponse } from "../lib/types";
 import { readPersistedLastUpload } from "../lib/persistence";
@@ -216,7 +216,7 @@ const HomePage = () => {
           </p>
         </div>
 
-        <ol className="mt-4 grid gap-4 lg:grid-cols-3">
+        <ol className="mt-4 grid gap-4 lg:grid-cols-2">
           <li>
             <Link
               to="/upload"
@@ -234,7 +234,7 @@ const HomePage = () => {
                     <ArrowRight aria-hidden="true" className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-1 group-hover:text-indigo-600" />
                   </div>
                   <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                    ZIP with Java sources under src/main/java. Replaces the active workspace.
+                    ZIP with Java sources under src/main/java. Replaces the active workspace and builds graph index.
                   </p>
                 </div>
               </div>
@@ -256,44 +256,17 @@ const HomePage = () => {
                 <div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-slate-900">
-                      2. Evaluate policies
+                      2. Evaluate policies & Remediate
                     </span>
                     <ArrowRight aria-hidden="true" className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-1 group-hover:text-indigo-600" />
                   </div>
                   <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                    Run the OPA rule surface, inspect findings with evidence, and preview bounded remediation.
+                    Run the OPA rule surface, inspect findings with evidence, preview diffs, and verify dry-run fixes.
                   </p>
                 </div>
               </div>
               <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-[11px] font-medium text-indigo-600">
                 <span>Evaluate & Remediate</span>
-              </div>
-            </Link>
-          </li>
-
-          <li>
-            <Link
-              to="/search"
-              className="group flex h-full flex-col justify-between rounded-xl border border-slate-200/80 p-5 transition-all hover:border-indigo-300 hover:bg-indigo-50/30 hover:shadow-subtle"
-            >
-              <div className="space-y-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 transition-colors group-hover:bg-indigo-600 group-hover:text-white">
-                  <Search aria-hidden="true" className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-900">
-                      3. Search the graph
-                    </span>
-                    <ArrowRight aria-hidden="true" className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-1 group-hover:text-indigo-600" />
-                  </div>
-                  <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                    Natural-language method search with structural neighbors from the code graph.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center text-[11px] font-medium text-indigo-600">
-                <span>Search Graph</span>
               </div>
             </Link>
           </li>

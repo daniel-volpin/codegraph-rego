@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { ShieldCheck, Upload, Search, Settings, Scale, X, LayoutDashboard, Sparkles } from "lucide-react";
+import { ShieldCheck, Upload, Settings, Scale, X, LayoutDashboard, Sparkles } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { isDemoMode } from "../../lib/api";
 
@@ -8,7 +8,6 @@ const routes = [
   { to: "/", label: "Overview", icon: LayoutDashboard },
   { to: "/upload", label: "Upload & Ingest", icon: Upload },
   { to: "/policy", label: "Policy Workbench", icon: Scale },
-  { to: "/search", label: "Semantic Search", icon: Search },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
