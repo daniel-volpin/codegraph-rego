@@ -31,6 +31,14 @@ Keep this file short. Detailed project context lives in `CLAUDE.md` and `copilot
 - Use `logging`, not `print`.
 - Avoid frontend/backend contract drift; update `frontend/src/lib/schemas.ts` (Zod schemas) when API payloads change. Types in `frontend/src/lib/types.ts` are auto-derived re-exports — no hand-maintained type definitions live there.
 
+## Development Model Budget
+
+- Reserve Astra for planning, coordination, and concise integration reviews; prefer a non-Astra model for implementation.
+- Follow the shared lean delegation policy in `../home-server-docs/generated/AGENT_PLATFORM_CONTEXT.md` when working on the home server. Repo guidance never overrides active higher-priority restrictions.
+- Use bounded roadmap packets with explicit file ownership and frozen interfaces; serialize shared ingestion, policy, and remediation contracts. Keep tiny changes inline.
+- Workers implement and run targeted tests, fixing failures before handing off the diff, results, and blockers. The lead performs one integration review, not a repeat investigation; further review targets concrete findings or high-risk changes.
+- Preserve canonical thesis artifacts and approval gates. Development-agent delegation does not authorize paid CodeGraph model calls, live graph changes, push, merge, or deployment.
+
 ## Benchmark Rules
 
 - Benchmark evidence matters more than intuition.
