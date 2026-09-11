@@ -29,10 +29,11 @@ This file is the canonical, cross-agent operating guide.
 - Graph revisions are immutable. Read the active revision; publish whole
   workspaces and use predecessor receipts for conditional rollback. Incompatible
   graph/index generations require an explicit rebuild, not compatibility reads.
-- Remediation must compile, verify, and write the same candidate bytes. Dry runs
-  must not mutate original source or the shared graph. Finish temporary cleanup
-  and recheck source freshness before apply/publication; skipped builds or
-  non-passing verification cannot become success.
+- Remediation supports both bounded single-method replacement and autonomous
+  multi-turn agentic refactoring (`codegraph.remediation.agentic`). Every remediation
+  candidate must satisfy the 3 invariant gates (JDT compilation, project test regression,
+  and OPA policy clearance) in an isolated scratch worktree before any live apply.
+  Dry runs must never mutate original source or the shared graph.
 - Keep backend DTOs and `frontend/src/lib/schemas.ts` aligned.
   `frontend/src/lib/types.ts` re-exports derived types; do not duplicate them.
 - Keep `policy/catalog.json`, Rego rules, and `configs/benchmark/` aligned.

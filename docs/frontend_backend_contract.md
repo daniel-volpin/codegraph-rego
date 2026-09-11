@@ -175,6 +175,13 @@ This document describes the HTTP API surface and the frontend integration patter
 - Cleanup metadata: `verification.cleanup.file_restored` reports source restoration after a failed apply, and `verification.cleanup.revision_published` records successful apply publication. Values are `true`/`false`, or `null` when no restoration or publication was required.
 - Apply requires passing policy verification and an attempted, successful compilation. Temporary workspace cleanup and a final source-freshness check precede source writes and whole-workspace revision publication.
 
+### `POST /remediation/agentic`
+- Router: `api/routers/remediation.py`
+- Request JSON: `{ "finding": object, "workspace_root"?: string|null, "max_turns"?: number, "model"?: string|null }`
+- Response HTTP `200`: `AgenticRemediationResponseSchema` (`{ status, rule_id, method_key, target_method, workspace_root, modified_files, diff, verification, reason, iterations, turns_count, error? }`).
+- Implementation: `codegraph/remediation/agentic/` → `AgenticRemediationService.remediate_finding()`.
+- Executes an autonomous multi-turn agent in an `IsolatedWorktreeEnvironment` with multi-file refactoring, automatic import additions, and 3-gate invariant verification (Compilation + Test Suite Regression + OPA Policy Clearance).
+
 ---
 
 ## Frontend API Usage
@@ -198,6 +205,7 @@ This document describes the HTTP API surface and the frontend integration patter
 | `saveViolationReview` / `fetchViolationReviews` | `POST`/`GET /policy/reviews` | Triage review persistence |
 | `previewRemediation` | `POST /remediation/preview` | Virtual fix; no disk writes; 5 min timeout |
 | `applyRemediation` | `POST /remediation/apply` | Frontend hardcodes `mode="dry_run"`; 5 min timeout |
+| `runAgenticRemediation` | `POST /remediation/agentic` | Autonomous multi-turn agent with 3-gate verification; 5 min timeout |
 
 ### Cache topology
 

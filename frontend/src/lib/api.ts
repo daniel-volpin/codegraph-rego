@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  AgenticRemediationResponseSchema,
   HealthCheckResponseSchema,
   PolicyCatalogResponseSchema,
   PolicyEvaluateResponseSchema,
@@ -11,6 +12,7 @@ import {
   SearchResponseSchema,
   UploadResponseSchema,
   UploadStatusSchema,
+  type AgenticRemediationResponse,
   type HealthCheckResponse,
   type PolicyCatalogResponse,
   type PolicyEvaluateResponse,
@@ -510,3 +512,49 @@ export async function applyRemediation(
 
   return parseApiResponse(response, RemediationApplyResponseSchema);
 }
+
+export interface AgenticRemediationPayload {
+  finding: Violation | Record<string, unknown>;
+  workspace_root?: string;
+  max_turns?: number;
+  model?: string;
+}
+
+export async function runAgenticRemediation(
+  payload: AgenticRemediationPayload,
+  signal?: AbortSignal,
+): Promise<AgenticRemediationResponse> {
+  if (isDemoMode()) {
+    return {
+      status: "SUCCESS",
+      rule_id: (payload.finding as Record<string, unknown>).violation_id as string ?? "ISO-A.8-SQL-INJECTION",
+      method_key: (payload.finding as Record<string, unknown>).method_key as string ?? "",
+      target_method: (payload.finding as Record<string, unknown>).target_method as string ?? "",
+      workspace_root: payload.workspace_root ?? "/app",
+      modified_files: ["src/main/java/com/acme/Demo.java"],
+      diff: "@@ -1,3 +1,3 @@\n-stmt.executeQuery(sql)\n+pstmt.executeQuery()",
+      verification: {
+        all_passed: true,
+        compile_passed: true,
+        tests_passed: true,
+        policy_passed: true,
+      },
+      reason: "Refactored to parameterized PreparedStatement query.",
+      iterations: 2,
+      turns_count: 2,
+    };
+  }
+
+  const response = await fetch(`${getRuntimeApiBase()}/remediation/agentic`, {
+    method: "POST",
+    headers: {
+      ...defaultHeaders,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    signal: withTimeoutSignal(signal, 300_000),
+  });
+
+  return parseApiResponse(response, AgenticRemediationResponseSchema);
+}
+

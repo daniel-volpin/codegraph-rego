@@ -43,8 +43,11 @@ dev: ## Run the application in development mode (backend + frontend)
 		exit "$$frontend_status"; \
 	fi
 
-test: ## Run backend tests
+test: ## Run backend unit & integration tests
 	@OTEL_SDK_DISABLED=true uv run python -m pytest -n auto -q
+
+test-e2e: ## Run live end-to-end acceptance tests (requires running Neo4j)
+	@OTEL_SDK_DISABLED=true uv run python -m pytest tests/e2e -v
 
 policy-check: ## Validate OPA/Rego policies (check-only; fails on format drift)
 	@opa check --strict policy/
