@@ -12,6 +12,7 @@ from openai import OpenAI
 from codegraph.config import settings
 from codegraph.llm.schema.explanation import strip_structured_stop_tokens
 from codegraph.llm.transport.base import LLMRequest, LLMTransport, LLMUnavailableError
+from codegraph.llm.transport.provider_admission import provider_admission_gate
 from codegraph.telemetry import get_tracer
 
 logger = logging.getLogger("codegraph.llm.transport.openai_compatible")
@@ -319,16 +320,31 @@ class OpenAICompatibleTransport(LLMTransport):
 
             t0 = time.monotonic()
             client = None
+            close_error: RuntimeError | OSError | httpx.HTTPError | None = None
             output_text: str | None = None
             generation_error_message: str | None = None
             generation_exception: LLMUnavailableError | None = None
             generation_cause: Exception | None = None
             try:
-                client = _build_client(api_base=config.api_base, api_key=settings.llm_api_key)
-                if config.use_chat_completions:
-                    output_text = _generate_with_chat_completions(client, request, config, span)
-                else:
-                    output_text = _generate_with_responses(client, request, config, span)
+                with provider_admission_gate.acquire(
+                    max_active=settings.llm_max_concurrent_requests,
+                    max_waiting=settings.llm_max_pending_requests,
+                    queue_timeout_seconds=settings.llm_queue_timeout_seconds,
+                ):
+                    try:
+                        client = _build_client(api_base=config.api_base, api_key=settings.llm_api_key)
+                        if config.use_chat_completions:
+                            output_text = _generate_with_chat_completions(client, request, config, span)
+                        else:
+                            output_text = _generate_with_responses(client, request, config, span)
+                    finally:
+                        if client is not None:
+                            try:
+                                client.close()
+                            except _CLIENT_CLOSE_EXCEPTIONS as exc:
+                                close_error = exc
+                                span.set_attribute("llm.close_error", _summarize_exception(exc))
+                                logger.warning("Failed to close LLM client cleanly: %s", _summarize_exception(exc))
             except LLMUnavailableError as exc:
                 error_msg = str(exc) or "LLM returned an empty response."
                 generation_exception = exc
@@ -348,14 +364,6 @@ class OpenAICompatibleTransport(LLMTransport):
                 span.set_attribute("llm.error", error_msg)
             finally:
                 span.set_attribute("llm.latency_ms", round((time.monotonic() - t0) * 1000))
-                close_error: RuntimeError | OSError | httpx.HTTPError | None = None
-                if client is not None:
-                    try:
-                        client.close()
-                    except _CLIENT_CLOSE_EXCEPTIONS as exc:
-                        close_error = exc
-                        span.set_attribute("llm.close_error", _summarize_exception(exc))
-                        logger.warning("Failed to close LLM client cleanly: %s", _summarize_exception(exc))
 
             if generation_error_message is not None:
                 if request.raise_on_error and generation_exception is not None:

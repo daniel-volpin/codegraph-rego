@@ -57,6 +57,9 @@ matching defaults — keep it in sync when adding new variables.
 | `LLM_MODEL` | `qwen3.5-9b-mlx` | Default explanation model. |
 | `LLM_API_MODE` | `auto` | Endpoint mode selection (`auto`, `responses`, `chat_completions`). |
 | `LLM_TIMEOUT_SECONDS` | `60.0` | Per SDK HTTP operation timeout for model calls (not a total agent-run deadline). |
+| `LLM_MAX_CONCURRENT_REQUESTS` | `2` | Process-local cap on active provider SDK/client generation calls, shared by OpenAI-compatible transports. Not global across processes and not a durable run/token budget. |
+| `LLM_MAX_PENDING_REQUESTS` | `4` | Process-local cap on provider generation calls waiting for admission before client construction. |
+| `LLM_QUEUE_TIMEOUT_SECONDS` | `5.0` | Maximum provider admission queue wait in seconds; separate from `LLM_TIMEOUT_SECONDS`, which applies after SDK/client operation starts. |
 | `LLM_MAX_RETRIES` | `0` | SDK transport retries per generation attempt (allowed range `0..2`). |
 | `LLM_SEND_TEMPERATURE` | `1` | When `0`, suppresses temperature for providers/models that reject it. |
 | `LLM_TEMPERATURE` | `0.2` | Sampling temperature for explanation. Note: not zero; outputs are not bitwise reproducible. |

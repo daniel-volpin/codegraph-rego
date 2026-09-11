@@ -43,6 +43,24 @@ class TestConfigSettings(unittest.TestCase):
             Settings(_env_file=None, llm_concurrency=0)
 
         with self.assertRaises(ValidationError):
+            Settings(_env_file=None, llm_max_concurrent_requests=0)
+
+        with self.assertRaises(ValidationError):
+            Settings(_env_file=None, llm_max_concurrent_requests=9)
+
+        with self.assertRaises(ValidationError):
+            Settings(_env_file=None, llm_max_pending_requests=-1)
+
+        with self.assertRaises(ValidationError):
+            Settings(_env_file=None, llm_max_pending_requests=33)
+
+        with self.assertRaises(ValidationError):
+            Settings(_env_file=None, llm_queue_timeout_seconds=0)
+
+        with self.assertRaises(ValidationError):
+            Settings(_env_file=None, llm_queue_timeout_seconds=120.1)
+
+        with self.assertRaises(ValidationError):
             Settings(_env_file=None, remediation_confidence_threshold_apply=1.5)
 
         with self.assertRaises(ValidationError):

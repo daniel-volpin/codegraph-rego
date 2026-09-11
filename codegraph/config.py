@@ -97,6 +97,27 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(
         60.0, gt=0, le=600, description="HTTP request timeout for model calls, not a total agent-run deadline.",
     )
+    llm_max_concurrent_requests: int = Field(
+        2,
+        ge=1,
+        le=8,
+        validation_alias=AliasChoices("LLM_MAX_CONCURRENT_REQUESTS", "llm_max_concurrent_requests"),
+        description="Process-local cap on active provider SDK/client generation calls.",
+    )
+    llm_max_pending_requests: int = Field(
+        4,
+        ge=0,
+        le=32,
+        validation_alias=AliasChoices("LLM_MAX_PENDING_REQUESTS", "llm_max_pending_requests"),
+        description="Process-local cap on generation calls waiting for provider admission.",
+    )
+    llm_queue_timeout_seconds: float = Field(
+        5.0,
+        gt=0.0,
+        le=120.0,
+        validation_alias=AliasChoices("LLM_QUEUE_TIMEOUT_SECONDS", "llm_queue_timeout_seconds"),
+        description="Maximum queue wait for provider admission; separate from LLM HTTP request timeout.",
+    )
     llm_max_retries: int = Field(
         0, ge=0, le=2, description="SDK transport retries per generation attempt; default avoids hidden retry multiplication.",
     )
