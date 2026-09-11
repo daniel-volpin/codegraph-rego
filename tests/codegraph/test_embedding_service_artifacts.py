@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -247,3 +248,214 @@ def test_build_embeddings_rejects_vector_signature_count_mismatch_before_manifes
 
     with pytest.raises(RuntimeError, match="vector/signature count mismatch"):
         embedding_service.EmbeddingService.build_embeddings()
+
+
+def test_fetch_method_snippets_prefers_exact_ranges_for_overloads(tmp_path, monkeypatch) -> None:
+    java_file = tmp_path / "Overloads.java"
+    java_file.write_text(
+        "\n".join(
+            [
+                "class Overloads {",
+                "  void work() {",
+                "    int first = 1;",
+                "  }",
+                "  void work(int n) {",
+                "    int second = n;",
+                "  }",
+                "}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = [
+        {
+            "sig": "Overloads#work()",
+            "name": "work",
+            "path": str(java_file),
+            "start_line": 2,
+            "end_line": 4,
+        },
+        {
+            "sig": "Overloads#work(int)",
+            "name": "work",
+            "path": str(java_file),
+            "start_line": 5,
+            "end_line": 7,
+        },
+    ]
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def run(self, _query):
+            return rows
+
+    class _Driver:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def session(self):
+            return _Session()
+
+    monkeypatch.setattr(embedding_service.GraphDatabase, "driver", lambda *_args, **_kwargs: _Driver())
+    snippets = embedding_service._fetch_method_snippets()
+    assert len(snippets) == 2
+    assert "int first = 1;" in snippets[0].code
+    assert "int second = n;" not in snippets[0].code
+    assert "int second = n;" in snippets[1].code
+    assert "int first = 1;" not in snippets[1].code
+
+
+def test_fetch_method_snippets_rejects_ambiguous_missing_range_fallback(tmp_path, monkeypatch, caplog) -> None:
+    java_file = tmp_path / "Overloads.java"
+    java_file.write_text(
+        "\n".join(
+            [
+                "class Overloads {",
+                "  void work() {}",
+                "  void work(int n) {}",
+                "}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rows = [
+        {"sig": "Overloads#work()", "name": "work", "path": str(java_file), "start_line": None, "end_line": None}
+    ]
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def run(self, _query):
+            return rows
+
+    class _Driver:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def session(self):
+            return _Session()
+
+    monkeypatch.setattr(embedding_service.GraphDatabase, "driver", lambda *_args, **_kwargs: _Driver())
+    with caplog.at_level(logging.WARNING):
+        snippets = embedding_service._fetch_method_snippets()
+    assert snippets == []
+    assert "Skipping method snippet for signature Overloads#work()" in caplog.text
+
+
+def test_fetch_method_snippets_rejects_incomplete_range_without_fallback(tmp_path, monkeypatch, caplog) -> None:
+    java_file = tmp_path / "Overloads.java"
+    java_file.write_text(
+        "\n".join(
+            [
+                "class Overloads {",
+                "  void work() {}",
+                "  void work(int n) {}",
+                "}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rows = [
+        {"sig": "Overloads#work()", "name": "work", "path": str(java_file), "start_line": 2, "end_line": None}
+    ]
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def run(self, _query):
+            return rows
+
+    class _Driver:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def session(self):
+            return _Session()
+
+    monkeypatch.setattr(embedding_service.GraphDatabase, "driver", lambda *_args, **_kwargs: _Driver())
+    with caplog.at_level(logging.WARNING):
+        snippets = embedding_service._fetch_method_snippets()
+    assert snippets == []
+    assert "incomplete source range metadata" in caplog.text
+
+
+def test_fetch_method_snippets_rejects_out_of_file_range_without_fallback(tmp_path, monkeypatch, caplog) -> None:
+    java_file = tmp_path / "Overloads.java"
+    java_file.write_text("class Overloads {\n  void work() {}\n}\n", encoding="utf-8")
+    rows = [
+        {"sig": "Overloads#work()", "name": "work", "path": str(java_file), "start_line": 2, "end_line": 20}
+    ]
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def run(self, _query):
+            return rows
+
+    class _Driver:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def session(self):
+            return _Session()
+
+    monkeypatch.setattr(embedding_service.GraphDatabase, "driver", lambda *_args, **_kwargs: _Driver())
+    with caplog.at_level(logging.WARNING):
+        snippets = embedding_service._fetch_method_snippets()
+    assert snippets == []
+    assert "invalid source range 2-20" in caplog.text
+
+
+def test_manifest_write_failure_keeps_previous_manifest_and_leaves_no_temp_orphan(tmp_path, monkeypatch) -> None:
+    settings_obj = _make_settings(tmp_path)
+    manifest_path = Path(settings_obj.embedding_metadata_path)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    before = '{"schema":"embedding_generation_manifest.v1","generation":{"id":"stable"}}'
+    manifest_path.write_text(before, encoding="utf-8")
+
+    original_dump = embedding_service.json.dump
+
+    def _fail_dump(payload, handle, indent=None):
+        if payload == {"schema": "embedding_generation_manifest.v1"}:
+            raise OSError("write failed")
+        return original_dump(payload, handle, indent=indent)
+
+    monkeypatch.setattr(embedding_service.json, "dump", _fail_dump)
+    with pytest.raises(OSError, match="write failed"):
+        embedding_service._atomic_write_json(manifest_path, {"schema": "embedding_generation_manifest.v1"})
+
+    assert manifest_path.read_text(encoding="utf-8") == before
+    assert list(manifest_path.parent.glob(".embedding_metadata.json.tmp-*")) == []

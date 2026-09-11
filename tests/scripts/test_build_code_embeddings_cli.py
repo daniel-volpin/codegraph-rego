@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import sys
-import types
 from types import SimpleNamespace
 
 import pytest
@@ -30,6 +28,7 @@ def test_parse_args_uses_canonical_settings_defaults(monkeypatch: pytest.MonkeyP
 
 def test_main_applies_cli_overrides_to_settings_used_by_builder(monkeypatch: pytest.MonkeyPatch) -> None:
     module = importlib.import_module("scripts.ingestion.build_code_embeddings")
+    embedding_module = importlib.import_module("codegraph.embedding.service")
     settings_obj = SimpleNamespace(
         neo4j_uri="bolt://default:7687",
         neo4j_user="neo4j-default",
@@ -40,22 +39,17 @@ def test_main_applies_cli_overrides_to_settings_used_by_builder(monkeypatch: pyt
 
     captured: dict[str, object] = {}
 
-    class FakeEmbeddingService:
-        @staticmethod
-        def build_embeddings(*, progress_callback, rebuild_index):  # noqa: ANN001
-            from codegraph.config import settings as canonical_settings
+    def fake_build_embeddings(*, progress_callback, rebuild_index):  # noqa: ANN001
+        from codegraph.config import settings as canonical_settings
 
-            captured["neo4j_uri"] = canonical_settings.neo4j_uri
-            captured["neo4j_user"] = canonical_settings.neo4j_user
-            captured["neo4j_pass"] = canonical_settings.neo4j_pass
-            captured["embedding_model_name"] = canonical_settings.embedding_model_name
-            captured["progress_callback"] = progress_callback
-            captured["rebuild_index"] = rebuild_index
+        captured["neo4j_uri"] = canonical_settings.neo4j_uri
+        captured["neo4j_user"] = canonical_settings.neo4j_user
+        captured["neo4j_pass"] = canonical_settings.neo4j_pass
+        captured["embedding_model_name"] = canonical_settings.embedding_model_name
+        captured["progress_callback"] = progress_callback
+        captured["rebuild_index"] = rebuild_index
 
-    fake_service_module = types.SimpleNamespace(EmbeddingService=FakeEmbeddingService)
-    fake_embedding_package = types.SimpleNamespace(service=fake_service_module)
-    monkeypatch.setitem(sys.modules, "codegraph.embedding", fake_embedding_package)
-    monkeypatch.setitem(sys.modules, "codegraph.embedding.service", fake_service_module)
+    monkeypatch.setattr(embedding_module.EmbeddingService, "build_embeddings", fake_build_embeddings)
 
     exit_code = module.main(
         [
@@ -81,9 +75,17 @@ def test_main_applies_cli_overrides_to_settings_used_by_builder(monkeypatch: pyt
     assert captured["rebuild_index"] is True
 
 
-def test_help_exits_without_importing_embedding_service() -> None:
+def test_help_exits_without_invoking_builder(monkeypatch: pytest.MonkeyPatch) -> None:
     module = importlib.import_module("scripts.ingestion.build_code_embeddings")
+    embedding_module = importlib.import_module("codegraph.embedding.service")
+    calls: list[bool] = []
+
+    def fake_build_embeddings(*, progress_callback, rebuild_index):  # noqa: ANN001,ARG001
+        calls.append(True)
+
+    monkeypatch.setattr(embedding_module.EmbeddingService, "build_embeddings", fake_build_embeddings)
 
     with pytest.raises(SystemExit) as exc:
         module.main(["--help"])
     assert exc.value.code == 0
+    assert calls == []

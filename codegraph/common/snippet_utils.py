@@ -200,7 +200,12 @@ def extract_code_snippet(
 
 
 def extract_snippet_by_lines(
-    file_path: str, start_line: int | None, end_line: int | None, padding: int = 2
+    file_path: str,
+    start_line: int | None,
+    end_line: int | None,
+    padding: int = 2,
+    *,
+    strict_range: bool = False,
 ) -> str:
     """
     Return the snippet defined by `start_line`/`end_line` (1-based, inclusive).
@@ -214,6 +219,11 @@ def extract_snippet_by_lines(
             return ""
         lines = _read_lines(path)
         total = len(lines)
+        if strict_range:
+            if not isinstance(start_line, int) or not isinstance(end_line, int):
+                return ""
+            if start_line < 1 or end_line < start_line or end_line > total:
+                return ""
         start_idx = max(0, (start_line - 1) if start_line else 0)
         end_idx = (end_line - 1) if end_line else start_idx
         start_idx = max(0, start_idx - padding)

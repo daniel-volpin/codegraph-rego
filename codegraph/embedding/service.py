@@ -151,14 +151,53 @@ def _cache_vector_dim(cache_entries: EmbeddingCache) -> int | None:
 
 
 def _fetch_method_snippets() -> list[_MethodSnippet]:
+    from codegraph.common.snippet_utils import extract_snippet_by_lines
+
     snippets: list[_MethodSnippet] = []
-    query = "MATCH (m:Method) RETURN coalesce(m.full_signature, m.signature) AS sig, m.name AS name, m.file_path AS path"
+    query = (
+        "MATCH (m:Method) "
+        "RETURN coalesce(m.full_signature, m.signature) AS sig, "
+        "m.name AS name, m.file_path AS path, m.start_line AS start_line, m.end_line AS end_line"
+    )
     with GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass)) as driver:
         with driver.session() as session:
             for record in session.run(query):
-                code = EmbeddingService.extract_method_snippet(record["path"], record["name"])
+                path = record["path"]
+                name = record["name"]
+                signature = record["sig"]
+                start_line = record.get("start_line")
+                end_line = record.get("end_line")
+                code = ""
+                has_no_range = start_line is None and end_line is None
+                has_complete_range = isinstance(start_line, int) and isinstance(end_line, int)
+                if has_complete_range:
+                    code = extract_snippet_by_lines(path, start_line, end_line, padding=0, strict_range=True)
+                    if not code:
+                        LOGGER.warning(
+                            "Skipping method snippet for signature %s: invalid source range %s-%s in %s",
+                            signature,
+                            start_line,
+                            end_line,
+                            path,
+                        )
+                elif has_no_range:
+                    code = EmbeddingService.extract_method_snippet(path, name)
+                    if not code:
+                        LOGGER.warning(
+                            "Skipping method snippet for signature %s: missing or ambiguous range fallback in %s",
+                            signature,
+                            path,
+                        )
+                else:
+                    LOGGER.warning(
+                        "Skipping method snippet for signature %s: incomplete source range metadata start=%r end=%r in %s",
+                        signature,
+                        start_line,
+                        end_line,
+                        path,
+                    )
                 if code:
-                    snippets.append(_MethodSnippet(signature=record["sig"], code=code))
+                    snippets.append(_MethodSnippet(signature=signature, code=code))
     return snippets
 
 

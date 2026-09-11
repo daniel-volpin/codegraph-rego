@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from codegraph.common.snippet_utils import (
+    extract_snippet_by_lines,
     find_java_block_end_line,
     find_java_statement_end_line,
     select_unique_line_or_refuse,
@@ -107,6 +110,12 @@ class JavaLexicalBoundaryTests(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             find_java_statement_end_line(lines, 2)
+
+    def test_extract_snippet_by_lines_strict_rejects_out_of_file_end(self) -> None:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "Demo.java"
+            path.write_text("class Demo {\n  void a() {}\n}\n", encoding="utf-8")
+            self.assertEqual(extract_snippet_by_lines(str(path), 2, 99, strict_range=True), "")
 
 
 class IngestionMethodSpanTests(unittest.TestCase):
