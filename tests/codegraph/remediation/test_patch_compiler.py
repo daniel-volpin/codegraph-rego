@@ -379,9 +379,9 @@ class TestMethodCallReplacement(unittest.TestCase):
 
 
 class TestImportAdjustment(unittest.TestCase):
-    """Import adjustments are informational-only in v1."""
+    """Import adjustments are explicitly unsupported in v1."""
 
-    def test_import_adjustment_produces_no_edits(self) -> None:
+    def test_import_adjustment_raises(self) -> None:
         source = [
             "public void hash() {",
             '    MessageDigest.getInstance("MD5");',
@@ -392,8 +392,8 @@ class TestImportAdjustment(unittest.TestCase):
                 ImportAdjustmentOp(add_import="java.security.MessageDigest"),
             ]
         )
-        edits = compile_repair_intent(intent, source)
-        self.assertEqual(edits, [])
+        with self.assertRaises(CompileError):
+            compile_repair_intent(intent, source)
 
 
 # ---------------------------------------------------------------------------
@@ -415,10 +415,10 @@ class TestCompilerEdgeCases(unittest.TestCase):
         edits = compile_repair_intent(intent, ["public void x() {}"])
         self.assertEqual(edits, [])
 
-    def test_empty_operations_returns_empty(self) -> None:
+    def test_empty_operations_raise(self) -> None:
         intent = _make_intent(operations=[])
-        edits = compile_repair_intent(intent, ["public void x() {}"])
-        self.assertEqual(edits, [])
+        with self.assertRaises(CompileError):
+            compile_repair_intent(intent, ["public void x() {}"])
 
     def test_multi_operation_intent(self) -> None:
         source = [

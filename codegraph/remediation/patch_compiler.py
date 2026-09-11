@@ -70,7 +70,7 @@ def compile_repair_intent(
         return []
 
     if not intent.operations:
-        return []
+        raise CompileError("intent has no executable operations")
 
     edits: list[dict[str, Any]] = []
     for op in intent.operations:
@@ -81,12 +81,16 @@ def compile_repair_intent(
         elif isinstance(op, MethodCallReplacementOp):
             edits.extend(_compile_method_call_replacement(op, source_lines))
         elif isinstance(op, ImportAdjustmentOp):
-            # Import adjustments are informational in v1 — they declare
-            # intent but do not produce method-local edits.
-            LOGGER.debug("Skipping import_adjustment op (v1: informational only)")
+            raise CompileError(
+                "import_adjustment is unsupported in deterministic compiler v1; "
+                "refuse instead of silently ignoring"
+            )
         else:
             raise CompileError(f"Unsupported operation type: {type(op).__name__}")
 
+    if not edits:
+        raise CompileError("intent produced no executable edits")
+    _validate_non_overlapping_edits(edits)
     return edits
 
 
@@ -104,21 +108,23 @@ def _compile_literal_replacement(
     replacement = op.replacement_value
     qualifier = op.qualifier_call
 
-    matching_indices = _find_literal_lines(target, source_lines, qualifier)
-    if not matching_indices:
+    matches = _find_literal_occurrences(target, source_lines, qualifier)
+    if not matches:
         raise CompileError(
             f"literal_replacement: target_value {target!r} not found in source"
             + (f" (qualifier={qualifier!r})" if qualifier else "")
         )
-    if len(matching_indices) > 1:
+    if len(matches) > 1:
         raise CompileError(
-            f"literal_replacement: target_value {target!r} found on {len(matching_indices)} lines, ambiguous match"
+            f"literal_replacement: target_value {target!r} matched {len(matches)} occurrences, ambiguous match"
         )
 
-    line_idx = matching_indices[0]
+    line_idx, _, _ = matches[0]
     original_line = source_lines[line_idx]
     # Case-insensitive replacement of the literal value within the line.
     replaced_line = _case_insensitive_literal_replace(original_line, target, replacement)
+    if replaced_line == original_line:
+        raise CompileError("literal_replacement: replacement is non-operative")
 
     return [
         {
@@ -137,35 +143,19 @@ def _compile_constructor_replacement(
     """Find a constructor ``new OldType(`` and replace with ``new NewType(``."""
     # Build a regex that matches "new OldType(" with optional whitespace,
     # allowing both fully-qualified and simple class names.
-    old_simple = op.old_type.rsplit(".", 1)[-1]
-    old_patterns = [re.escape(op.old_type), re.escape(old_simple)]
-    # Deduplicate if old_type has no package qualifier.
-    old_patterns = list(dict.fromkeys(old_patterns))
-
-    matching_indices: list[int] = []
-    matched_pattern: str | None = None
-
-    for pat_str in old_patterns:
-        pattern = re.compile(r"new\s+" + pat_str + r"\s*\(", re.IGNORECASE)
-        indices = [i for i, line in enumerate(source_lines) if pattern.search(line)]
-        if indices:
-            matching_indices = indices
-            matched_pattern = pat_str
-            break
-
-    if not matching_indices:
+    occurrences = _find_constructor_occurrences(op.old_type, source_lines)
+    if not occurrences:
         raise CompileError(f"constructor_replacement: 'new {op.old_type}(' not found in source")
-    if len(matching_indices) > 1:
+    if len(occurrences) > 1:
         raise CompileError(
-            f"constructor_replacement: 'new {op.old_type}(' found on {len(matching_indices)} lines, ambiguous match"
+            f"constructor_replacement: 'new {op.old_type}(' matched {len(occurrences)} occurrences, ambiguous match"
         )
 
-    line_idx = matching_indices[0]
+    line_idx, start, end = occurrences[0]
     original_line = source_lines[line_idx]
-    assert matched_pattern is not None  # ensured by matching_indices check
-
-    replace_pattern = re.compile(r"new\s+" + matched_pattern + r"\s*\(", re.IGNORECASE)
-    replaced_line = replace_pattern.sub(f"new {op.new_type}(", original_line, count=1)
+    replaced_line = original_line[:start] + f"new {op.new_type}(" + original_line[end:]
+    if replaced_line == original_line:
+        raise CompileError("constructor_replacement: replacement is non-operative")
 
     return [
         {
@@ -189,18 +179,20 @@ def _compile_method_call_replacement(
     escaped = _call_pattern_to_regex(call)
 
     pattern = re.compile(escaped, re.IGNORECASE)
-    matching_indices = [i for i, line in enumerate(source_lines) if pattern.search(line)]
+    occurrences = _find_regex_occurrences(pattern, source_lines)
 
-    if not matching_indices:
+    if not occurrences:
         raise CompileError(f"method_call_replacement: pattern {call!r} not found in source")
-    if len(matching_indices) > 1:
+    if len(occurrences) > 1:
         raise CompileError(
-            f"method_call_replacement: pattern {call!r} found on {len(matching_indices)} lines, ambiguous match"
+            f"method_call_replacement: pattern {call!r} matched {len(occurrences)} occurrences, ambiguous match"
         )
 
-    line_idx = matching_indices[0]
+    line_idx = occurrences[0][0]
     original_line = source_lines[line_idx]
     replaced_line = pattern.sub(op.new_call_expression, original_line, count=1)
+    if replaced_line == original_line:
+        raise CompileError("method_call_replacement: replacement is non-operative")
 
     return [
         {
@@ -217,28 +209,53 @@ def _compile_method_call_replacement(
 # ---------------------------------------------------------------------------
 
 
-def _find_literal_lines(
+def _find_literal_occurrences(
     target_value: str,
     source_lines: list[str],
     qualifier: str | None,
-) -> list[int]:
-    """Return 0-based line indices where *target_value* appears.
+) -> list[tuple[int, int, int]]:
+    """Return 0-based (line,start,end) literal occurrences.
 
     When *qualifier* is set, only lines also containing the qualifier
     call are considered.
     """
-    indices: list[int] = []
-    target_lower = target_value.lower()
+    matches: list[tuple[int, int, int]] = []
     qualifier_lower = qualifier.lower() if qualifier else None
+    pattern = re.compile(re.escape(target_value), re.IGNORECASE)
 
     for i, line in enumerate(source_lines):
         line_lower = line.lower()
-        if target_lower not in line_lower:
-            continue
         if qualifier_lower is not None and qualifier_lower not in line_lower:
             continue
-        indices.append(i)
-    return indices
+        for match in pattern.finditer(line):
+            matches.append((i, match.start(), match.end()))
+    return matches
+
+
+def _find_constructor_occurrences(old_type: str, source_lines: list[str]) -> list[tuple[int, int, int]]:
+    """Find deduped constructor-call occurrences for FQN and simple type."""
+    old_simple = old_type.rsplit(".", 1)[-1]
+    escaped_types = [re.escape(old_type), re.escape(old_simple)]
+    escaped_types = list(dict.fromkeys(escaped_types))
+    patterns = [re.compile(r"new\s+" + typ + r"\s*\(", re.IGNORECASE) for typ in escaped_types]
+
+    deduped: dict[tuple[int, int, int], tuple[int, int, int]] = {}
+    for pattern in patterns:
+        for occurrence in _find_regex_occurrences(pattern, source_lines):
+            deduped[occurrence] = occurrence
+    return list(deduped.values())
+
+
+def _find_regex_occurrences(
+    pattern: re.Pattern[str],
+    source_lines: list[str],
+) -> list[tuple[int, int, int]]:
+    """Return 0-based (line,start,end) occurrences for a compiled regex."""
+    occurrences: list[tuple[int, int, int]] = []
+    for i, line in enumerate(source_lines):
+        for match in pattern.finditer(line):
+            occurrences.append((i, match.start(), match.end()))
+    return occurrences
 
 
 def _case_insensitive_literal_replace(
@@ -289,3 +306,34 @@ def _call_pattern_to_regex(call_pattern: str) -> str:
         args_regex = r"\s*\(\s*" + re.escape(inner) + r"\s*\)"
 
     return caller_regex + args_regex
+
+
+def _validate_non_overlapping_edits(edits: list[dict[str, Any]]) -> None:
+    """Reject overlapping or conflicting edit spans."""
+    for i, left in enumerate(edits):
+        l_start = int(left["start_line"])
+        l_end = int(left["end_line"])
+        for j in range(i + 1, len(edits)):
+            right = edits[j]
+            r_start = int(right["start_line"])
+            r_end = int(right["end_line"])
+            if l_start > r_end or r_start > l_end:
+                continue
+
+            same_range = l_start == r_start and l_end == r_end
+            same_replacement = left["replacement_lines"] == right["replacement_lines"]
+            same_original = left["original_lines"] == right["original_lines"]
+            if same_range and same_replacement and same_original:
+                raise CompileError(
+                    f"overlapping_edits: duplicate edits target lines {l_start}-{l_end}"
+                )
+
+            if same_range:
+                raise CompileError(
+                    f"conflicting_edits: multiple edits target lines {l_start}-{l_end} with different replacements"
+                )
+
+            raise CompileError(
+                "overlapping_edits: edit spans overlap across "
+                f"lines {l_start}-{l_end} and {r_start}-{r_end}"
+            )
