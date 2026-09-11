@@ -101,10 +101,19 @@ def find_java_block_end_line(
     """Find the closing line for a Java block that starts at/after start_line."""
     if not start_line or start_line <= 0 or start_line > len(lines):
         return start_line
+    return find_java_block_end_position(lines, start_line, start_column)[0]
+
+
+def find_java_block_end_position(
+    lines: list[str], start_line: int | None, start_column: int | None = None
+) -> tuple[int, int]:
+    """Find the closing ``}`` position for a Java block."""
+    if not start_line or start_line <= 0 or start_line > len(lines):
+        raise ValueError(f"invalid_block_start_line_{start_line}")
     column = start_column if isinstance(start_column, int) else 0
     open_braces = 0
     saw_block_open = False
-    for line_no, _col, ch in _iter_java_code_chars(lines, start_line=start_line, start_column=column):
+    for line_no, col, ch in _iter_java_code_chars(lines, start_line=start_line, start_column=column):
         if ch == "{":
             open_braces += 1
             saw_block_open = True
@@ -112,23 +121,23 @@ def find_java_block_end_line(
             if saw_block_open:
                 open_braces -= 1
                 if open_braces == 0:
-                    return line_no
+                    return line_no, col
     if saw_block_open:
         raise ValueError(f"unbalanced_block_from_line_{start_line}")
     raise ValueError(f"missing_block_open_from_line_{start_line}")
 
 
-def find_java_statement_end_line(
+def find_java_statement_end_position(
     lines: list[str], start_line: int | None, start_column: int | None = None
-) -> int | None:
-    """Find terminating semicolon line for a field/statement declaration."""
+) -> tuple[int, int]:
+    """Find the terminating semicolon position for a Java statement."""
     if not start_line or start_line <= 0 or start_line > len(lines):
-        return start_line
+        raise ValueError(f"invalid_statement_start_line_{start_line}")
     column = start_column if isinstance(start_column, int) else 0
     paren_depth = 0
     bracket_depth = 0
     brace_depth = 0
-    for line_no, _col, ch in _iter_java_code_chars(lines, start_line=start_line, start_column=column):
+    for line_no, col, ch in _iter_java_code_chars(lines, start_line=start_line, start_column=column):
         if ch == "(":
             paren_depth += 1
             continue
@@ -154,8 +163,17 @@ def find_java_statement_end_line(
             brace_depth -= 1
             continue
         if ch == ";" and paren_depth == 0 and bracket_depth == 0 and brace_depth == 0:
-            return line_no
+            return line_no, col
     raise ValueError(f"unterminated_statement_from_line_{start_line}")
+
+
+def find_java_statement_end_line(
+    lines: list[str], start_line: int | None, start_column: int | None = None
+) -> int | None:
+    """Find terminating semicolon line for a field/statement declaration."""
+    if not start_line or start_line <= 0 or start_line > len(lines):
+        return start_line
+    return find_java_statement_end_position(lines, start_line, start_column)[0]
 
 
 def select_unique_line_or_refuse(

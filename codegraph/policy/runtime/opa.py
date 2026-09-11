@@ -7,6 +7,7 @@ import tempfile
 import time
 import uuid
 from collections.abc import Mapping
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
@@ -112,14 +113,14 @@ def _serialize_for_opa(bundle: PolicyBundle | Mapping[str, Any]) -> dict[str, An
     return serialize_policy_bundle(bundle)
 
 
-def _opa_eval_command(input_path: str, query: str) -> list[str]:
+def _opa_eval_command(input_path: str, query: str, *, policy_dir: str | None = None) -> list[str]:
     return [
         "opa",
         "eval",
         "-f",
         "json",
         "-d",
-        POLICY_DIR,
+        policy_dir or POLICY_DIR,
         "-i",
         input_path,
         query,
@@ -131,6 +132,17 @@ def _write_opa_input(tmp_dir: str, serialized_bundle: Mapping[str, Any]) -> str:
     with open(input_path, "w", encoding="utf-8") as file:
         json.dump(serialized_bundle, file)
     return input_path
+
+
+@contextmanager
+def _opa_input_dir(work_dir: str | None = None):
+    if work_dir is None:
+        with tempfile.TemporaryDirectory() as tmp:
+            yield tmp
+        return
+    os.makedirs(work_dir, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="opa-input-", dir=work_dir) as tmp:
+        yield tmp
 
 
 def _run_opa_eval(cmd: list[str], target_method: Any, *, package_root: bool = False) -> subprocess.CompletedProcess[str]:
@@ -171,16 +183,21 @@ def _extract_opa_value(parsed: Mapping[str, Any], expected_type: type[list] | ty
     return value
 
 
-def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, Any]]:
+def evaluate_bundle(
+    bundle: PolicyBundle | Mapping[str, Any],
+    *,
+    policy_dir: str | None = None,
+    work_dir: str | None = None,
+) -> list[dict[str, Any]]:
     serialized_bundle = _serialize_for_opa(bundle)
 
     with _tracer.start_as_current_span("policy.evaluate") as span:
         span.set_attribute("target_method", str(serialized_bundle.get("target_method") or ""))
         span.set_attribute("bundle_size_bytes", len(json.dumps(serialized_bundle).encode()))
         t0 = time.monotonic()
-        with tempfile.TemporaryDirectory() as tmp:
+        with _opa_input_dir(work_dir) as tmp:
             input_path = _write_opa_input(tmp, serialized_bundle)
-            cmd = _opa_eval_command(input_path, POLICY_QUERY)
+            cmd = _opa_eval_command(input_path, POLICY_QUERY, policy_dir=policy_dir)
             try:
                 proc = _run_opa_eval(cmd, serialized_bundle.get("target_method"))
                 out = _parse_opa_stdout(proc.stdout)
@@ -200,11 +217,17 @@ def evaluate_bundle(bundle: PolicyBundle | Mapping[str, Any]) -> list[dict[str, 
             return violations
 
 
-def evaluate_package_root(bundle: PolicyBundle | Mapping[str, Any], package: str = "data.iso27001") -> dict[str, Any]:
+def evaluate_package_root(
+    bundle: PolicyBundle | Mapping[str, Any],
+    package: str = "data.iso27001",
+    *,
+    policy_dir: str | None = None,
+    work_dir: str | None = None,
+) -> dict[str, Any]:
     serialized_bundle = _serialize_for_opa(bundle)
-    with tempfile.TemporaryDirectory() as tmp:
+    with _opa_input_dir(work_dir) as tmp:
         input_path = _write_opa_input(tmp, serialized_bundle)
-        cmd = _opa_eval_command(input_path, package)
+        cmd = _opa_eval_command(input_path, package, policy_dir=policy_dir)
         proc = _run_opa_eval(cmd, serialized_bundle.get("target_method"), package_root=True)
         out = _parse_opa_stdout(proc.stdout, package_root=True)
         return _extract_opa_value(out, dict)
