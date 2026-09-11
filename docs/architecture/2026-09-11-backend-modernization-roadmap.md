@@ -338,14 +338,20 @@ are separately authorized. Preserve historical benchmark artifacts; do not use
 production credentials or reinterpret old signature-keyed graphs as JDT state.
 
 The requested delivery is a clean feature branch and an unmerged PR for that
-Mac acceptance. The current host exposes no governed push/PR capability for
-this repository. Do not bypass that restriction with raw publishing commands.
-If publishing remains unavailable, export a verified Git bundle containing
-`feat/jdt-parser-foundation` and its unpublished prerequisite commits; the Mac
-agent can import it into the user's existing clone and publish the branch/PR
-there under the user's authorization.
+Mac acceptance. This repository's origin is GitHub, unlike the home-server
+repositories hosted on Forgejo. Both forge CLIs are configured on the host.
+Use the authenticated Git/forge CLI workflow with explicit approval for the
+feature-branch push; no persistent permission or credential changes are needed.
+The earlier conclusion that publishing required a separate runtime publisher
+was incorrect. The runtime launcher exists at
+`/usr/local/libexec/platform-capability`, but does not provide general Git
+publication commands.
 
-After transferring the bundle to the Mac, import it without resetting existing
+The normal Mac handoff is to fetch `feat/jdt-parser-foundation` from origin.
+A complete-history Git bundle is an optional offline transfer path, including
+the unpublished prerequisite commits if the branch has not yet been pushed.
+
+If using the bundle, transfer it to the Mac and import without resetting existing
 local work or force-updating an existing branch:
 
 ```sh
