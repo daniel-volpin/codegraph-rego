@@ -17,7 +17,6 @@ import {
   type PolicyExplainOneResponse,
   type RemediationApplyResponse,
   type RemediationPreviewResponse,
-  type Violation,
 } from "../lib/types";
 import {
   type ViolationRow,
