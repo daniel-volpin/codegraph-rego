@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import re
 from pathlib import Path
 from typing import Any
@@ -54,6 +55,18 @@ def write_source_preserving_format(path: Path, text: str, encoding: str, newline
     """
     payload = text.replace("\n", "\r\n") if newline == "\r\n" else text
     path.write_bytes(payload.encode(encoding))
+
+
+def unified_diff(before: str, after: str, *, label: str = "method") -> str:
+    """Generate a clean unified diff between two text strings."""
+    diff = difflib.unified_diff(
+        before.splitlines(),
+        after.splitlines(),
+        fromfile=f"{label} (before)",
+        tofile=f"{label} (after)",
+        lineterm="",
+    )
+    return "\n".join(diff)
 
 
 def format_java_parse_error(exc: Exception) -> str:

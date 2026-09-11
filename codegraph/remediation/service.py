@@ -16,7 +16,6 @@ module after the active workspace is refreshed.
 
 from __future__ import annotations
 
-import difflib
 import logging
 import os
 import subprocess
@@ -59,6 +58,7 @@ from codegraph.remediation.editing import (
     apply_method_edits,
     extract_method_span,
     resolve_file_path,
+    unified_diff,
 )
 from codegraph.remediation.metrics import summarize_retry_error
 from codegraph.remediation.planning import build_remediation_plan
@@ -78,14 +78,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _unified_diff(before: str, after: str, *, label: str = "method") -> str:
-    diff = difflib.unified_diff(
-        before.splitlines(),
-        after.splitlines(),
-        fromfile=f"{label} (before)",
-        tofile=f"{label} (after)",
-        lineterm="",
-    )
-    return "\n".join(diff)
+    return unified_diff(before, after, label=label)
 
 
 def _extract_json_block(text: str) -> str | None:
