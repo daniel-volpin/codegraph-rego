@@ -111,7 +111,14 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: "maven"
+
+      - name: Cache Maven local repository
+        uses: actions/cache@v6.1.0
+        with:
+          path: build/jdt-tools/m2
+          key: maven-jdt-${{ runner.os }}-${{ hashFiles('tools/java-parser/pom.xml') }}
+          restore-keys: |
+            maven-jdt-${{ runner.os }}-
 
       - name: Build Java parser adapter
         run: make java-parser-build
@@ -124,14 +131,29 @@ jobs:
           retention-days: 1
 
   backend-tests:
+    name: backend (${{ matrix.name }})
     needs: [changes, policy-lint, java-parser]
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "policy-java"
+            paths: "tests/codegraph/policy tests/codegraph/java"
+          - name: "remediation"
+            paths: "tests/codegraph/remediation"
+          - name: "ingestion-eval-llm"
+            paths: "tests/codegraph/ingestion tests/codegraph/llm tests/codegraph/evaluation tests/codegraph/common tests/codegraph/app"
+          - name: "api-scripts-core"
+            paths: "tests/api tests/scripts tests/baselines tests/test_*.py tests/codegraph/test_*.py"
     env:
       NEO4J_PASS: test-password
       UV_CACHE_DIR: ~/.cache/uv
       OTEL_SDK_DISABLED: "true"
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: "1"
+      HF_HUB_ENABLE_HF_TRANSFER: "0"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7.0.1
@@ -171,6 +193,14 @@ jobs:
           restore-keys: |
             uv-${{ runner.os }}-py314-
 
+      - name: Cache HuggingFace models
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            hf-${{ runner.os }}-
+
       - name: Install backend dependencies
         run: uv sync --locked
 
@@ -182,8 +212,8 @@ jobs:
           chmod +x /usr/local/bin/opa
           opa version
 
-      - name: Run backend tests in parallel
-        run: uv run python -m pytest -n auto -q
+      - name: Run backend tests (${{ matrix.name }})
+        run: uv run python -m pytest -n auto --dist=loadfile -q ${{ matrix.paths }}
 
   frontend:
     needs: changes
