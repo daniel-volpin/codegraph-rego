@@ -35,31 +35,30 @@ const Layout = ({ children }: PropsWithChildren) => {
   const [isDrawerOpen, setDrawerOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50/80 text-slate-900 antialiased">
       {/* Skip-to-content link (WCAG 2.4.1) — visually hidden until focused. */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-slate-900 focus:shadow"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-md"
       >
         Skip to main content
       </a>
 
       <Dialog open={isDrawerOpen} onOpenChange={setDrawerOpen}>
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
-          {/* Radix manages aria-expanded/aria-controls and focus return for us. */}
+        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur-xs lg:hidden">
           <button
             type="button"
             aria-label="Open navigation"
             onClick={() => setDrawerOpen(true)}
-            className="rounded-md p-2 text-slate-700 transition hover:bg-slate-100"
+            className="rounded-lg p-2 text-slate-700 transition hover:bg-slate-100"
           >
             <Menu aria-hidden="true" className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="rounded-md bg-indigo-600 p-1.5 text-white">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-xs">
               <ShieldCheck aria-hidden="true" className="h-4 w-4" />
             </div>
-            <span className="text-sm font-semibold text-slate-900">CodeGraph</span>
+            <span className="text-sm font-semibold tracking-tight text-slate-900">CodeGraph</span>
           </div>
           <div className="w-9" />
         </header>
@@ -68,10 +67,6 @@ const Layout = ({ children }: PropsWithChildren) => {
           <DialogOverlay className="lg:hidden" />
           <DialogContent
             className="lg:hidden w-72"
-            // Radix Dialog gives us focus trap, scroll lock, Escape-to-close,
-            // overlay-click dismiss, and focus restoration by construction.
-            // We still suppress its default "focus first element" so the
-            // drawer's nav close button isn't auto-focused on every open.
             onOpenAutoFocus={(event) => event.preventDefault()}
           >
             <DialogTitle className="sr-only">Primary navigation</DialogTitle>
@@ -89,12 +84,14 @@ const Layout = ({ children }: PropsWithChildren) => {
 
       <div className="lg:grid lg:min-h-screen lg:grid-cols-[18rem_1fr]">
         <SidebarNav className="hidden lg:flex" />
-        <div className="p-4 sm:p-6 xl:p-8">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <div className="p-4 sm:p-6 xl:p-8 min-w-0">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white px-4 py-2.5 shadow-subtle">
             <div className="min-w-0">
               <Breadcrumbs />
             </div>
-            <HealthStatus />
+            <div className="flex items-center gap-3">
+              <HealthStatus />
+            </div>
           </div>
           <div className="flex flex-col gap-6 lg:flex-row">
             <main id="main-content" className="min-w-0 flex-1">
@@ -110,10 +107,10 @@ const Layout = ({ children }: PropsWithChildren) => {
         style={toastColorVars}
         toastOptions={{
           classNames: {
-            success: "border-emerald-300 bg-emerald-50 text-emerald-950",
-            error: "border-rose-300 bg-rose-50 text-rose-950",
-            warning: "border-amber-300 bg-amber-50 text-amber-950",
-            info: "border-indigo-300 bg-indigo-50 text-indigo-950",
+            success: "border-emerald-300 bg-emerald-50 text-emerald-950 font-medium",
+            error: "border-rose-300 bg-rose-50 text-rose-950 font-medium",
+            warning: "border-amber-300 bg-amber-50 text-amber-950 font-medium",
+            info: "border-indigo-300 bg-indigo-50 text-indigo-950 font-medium",
             title: "text-current",
             description: "text-current",
           },
@@ -124,3 +121,4 @@ const Layout = ({ children }: PropsWithChildren) => {
 };
 
 export default Layout;
+

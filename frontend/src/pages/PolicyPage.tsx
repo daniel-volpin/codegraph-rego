@@ -78,34 +78,34 @@ const EvaluationStatusCard = ({
 
   const config = {
     running: {
-      icon: <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-indigo-600" />,
+      icon: <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin text-zinc-700 dark:text-zinc-300" />,
       title: "Policy evaluation is running.",
       body: "The backend is evaluating the current workspace. Findings will appear when the response is validated.",
-      tone: "border-indigo-200 bg-indigo-50 text-indigo-900",
+      tone: "border-zinc-300 bg-zinc-50 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100",
     },
     partial: {
-      icon: <AlertTriangle aria-hidden="true" className="h-4 w-4 text-amber-700" />,
+      icon: <AlertTriangle aria-hidden="true" className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
       title: "Evaluation response is partial.",
       body: "The response validated, but expected evaluation metadata was absent. Review the findings that are present and rerun before treating this as complete evidence.",
-      tone: "border-amber-200 bg-amber-50 text-amber-900",
+      tone: "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200",
     },
     empty: {
-      icon: <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-emerald-700" />,
+      icon: <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
       title: "Evaluation completed successfully.",
       body: "Zero findings were returned. This means the policy engine evaluated the current workspace and did not report violations for the selected scope.",
-      tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200",
     },
     findings: {
-      icon: <AlertTriangle aria-hidden="true" className="h-4 w-4 text-amber-700" />,
+      icon: <AlertTriangle aria-hidden="true" className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
       title: "Evaluation completed with findings.",
       body: `${findingCount} visible finding${findingCount === 1 ? "" : "s"} across ${ruleCount} rule group${ruleCount === 1 ? "" : "s"}. Use the table and case dossier for evidence, explanation, and remediation availability.`,
-      tone: "border-amber-200 bg-amber-50 text-amber-900",
+      tone: "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200",
     },
     initial: {
-      icon: <ChevronRight aria-hidden="true" className="h-4 w-4 text-slate-500" />,
+      icon: <ChevronRight aria-hidden="true" className="h-4 w-4 text-zinc-400" />,
       title: "Policy evaluation has not run yet.",
       body: "Run a policy scan to evaluate the uploaded workspace. A zero finding result will be shown separately after a successful backend response.",
-      tone: "border-slate-200 bg-slate-50 text-slate-700",
+      tone: "border-zinc-200 bg-zinc-50/70 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-300",
     },
   }[status];
 
@@ -114,13 +114,13 @@ const EvaluationStatusCard = ({
       role="status"
       aria-label="Policy evaluation status"
       aria-live={isFetching ? "polite" : "off"}
-      className={`p-4 text-sm ${config.tone}`}
+      className={`p-3.5 text-xs shadow-2xs ${config.tone}`}
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">{config.icon}</div>
         <div>
-          <p className="font-medium">{config.title}</p>
-          <p className="mt-1">{config.body}</p>
+          <p className="font-semibold text-xs">{config.title}</p>
+          <p className="mt-0.5 leading-relaxed">{config.body}</p>
         </div>
       </div>
     </Card>
@@ -403,10 +403,10 @@ const PolicyPage = () => {
 
   return (
     <div className="space-y-4">
-      <Card className="p-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Policy Evaluation</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-600">
-          Run the benchmark-aligned policy surface, review grouped violations, and inspect remediation support in one workspace.
+      <Card className="p-5 shadow-xs border-zinc-200/80 dark:border-zinc-800">
+        <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Policy Evaluation</h1>
+        <p className="mt-1 max-w-3xl text-xs text-zinc-600 dark:text-zinc-400">
+          Run benchmark-aligned compliance evaluations, review grouped violations, and inspect remediation support across your codebase.
         </p>
       </Card>
 
@@ -437,11 +437,11 @@ const PolicyPage = () => {
       {evaluationError && (
         <Card
           role="alert"
-          className="border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"
+          className="border-rose-200 bg-rose-50/80 p-4 text-xs text-rose-800 shadow-2xs dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200"
         >
-          <p className="font-medium text-rose-900">{evaluationErrorTitle(evaluationError)}</p>
-          <p className="mt-1 break-words">{evaluationError}</p>
-          <p className="mt-2 text-xs text-rose-700">
+          <p className="font-semibold text-rose-900 dark:text-rose-100">{evaluationErrorTitle(evaluationError)}</p>
+          <p className="mt-1 break-words leading-relaxed">{evaluationError}</p>
+          <p className="mt-2 text-[11px] text-rose-700 dark:text-rose-400">
             Check the health indicator for missing backend dependencies, then rerun the evaluation.
           </p>
         </Card>

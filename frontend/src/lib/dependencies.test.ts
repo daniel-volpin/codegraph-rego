@@ -5,9 +5,9 @@ import {
 
 describe("dependencies", () => {
   it("provides stable dependency labels for health summaries", () => {
-    expect(BACKEND_DEPENDENCY_LABELS.neo4j.description).toBe("Neo4j graph database");
-    expect(BACKEND_DEPENDENCY_LABELS.faiss_index.homeLabel).toBe("Search index");
-    expect(BACKEND_DEPENDENCY_LABELS.opa.description).toBe("OPA policy engine");
+    expect(BACKEND_DEPENDENCY_LABELS.neo4j.description).toBe("Neo4j code knowledge graph");
+    expect(BACKEND_DEPENDENCY_LABELS.faiss_index.homeLabel).toBe("Semantic search index");
+    expect(BACKEND_DEPENDENCY_LABELS.opa.description).toBe("OPA policy compliance engine");
   });
 
   it("classifies backend dependency failure messages", () => {
@@ -17,3 +17,4 @@ describe("dependencies", () => {
     expect(messageMentionsBackendDependency("backend connection refused", ["faiss_index"])).toBe(true);
   });
 });
+

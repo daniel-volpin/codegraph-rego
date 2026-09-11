@@ -40,20 +40,20 @@ interface ViolationFindingProps {
 const renderStructuredExplanation = (payload: PolicyExplanationStructured) => {
   const citation = formatCitationDisplay(payload.citation);
   return (
-    <div className="space-y-3 rounded-md border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-950">
+    <div className="space-y-2.5 rounded-lg border border-sky-200 bg-sky-50/70 p-3.5 text-xs text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Citation</p>
-        <p className="mt-1 break-words font-mono text-xs text-indigo-900" title={citation.full}>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-400">Citation Grounding</p>
+        <p className="mt-0.5 break-all font-mono text-[11px] font-medium text-sky-900 dark:text-sky-200" title={citation.full}>
           {citation.display}
         </p>
       </div>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Why</p>
-        <p className="mt-1 break-words">{payload.why}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-400">Why Finding Matters</p>
+        <p className="mt-0.5 break-words leading-relaxed">{payload.why}</p>
       </div>
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Fix</p>
-        <p className="mt-1 break-words">{payload.fix}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-400">Recommended Fix</p>
+        <p className="mt-0.5 break-words leading-relaxed">{payload.fix}</p>
       </div>
     </div>
   );
@@ -89,54 +89,56 @@ const ViolationFinding = memo(function ViolationFinding({
   return (
     <div
       data-testid={`finding-row-${finding.id}`}
-      className={`rounded-lg border bg-white ${
-        isSelected ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200"
+      className={`rounded-lg border bg-white shadow-2xs transition-all dark:bg-zinc-900 ${
+        isSelected
+          ? "border-zinc-900 ring-2 ring-zinc-900/10 dark:border-zinc-100 dark:ring-zinc-100/10"
+          : "border-zinc-200 dark:border-zinc-800"
       }`}
     >
       <button
         type="button"
         aria-expanded={isExpanded}
         aria-controls={`finding-${finding.id}-detail`}
-        className="flex w-full flex-wrap items-start justify-between gap-3 p-4 text-left"
+        className="flex w-full flex-wrap items-start justify-between gap-3 p-3.5 text-left transition hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40"
         onClick={() => {
           onSelect(finding.id);
           onToggle(groupId, finding.id);
         }}
       >
-        <div className="flex min-w-0 items-start gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
           {isExpanded ? (
-            <ChevronDown aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+            <ChevronDown aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
           ) : (
-            <ChevronRight aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+            <ChevronRight aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
           )}
           <div className="min-w-0">
-            <p className="truncate font-mono text-sm text-slate-900" title={finding.targetMethod}>
+            <p className="truncate font-mono text-xs font-semibold text-zinc-900 dark:text-zinc-100" title={finding.targetMethod}>
               {compactTargetMethod(finding.targetMethod)}
             </p>
-            <p className="mt-1 truncate font-mono text-xs text-slate-500" title={finding.filePath}>
+            <p className="mt-0.5 truncate font-mono text-[11px] text-zinc-500 dark:text-zinc-400" title={finding.filePath}>
               {finding.filePath}
             </p>
             <div className="mt-2">
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary">{finding.module}</Badge>
-                <Badge variant="secondary">Control {finding.controlLabel}</Badge>
-                <Badge variant="secondary">{finding.cweLabel}</Badge>
+              <div className="flex flex-wrap gap-1.5">
+                <Badge variant="secondary" className="text-[10px]">{finding.module}</Badge>
+                <Badge variant="secondary" className="text-[10px]">Control {finding.controlLabel}</Badge>
+                <Badge variant="secondary" className="text-[10px]">{finding.cweLabel}</Badge>
               </div>
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant={severityVariant(finding.severity)}>{finding.severity}</Badge>
-          <Badge variant={remediationBadgeVariant(remediation)}>
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant={severityVariant(finding.severity)} className="text-[10px]">{finding.severity}</Badge>
+          <Badge variant={remediationBadgeVariant(remediation)} className="text-[10px]">
             {remediationBadgeLabel(remediation)}
           </Badge>
         </div>
       </button>
 
       {isExpanded && (
-        <div id={`finding-${finding.id}-detail`} className="border-t border-slate-200 p-4">
-          <div className="space-y-4">
-            <p className="text-sm text-slate-700">{finding.reason}</p>
+        <div id={`finding-${finding.id}-detail`} className="border-t border-zinc-200 p-4 space-y-3.5 dark:border-zinc-800">
+          <div className="space-y-3.5">
+            <p className="text-xs text-zinc-700 leading-relaxed dark:text-zinc-300">{finding.reason}</p>
 
             <div className="flex flex-wrap gap-2">
               <Button
@@ -226,12 +228,13 @@ const ViolationFinding = memo(function ViolationFinding({
                 </div>
               ))}
 
-            <div className="rounded-lg border border-slate-200">
-              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-                <span className="text-xs font-semibold uppercase text-slate-500">Code snippet</span>
+            <div className="rounded-lg border border-zinc-200 overflow-hidden dark:border-zinc-800">
+              <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-1.5 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/50">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Code snippet</span>
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="h-6 px-2 text-xs"
                   aria-label={`Copy snippet for ${finding.targetMethod}`}
                   onClick={async () => {
                     const ok = await copyTextToClipboard(finding.snippet || "");
@@ -239,7 +242,7 @@ const ViolationFinding = memo(function ViolationFinding({
                     else toast.error("Clipboard unavailable. Select and copy manually.");
                   }}
                 >
-                  <Copy aria-hidden="true" className="mr-1 h-4 w-4" /> Copy
+                  <Copy aria-hidden="true" className="mr-1 h-3.5 w-3.5" /> Copy
                 </Button>
               </div>
               <CodeHighlight
@@ -250,24 +253,24 @@ const ViolationFinding = memo(function ViolationFinding({
             </div>
 
             {previewResult?.error && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
                 <strong>Preview error:</strong> {previewResult.error}
               </div>
             )}
             {previewResult?.diff && (
-              <div className="rounded-lg border border-slate-200">
-                <div className="border-b border-slate-200 px-3 py-2">
-                  <span className="text-xs font-semibold uppercase text-slate-500">
+              <div className="rounded-lg border border-zinc-200 overflow-hidden dark:border-zinc-800">
+                <div className="border-b border-zinc-200 px-3 py-1.5 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/50">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                     Remediation Diff
                   </span>
                 </div>
-                <pre className="overflow-auto whitespace-pre-wrap break-words bg-white p-3 text-xs">
+                <pre className="overflow-auto whitespace-pre-wrap break-words bg-white p-3 font-mono text-xs dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100">
                   {previewResult.diff}
                 </pre>
               </div>
             )}
             {!previewResult?.diff && previewResult?.explanation && (
-              <div className="prose prose-sm max-w-none rounded-md border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 break-words">
+              <div className="prose prose-xs max-w-none rounded-lg border border-emerald-200 bg-emerald-50/70 p-3.5 text-emerald-950 break-words dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
                 <strong>Preview:</strong>
                 <Markdown>{previewResult.explanation}</Markdown>
               </div>
