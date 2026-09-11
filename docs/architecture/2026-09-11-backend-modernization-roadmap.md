@@ -339,13 +339,19 @@ production credentials or reinterpret old signature-keyed graphs as JDT state.
 
 The requested delivery is a clean feature branch and an unmerged PR for that
 Mac acceptance. This repository's origin is GitHub, unlike the home-server
-repositories hosted on Forgejo. Both forge CLIs are configured on the host.
+repositories hosted on Forgejo. Both forge CLIs are authenticated on the host.
 Use the authenticated Git/forge CLI workflow with explicit approval for the
-feature-branch push; no persistent permission or credential changes are needed.
+feature-branch push; no persistent command-permission changes are needed.
 The earlier conclusion that publishing required a separate runtime publisher
 was incorrect. The runtime launcher exists at
 `/usr/local/libexec/platform-capability`, but does not provide general Git
 publication commands.
+
+The first publication attempt on 2026-09-11 reached GitHub but was rejected:
+the OAuth credential lacked `workflow` scope, which is required for the
+changed `.github/workflows/ci.yml`. The user subsequently approved and completed
+GitHub CLI browser reauthorization with that scope. The rejected attempt
+created no remote branch; publication can now use the approved CLI workflow.
 
 The normal Mac handoff is to fetch `feat/jdt-parser-foundation` from origin.
 A complete-history Git bundle is an optional offline transfer path, including
