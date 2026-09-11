@@ -109,6 +109,45 @@ FIX_STRATEGIES: dict[str, dict[str, Any]] = {
     },
 }
 
+AGENTIC_FIX_STRATEGIES: dict[str, dict[str, Any]] = {
+    **FIX_STRATEGIES,
+    "ISO-A.8-SQL-INJECTION": {
+        "objective": "Replace dynamic SQL query concatenation with parameterized PreparedStatement.",
+        "allowed_transformations": [
+            "Convert Statement.executeQuery/executeUpdate into Connection.prepareStatement with ? placeholders.",
+            "Bind query parameters using typed setter methods (e.g. setString, setInt).",
+            "Add required java.sql.PreparedStatement imports.",
+        ],
+        "non_goals": [
+            "Do not alter database table or column names.",
+            "Do not change method return types.",
+        ],
+        "extra_examples": [],
+    },
+    "ISO-A.8-PATH-TRAVERSAL": {
+        "objective": "Prevent path traversal by verifying canonical base directory containment.",
+        "allowed_transformations": [
+            "Normalize paths using Path.normalize() and verify canonical containment against the base directory.",
+            "Use Path.resolve() instead of string concatenation for file paths.",
+        ],
+        "non_goals": [
+            "Do not change file permissions or filesystem structure.",
+        ],
+        "extra_examples": [],
+    },
+    "ISO-A.8-CMD-INJECTION": {
+        "objective": "Prevent command injection by using structured argument arrays with ProcessBuilder.",
+        "allowed_transformations": [
+            "Replace Runtime.getRuntime().exec string concatenation with ProcessBuilder argument arrays.",
+            "Pass individual command arguments as separate array elements to prevent shell token splitting.",
+        ],
+        "non_goals": [
+            "Do not modify the underlying executable or external environment.",
+        ],
+        "extra_examples": [],
+    },
+}
+
 
 def build_generation_payload(
     *,

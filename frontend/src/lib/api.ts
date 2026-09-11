@@ -28,6 +28,7 @@ import {
 } from "./schemas";
 import { buildRuntimeApiUrl, getRuntimeApiBase } from "./runtimeConfig";
 import {
+  DEMO_AGENTIC_RESULT,
   DEMO_APPLY_RESULT,
   DEMO_DIFFS,
   DEMO_EXPLANATION,
@@ -525,23 +526,13 @@ export async function runAgenticRemediation(
   signal?: AbortSignal,
 ): Promise<AgenticRemediationResponse> {
   if (isDemoMode()) {
+    const raw = payload.finding as Record<string, unknown>;
+    const ruleId = (raw.violation_id as string) ?? (raw.rule_id as string) ?? "ISO-A.8-SQL-INJECTION";
     return {
-      status: "SUCCESS",
-      rule_id: (payload.finding as Record<string, unknown>).violation_id as string ?? "ISO-A.8-SQL-INJECTION",
-      method_key: (payload.finding as Record<string, unknown>).method_key as string ?? "",
-      target_method: (payload.finding as Record<string, unknown>).target_method as string ?? "",
-      workspace_root: payload.workspace_root ?? "/app",
-      modified_files: ["src/main/java/com/acme/Demo.java"],
-      diff: "@@ -1,3 +1,3 @@\n-stmt.executeQuery(sql)\n+pstmt.executeQuery()",
-      verification: {
-        all_passed: true,
-        compile_passed: true,
-        tests_passed: true,
-        policy_passed: true,
-      },
-      reason: "Refactored to parameterized PreparedStatement query.",
-      iterations: 2,
-      turns_count: 2,
+      ...DEMO_AGENTIC_RESULT,
+      rule_id: ruleId,
+      method_key: (raw.method_key as string) ?? DEMO_AGENTIC_RESULT.method_key,
+      target_method: (raw.target_method as string) ?? DEMO_AGENTIC_RESULT.target_method,
     };
   }
 
