@@ -87,3 +87,24 @@ def apply_remediation(
             extra={"err": str(exc), "err_type": type(exc).__name__, "violation_id": violation_id},
         )
         return {"status": "ERROR", "error": str(exc), "violation_id": violation_id}
+
+
+def run_agentic_remediation(
+    finding: dict[str, Any],
+    *,
+    workspace_root: str | None = None,
+    max_turns: int = 8,
+    model: str | None = None,
+) -> dict[str, Any]:
+    """Public orchestration wrapper for autonomous multi-turn agentic remediation."""
+    from codegraph.config import settings
+    from codegraph.remediation.agentic import AgenticRemediationService
+
+    root = workspace_root or settings.upload_dir
+    service = AgenticRemediationService()
+    try:
+        res = service.remediate_finding(finding, workspace_root=root, max_turns=max_turns, model=model)
+        return res.to_dict()
+    except Exception as exc:
+        LOGGER.exception("Agentic remediation execution failed", extra={"err": str(exc)})
+        return {"status": "ERROR", "error": str(exc)}

@@ -198,6 +198,37 @@ class TestRemediationApplyRequestValidation(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_apply.call_args.kwargs["mode"], "apply")
 
+    @patch("api.routers.remediation.run_agentic_remediation")
+    def test_agentic_endpoint_invokes_orchestrator(self, mock_agentic):
+        mock_agentic.return_value = {
+            "status": "SUCCESS",
+            "rule_id": "ISO-A.8-SQL-INJECTION",
+            "method_key": "ws@rev:Demo.java#query",
+            "target_method": "demo.Demo.query()",
+            "workspace_root": "/tmp/ws",
+            "modified_files": ["src/Demo.java"],
+            "diff": "@@ -1 +1 @@",
+            "reason": "Parameterized with PreparedStatement.",
+            "iterations": 2,
+            "turns_count": 2,
+        }
+        client = TestClient(_build_app())
+        response = client.post(
+            "/remediation/agentic",
+            json={
+                "finding": {
+                    "violation_id": "ISO-A.8-SQL-INJECTION",
+                    "method_key": "ws@rev:Demo.java#query",
+                },
+                "max_turns": 5,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "SUCCESS")
+        self.assertEqual(payload["rule_id"], "ISO-A.8-SQL-INJECTION")
+
+
     @patch("api.routers.remediation.apply_remediation")
     def test_unknown_mode_is_rejected_without_invoking_service(self, mock_apply):
         response = self._post_apply(mock_apply, {"mode": "preview"})
