@@ -1,0 +1,19 @@
+{
+  "notes": "CWE-90 positive: explicit LDAP injection flag in servlet context should trigger LDAP-injection detection.",
+  "bundle": {
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest90004.doPost(HttpServletRequest,HttpServletResponse)",
+    "method_name": "doPost",
+    "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest90004.java",
+    "source_code": "String user = request.getParameter(\"user\"); String filter = \"(uid=\" + user + \")\"; ctx.search(\"ou=users\", filter, ctrls);",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    },
+    "analysis_flags": {
+      "ldap_injection_detected": true
+    }
+  },
+  "expected_violation_ids": ["ISO-A.8-LDAP-INJECTION"]
+}

@@ -1,0 +1,25 @@
+{
+  "notes": "CWE-90 negative: LDAP flag is suppressed when helper summary confirms safe constant filter usage.",
+  "bundle": {
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest90005.doPost(HttpServletRequest,HttpServletResponse)",
+    "method_name": "doPost",
+    "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest90005.java",
+    "source_code": "String user = request.getParameter(\"user\"); String filter = buildFilter(user); ctx.search(\"ou=users\", filter, ctrls);",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    },
+    "analysis_flags": {
+      "ldap_injection_detected": true
+    },
+    "helper_summaries": {
+      "safe_constant_return_vars": ["filter"],
+      "tainted_return_vars": [],
+      "safe_constant_return_used_in_ldap_filter": true,
+      "tainted_return_used_in_ldap_filter": false
+    }
+  },
+  "expected_violation_ids": []
+}

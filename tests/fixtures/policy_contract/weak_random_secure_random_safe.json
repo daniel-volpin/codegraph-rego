@@ -1,0 +1,17 @@
+{
+  "notes": "CWE-330 negative: SecureRandom usage should not trigger weak-random detection.",
+  "bundle": {
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest33007.doPost(HttpServletRequest,HttpServletResponse)",
+    "method_name": "doPost",
+    "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest33007.java",
+    "source_code": "java.security.SecureRandom random = new java.security.SecureRandom(); String token = Integer.toString(random.nextInt());",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": ["java.security.SecureRandom.nextInt()"],
+      "callers": []
+    },
+    "analysis_flags": null
+  },
+  "expected_violation_ids": []
+}

@@ -1,0 +1,16 @@
+{
+  "notes": "CWE-327 positive: DES cipher usage should trigger weak-crypto detection.",
+  "bundle": {
+    "target_method": "org.example.CryptoService.encrypt()",
+    "method_name": "encrypt",
+    "file_path": "src/main/java/org/example/CryptoService.java",
+    "source_code": "public byte[] encrypt(byte[] data) { Cipher cipher = Cipher.getInstance(\"DES/CBC/PKCS5Padding\"); return cipher.doFinal(data); }",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    }
+  },
+  "expected_violation_ids": ["ISO-A.10-WEAK-CRYPTO"]
+}

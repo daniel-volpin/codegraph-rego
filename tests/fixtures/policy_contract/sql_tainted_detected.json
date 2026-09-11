@@ -1,0 +1,20 @@
+{
+  "notes": "CWE-89 positive: explicit SQL dynamic-query and tainted-input flags in servlet context should trigger SQL-injection detection.",
+  "bundle": {
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest89003.doPost(HttpServletRequest,HttpServletResponse)",
+    "method_name": "doPost",
+    "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest89003.java",
+    "source_code": "String param = request.getParameter(\"x\"); String sql = \"SELECT * FROM USERS WHERE USERNAME='\" + param + \"'\"; statement.executeQuery(sql);",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    },
+    "analysis_flags": {
+      "sql_dynamic_query_detected": true,
+      "sql_query_uses_tainted_input": true
+    }
+  },
+  "expected_violation_ids": ["ISO-A.8-SQL-INJECTION"]
+}

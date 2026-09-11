@@ -1,0 +1,16 @@
+{
+  "notes": "CWE-327 negative: modern AES-GCM usage should not trigger weak-crypto detection.",
+  "bundle": {
+    "target_method": "org.example.CryptoService.encryptSafely()",
+    "method_name": "encryptSafely",
+    "file_path": "src/main/java/org/example/CryptoService.java",
+    "source_code": "public byte[] encryptSafely(byte[] data) { Cipher cipher = Cipher.getInstance(\"AES/GCM/NoPadding\"); return cipher.doFinal(data); }",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    }
+  },
+  "expected_violation_ids": []
+}

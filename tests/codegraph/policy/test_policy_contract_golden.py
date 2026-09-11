@@ -17,6 +17,40 @@ from tests._support import PROJECT_ROOT
 
 FIXTURE_DIR = PROJECT_ROOT / "tests" / "fixtures" / "policy_contract"
 OPA_AVAILABLE = bool(shutil.which("opa"))
+BENCHMARK_FIXTURE_MATRIX: dict[str, dict[str, str]] = {
+    "CWE-22": {
+        "positive": "path_tainted_detected.json",
+        "negative": "path_safe_helper_suppressed.json",
+    },
+    "CWE-78": {
+        "positive": "command_tainted_helper.json",
+        "negative": "command_safe_helper_suppressed.json",
+    },
+    "CWE-89": {
+        "positive": "sql_tainted_detected.json",
+        "negative": "analysis_flags_null_safe_prepared_statement.json",
+    },
+    "CWE-90": {
+        "positive": "ldap_tainted_detected.json",
+        "negative": "ldap_safe_helper_suppressed.json",
+    },
+    "CWE-327": {
+        "positive": "weak_crypto_des_detected.json",
+        "negative": "weak_crypto_aes_gcm_safe.json",
+    },
+    "CWE-328": {
+        "positive": "weak_hash_call_graph.json",
+        "negative": "weak_hash_sha256_safe.json",
+    },
+    "CWE-330": {
+        "positive": "weak_random_detected.json",
+        "negative": "weak_random_secure_random_safe.json",
+    },
+    "CWE-643": {
+        "positive": "xpath_tainted_detected.json",
+        "negative": "xpath_safe_helper_suppressed.json",
+    },
+}
 
 
 def _load_fixture(name: str) -> dict:
@@ -180,3 +214,20 @@ class TestPolicyContractGoldenFixtures(unittest.TestCase):
                 payload = _load_fixture(fixture_path.name)
                 violations = evaluate_bundle(payload["bundle"])
                 self.assertEqual(_violation_ids(violations), set(payload["expected_violation_ids"]))
+
+    def test_benchmark_matrix_has_explicit_positive_and_negative_cases(self) -> None:
+        for cwe_id, cases in BENCHMARK_FIXTURE_MATRIX.items():
+            positive_fixture = cases["positive"]
+            negative_fixture = cases["negative"]
+            with self.subTest(cwe=cwe_id, case="positive", fixture=positive_fixture):
+                payload = _load_fixture(positive_fixture)
+                violations = evaluate_bundle(payload["bundle"])
+                expected = set(payload["expected_violation_ids"])
+                self.assertTrue(expected, f"{positive_fixture} must assert at least one violation")
+                self.assertEqual(_violation_ids(violations), expected)
+            with self.subTest(cwe=cwe_id, case="negative", fixture=negative_fixture):
+                payload = _load_fixture(negative_fixture)
+                violations = evaluate_bundle(payload["bundle"])
+                expected = set(payload["expected_violation_ids"])
+                self.assertEqual(expected, set(), f"{negative_fixture} must assert an explicit safe outcome")
+                self.assertEqual(_violation_ids(violations), expected)

@@ -1,0 +1,19 @@
+{
+  "notes": "CWE-330 positive: explicit insecure-random analysis flag in servlet context should trigger weak-random detection.",
+  "bundle": {
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest33006.doPost(HttpServletRequest,HttpServletResponse)",
+    "method_name": "doPost",
+    "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest33006.java",
+    "source_code": "String token = Integer.toString(new Random().nextInt()); response.getWriter().println(token);",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    },
+    "analysis_flags": {
+      "insecure_random_detected": true
+    }
+  },
+  "expected_violation_ids": ["ISO-A.10-WEAK-RANDOM"]
+}

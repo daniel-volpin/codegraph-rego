@@ -1,0 +1,25 @@
+{
+  "notes": "CWE-78 negative: command sink with taint flag is suppressed when helper summary confirms safe constant sink usage.",
+  "bundle": {
+    "target_method": "org.owasp.benchmark.testcode.BenchmarkTest78002.doPost(HttpServletRequest,HttpServletResponse)",
+    "method_name": "doPost",
+    "file_path": "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest78002.java",
+    "source_code": "String param = request.getHeader(\"x\"); String bar = doSomething(param); Runtime.getRuntime().exec(\"ls \" + bar);",
+    "graph_context": {
+      "annotations": [],
+      "uses_fields": [],
+      "calls": [],
+      "callers": []
+    },
+    "analysis_flags": {
+      "command_exec_string_tainted": true
+    },
+    "helper_summaries": {
+      "safe_constant_return_vars": ["bar"],
+      "tainted_return_vars": [],
+      "safe_constant_return_used_in_command_sink": true,
+      "tainted_return_used_in_command_sink": false
+    }
+  },
+  "expected_violation_ids": []
+}
