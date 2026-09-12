@@ -51,6 +51,7 @@ import logging
 import os
 
 from opentelemetry import trace
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
@@ -112,11 +113,9 @@ class _FileSpanExporter:
     """
 
     def __init__(self, path: str) -> None:
-        from opentelemetry.sdk.trace.export import ConsoleSpanExporter as _CSE  # noqa: PLC0415
-
         self._fh = open(path, "a", encoding="utf-8")  # noqa: SIM115
         # ConsoleSpanExporter accepts an ``out`` file-like; reuse its serialisation.
-        self._inner = _CSE(out=self._fh)
+        self._inner = ConsoleSpanExporter(out=self._fh)
 
     # Mirror the SpanExporter interface used by BatchSpanProcessor.
     def export(self, spans):  # type: ignore[override]
@@ -166,8 +165,6 @@ def configure_telemetry(service_name: str = "codegraph") -> None:
 
     # Auto-instrument outbound HTTP calls made by the OpenAI SDK (uses httpx).
     try:
-        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor  # noqa: PLC0415
-
         HTTPXClientInstrumentor().instrument()
     except Exception:  # pragma: no cover - optional extra
         pass

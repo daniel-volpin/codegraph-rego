@@ -16,6 +16,7 @@ import platform
 import subprocess
 import sys
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -184,13 +185,8 @@ def _ground_truth_info(
 
 def _package_version() -> str | None:
     try:
-        from importlib.metadata import PackageNotFoundError, version
-
-        try:
-            return version("codegraph")
-        except PackageNotFoundError:
-            return None
-    except ImportError:
+        return version("codegraph")
+    except PackageNotFoundError:
         return None
 
 
