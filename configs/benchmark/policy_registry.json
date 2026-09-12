@@ -273,7 +273,7 @@
       "rego_rule_ids": ["ISO-A.9.4.1"],
       "control_ids": ["A.9.4.1"],
       "remediation_tier": "guarded",
-      "framework_demo": true
+      "framework_demo": false
     },
     {
       "category_id": "event-logging",
@@ -282,7 +282,7 @@
       "rego_rule_ids": ["ISO-A.12.4.1"],
       "control_ids": ["A.12.4.1"],
       "remediation_tier": "guarded",
-      "framework_demo": true
+      "framework_demo": false
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { downloadSarifFile, summarizeSarif } from "./sarif";
-import { DEMO_SARIF_DOCUMENT } from "./demoData";
+import { DEMO_SARIF_DOCUMENT } from "./demoDataset";
 
 describe("sarif utilities", () => {
   beforeEach(() => {

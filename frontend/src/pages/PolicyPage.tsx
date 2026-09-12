@@ -6,12 +6,12 @@ import {
   type SortingState,
   useTable,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronRight, ShieldCheck } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, ShieldAlert, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { evaluatePolicies, exportPolicySarif, fetchPolicyCatalog, fetchPolicyPacks, importSarifReport } from "../lib/api";
 import { cn } from "../lib/utils";
 import { downloadSarifFile } from "../lib/sarif";
-import type { PolicyCatalogResponse, PolicyEvaluateResponse } from "../lib/types";
+import type { PolicyCatalogResponse, PolicyEvaluateResponse, PolicyPacksResponse } from "../lib/types";
 import {
   persistPolicyEvaluation,
   readPersistedUploadedModules,
@@ -23,6 +23,7 @@ import { Badge } from "../components/ui/badge";
 import ControlsPanel from "../components/features/policy/ControlsPanel";
 import EvaluationStatusCard from "../components/features/policy/EvaluationStatusCard";
 import FindingDetailPanel from "../components/features/policy/FindingDetailPanel";
+import StandardRulesCatalogView from "../components/features/policy/StandardRulesCatalogView";
 import SummaryCards from "../components/features/policy/SummaryCards";
 import ViolationGroupTable from "../components/features/policy/ViolationGroupTable";
 import {
@@ -30,6 +31,8 @@ import {
   type ViolationGroupRow,
   LEGACY_FRAMEWORK_DEMO_RULE_IDS,
   POLICY_VIEW_PRESET_STORAGE_KEY,
+  deriveStandardFromRuleId,
+  formatHumanRuleTitle,
   groupViolationsByRule,
   normalizeViolation,
   readPolicyViewPreset,
@@ -61,6 +64,7 @@ const PolicyPage = () => {
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedStandard, setSelectedStandard] = useState<string>("all");
+  const [activeViewMode, setActiveViewMode] = useState<"findings" | "rules_catalog">("findings");
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [isExportingSarif, setIsExportingSarif] = useState<boolean>(false);
   const [isImportingSarif, setIsImportingSarif] = useState<boolean>(false);
@@ -73,11 +77,16 @@ const PolicyPage = () => {
     }));
   };
 
-  // ---- Policy catalog + eval queries ----
+  // ---- Policy catalog + packs + eval queries ----
 
   const policyCatalogQuery = useQuery<PolicyCatalogResponse, Error>({
     queryKey: ["policyCatalog"],
     queryFn: ({ signal }) => fetchPolicyCatalog(signal),
+  });
+
+  const policyPacksQuery = useQuery<PolicyPacksResponse, Error>({
+    queryKey: ["policyPacks"],
+    queryFn: ({ signal }) => fetchPolicyPacks(signal),
   });
 
   const frameworkDemoRuleIds = useMemo(() => {
@@ -308,12 +317,27 @@ const PolicyPage = () => {
       },
       {
         accessorKey: "ruleId",
-        header: "Rule ID",
-        cell: ({ row }) => (
-          <span className="block min-w-0 truncate font-mono text-xs text-slate-800" title={row.original.ruleId}>
-            {row.original.ruleId}
-          </span>
-        ),
+        header: "Rule / Standard",
+        cell: ({ row }) => {
+          const ruleId = row.original.ruleId;
+          const humanTitle = formatHumanRuleTitle(ruleId);
+          const standard = deriveStandardFromRuleId(ruleId);
+          return (
+            <div className="min-w-0">
+              <span className="block min-w-0 truncate font-semibold text-xs text-zinc-900 dark:text-zinc-100" title={humanTitle}>
+                {humanTitle}
+              </span>
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <span className="font-mono text-[10px] text-zinc-400 dark:text-zinc-500 truncate" title={ruleId}>
+                  {ruleId}
+                </span>
+                <Badge variant="outline" className="px-1 py-0 text-[9px] text-zinc-500 border-zinc-200 dark:border-zinc-800 shrink-0">
+                  {standard}
+                </Badge>
+              </div>
+            </div>
+          );
+        },
       },
       {
         accessorKey: "severity",
@@ -485,64 +509,111 @@ const PolicyPage = () => {
         </Card>
       )}
 
-      {/* Compliance Standard & SAST Pack Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
-        {[
-          { id: "all", label: "All Standards", count: standardCounts.all },
-          { id: "iso", label: "ISO/IEC 27001", count: standardCounts.iso },
-          { id: "pci", label: "PCI-DSS 4.0", count: standardCounts.pci },
-          { id: "owasp", label: "OWASP Top 10", count: standardCounts.owasp },
-          { id: "nist", label: "NIST SP 800-53", count: standardCounts.nist },
-          { id: "sarif", label: "External SAST (SARIF)", count: standardCounts.sarif },
-        ].map((tab) => {
-          const active = selectedStandard === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setSelectedStandard(tab.id)}
-              className={cn(
-                "rounded-lg px-3 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap text-xs flex items-center gap-1.5",
-                active
-                  ? "bg-indigo-600 text-white shadow-xs font-semibold"
-                  : "bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800",
-              )}
-            >
-              <span>{tab.label}</span>
-              <span
+      {/* Compliance Standard Filter Tabs + Dual Mode Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+          {[
+            { id: "all", label: "All Standards", count: standardCounts.all },
+            { id: "iso", label: "ISO/IEC 27001", count: standardCounts.iso },
+            { id: "pci", label: "PCI-DSS 4.0", count: standardCounts.pci },
+            { id: "owasp", label: "OWASP Top 10", count: standardCounts.owasp },
+            { id: "nist", label: "NIST SP 800-53", count: standardCounts.nist },
+            { id: "sarif", label: "External SAST (SARIF)", count: standardCounts.sarif },
+          ].map((tab) => {
+            const active = selectedStandard === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSelectedStandard(tab.id)}
                 className={cn(
-                  "rounded-full px-1.5 py-0.2 text-[10px] font-mono",
+                  "rounded-lg px-3 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap text-xs flex items-center gap-1.5",
                   active
-                    ? "bg-indigo-700 text-indigo-100"
-                    : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400",
+                    ? "bg-indigo-600 text-white shadow-xs font-semibold"
+                    : "bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800",
                 )}
               >
-                {tab.count}
-              </span>
-            </button>
-          );
-        })}
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.2 text-[10px] font-mono",
+                    active
+                      ? "bg-indigo-700 text-indigo-100"
+                      : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400",
+                  )}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* View Switcher: Active Findings vs Policy Rules Catalog */}
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-zinc-800 p-1 rounded-lg text-xs shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveViewMode("findings")}
+            className={cn(
+              "rounded-md px-3 py-1 text-xs font-medium transition cursor-pointer flex items-center gap-1.5",
+              activeViewMode === "findings"
+                ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
+                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100",
+            )}
+          >
+            <ShieldAlert className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+            <span>Active Violations ({filteredFindings.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveViewMode("rules_catalog")}
+            className={cn(
+              "rounded-md px-3 py-1 text-xs font-medium transition cursor-pointer flex items-center gap-1.5",
+              activeViewMode === "rules_catalog"
+                ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
+                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100",
+            )}
+          >
+            <BookOpen className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span>Standards &amp; Rules Catalog</span>
+          </button>
+        </div>
       </div>
 
-      <SummaryCards {...summary} />
-
-      <div
-        data-testid="policy-results-layout"
-        className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,540px)] xl:items-start"
-      >
-        <ViolationGroupTable
-          table={table}
-          columnCount={columns.length}
-          selectedFindingId={effectiveSelectedFindingId}
-          onSelectFinding={setSelectedFindingId}
-          expandedFindingByGroup={expandedFindingByGroup}
-          onToggleFinding={toggleFindingExpanded}
-          hasEvaluationResult={hasEvaluationResult}
-          emptyMessage={tableEmptyMessage}
+      {activeViewMode === "rules_catalog" ? (
+        <StandardRulesCatalogView
+          packs={policyPacksQuery.data?.packs ?? []}
+          findings={findings}
+          selectedStandard={selectedStandard}
+          onSelectStandard={setSelectedStandard}
+          onSelectRuleInFindings={(ruleId) => {
+            setSearchQuery(ruleId);
+            setActiveViewMode("findings");
+          }}
         />
+      ) : (
+        <>
+          <SummaryCards {...summary} />
 
-        <FindingDetailPanel key={selectedFinding?.id ?? "empty"} selectedFinding={selectedFinding} />
-      </div>
+          <div
+            data-testid="policy-results-layout"
+            className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,540px)] xl:items-start"
+          >
+            <ViolationGroupTable
+              table={table}
+              columnCount={columns.length}
+              selectedFindingId={effectiveSelectedFindingId}
+              onSelectFinding={setSelectedFindingId}
+              expandedFindingByGroup={expandedFindingByGroup}
+              onToggleFinding={toggleFindingExpanded}
+              hasEvaluationResult={hasEvaluationResult}
+              emptyMessage={tableEmptyMessage}
+            />
+
+            <FindingDetailPanel key={selectedFinding?.id ?? "empty"} selectedFinding={selectedFinding} />
+          </div>
+        </>
+      )}
     </div>
   );
 };

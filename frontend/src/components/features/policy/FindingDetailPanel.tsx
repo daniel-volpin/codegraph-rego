@@ -56,6 +56,7 @@ export const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps)
   const applyMutation = useApplyMutation();
   const agenticMutation = useAgenticMutation();
 
+  const [activeTab, setActiveTab] = useState<"all" | "fix" | "evidence" | "explanation">("all");
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showVerificationDetails, setShowVerificationDetails] = useState(false);
   const [showCompilationLogs, setShowCompilationLogs] = useState(false);
@@ -105,49 +106,76 @@ export const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps)
   return (
     <>
       <Card
-        className="min-w-0 p-5 xl:sticky xl:top-24 xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto shadow-xs border-zinc-200/80 dark:border-zinc-800"
+        className="min-w-0 p-4 xl:sticky xl:top-24 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto shadow-xs border-zinc-200/80 dark:border-zinc-800"
         data-testid="finding-dossier"
       >
         <div role="status" aria-live="polite" className="sr-only">
           {statusMessage}
         </div>
 
-        {/* Level 1 Header: Dossier & Authoritative Policy Violation */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-zinc-800">
-          <div>
+        {/* Compact Header with Tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <ShieldCheck aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Case Dossier</p>
+              <ShieldCheck aria-hidden="true" className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Case Dossier</span>
+              {selectedFinding && (
+                <span className="font-mono text-xs font-semibold text-slate-700 dark:text-zinc-300 truncate">
+                  {selectedFinding.ruleId}
+                </span>
+              )}
             </div>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              Selected finding analysis with evidence hierarchy, explanation, preview, and dry-run re-verification.
-            </p>
+            {selectedFinding && (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <Badge variant={severityVariant(selectedFinding.severity)} className="text-[10px]">
+                  {selectedFinding.severity}
+                </Badge>
+                <Badge variant={remediationBadgeVariant(selectedFinding.remediation)} className="text-[10px]">
+                  {remediationBadgeLabel(selectedFinding.remediation)}
+                </Badge>
+                <Badge variant="secondary" className="text-[10px]">
+                  {selectedFinding.cweLabel}
+                </Badge>
+              </div>
+            )}
           </div>
+
           {selectedFinding && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant={severityVariant(selectedFinding.severity)} className="text-[10px]">{selectedFinding.severity}</Badge>
-              <Badge variant={remediationBadgeVariant(selectedFinding.remediation)} className="text-[10px]">
-                {remediationBadgeLabel(selectedFinding.remediation)}
-              </Badge>
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-zinc-800 p-1 rounded-lg text-xs shrink-0">
+              {[
+                { id: "all", label: "All Details" },
+                { id: "fix", label: "⚡ 3-Gate Fix" },
+                { id: "evidence", label: "🔍 Evidence" },
+                { id: "explanation", label: "📋 AI Analysis" },
+              ].map((tab) => {
+                const active = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition cursor-pointer whitespace-nowrap ${
+                      active
+                        ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
+                        : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
 
         {!selectedFinding ? (
           <div className="py-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
-            Run a policy scan and select a finding to open a case dossier.
+            Select any finding on the left to inspect evidence, run AI analysis, or execute autonomous 3-gate repair.
           </div>
         ) : (
-          <div className="space-y-4 pt-4">
+          <div className="space-y-3.5 pt-3">
             {/* 1. Authoritative Policy Finding Box */}
             <FindingHeader finding={selectedFinding} />
-
-            {/* Pipeline Step Summary Cards */}
-            <PipelineStageCards
-              explainStatus={explainStatus}
-              previewStatus={previewStatus}
-              verifyStatus={verifyStatus}
-            />
 
             {/* Action Toolbar */}
             <ActionToolbar
@@ -160,6 +188,13 @@ export const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps)
               onAgentic={() => agenticMutation.mutate(selectedFinding)}
             />
 
+            {/* Pipeline Stage Cards */}
+            <PipelineStageCards
+              explainStatus={explainStatus}
+              previewStatus={previewStatus}
+              verifyStatus={verifyStatus}
+            />
+
             {remediationUnavailable && (
               <RemediationUnavailableNotice
                 reasonCode={selectedFinding.remediation.reason_code}
@@ -170,37 +205,46 @@ export const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps)
             {/* Confidence Surface */}
             <ConfidenceBand confidence={confidenceSurface} />
 
-            {/* 2. Source Evidence & Citation Section */}
-            <div className="space-y-4">
-              <EvidenceSection finding={selectedFinding} />
+            {/* Dossier Content Sections */}
+            <div className="space-y-3.5">
+              {/* 2. Source Evidence & Citation Section */}
+              {(activeTab === "all" || activeTab === "evidence") && (
+                <EvidenceSection finding={selectedFinding} />
+              )}
 
               {/* 3. Generated LLM Explanation Artifact Section */}
-              <ExplanationSection
-                explainResult={explainResult}
-                explainFailed={explainFailed}
-                pendingAction={pendingAction}
-              />
+              {(activeTab === "all" || activeTab === "explanation") && (
+                <ExplanationSection
+                  explainResult={explainResult}
+                  explainFailed={explainFailed}
+                  pendingAction={pendingAction}
+                />
+              )}
 
               {/* 4. Bounded Remediation Artifacts Section */}
-              <BoundedRemediationSection
-                findingId={findingId}
-                previewResult={previewResult}
-                applyResult={applyResult}
-                previewFailed={previewFailed}
-                categorizedOutcome={categorizedOutcome}
-                pendingAction={pendingAction}
-                showVerificationDetails={showVerificationDetails}
-                onToggleVerificationDetails={() => setShowVerificationDetails((c) => !c)}
-                showCompilationLogs={showCompilationLogs}
-                onToggleCompilationLogs={() => setShowCompilationLogs((c) => !c)}
-              />
+              {(activeTab === "all" || activeTab === "fix") && (
+                <BoundedRemediationSection
+                  findingId={findingId}
+                  previewResult={previewResult}
+                  applyResult={applyResult}
+                  previewFailed={previewFailed}
+                  categorizedOutcome={categorizedOutcome}
+                  pendingAction={pendingAction}
+                  showVerificationDetails={showVerificationDetails}
+                  onToggleVerificationDetails={() => setShowVerificationDetails((c) => !c)}
+                  showCompilationLogs={showCompilationLogs}
+                  onToggleCompilationLogs={() => setShowCompilationLogs((c) => !c)}
+                />
+              )}
 
               {/* 5. Autonomous Multi-Turn Agentic Remediation Section */}
-              <AgenticRemediationSection
-                findingId={findingId}
-                agenticResult={agenticResult}
-                pendingAction={pendingAction}
-              />
+              {(activeTab === "all" || activeTab === "fix") && (
+                <AgenticRemediationSection
+                  findingId={findingId}
+                  agenticResult={agenticResult}
+                  pendingAction={pendingAction}
+                />
+              )}
             </div>
           </div>
         )}

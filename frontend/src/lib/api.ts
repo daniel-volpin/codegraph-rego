@@ -48,7 +48,7 @@ import {
   DEMO_SEARCH_MATCHES,
   DEMO_UPLOAD_RESPONSE,
   DEMO_UPLOAD_STATUS,
-} from "./demoData";
+} from "./demoDataset";
 
 const defaultHeaders = {
   Accept: "application/json",

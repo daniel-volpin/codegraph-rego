@@ -17,6 +17,9 @@ export interface FindingHeaderProps {
 export const FindingHeader = ({ finding }: FindingHeaderProps) => {
   const parsedMethod = parseMethodKey(finding.targetMethod || finding.methodKey);
   const cleanPath = formatCitationDisplay(finding.filePath).display;
+  const cleanControl = finding.controlLabel.toLowerCase().startsWith("control")
+    ? finding.controlLabel
+    : `Control ${finding.controlLabel}`;
 
   return (
     <div className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-4 space-y-3 dark:border-zinc-800 dark:bg-zinc-900/40">
@@ -28,7 +31,7 @@ export const FindingHeader = ({ finding }: FindingHeaderProps) => {
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        <Badge variant="secondary" className="text-[10px]">Control {finding.controlLabel}</Badge>
+        <Badge variant="secondary" className="text-[10px]">{cleanControl}</Badge>
         <Badge variant="secondary" className="text-[10px]">{finding.cweLabel}</Badge>
         <Badge variant={severityVariant(finding.severity)} className="text-[10px]">{finding.severity}</Badge>
       </div>
