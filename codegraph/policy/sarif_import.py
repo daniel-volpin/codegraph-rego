@@ -21,6 +21,46 @@ SARIF_LEVEL_TO_SEVERITY: dict[str, str] = {
 }
 
 
+def _taint_paths_from_code_flows(result: dict[str, Any], *, rule_id: str) -> list[dict[str, Any]]:
+    """Translate SARIF codeFlows/threadFlows into verified taint propagation paths.
+
+    Each threadFlow is an ordered source → propagator → sink dataflow trace
+    produced by the analyzer, so the emitted chain reflects observed data
+    dependencies rather than call-graph reachability.
+    """
+    taint_paths: list[dict[str, Any]] = []
+    for code_flow in result.get("codeFlows") or []:
+        if not isinstance(code_flow, dict):
+            continue
+        for thread_flow in code_flow.get("threadFlows") or []:
+            if not isinstance(thread_flow, dict):
+                continue
+            chain: list[dict[str, Any]] = []
+            for entry in thread_flow.get("locations") or []:
+                location = (entry or {}).get("location") or {}
+                physical = location.get("physicalLocation") or {}
+                region = physical.get("region") or {}
+                text = str((location.get("message") or {}).get("text") or "").strip()
+                chain.append(
+                    {
+                        "signature": text,
+                        "file_path": (physical.get("artifactLocation") or {}).get("uri"),
+                        "line": region.get("startLine"),
+                        "snippet": (region.get("snippet") or {}).get("text"),
+                    }
+                )
+            if not chain:
+                continue
+            taint_paths.append(
+                {
+                    "sink_type": rule_id,
+                    "hops": len(chain) - 1,
+                    "chain": chain,
+                }
+            )
+    return taint_paths
+
+
 def _resolve_method_for_location(
     driver: Driver,
     *,
@@ -225,6 +265,7 @@ def import_findings_from_sarif(
                     "end_line": end_line,
                     "source_code": code_snippet,
                     "imported_from_sarif": True,
+                    "taint_paths": _taint_paths_from_code_flows(result, rule_id=rule_id),
                 },
             }
             violations.append(violation_record)

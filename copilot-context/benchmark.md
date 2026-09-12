@@ -27,6 +27,12 @@ Remediation support tiers:
   - `TP=222`, `FP=11`, `FN=11`
   - `Precision=Recall=F1=0.9528`
   - Same headline numbers as the older v1 run, but with provenance and CIs
+  - **Qualified evidence.** Recorded at SHA `7ad90a2`, which predates audit
+    POLICY-C1's removal of the `benchmarktest` corpus fingerprint that gated
+    weak-random detection, and it does not reproduce on the current baseline
+    under its own matched config (60/category, seed 7): Rego lexical scores
+    `0.795` F1 and OpenGrep taint analysis `0.838`. See
+    `docs/thesis_context.md` ("Canonical thesis runs") before citing.
 - Explanation: `outputs/thesis_final_explanation_full_v2/`
   - `Citation@TP (ctx)=1.000` (`222/222`)
   - `Citation@TP (no-ctx)=0.009` (`2/222`)

@@ -11,6 +11,8 @@ revision; runs of this modernized branch are new evidence, not historical reruns
 - uv 0.12.13+
 - Neo4j 5.x
 - OPA `v1.20.2` on `PATH` (required for `make policy-check` and OPA policy evaluation)
+- OpenGrep `v1.30.0+` on `PATH` (required for the injection controls; without it
+  those rules are skipped and detection recall drops silently)
 - JDK 21+ and Maven for the JDT adapter; the analyzed project's build may require its own configured Java release
 - local checkout of `BenchmarkJava`
 - LM Studio, OpenAI, or another OpenAI-compatible LLM endpoint for explanation/remediation runs
@@ -56,6 +58,8 @@ matching defaults — keep it in sync when adding new variables.
 | `OWASP_BENCHMARK_ROOT` | _unset_ | Absolute path to the local `BenchmarkJava` checkout. Required for benchmark eval scripts. |
 | `CODEGRAPH_HOST` | `127.0.0.1` | Bind host for the backend service. Loopback by default for safe local-only operation. |
 | `CODEGRAPH_OPA_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OPA eval subprocesses. |
+| `CODEGRAPH_OPENGREP_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OpenGrep taint subprocesses. |
+| `CODEGRAPH_OPENGREP_RULES_DIR` | `policy/opengrep` | Directory of auto-discovered OpenGrep taint rule files. |
 | `JAVA_PARSER_JAR` | `tools/java-parser/target/codegraph-java-parser.jar` | Explicit path to the Eclipse JDT parser fat jar. Build with `make java-parser-build`; the Python adapter never downloads or builds it at runtime. |
 | `JAVA_PARSER_TIMEOUT_SECONDS` | `30.0` | Per-request deadline for the fresh JVM parser process. |
 | `JAVA_PARSER_HEAP_MB` | `384` | Heap cap passed as `-Xmx` to each parser JVM. |
@@ -109,6 +113,7 @@ Use these commands as the local verification gate:
 uv run ruff check .
 UV_CACHE_DIR=/tmp/uv-cache uv run python -m pytest -q
 PATH="$(pwd)/.venv/bin:$PATH" make policy-check
+make opengrep-test
 cd frontend && yarn lint && yarn test && yarn build
 ```
 

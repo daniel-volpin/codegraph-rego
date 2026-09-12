@@ -1,0 +1,32 @@
+rules:
+  - id: ISO-A.8-XPATH-INJECTION
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Possible XPath injection: an XPath expression is built from untrusted
+      HTTP input reaching XPath.evaluate()/compile() without sanitization.
+    metadata:
+      cwe: CWE-643
+      references:
+        - https://owasp.org/www-project-benchmark/
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getParameterValues(...)
+          - pattern: $REQ.getParameterMap(...)
+          - pattern: $REQ.getParameterNames(...)
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getHeaders(...)
+          - pattern: $REQ.getQueryString(...)
+          - pattern: $REQ.getCookies(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $XP.evaluate(...)
+              - pattern: $XP.compile(...)
+          - metavariable-type:
+              metavariable: $XP
+              type: javax.xml.xpath.XPath
+    pattern-sanitizers:
+      - pattern: $ESAPI.encoder().encodeForXPath(...)

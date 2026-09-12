@@ -17,23 +17,10 @@ from tests._support import PROJECT_ROOT
 
 FIXTURE_DIR = PROJECT_ROOT / "tests" / "fixtures" / "policy_contract"
 OPA_AVAILABLE = bool(shutil.which("opa"))
+# Only OPA/Rego-backed controls belong here: these fixtures feed policy input
+# straight to OPA. The taint-backed controls (CWE-22/78/89/90/643) are owned by
+# the OpenGrep engine and are covered by tests/codegraph/policy/test_opengrep_rules.py.
 BENCHMARK_FIXTURE_MATRIX: dict[str, dict[str, str]] = {
-    "CWE-22": {
-        "positive": "path_tainted_detected.json",
-        "negative": "path_safe_helper_suppressed.json",
-    },
-    "CWE-78": {
-        "positive": "command_tainted_helper.json",
-        "negative": "command_safe_helper_suppressed.json",
-    },
-    "CWE-89": {
-        "positive": "sql_tainted_detected.json",
-        "negative": "analysis_flags_null_safe_prepared_statement.json",
-    },
-    "CWE-90": {
-        "positive": "ldap_tainted_detected.json",
-        "negative": "ldap_safe_helper_suppressed.json",
-    },
     "CWE-327": {
         "positive": "weak_crypto_des_detected.json",
         "negative": "weak_crypto_aes_gcm_safe.json",
@@ -45,10 +32,6 @@ BENCHMARK_FIXTURE_MATRIX: dict[str, dict[str, str]] = {
     "CWE-330": {
         "positive": "weak_random_detected.json",
         "negative": "weak_random_secure_random_safe.json",
-    },
-    "CWE-643": {
-        "positive": "xpath_tainted_detected.json",
-        "negative": "xpath_safe_helper_suppressed.json",
     },
 }
 

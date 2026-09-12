@@ -1,0 +1,46 @@
+rules:
+  - id: ISO-A.8-CMD-INJECTION
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Possible OS command injection: a command/argument built from untrusted
+      HTTP input reaches process execution without sanitization.
+    metadata:
+      cwe: CWE-78
+      references:
+        - https://owasp.org/www-project-benchmark/
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getParameterValues(...)
+          - pattern: $REQ.getParameterMap(...)
+          - pattern: $REQ.getParameterNames(...)
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getHeaders(...)
+          - pattern: $REQ.getQueryString(...)
+          - pattern: $REQ.getCookies(...)
+    pattern-propagators:
+      - pattern: $LIST.add($VALUE)
+        from: $VALUE
+        to: $LIST
+      - pattern: $LIST.set($IDX, $VALUE)
+        from: $VALUE
+        to: $LIST
+      - pattern: $ARR[$IDX] = $VALUE
+        from: $VALUE
+        to: $ARR
+    pattern-sinks:
+      - patterns:
+          - pattern: $RT.exec(...)
+          - metavariable-type:
+              metavariable: $RT
+              type: Runtime
+      - patterns:
+          - pattern: $PB.command(...)
+          - metavariable-type:
+              metavariable: $PB
+              type: ProcessBuilder
+      - pattern: new ProcessBuilder(...)
+    pattern-sanitizers:
+      - pattern: $ESAPI.encoder().encodeForOS(...)

@@ -21,8 +21,6 @@ class PolicyRuleSpec:
     title: str
     reference: str
     summary: str
-    rego_module: str
-    rego_rule: str
     evidence_fields: tuple[str, ...]
     standard: str
     iso_rule_id: str
@@ -32,6 +30,10 @@ class PolicyRuleSpec:
     conditions: tuple[str, ...]
     description: str
     alias_ids: tuple[str, ...] = ()
+    evidence_source: str = "opa"
+    rego_module: str = ""
+    rego_rule: str = ""
+    opengrep_rules_dir: str = ""
 
     def as_catalog_entry(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -40,10 +42,14 @@ class PolicyRuleSpec:
             "title": self.title,
             "reference": self.reference,
             "summary": self.summary,
-            "rego_module": self.rego_module,
-            "rego_rule": self.rego_rule,
+            "evidence_source": self.evidence_source,
             "evidence_fields": list(self.evidence_fields),
         }
+        if self.evidence_source == "opa":
+            payload["rego_module"] = self.rego_module
+            payload["rego_rule"] = self.rego_rule
+        elif self.opengrep_rules_dir:
+            payload["opengrep_rules_dir"] = self.opengrep_rules_dir
         if self.alias_ids:
             payload["alias_ids"] = list(self.alias_ids)
         return payload
@@ -119,8 +125,6 @@ def _parse_rule_entry(entry: Any) -> PolicyRuleSpec:
         title=str(rule.get("title") or ""),
         reference=str(rule.get("reference") or ""),
         summary=str(rule.get("summary") or ""),
-        rego_module=str(rule.get("rego_module") or ""),
-        rego_rule=str(rule.get("rego_rule") or ""),
         evidence_fields=_string_tuple(rule.get("evidence_fields")),
         standard=str(iso_rule.get("standard") or ""),
         iso_rule_id=str(iso_rule.get("id") or ""),
@@ -130,6 +134,10 @@ def _parse_rule_entry(entry: Any) -> PolicyRuleSpec:
         conditions=_string_tuple(iso_rule.get("conditions")),
         description=str(iso_rule.get("description") or ""),
         alias_ids=_string_tuple(rule.get("alias_ids")),
+        evidence_source=str(rule.get("evidence_source") or "opa"),
+        rego_module=str(rule.get("rego_module") or ""),
+        rego_rule=str(rule.get("rego_rule") or ""),
+        opengrep_rules_dir=str(rule.get("opengrep_rules_dir") or ""),
     )
 
 
@@ -182,6 +190,20 @@ def _validate_rule_module(rule: PolicyRuleSpec) -> None:
         raise ValueError(f"Policy registry rule {rule.id} references a missing module: {rule.rego_module}")
 
 
+def _validate_opengrep_rule(rule: PolicyRuleSpec) -> None:
+    # Local import: keeps the registry loader free of an opengrep_bridge
+    # dependency for the common (opa-only) case.
+    from codegraph.policy.opengrep_bridge import DEFAULT_RULES_DIR, discover_rule_ids  # noqa: PLC0415
+
+    rules_dir = (PROJECT_ROOT / rule.opengrep_rules_dir).resolve() if rule.opengrep_rules_dir else DEFAULT_RULES_DIR
+    discovered = discover_rule_ids(rules_dir)
+    if rule.id not in discovered:
+        raise ValueError(
+            f"Policy registry rule {rule.id} declares evidence_source=opengrep but no rule with that id "
+            f"was found under {rules_dir}."
+        )
+
+
 def _validate_rule(rule: PolicyRuleSpec, *, rule_ids: set[str], alias_ids: set[str], iso_rule_ids: set[str]) -> None:
     if not rule.id:
         raise ValueError("Policy registry rules must include a non-empty id.")
@@ -190,7 +212,12 @@ def _validate_rule(rule: PolicyRuleSpec, *, rule_ids: set[str], alias_ids: set[s
     if rule.iso_rule_id in iso_rule_ids:
         raise ValueError(f"Policy registry contains duplicate ISO rule id: {rule.iso_rule_id}")
     iso_rule_ids.add(rule.iso_rule_id)
-    _validate_rule_module(rule)
+    if rule.evidence_source == "opa":
+        _validate_rule_module(rule)
+    elif rule.evidence_source == "opengrep":
+        _validate_opengrep_rule(rule)
+    else:
+        raise ValueError(f"Policy registry rule {rule.id} has unknown evidence_source: {rule.evidence_source}")
 
     for evidence_field in rule.evidence_fields:
         if evidence_field not in EVIDENCE_FIELD_ALIAS_MAP:
@@ -276,6 +303,21 @@ def remediation_tier_by_rule_id(path: str | None = None) -> dict[str, RegistryTi
 
 def supported_remediation_rule_ids(path: str | None = None) -> list[str]:
     return [rule_id for rule_id, tier in remediation_tier_by_rule_id(path).items() if tier in {"full", "guarded"}]
+
+
+def evidence_source_for_rule_id(rule_id: str | None, path: str | None = None) -> str | None:
+    """Return which detection engine owns *rule_id* ("opa"/"opengrep"), or None if unknown.
+
+    Callers that must re-verify a finding use this to route the recheck to the
+    engine that produced it; routing to the wrong engine silently finds nothing.
+    """
+    if not rule_id:
+        return None
+    wanted = str(rule_id).strip()
+    for rule in load_policy_registry(path).rules:
+        if rule.id == wanted or wanted in rule.alias_ids:
+            return rule.evidence_source
+    return None
 
 
 def policy_catalog_entries_from_registry(path: str | None = None) -> list[dict[str, Any]]:

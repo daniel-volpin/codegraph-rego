@@ -24,6 +24,7 @@ _tracer = get_tracer("codegraph.policy.opa")
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.abspath(os.path.join(_THIS_DIR, os.pardir, os.pardir, os.pardir))
 POLICY_DIR = os.path.join(_PROJECT_ROOT, "policy")
+_OPA_NON_REGO_IGNORE_ARGS = ("--ignore=*.yaml", "--ignore=*.yml")
 DEFAULT_POLICY_QUERY = "data.iso27001.violations"
 POLICY_QUERY = DEFAULT_POLICY_QUERY
 
@@ -122,6 +123,9 @@ def _opa_eval_command(input_path: str, query: str, *, policy_dir: str | None = N
         "json",
         "-d",
         policy_dir or POLICY_DIR,
+        # The policy tree also holds non-Rego engine rules (e.g. OpenGrep
+        # taint YAML); OPA must load only its own modules from it.
+        *_OPA_NON_REGO_IGNORE_ARGS,
         "-i",
         input_path,
         query,

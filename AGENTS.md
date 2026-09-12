@@ -52,8 +52,23 @@ This file is the canonical, cross-agent operating guide.
   - External SAST reports in OASIS SARIF v2.1.0 format (`POST /policy/import/sarif`) are anchored against Neo4j AST `method_key` nodes and enter the same 3-gate agentic repair pipeline as native policy findings.
 - Keep backend DTOs and `frontend/src/lib/schemas.ts` aligned.
   `frontend/src/lib/types.ts` re-exports derived types; do not duplicate them.
-- Keep `policy/catalog.json`, Rego rules, and `configs/benchmark/` aligned.
-  Do not silently change control mappings or benchmark semantics.
+- Keep `policy/catalog.json`, Rego rules, OpenGrep rules, and
+  `configs/benchmark/` aligned. Do not silently change control mappings or
+  benchmark semantics.
+- Detection is multi-engine and registry-routed. Each rule in
+  `configs/benchmark/policy_registry.json` declares `evidence_source`:
+  `opa` (Rego module under `policy/`) or `opengrep` (taint rule under
+  `policy/opengrep/`, auto-discovered by `codegraph.policy.opengrep_bridge`
+  and imported through the SARIF bridge). Adding a rule means adding its
+  definition plus a fixture, never new dispatch code. Anything that
+  re-evaluates a finding must route by `evidence_source_for_rule_id`;
+  rechecking with the wrong engine finds nothing and reads as "fixed".
+- Injection controls use dataflow taint analysis, not lexical matching.
+  Do not reintroduce substring/co-occurrence heuristics for them: the
+  retired Rego versions failed OWASP Benchmark's deliberate
+  "looks tainted, isn't" cases. Known engine limits are cross-file taint
+  and collection index-sensitivity; treat those as documented scope, not
+  as bugs to paper over with pattern matching.
 - Explanation uses structured `Citation / Why / Fix`; remediation uses
   `decision`, `replacement_method_lines`, and `reason`. Models propose;
   deterministic validation owns acceptance. Malformed output is an explicit
@@ -94,7 +109,9 @@ This file is the canonical, cross-agent operating guide.
 - Python: select affected paths for `uv run python -m pytest -q`, then run
   `uv run ruff check .`. Group related callers; escalate when failures warrant it.
 - Policy: `make policy-check` with the pinned OPA on `PATH`. This is check-only;
-  `make policy-fmt` rewrites files.
+  `make policy-fmt` rewrites files. Run `make opengrep-test` for the taint
+  rules; every rule under `policy/opengrep/` needs an annotated fixture in
+  `tests/fixtures/opengrep/` asserting both a detection and a non-detection.
 - Frontend: `cd frontend && yarn lint && yarn test && yarn build`.
   Preserve file isolation and automatic test discovery when optimizing the runner.
 - Exercise the real public path. Mock external boundaries, not both orchestration
@@ -121,9 +138,13 @@ This file is the canonical, cross-agent operating guide.
   tools, authentication, and permission scopes; report the actual rejection.
   Request authorization for missing scopes instead of dropping workflow changes
   or granting persistent broad permissions.
-- OPA findings, successful compilation, and confidence scores do not prove
-  behavioral equivalence or production safety. Safe refusal is a valid outcome;
+- OPA findings, taint findings, successful compilation, and confidence scores
+  do not prove behavioral equivalence or production safety. Safe refusal is a valid outcome;
   graph-based evidence is not full taint analysis or autonomous production repair.
+- The recorded `0.9528` detection figure is qualified evidence: it predates
+  audit POLICY-C1's removal of the `benchmarktest` corpus fingerprint and does
+  not reproduce on the current baseline under its own matched config. Cite it
+  only with the caveat recorded in `docs/thesis_context.md`.
 - Cite benchmark claims with artifact paths and provenance. Report exact evidence
   scope, skipped prerequisites, and remaining unknowns; distinguish wall-clock
   timings from aggregate worker timings and do not sum overlapping test packets.

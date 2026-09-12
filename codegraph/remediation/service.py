@@ -22,6 +22,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from codegraph.benchmark_registry import evidence_source_for_rule_id
 from codegraph.config import settings
 from codegraph.llm.client import generate_chat_completion
 from codegraph.llm.schema.remediation import parse_structured_generation_response
@@ -34,6 +35,7 @@ from codegraph.policy.integration import (
     load_policy_catalog,
     normalize_violation_payload,
 )
+from codegraph.policy.opengrep_bridge import verify_candidate_source
 from codegraph.remediation.apply_flow import execute_apply_fix
 from codegraph.remediation.capabilities import get_remediation_capability, rule_id_variants
 from codegraph.remediation.confidence import (
@@ -75,6 +77,36 @@ from codegraph.remediation.verification import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _verify_non_opa_rule(*, context: dict[str, Any], updated_source: str) -> list[dict[str, Any]]:
+    """Re-check a candidate with the engine that owns its rule, when that is not OPA.
+
+    OPA only evaluates Rego-backed rules, so a rule detected by another engine
+    would otherwise come back clean from the OPA recheck and be reported as
+    fixed without ever being re-examined.
+    """
+    rule_id = str(context.get("rule_id") or "")
+    if evidence_source_for_rule_id(rule_id) != "opengrep":
+        return []
+
+    source_bytes = context.get("source_bytes")
+    original_method = context.get("exact_method_source")
+    file_path = str(context.get("file_path") or "")
+    if not source_bytes or not original_method or not updated_source:
+        raise RuntimeError("candidate_reverification_inputs_unavailable")
+
+    original_file = source_bytes.decode("utf-8")
+    if original_method not in original_file:
+        raise RuntimeError("candidate_method_not_found_in_source")
+    candidate_file = original_file.replace(original_method, updated_source, 1)
+
+    return verify_candidate_source(
+        rule_id=rule_id,
+        candidate_file_source=candidate_file,
+        source_file_name=file_path or "Candidate.java",
+        timeout=settings.opengrep_timeout_seconds,
+    )
 
 
 def _unified_diff(before: str, after: str, *, label: str = "method") -> str:
@@ -311,6 +343,26 @@ class RemediationService:
             if not normalized:
                 continue
             normalized_output.append(normalized)
+
+        try:
+            normalized_output.extend(
+                _verify_non_opa_rule(context=context, updated_source=updated_source or ""),
+            )
+        except Exception as exc:
+            # Fail closed: an unrunnable recheck must not read as "fixed".
+            LOGGER.error("Candidate re-verification failed", extra={"err": str(exc)})
+            return {
+                "status": "VERIFICATION_ERROR",
+                "error": f"candidate_reverification_failed: {exc}",
+                "violation_id": violation_id,
+                "method_key": context.get("method_key"),
+                "target_method": context.get("target_method"),
+                "file_path": context.get("file_path"),
+                "rule_id": context.get("rule_id"),
+                "updated_source_code": updated_source,
+                "generation": generation,
+                "confidence": confidence,
+            }
 
         verification = _build_verification_summary(
             context.get("rule_id"),

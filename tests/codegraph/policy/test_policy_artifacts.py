@@ -11,6 +11,7 @@ from codegraph.benchmark_registry import (
     policy_catalog_entries_from_registry,
     policy_catalog_payload_from_registry,
 )
+from codegraph.policy.opengrep_bridge import discover_rule_ids
 from tests._support import PROJECT_ROOT
 
 
@@ -37,14 +38,21 @@ class TestPolicyArtifacts(unittest.TestCase):
         registry_rule_ids = {rule.id for rule in registry.rules}
         registry_iso_rule_ids = {rule.iso_rule_id for rule in registry.rules}
 
-        access_rego = (PROJECT_ROOT / "policy" / "iso_27001_access.rego").read_text(encoding="utf-8")
-        crypto_rego = (PROJECT_ROOT / "policy" / "iso_27001_crypto.rego").read_text(encoding="utf-8")
-        injection_rego = (PROJECT_ROOT / "policy" / "iso_27001_injection.rego").read_text(encoding="utf-8")
-        emitted_rule_ids = set(
-            re.findall(r'violation_record\("([^"]+)"', "\n".join([access_rego, crypto_rego, injection_rego]))
+        # Every registry rule must be emitted by the engine its evidence_source names,
+        # so a newly added rule cannot silently reference a non-existent detector.
+        rego_sources = "\n".join(
+            path.read_text(encoding="utf-8") for path in sorted((PROJECT_ROOT / "policy").glob("*.rego"))
         )
+        opa_emitted_rule_ids = set(re.findall(r'violation_record\("([^"]+)"', rego_sources))
+        opengrep_emitted_rule_ids = discover_rule_ids()
 
-        self.assertEqual(registry_rule_ids, emitted_rule_ids)
+        expected_opa_ids = {rule.id for rule in registry.rules if rule.evidence_source == "opa"}
+        expected_opengrep_ids = {rule.id for rule in registry.rules if rule.evidence_source == "opengrep"}
+
+        self.assertEqual(expected_opa_ids, opa_emitted_rule_ids)
+        self.assertTrue(expected_opengrep_ids)
+        self.assertTrue(expected_opengrep_ids <= opengrep_emitted_rule_ids)
+        self.assertEqual(registry_rule_ids, expected_opa_ids | expected_opengrep_ids)
         self.assertEqual(registry_rule_ids, catalog_ids)
         self.assertEqual(registry_iso_rule_ids, iso_rule_ids)
 

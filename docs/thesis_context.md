@@ -147,7 +147,35 @@ Canonical thesis runs:
 
 - detection v2: `outputs/thesis_final_detection_full_v2/`, provenance
   SHA `7ad90a2`, precision/recall/F1 all `0.9528` with bootstrap 95%
-  CIs.
+  CIs. **Do not cite this figure without the qualification below.**
+
+  At SHA `7ad90a2` the authoritative Rego layer still contained the
+  OWASP-Benchmark class-name fingerprint later removed by audit
+  POLICY-C1: `benchmark_context` matched `contains(lower(target_method),
+  "benchmarktest")` and gated `random_context` in
+  `policy/iso_27001_crypto.rego`, so weak-random detection depended on
+  the corpus naming convention rather than on the code under analysis.
+  `tests/codegraph/policy/test_no_benchmark_fingerprint.py` now prevents
+  reintroduction. The recorded `rng-insecure` precision of `1.000` is
+  attributable in part to that fingerprint; post-removal runs score
+  `0.889` on the same sample.
+
+  The figure is also not reproducible on the current source baseline
+  under its own matched configuration (`multicat_full.json`, 60
+  cases/category, seed 7). Measured on that identical configuration:
+
+  | Engine | Precision | Recall | F1 |
+  | --- | --- | --- | --- |
+  | Rego lexical heuristics (pre-OpenGrep `main`) | 0.712 | 0.901 | 0.795 |
+  | OpenGrep taint analysis (current) | 0.793 | 0.888 | 0.838 |
+  | Recorded detection v2 (SHA `7ad90a2`) | 0.953 | 0.953 | 0.953 |
+
+  Crypto and hash reproduce bit-identically across all three, which
+  pins the harness and sample; the divergence is confined to the
+  taint-dependent controls. For external context, published OWASP
+  Benchmark v1.2 figures put CodeQL near `0.744` F1 and Semgrep near
+  `0.694`, so treat any result materially above that range as requiring
+  construct-validity scrutiny rather than as a target.
 - explanation v2: `outputs/thesis_final_explanation_full_v2/`,
   provenance SHA `701d051`, `Citation@TP=1.000` (`222/222`),
   `Citation@TP@NoContext=0.009` (`2/222`), `Citation@FP=1.000`

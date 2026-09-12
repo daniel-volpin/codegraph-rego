@@ -1,0 +1,37 @@
+rules:
+  - id: ISO-A.8-PATH-TRAVERSAL
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Possible path traversal: a file path built from untrusted HTTP input
+      reaches a file-access API without validation.
+    metadata:
+      cwe: CWE-22
+      references:
+        - https://owasp.org/www-project-benchmark/
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getParameterValues(...)
+          - pattern: $REQ.getParameterMap(...)
+          - pattern: $REQ.getParameterNames(...)
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getHeaders(...)
+          - pattern: $REQ.getQueryString(...)
+          - pattern: $REQ.getCookies(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: new java.io.File(...)
+          - pattern: new java.io.FileInputStream(...)
+          - pattern: new java.io.FileReader(...)
+          - pattern: new java.io.FileOutputStream(...)
+          - pattern: java.nio.file.Paths.get(...)
+          - pattern: java.nio.file.Files.newInputStream(...)
+          - pattern: java.nio.file.Files.newOutputStream(...)
+          - pattern: java.nio.file.Files.newBufferedReader(...)
+          - pattern: java.nio.file.Files.newBufferedWriter(...)
+          - pattern: java.nio.file.Files.readAllBytes(...)
+          - pattern: java.nio.file.Files.readAllLines(...)
+    pattern-sanitizers:
+      - pattern: $ESAPI.encoder().encodeForOS(...)

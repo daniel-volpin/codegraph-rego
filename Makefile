@@ -1,4 +1,4 @@
-.PHONY: install java-parser-build backend-dev dev test policy-check policy-fmt lint format neo4j-up neo4j-down docker-up docker-down clean help
+.PHONY: install java-parser-build backend-dev dev test policy-check policy-fmt opengrep-test lint format neo4j-up neo4j-down docker-up docker-down clean help
 
 MVN ?= mvn
 
@@ -59,6 +59,13 @@ policy-check: ## Validate OPA/Rego policies (check-only; fails on format drift)
 
 policy-fmt: ## Format OPA/Rego policies in place
 	@opa fmt -w policy/
+
+opengrep-test: ## Validate OpenGrep taint rules against their annotated fixtures
+	@opengrep validate policy/opengrep/
+	@for rule in policy/opengrep/*.yaml; do \
+		name=$$(basename "$$rule" .yaml); \
+		opengrep test --config "$$rule" "tests/fixtures/opengrep/$$name.java" || exit 1; \
+	done
 
 lint: ## Run linting (ruff for backend, eslint for frontend)
 	@echo "Linting backend..."
