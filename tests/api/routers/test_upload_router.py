@@ -45,9 +45,9 @@ def _workspace_entries(root: Path) -> list[str]:
 
 @contextmanager
 def _workspace_case() -> Iterator[Path]:
-    _TEST_WORK_ROOT.mkdir(exist_ok=True)
+    _TEST_WORK_ROOT.mkdir(parents=True, exist_ok=True)
     case_dir = _TEST_WORK_ROOT / uuid.uuid4().hex
-    case_dir.mkdir()
+    case_dir.mkdir(parents=True, exist_ok=True)
     try:
         yield case_dir
     finally:

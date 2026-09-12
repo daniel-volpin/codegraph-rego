@@ -12,7 +12,7 @@ _DEFAULT_TRANSPORT = OpenAICompatibleTransport()
 
 
 def generate_chat_completion(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
     model: str | None = None,
     temperature: float | None = None,
@@ -20,10 +20,11 @@ def generate_chat_completion(
     ttl_seconds: int | None = None,
     stop: list[str] | str | None = None,
     response_format: dict[str, Any] | None = None,
+    tools: list[dict[str, Any]] | None = None,
     raise_on_error: bool = False,
     task_type: str = "",
     retry_index: int = 0,
-) -> str:
+) -> Any:
     """Generate a chat completion via the default transport."""
 
     request = LLMRequest(
@@ -34,6 +35,7 @@ def generate_chat_completion(
         ttl_seconds=ttl_seconds,
         stop=stop,
         response_format=response_format,
+        tools=tools,
         raise_on_error=raise_on_error,
     )
     return _DEFAULT_TRANSPORT.generate(request, task_type=task_type, retry_index=retry_index)

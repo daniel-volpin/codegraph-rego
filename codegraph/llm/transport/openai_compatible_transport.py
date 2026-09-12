@@ -265,6 +265,9 @@ def _chat_completion_params(request: LLMRequest, config: _GenerationConfig) -> d
         params["stop"] = request.stop
     if request.response_format is not None:
         params["response_format"] = request.response_format
+    if request.tools is not None:
+        params["tools"] = list(request.tools)
+        params["tool_choice"] = "auto"
     if config.extra_body:
         params["extra_body"] = config.extra_body
     return params
@@ -289,13 +292,38 @@ def _responses_params(request: LLMRequest, config: _GenerationConfig) -> dict[st
     return params
 
 
-def _generate_with_chat_completions(client: OpenAI, request: LLMRequest, config: _GenerationConfig, span: Any) -> str:
+def _generate_with_chat_completions(client: OpenAI, request: LLMRequest, config: _GenerationConfig, span: Any) -> Any:
     response = client.chat.completions.create(**_chat_completion_params(request, config))
     _set_usage_attributes(
         span,
         getattr(response, "usage", None),
         {"prompt": "prompt_tokens", "completion": "completion_tokens", "total": "total_tokens"},
     )
+    if request.tools:
+        choices = getattr(response, "choices", None) or []
+        msg = choices[0].message if choices else None
+        tool_calls = []
+        for tc in getattr(msg, "tool_calls", None) or []:
+            tool_calls.append(
+                {
+                    "id": getattr(tc, "id", None),
+                    "type": getattr(tc, "type", "function"),
+                    "function": {
+                        "name": getattr(tc.function, "name", ""),
+                        "arguments": getattr(tc.function, "arguments", "{}"),
+                    },
+                }
+            )
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": getattr(msg, "content", ""),
+                        "tool_calls": tool_calls,
+                    }
+                }
+            ]
+        }
     return _extract_message_content(response, allow_reasoning_content=request.response_format is not None)
 
 

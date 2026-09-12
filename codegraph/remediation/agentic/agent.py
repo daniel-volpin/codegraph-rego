@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from collections.abc import Callable
@@ -11,6 +10,7 @@ from typing import Any
 
 from codegraph.config import settings
 from codegraph.llm.client import generate_chat_completion
+from codegraph.llm.schema.tools import ChatCompletionResponse
 from codegraph.remediation.agentic.contracts import (
     AgentOutcomeStatus,
     AgentRemediationResult,
@@ -98,43 +98,16 @@ def _build_initial_user_prompt(finding: dict[str, Any]) -> str:
 
 
 def _parse_model_response(raw_response: Any) -> tuple[str, list[AgentToolCall]]:
-    content = ""
-    tool_calls: list[AgentToolCall] = []
-
-    if isinstance(raw_response, dict):
-        choices = raw_response.get("choices") or []
-        if choices and isinstance(choices[0], dict):
-            msg = choices[0].get("message") or {}
-            content = str(msg.get("content") or "")
-            for tc in msg.get("tool_calls") or []:
-                fn = tc.get("function") or {}
-                fn_name = str(fn.get("name") or "")
-                raw_args = fn.get("arguments") or {}
-                args = json.loads(raw_args) if isinstance(raw_args, str) else dict(raw_args)
-                tool_calls.append(
-                    AgentToolCall(
-                        call_id=str(tc.get("id") or uuid.uuid4().hex),
-                        name=fn_name,
-                        arguments=args,
-                    )
-                )
-    elif isinstance(raw_response, str):
-        content = raw_response
-        # Check if model formatted tool call in text or JSON
-        try:
-            parsed = json.loads(raw_response)
-            if isinstance(parsed, dict) and "name" in parsed:
-                tool_calls.append(
-                    AgentToolCall(
-                        call_id=uuid.uuid4().hex,
-                        name=parsed["name"],
-                        arguments=parsed.get("arguments", {}),
-                    )
-                )
-        except Exception:
-            pass
-
-    return content, tool_calls
+    parsed = ChatCompletionResponse.from_response(raw_response)
+    tool_calls = [
+        AgentToolCall(
+            call_id=tc.id or uuid.uuid4().hex,
+            name=tc.name,
+            arguments=tc.arguments,
+        )
+        for tc in parsed.tool_calls
+    ]
+    return parsed.content, tool_calls
 
 
 class AgenticRemediationService:
