@@ -5,11 +5,13 @@ import {
   PolicyCatalogResponseSchema,
   PolicyEvaluateResponseSchema,
   PolicyExplainOneResponseSchema,
+  PolicyPacksResponseSchema,
   PolicyReviewCreateResponseSchema,
   PolicyReviewListResponseSchema,
   RemediationApplyResponseSchema,
   RemediationPreviewResponseSchema,
   SarifExportResponseSchema,
+  SarifImportResponseSchema,
   SearchResponseSchema,
   UploadResponseSchema,
   UploadStatusSchema,
@@ -18,15 +20,17 @@ import {
   type PolicyCatalogResponse,
   type PolicyEvaluateResponse,
   type PolicyExplainOneResponse,
-  type Violation,
+  type PolicyPacksResponse,
   type PolicyReviewCreateResponse,
   type PolicyReviewListResponse,
   type RemediationApplyResponse,
   type RemediationPreviewResponse,
   type SarifExportResponse,
+  type SarifImportResponse,
   type SearchResponse,
   type UploadResponse,
   type UploadStatus,
+  type Violation,
 } from "./schemas";
 import { buildRuntimeApiUrl, getRuntimeApiBase } from "./runtimeConfig";
 import {
@@ -38,7 +42,9 @@ import {
   DEMO_POLICY_CATALOG,
   DEMO_POLICY_EVALUATION,
   DEMO_PREVIEWS,
+  DEMO_POLICY_PACKS,
   DEMO_SARIF_DOCUMENT,
+  DEMO_SARIF_IMPORT,
   DEMO_SEARCH_MATCHES,
   DEMO_UPLOAD_RESPONSE,
   DEMO_UPLOAD_STATUS,
@@ -360,6 +366,44 @@ export async function exportPolicySarif(
     );
   }
   return data;
+}
+
+export async function fetchPolicyPacks(
+  signal?: AbortSignal,
+): Promise<PolicyPacksResponse> {
+  if (isDemoMode()) {
+    return DEMO_POLICY_PACKS;
+  }
+
+  const response = await fetch(`${getRuntimeApiBase()}/policy/packs`, {
+    method: "GET",
+    headers: defaultHeaders,
+    signal,
+  });
+
+  return parseApiResponse(response, PolicyPacksResponseSchema);
+}
+
+export async function importSarifReport(
+  sarifData: Record<string, unknown> | string,
+  signal?: AbortSignal,
+): Promise<SarifImportResponse> {
+  if (isDemoMode()) {
+    return DEMO_SARIF_IMPORT;
+  }
+
+  const payload = typeof sarifData === "string" ? JSON.parse(sarifData) : sarifData;
+  const response = await fetch(`${getRuntimeApiBase()}/policy/import/sarif`, {
+    method: "POST",
+    headers: {
+      ...defaultHeaders,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    signal: withTimeoutSignal(signal, 120_000),
+  });
+
+  return parseApiResponse(response, SarifImportResponseSchema);
 }
 
 export interface PolicyExplainOneRequest {

@@ -203,7 +203,51 @@ export const PolicyCatalogResponseSchema = z
   .loose();
 export type PolicyCatalogResponse = z.infer<typeof PolicyCatalogResponseSchema>;
 
-// ---- Policy SARIF export ----
+// ---- Policy Packs ----
+
+export const PolicyPackRuleSchema = z
+  .object({
+    id: z.string(),
+    control: z.string().default(""),
+    title: z.string().default(""),
+    summary: z.string().default(""),
+    rego_module: z.string().default(""),
+    rego_rule: z.string().default(""),
+    category: z.string().default(""),
+    severity: z.string().default("high"),
+    reference: z.string().default(""),
+    description: z.string().default(""),
+    alias_ids: z.array(z.string()).default([]),
+  })
+  .loose();
+export type PolicyPackRule = z.infer<typeof PolicyPackRuleSchema>;
+
+export const PolicyPackSpecSchema = z
+  .object({
+    pack_id: z.string(),
+    name: z.string(),
+    standard: z.string(),
+    version: z.string(),
+    rego_dir: z.string().optional(),
+    query_entrypoints: z.array(z.string()).default([]),
+    enabled: z.boolean().default(true),
+    description: z.string().default(""),
+    rules_count: z.number().default(0),
+    rules: z.array(PolicyPackRuleSchema).default([]),
+  })
+  .loose();
+export type PolicyPackSpec = z.infer<typeof PolicyPackSpecSchema>;
+
+export const PolicyPacksResponseSchema = z
+  .object({
+    status: z.string().default("OK"),
+    packs: z.array(PolicyPackSpecSchema).default([]),
+    error: z.string().optional(),
+  })
+  .loose();
+export type PolicyPacksResponse = z.infer<typeof PolicyPacksResponseSchema>;
+
+// ---- Policy SARIF export / import ----
 
 export const SarifExportResponseSchema = z
   .object({
@@ -213,6 +257,16 @@ export const SarifExportResponseSchema = z
   })
   .loose();
 export type SarifExportResponse = z.infer<typeof SarifExportResponseSchema>;
+
+export const SarifImportResponseSchema = z
+  .object({
+    status: z.string().default("OK"),
+    count: z.number().default(0),
+    violations: z.array(ViolationSchema).default([]),
+    error: z.string().optional(),
+  })
+  .loose();
+export type SarifImportResponse = z.infer<typeof SarifImportResponseSchema>;
 
 // ---- Remediation ----
 

@@ -1,4 +1,4 @@
-import { Download, Loader2, Sparkles, SlidersHorizontal } from "lucide-react";
+import { Download, Loader2, Sparkles, SlidersHorizontal, Upload } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
 import { Switch } from "../../ui/switch";
@@ -21,6 +21,8 @@ interface ControlsPanelProps {
   frameworkDemoScopeSource: string;
   onExportSarif?: () => void;
   isExportingSarif?: boolean;
+  onImportSarif?: () => void;
+  isImportingSarif?: boolean;
 }
 
 const ControlsPanel = ({
@@ -37,6 +39,8 @@ const ControlsPanel = ({
   frameworkDemoScopeSource,
   onExportSarif,
   isExportingSarif = false,
+  onImportSarif,
+  isImportingSarif = false,
 }: ControlsPanelProps) => (
   <Card className="p-5 shadow-xs border-zinc-200/80 dark:border-zinc-800">
     <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_auto] lg:items-center">
@@ -108,6 +112,28 @@ const ControlsPanel = ({
       </div>
 
       <div className="flex flex-col sm:flex-row gap-2 lg:justify-end lg:self-center">
+        {onImportSarif && (
+          <Button
+            variant="outline"
+            data-testid="policy-sarif-import"
+            onClick={onImportSarif}
+            disabled={isImportingSarif || evalIsFetching}
+            title="Import external SAST report in standard OASIS SARIF v2.1.0 format"
+            className="font-medium text-xs"
+          >
+            {isImportingSarif ? (
+              <>
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Importing SARIF…
+              </>
+            ) : (
+              <>
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
+                Import SAST (SARIF)
+              </>
+            )}
+          </Button>
+        )}
         {onExportSarif && (
           <Button
             variant="outline"

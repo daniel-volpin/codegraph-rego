@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-table";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { evaluatePolicies, exportPolicySarif, fetchPolicyCatalog } from "../lib/api";
+import { evaluatePolicies, exportPolicySarif, fetchPolicyCatalog, importSarifReport } from "../lib/api";
 import { downloadSarifFile } from "../lib/sarif";
 import type { PolicyCatalogResponse, PolicyEvaluateResponse } from "../lib/types";
 import {
@@ -60,6 +60,8 @@ const PolicyPage = () => {
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [isExportingSarif, setIsExportingSarif] = useState<boolean>(false);
+  const [isImportingSarif, setIsImportingSarif] = useState<boolean>(false);
+  const sarifFileInputRef = useRef<HTMLInputElement>(null);
 
   const toggleFindingExpanded = (groupId: string, findingId: string) => {
     setExpandedFindingByGroup((prev) => ({
@@ -343,10 +345,75 @@ const PolicyPage = () => {
     }
   };
 
+  const handleImportSarifClick = () => {
+    sarifFileInputRef.current?.click();
+  };
+
+  const handleSarifFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImportingSarif(true);
+    try {
+      const text = await file.text();
+      const res = await importSarifReport(text);
+      if (res.count > 0) {
+        toast.success(`Imported ${res.count} findings from SAST SARIF report.`);
+        const existingData = evalQuery.data ?? {
+          violations: [],
+          catalog: [],
+          rules_catalog: {},
+          opa_runs: 1,
+          bundle_count: 1,
+          evaluation: {
+            status: "complete",
+            attempted_bundles: 1,
+            evaluated_bundles: 1,
+            failed_bundles: 0,
+            omitted_findings: 0,
+            excluded_findings: 0,
+            truncated: false,
+            scope_limited: false,
+            rule_ids: [],
+          },
+        };
+
+        const existingViolations = existingData.violations ?? [];
+        const existingKeys = new Set(existingViolations.map((v) => `${v.violation_id ?? v.rule_id}:${v.method_key}`));
+        const newViolations = res.violations.filter(
+          (v) => !existingKeys.has(`${v.violation_id ?? v.rule_id}:${v.method_key}`),
+        );
+
+        queryClient.setQueryData(evalQueryKey(viewPreset), {
+          ...existingData,
+          violations: [...existingViolations, ...newViolations],
+        });
+      } else {
+        toast.info("No findings found in the imported SARIF report.");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "SARIF import failed";
+      toast.error(`SARIF import failed: ${msg}`);
+    } finally {
+      setIsImportingSarif(false);
+      if (event.target) {
+        event.target.value = "";
+      }
+    }
+  };
+
   // ---- Render ----
 
   return (
     <div className="space-y-4">
+      <input
+        type="file"
+        ref={sarifFileInputRef}
+        data-testid="sarif-file-input"
+        accept=".json,.sarif"
+        className="hidden"
+        onChange={handleSarifFileChange}
+      />
       <Card className="p-5 shadow-xs border-zinc-200/80 dark:border-zinc-800">
         <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Policy Evaluation</h1>
         <p className="mt-1 max-w-3xl text-xs text-zinc-600 dark:text-zinc-400">
@@ -368,6 +435,8 @@ const PolicyPage = () => {
         frameworkDemoScopeSource={frameworkDemoScopeSource}
         onExportSarif={handleExportSarif}
         isExportingSarif={isExportingSarif}
+        onImportSarif={handleImportSarifClick}
+        isImportingSarif={isImportingSarif}
       />
 
       <EvaluationStatusCard
