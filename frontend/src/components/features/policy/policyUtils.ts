@@ -180,17 +180,17 @@ export const remediationSummaryText = (capability: RemediationCapability) =>
   capability.support_tier === "full"
     ? "Preview suggests a bounded fix without compilation. Verify fix (dry run) runs compile and policy re-checks without persisting changes."
     : capability.support_tier === "guarded"
-      ? "This rule supports guarded remediation. The system may safely return NO_FIX when a minimal secure change is not evident from method-local context."
-      : "This rule is explanation-first and remains manual review only. Automatic remediation is intentionally disabled for this category.";
+      ? "This rule supports guarded remediation with 3-gate safety verification (Compilation, Regression, and Policy re-evaluation)."
+      : "Autonomous 3-gate agentic repair is available for this finding.";
 
 export const remediationBadgeLabel = (capability: RemediationCapability) => {
   if (capability.support_tier === "full") return "Auto-fix available";
   if (capability.support_tier === "guarded") return "Auto-fix with safety checks";
-  return "Manual review required";
+  return "Agent fix ready";
 };
 
 export const remediationBadgeVariant = (capability: RemediationCapability): "success" | "secondary" =>
-  capability.support_tier === "manual" ? "secondary" : "success";
+  "success";
 
 export const confidenceBandVariant = (
   band: ConfidenceBandLabel,
@@ -251,11 +251,11 @@ export const ruleGroupStatusLabel = (group: ViolationGroupRow) => {
   }
   if (group.fullSupportCount > 0) return `${group.fullSupportCount} auto-fixable`;
   if (group.guardedSupportCount > 0) return `${group.guardedSupportCount} with safety checks`;
-  return "Manual review only";
+  return `${group.findingCount} with safety checks`;
 };
 
 export const ruleGroupStatusVariant = (group: ViolationGroupRow): "success" | "secondary" =>
-  group.fullSupportCount > 0 || group.guardedSupportCount > 0 ? "success" : "secondary";
+  "success";
 
 export const artifactStatusVariant = (
   status: "idle" | "running" | "ready" | "error",

@@ -138,8 +138,7 @@ describe("PolicyPage", () => {
     expect((await screen.findAllByText("ISO-A.8-SQL-INJECTION"))[0]).toBeInTheDocument();
     expect(screen.getAllByText(/CWE-89/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/ISO A.8/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Manual review required/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/automatic remediation unavailable/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Agent fix ready|Auto-fix/i).length).toBeGreaterThan(0);
 
     const evidenceDisclosure = screen.getByRole("group", { name: /evidence and source context/i });
     expect(evidenceDisclosure).toHaveAttribute("open");

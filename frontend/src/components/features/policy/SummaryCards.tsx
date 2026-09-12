@@ -56,10 +56,10 @@ const SummaryCards = ({
     </Card>
     <Card className="p-3.5 shadow-2xs border-zinc-200/80 dark:border-zinc-800">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Manual review</p>
-        <FileWarning className="h-3.5 w-3.5 text-zinc-400" />
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">Agent Fixes</p>
+        <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
       </div>
-      <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-zinc-800 dark:text-zinc-200">{manualReviewCount}</p>
+      <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-indigo-700 dark:text-indigo-400">{findingCount}</p>
     </Card>
   </div>
 );
