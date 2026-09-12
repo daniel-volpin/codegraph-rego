@@ -16,6 +16,7 @@ interface ImmediateEvidence {
   citation: string;
   callers: string[];
   neighbors: string[];
+  taintPaths: Array<{ sink_type?: string; hops?: number; chain?: Array<{ signature?: string; file_path?: string }> }>;
 }
 
 const buildImmediateEvidence = (finding: ViolationRow): ImmediateEvidence => {
@@ -38,8 +39,13 @@ const buildImmediateEvidence = (finding: ViolationRow): ImmediateEvidence => {
   const neighbors = Array.isArray(evidence?.vector_context)
     ? evidence.vector_context.filter((item): item is string => typeof item === "string")
     : [];
+  const taintPaths = Array.isArray(evidence?.taint_paths)
+    ? (evidence.taint_paths as Array<{ sink_type?: string; hops?: number; chain?: Array<{ signature?: string; file_path?: string }> }>)
+    : Array.isArray(raw.taint_paths)
+      ? (raw.taint_paths as Array<{ sink_type?: string; hops?: number; chain?: Array<{ signature?: string; file_path?: string }> }>)
+      : [];
 
-  return { citation: finding.citation, callers, neighbors };
+  return { citation: finding.citation, callers, neighbors, taintPaths };
 };
 
 export const EvidenceSection = ({ finding }: EvidenceSectionProps) => {
@@ -105,6 +111,32 @@ export const EvidenceSection = ({ finding }: EvidenceSectionProps) => {
                   ? immediateEvidence.neighbors.slice(0, 3).join(", ")
                   : "No semantic neighbors available."}
               </p>
+            </div>
+          </div>
+        )}
+        {immediateEvidence.taintPaths.length > 0 && (
+          <div className="mt-3 border-t border-zinc-200/60 pt-2.5 dark:border-zinc-800">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              Interprocedural Taint Propagation Trace
+            </p>
+            <div className="mt-1.5 space-y-1.5 font-mono text-[11px] text-zinc-800 dark:text-zinc-200">
+              {immediateEvidence.taintPaths.map((tp, i) => (
+                <div key={i} className="rounded bg-amber-500/10 p-2 text-xs">
+                  <span className="font-semibold text-amber-700 dark:text-amber-300">
+                    Sink: {(tp.sink_type || "unknown").toUpperCase()} ({tp.hops ?? 1} hops)
+                  </span>
+                  {tp.chain && tp.chain.length > 0 && (
+                    <div className="mt-1 text-zinc-600 dark:text-zinc-300">
+                      {tp.chain.map((hop, hIdx) => (
+                        <div key={hIdx} className="flex items-center gap-1">
+                          <span>{hIdx === 0 ? "Entry:" : hIdx === (tp.chain?.length ?? 1) - 1 ? "Sink:" : "->"}</span>
+                          <span className="font-medium">{hop.signature || hop.file_path}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}

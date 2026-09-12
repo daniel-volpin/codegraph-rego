@@ -595,3 +595,59 @@ export const DEMO_SARIF_DOCUMENT: SarifExportResponse = {
     },
   ],
 };
+
+export const DEMO_POLICY_PACKS = {
+  status: "OK",
+  packs: [
+    {
+      pack_id: "iso-27001",
+      name: "ISO/IEC 27001 Benchmark Security Policy Pack",
+      standard: "ISO-27001",
+      version: "1.0.0",
+      query_entrypoints: ["data.iso27001.violations"],
+      enabled: true,
+      description: "Default security and compliance rules for OWASP Benchmark controls.",
+      rules_count: 8,
+      rules: [],
+    },
+    {
+      pack_id: "pci-dss-4.0",
+      name: "Payment Card Industry Data Security Standard (PCI-DSS) v4.0",
+      standard: "PCI-DSS-4.0",
+      version: "4.0.0",
+      query_entrypoints: ["data.iso27001.violations"],
+      enabled: true,
+      description: "Compliance rules enforcing PCI-DSS v4.0 secure software development standards.",
+      rules_count: 6,
+      rules: [],
+    },
+    {
+      pack_id: "owasp-top10-2021",
+      name: "OWASP Top 10 Application Security Risks (2021)",
+      standard: "OWASP-2021",
+      version: "2021.1.0",
+      query_entrypoints: ["data.iso27001.violations"],
+      enabled: true,
+      description: "Compliance rules aligned with the OWASP Top 10 (2021) standard categories.",
+      rules_count: 8,
+      rules: [],
+    },
+    {
+      pack_id: "nist-sp-800-53",
+      name: "NIST SP 800-53 Rev 5 Security Controls",
+      standard: "NIST-800-53",
+      version: "5.1.0",
+      query_entrypoints: ["data.iso27001.violations"],
+      enabled: true,
+      description: "Security and privacy controls for federal and enterprise information systems.",
+      rules_count: 5,
+      rules: [],
+    },
+  ],
+};
+
+export const DEMO_SARIF_IMPORT = {
+  status: "OK",
+  count: 2,
+  violations: DEMO_VIOLATIONS.slice(0, 2),
+};
