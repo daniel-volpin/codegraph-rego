@@ -398,12 +398,12 @@ export const artifactStatusLabel = (status: "idle" | "running" | "ready" | "erro
 };
 
 export const colWidthClass = (colId: string) => {
-  if (colId === "expander") return "w-[4%]";
-  if (colId === "ruleId") return "w-[24%]";
-  if (colId === "severity") return "w-[10%]";
+  if (colId === "expander") return "w-9 text-center px-2";
+  if (colId === "ruleId") return "w-[34%]";
+  if (colId === "severity") return "w-[16%]";
   if (colId === "findingCount") return "w-[12%]";
   if (colId === "fileCount") return "w-[12%]";
-  if (colId === "status") return "w-[24%]";
+  if (colId === "status") return "w-[26%]";
   return "";
 };
 

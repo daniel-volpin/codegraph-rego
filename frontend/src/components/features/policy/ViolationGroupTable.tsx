@@ -16,7 +16,6 @@ import type { PolicyTableFeatures } from "./tableFeatures";
 interface ViolationGroupTableProps {
   table: Table<PolicyTableFeatures, ViolationGroupRow>;
   columnCount: number;
-  viewPreset: PolicyViewPreset;
   selectedFindingId: string | null;
   onSelectFinding: (id: string) => void;
   expandedFindingByGroup: Record<string, string | null>;
@@ -28,7 +27,6 @@ interface ViolationGroupTableProps {
 const ViolationGroupTable = ({
   table,
   columnCount,
-  viewPreset,
   selectedFindingId,
   onSelectFinding,
   expandedFindingByGroup,
@@ -40,11 +38,6 @@ const ViolationGroupTable = ({
 
   return (
     <Card data-testid="policy-results-region" className="min-w-0 overflow-hidden shadow-xs border-zinc-200/80 dark:border-zinc-800">
-      {viewPreset === "framework_demo" && (
-        <div className="border-b border-zinc-200 bg-zinc-50/70 px-4 py-2.5 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
-          Showing benchmark-aligned categories for thesis framework evaluation. Switch to full view in controls to inspect all policy rules.
-        </div>
-      )}
       <div
         data-testid="policy-group-table-scroll"
         className="max-w-full overflow-x-auto xl:max-h-[calc(100vh-8rem)]"
@@ -63,7 +56,7 @@ const ViolationGroupTable = ({
                       key={header.id}
                       scope="col"
                       aria-sort={canSort ? ariaSort : undefined}
-                      className={`px-3.5 py-2.5 font-semibold uppercase tracking-wider text-[11px] overflow-hidden ${colWidthClass(header.column.id)}`}
+                      className={`px-3 py-2.5 font-semibold uppercase tracking-wider text-[11px] ${colWidthClass(header.column.id)}`}
                     >
                       {header.isPlaceholder ? <span className="sr-only">Expand rule group</span> : canSort ? (
                         <button
@@ -90,11 +83,14 @@ const ViolationGroupTable = ({
           <tbody className="divide-y divide-zinc-200/70 dark:divide-zinc-800/70">
             {rows.map((row) => (
               <Fragment key={row.id}>
-                <tr className="hover:bg-zinc-50/70 dark:hover:bg-zinc-900/40 transition-colors">
+                <tr
+                  className="hover:bg-zinc-50/80 dark:hover:bg-zinc-900/60 transition-colors cursor-pointer select-none"
+                  onClick={() => row.toggleExpanded()}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
-                      className={`px-3.5 py-2.5 align-middle overflow-hidden ${colWidthClass(cell.column.id)}`}
+                      className={`px-3 py-2.5 align-middle ${colWidthClass(cell.column.id)}`}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>

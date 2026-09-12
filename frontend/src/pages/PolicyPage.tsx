@@ -97,14 +97,9 @@ const PolicyPage = () => {
   const lastEvalErrorToastAtRef = useRef(0);
 
   const evalQuery = useQuery<PolicyEvaluateResponse, Error>({
-    queryKey: evalQueryKey(viewPreset),
-    queryFn: ({ signal }) =>
-      evaluatePolicies(
-        { ruleIds: viewPreset === "framework_demo" ? frameworkDemoRuleIds : undefined },
-        signal,
-      ),
-    enabled: false,
-    staleTime: Infinity,
+    queryKey: evalQueryKey("all"),
+    queryFn: ({ signal }) => evaluatePolicies(undefined, signal),
+    staleTime: 60_000,
     gcTime: 1000 * 60 * 60 * 6,
     retry: false,
   });
@@ -114,13 +109,13 @@ const PolicyPage = () => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const persisted = await readPersistedPolicyEvaluation(viewPreset);
+      const persisted = await readPersistedPolicyEvaluation("all");
       if (cancelled || !persisted) return;
       // Only hydrate if we don't already have fresher data (e.g. a fetch
       // raced the hydration).
-      const existing = queryClient.getQueryState(evalQueryKey(viewPreset));
+      const existing = queryClient.getQueryState(evalQueryKey("all"));
       if (existing?.data && (existing.dataUpdatedAt ?? 0) >= persisted.savedAt) return;
-      queryClient.setQueryData(evalQueryKey(viewPreset), persisted.data, {
+      queryClient.setQueryData(evalQueryKey("all"), persisted.data, {
         updatedAt: persisted.savedAt,
       });
       lastEvalToastAtRef.current = persisted.savedAt;
@@ -128,25 +123,15 @@ const PolicyPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [queryClient, viewPreset]);
-
-  const frameworkDemoReady = viewPreset !== "framework_demo" || frameworkDemoRuleIds.length > 0;
+  }, [queryClient]);
 
   // ---- Effects ----
 
   useEffect(() => {
     if (!evalQuery.data) return;
     // fire-and-forget; ignore IDB errors (handled inside persistence module)
-    void persistPolicyEvaluation(evalQuery.data, viewPreset);
-  }, [evalQuery.data, viewPreset]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(POLICY_VIEW_PRESET_STORAGE_KEY, viewPreset);
-    } catch {
-      /* ignore storage errors */
-    }
-  }, [viewPreset]);
+    void persistPolicyEvaluation(evalQuery.data, "all");
+  }, [evalQuery.data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -507,7 +492,6 @@ const PolicyPage = () => {
         <ViolationGroupTable
           table={table}
           columnCount={columns.length}
-          viewPreset={viewPreset}
           selectedFindingId={effectiveSelectedFindingId}
           onSelectFinding={setSelectedFindingId}
           expandedFindingByGroup={expandedFindingByGroup}
