@@ -6,7 +6,7 @@ import {
   type SortingState,
   useTable,
 } from "@tanstack/react-table";
-import { BookOpen, ChevronDown, ChevronRight, ShieldAlert, ShieldCheck } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { evaluatePolicies, exportPolicySarif, fetchPolicyCatalog, fetchPolicyPacks, importSarifReport } from "../lib/api";
 import { cn } from "../lib/utils";
@@ -27,25 +27,19 @@ import StandardRulesCatalogView from "../components/features/policy/StandardRule
 import SummaryCards from "../components/features/policy/SummaryCards";
 import ViolationGroupTable from "../components/features/policy/ViolationGroupTable";
 import {
-  type PolicyViewPreset,
   type ViolationGroupRow,
-  LEGACY_FRAMEWORK_DEMO_RULE_IDS,
-  POLICY_VIEW_PRESET_STORAGE_KEY,
   deriveStandardFromRuleId,
   formatHumanRuleTitle,
   groupViolationsByRule,
   normalizeViolation,
-  readPolicyViewPreset,
   ruleGroupStatusLabel,
   ruleGroupStatusVariant,
   severityVariant,
-  uniqueRuleIds,
 } from "../components/features/policy/policyUtils";
 import { type PolicyTableFeatures, policyTableFeatures } from "../components/features/policy/tableFeatures";
 import { Card } from "../components/ui/card";
 
-const evalQueryKey = (preset: PolicyViewPreset) =>
-  ["policyEvaluation:last", preset] as const;
+const evalQueryKey = () => ["policyEvaluation:last", "all"] as const;
 
 const evaluationErrorTitle = (message: string | null) =>
   messageMentionsBackendDependency(message)
@@ -54,12 +48,9 @@ const evaluationErrorTitle = (message: string | null) =>
 
 const PolicyPage = () => {
   const queryClient = useQueryClient();
-  const initialViewPreset = readPolicyViewPreset();
-
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
   const [expandedFindingByGroup, setExpandedFindingByGroup] = useState<Record<string, string | null>>({});
-  const [viewPreset, setViewPreset] = useState<PolicyViewPreset>(initialViewPreset);
   const [uploadedModules, setUploadedModules] = useState<string[]>([]);
   const [moduleFilter, setModuleFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -89,25 +80,13 @@ const PolicyPage = () => {
     queryFn: ({ signal }) => fetchPolicyPacks(signal),
   });
 
-  const frameworkDemoRuleIds = useMemo(() => {
-    const explicit = uniqueRuleIds(policyCatalogQuery.data?.framework_demo_rule_ids ?? []);
-    if (explicit.length > 0) return explicit;
-    const derivedFromCategories = uniqueRuleIds(
-      (policyCatalogQuery.data?.benchmark_categories ?? [])
-        .filter((category) => category.framework_demo)
-        .flatMap((category) => category.rego_rule_ids ?? []),
-    );
-    if (derivedFromCategories.length > 0) return derivedFromCategories;
-    return LEGACY_FRAMEWORK_DEMO_RULE_IDS;
-  }, [policyCatalogQuery.data?.benchmark_categories, policyCatalogQuery.data?.framework_demo_rule_ids]);
-
   // Track the most recent toast-emit timestamps so we don't double-fire on
   // IDB hydration vs. fresh fetches. Initialized after hydration completes.
   const lastEvalToastAtRef = useRef(0);
   const lastEvalErrorToastAtRef = useRef(0);
 
   const evalQuery = useQuery<PolicyEvaluateResponse, Error>({
-    queryKey: evalQueryKey("all"),
+    queryKey: evalQueryKey(),
     queryFn: ({ signal }) => evaluatePolicies(undefined, signal),
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 6,
@@ -123,9 +102,9 @@ const PolicyPage = () => {
       if (cancelled || !persisted) return;
       // Only hydrate if we don't already have fresher data (e.g. a fetch
       // raced the hydration).
-      const existing = queryClient.getQueryState(evalQueryKey("all"));
+      const existing = queryClient.getQueryState(evalQueryKey());
       if (existing?.data && (existing.dataUpdatedAt ?? 0) >= persisted.savedAt) return;
-      queryClient.setQueryData(evalQueryKey("all"), persisted.data, {
+      queryClient.setQueryData(evalQueryKey(), persisted.data, {
         updatedAt: persisted.savedAt,
       });
       lastEvalToastAtRef.current = persisted.savedAt;
@@ -263,7 +242,6 @@ const PolicyPage = () => {
       moduleCount: visibleModules.length,
       fullSupportCount: filteredFindings.filter((f) => f.remediation.support_tier === "full").length,
       guardedSupportCount: filteredFindings.filter((f) => f.remediation.support_tier === "guarded").length,
-      manualReviewCount: filteredFindings.filter((f) => f.remediation.support_tier === "manual").length,
     }),
     [data.length, filteredFindings, visibleModules.length],
   );
@@ -378,9 +356,8 @@ const PolicyPage = () => {
   const handleExportSarif = async () => {
     try {
       setIsExportingSarif(true);
-      const ruleIds = viewPreset === "framework_demo" ? frameworkDemoRuleIds : undefined;
-      const doc = await exportPolicySarif({ ruleIds });
-      const filename = `codegraph-${viewPreset === "framework_demo" ? "demo" : "full"}-findings.sarif.json`;
+      const doc = await exportPolicySarif();
+      const filename = "codegraph-full-findings.sarif.json";
       const ok = downloadSarifFile(doc, filename);
       if (ok) {
         toast.success("SARIF v2.1.0 report exported.");
@@ -434,7 +411,7 @@ const PolicyPage = () => {
           (v) => !existingKeys.has(`${v.violation_id ?? v.rule_id}:${v.method_key}`),
         );
 
-        queryClient.setQueryData(evalQueryKey(viewPreset), {
+        queryClient.setQueryData(evalQueryKey(), {
           ...existingData,
           violations: [...existingViolations, ...newViolations],
         });
@@ -585,7 +562,6 @@ const PolicyPage = () => {
           packs={policyPacksQuery.data?.packs ?? []}
           findings={findings}
           selectedStandard={selectedStandard}
-          onSelectStandard={setSelectedStandard}
           onSelectRuleInFindings={(ruleId) => {
             setSearchQuery(ruleId);
             setActiveViewMode("findings");

@@ -49,7 +49,6 @@ from codegraph.remediation.context import (
 )
 from codegraph.remediation.contracts import (
     AGENTIC_FIX_STRATEGIES,
-    FIX_STRATEGIES,
     NO_FIX_PREFIX,
     build_no_fix_response,
     preflight_unsupported_reason,

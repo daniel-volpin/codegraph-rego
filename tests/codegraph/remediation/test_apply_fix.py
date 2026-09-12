@@ -134,6 +134,7 @@ class ApplyFixTests(RemediationTestBase):
             with (
                 patch.object(apply_flow_mod, "verify_candidate", return_value={"status": "POLICY_PASS"}),
                 patch.object(apply_flow_mod, "ingest", return_value=object()),
+                patch.object(apply_flow_mod, "_build_search_embeddings"),
             ):
                 result = remediation.apply_fix(
                     context["rule_id"],
@@ -558,6 +559,49 @@ class ApplyFixTests(RemediationTestBase):
             self.assertEqual(src_path.read_text(encoding="utf-8"), original)
             self.assertEqual(result["status"], "VERIFICATION_ERROR")
             self.assertEqual(result["verification"]["cleanup"], {"file_restored": True, "revision_published": None})
+
+    def test_embedding_failure_rolls_back_graph_and_source(self):
+        svc_mod = self.service
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original = "package demo;\nclass Example {\n  void hash() throws Exception {\n    java.security.MessageDigest.getInstance(\"MD5\");\n  }\n}\n"
+            replacement_method = "void hash() throws Exception {\n    java.security.MessageDigest.getInstance(\"SHA-256\");\n  }"
+            src_path, context, _snapshot, _overlay = _method_context(
+                root, Path("src/Example.java"), original, replacement_method
+            )
+            remediation = svc_mod.RemediationService(llm_client=lambda *_args, **_kwargs: "")
+            remediation.get_violation_context = lambda *_args, **_kwargs: context  # type: ignore[method-assign]
+            remediation._resolve_file_path = lambda *_args, **_kwargs: src_path  # type: ignore[method-assign]
+            remediation.propose_method_edits = lambda *_args, **_kwargs: (  # type: ignore[method-assign]
+                ProposalResponseBuilder().with_edits(replacement_lines=replacement_method.splitlines()).build()
+            )
+            remediation._prepare_temp_workspace = (  # type: ignore[method-assign]
+                lambda tmp_root, _resolved: (tmp_root, Path(tmp_root) / "src" / "Example.java", tmp_root)
+            )
+            remediation._compile_project = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
+                "attempted": True,
+                "success": True,
+            }
+            publication = object()
+
+            with (
+                patch.object(apply_flow_mod, "verify_candidate", return_value={"status": "POLICY_PASS"}),
+                patch.object(apply_flow_mod, "ingest", return_value=publication),
+                patch.object(apply_flow_mod, "_build_search_embeddings", side_effect=RuntimeError("embedding failed")),
+                patch.object(apply_flow_mod, "rollback_workspace_revision") as rollback,
+            ):
+                result = remediation.apply_fix(
+                    context["rule_id"],
+                    method_key=context["method_key"],
+                    file_path=src_path.as_posix(),
+                    mode="apply",
+                    max_attempts=1,
+                )
+
+            self.assertEqual(result["status"], "VERIFICATION_ERROR")
+            self.assertIn("embedding failed", result["error"])
+            self.assertEqual(src_path.read_text(encoding="utf-8"), original)
+            rollback.assert_called_once_with(publication)
 
     def test_cleanup_failures_are_reported_after_candidate_evaluation_failure(self):
         with TemporaryDirectory() as tmp:

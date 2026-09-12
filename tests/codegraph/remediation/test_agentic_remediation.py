@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
+from codegraph.ingestion.snapshots import create_source_snapshot_from_bytes, sha256_hex
 from codegraph.remediation.agentic import (
     AgenticRemediationService,
     IsolatedWorktreeEnvironment,
 )
+from codegraph.remediation.agentic.contracts import AgentVerificationStatus
 
 SAMPLE_JAVA = """package demo;
 
@@ -26,6 +30,18 @@ public class SqlDemo {
     }
 }
 """
+
+
+def _verification(*, compile_passed: bool = True) -> AgentVerificationStatus:
+    return AgentVerificationStatus(
+        compile_passed=compile_passed,
+        compile_output="ok" if compile_passed else "compile failed",
+        tests_passed=True,
+        test_output="ok",
+        policy_passed=True,
+        policy_findings=[],
+        remaining_violations=[],
+    )
 
 
 def test_isolated_worktree_environment_sandboxes_edits(tmp_path: Path) -> None:
@@ -163,6 +179,7 @@ def test_agentic_multi_turn_remediation_sql_injection(tmp_path: Path, monkeypatc
                 ]
             }
 
+    monkeypatch.setattr(IsolatedWorktreeEnvironment, "run_full_verification", lambda *_args: _verification())
     service = AgenticRemediationService(llm_client=mock_llm_client)
     result = service.remediate_finding(finding, workspace_root=tmp_path, max_turns=5)
 
@@ -174,7 +191,7 @@ def test_agentic_multi_turn_remediation_sql_injection(tmp_path: Path, monkeypatc
     assert src.read_text(encoding="utf-8") == SAMPLE_JAVA  # Immutable original
 
 
-def test_agentic_self_healing_on_compilation_failure(tmp_path: Path) -> None:
+def test_agentic_self_healing_on_compilation_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     src = tmp_path / "src" / "demo" / "SqlDemo.java"
     src.parent.mkdir(parents=True)
     src.write_text(SAMPLE_JAVA, encoding="utf-8")
@@ -268,10 +285,99 @@ def test_agentic_self_healing_on_compilation_failure(tmp_path: Path) -> None:
             }
         return {"choices": [{"message": {"content": "done"}}]}
 
+    def verify_current_source(env: IsolatedWorktreeEnvironment, _rule_id: str) -> AgentVerificationStatus:
+        return _verification(compile_passed="INVALID SYNTAX" not in env.read_file("src/demo/SqlDemo.java"))
+
+    monkeypatch.setattr(IsolatedWorktreeEnvironment, "run_full_verification", verify_current_source)
     service = AgenticRemediationService(llm_client=mock_llm_client)
     result = service.remediate_finding(finding, workspace_root=tmp_path, max_turns=6)
     assert result.status == "SUCCESS"
     assert "Self-healed syntax error" in result.reason
+
+
+def test_missing_build_and_test_infrastructure_fail_closed(tmp_path: Path) -> None:
+    src = tmp_path / "App.java"
+    src.write_text("class App {}\n", encoding="utf-8")
+
+    with IsolatedWorktreeEnvironment(tmp_path) as env:
+        with patch(
+            "codegraph.java.service.parse_java_source",
+            return_value=SimpleNamespace(coverage="complete", diagnostics=[]),
+        ):
+            compile_ok, compile_output = env.compile_workspace()
+        tests_ok, tests_output = env.run_tests()
+
+    assert compile_ok is False
+    assert "no supported Maven build" in compile_output
+    assert tests_ok is False
+    assert "no supported Maven build" in tests_output
+
+
+def test_build_and_policy_exceptions_fail_closed(tmp_path: Path) -> None:
+    src = tmp_path / "App.java"
+    src.write_text("class App { void run() {} }\n", encoding="utf-8")
+    (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
+    test_dir = tmp_path / "src" / "test" / "java"
+    test_dir.mkdir(parents=True)
+    (test_dir / "AppTest.java").write_text("class AppTest {}\n", encoding="utf-8")
+
+    with IsolatedWorktreeEnvironment(tmp_path, target_method_key="invalid") as env:
+        with patch("subprocess.run", side_effect=OSError("maven unavailable")):
+            tests_ok, tests_output = env.run_tests()
+        policy_ok, findings, remaining = env.evaluate_policy("TEST-RULE")
+
+    assert tests_ok is False
+    assert "maven unavailable" in tests_output
+    assert policy_ok is False
+    assert findings == [{"error": "policy_target_unavailable"}]
+    assert remaining == ["TEST-RULE"]
+
+
+def test_policy_gate_compares_scratch_candidate_to_immutable_baseline(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "src" / "demo" / "HashDemo.java"
+    src.parent.mkdir(parents=True)
+    original = (
+        "package demo; class HashDemo { "
+        "void use(String algorithm) {} "
+        "void hash() { use(\"MD5\"); } }\n"
+    )
+    src.write_text(original, encoding="utf-8")
+    snapshot = create_source_snapshot_from_bytes(
+        workspace_root=tmp_path,
+        source_path=src,
+        source_bytes=original.encode(),
+        method_selector="demo.HashDemo#hash()",
+        expected_source_sha256=sha256_hex(original),
+    )
+    method_key = f"workspace@revision:src/demo/HashDemo.java#{snapshot.identity.source_key}"
+    captured: dict[str, str] = {}
+
+    def fake_verify_candidate(**kwargs):
+        root = Path(kwargs["workspace_root"])
+        captured["baseline"] = (root / kwargs["source"]).read_text(encoding="utf-8")
+        captured["candidate"] = (root / kwargs["candidate"]).read_text(encoding="utf-8")
+        return {
+            "status": "POLICY_PASS",
+            "policy_status": "PASS",
+            "findings": {"candidate": []},
+        }
+
+    with IsolatedWorktreeEnvironment(tmp_path, target_method_key=method_key) as env:
+        assert env.apply_replacement("src/demo/HashDemo.java", 'use("MD5")', 'use("SHA-256")')
+        with patch(
+            "codegraph.remediation.agentic.environment.verify_candidate",
+            side_effect=fake_verify_candidate,
+        ):
+            passed, findings, remaining = env.evaluate_policy("ISO-A.10-WEAK-HASH")
+
+    assert passed is True
+    assert findings == []
+    assert remaining == []
+    assert 'use("MD5")' in captured["baseline"]
+    assert 'use("SHA-256")' in captured["candidate"]
+    assert src.read_text(encoding="utf-8") == original
 
 
 def test_agentic_safe_refusal(tmp_path: Path) -> None:

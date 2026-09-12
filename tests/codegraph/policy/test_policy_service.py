@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 
@@ -25,6 +25,18 @@ class TestPolicyService(unittest.TestCase):
         self.assertEqual(
             mock_evaluate_policies.call_args.kwargs["workspace_root"],
             "/tmp/custom-upload-root",
+        )
+
+    @patch("codegraph.policy.service.import_findings_from_sarif", return_value=[])
+    @patch("codegraph.policy.service.shared_neo4j_driver", return_value=object())
+    def test_import_sarif_normalizes_workspace_root(self, _mock_driver, mock_import) -> None:
+        from codegraph.policy.service import import_sarif
+
+        import_sarif({"version": "2.1.0"}, workspace_root="relative-workspace")
+
+        self.assertEqual(
+            mock_import.call_args.kwargs["workspace_root"],
+            Path("relative-workspace").resolve().as_posix(),
         )
 
 

@@ -1,5 +1,5 @@
 import { Card } from "../../ui/card";
-import { AlertCircle, CheckCircle2, ShieldAlert, Boxes, ShieldCheck, FileWarning } from "lucide-react";
+import { AlertCircle, Boxes, CheckCircle2, ShieldAlert, ShieldCheck } from "lucide-react";
 
 interface SummaryCardsProps {
   findingCount: number;
@@ -7,7 +7,6 @@ interface SummaryCardsProps {
   moduleCount: number;
   fullSupportCount: number;
   guardedSupportCount: number;
-  manualReviewCount: number;
 }
 
 const SummaryCards = ({
@@ -16,7 +15,6 @@ const SummaryCards = ({
   moduleCount,
   fullSupportCount,
   guardedSupportCount,
-  manualReviewCount,
 }: SummaryCardsProps) => (
   <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
     <Card className="p-3.5 shadow-2xs border-zinc-200/80 dark:border-zinc-800">
@@ -65,4 +63,3 @@ const SummaryCards = ({
 );
 
 export default SummaryCards;
-

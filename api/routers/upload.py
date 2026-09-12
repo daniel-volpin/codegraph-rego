@@ -5,9 +5,10 @@ import shutil
 import uuid
 import zipfile
 from collections.abc import AsyncIterator
+from typing import Annotated
 
 import aiofiles
-from fastapi import APIRouter, File, Query, Request, UploadFile
+from fastapi import APIRouter, File, Header, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from api.models.validation import UploadResponse, UploadStatusResponse
@@ -19,6 +20,7 @@ from codegraph.common.progress import (
     start_progress,
     update_progress,
 )
+from codegraph.common.workspace_lock import async_workspace_mutation_guard
 from codegraph.config import settings
 from codegraph.embedding.service import EmbeddingService
 from codegraph.ingestion.service import WorkspacePublication, ingest, rollback_workspace_revision
@@ -192,10 +194,18 @@ async def _handle_workspace_processing_error(
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_zip(file: UploadFile = File(...)):
+async def upload_zip(
+    file: UploadFile = File(...),
+    request_id_header: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+):
     # request_id is echoed on every response so the caller can poll
     # GET /upload/status?request_id=<id> for its own upload's progress.
-    request_id = start_progress("upload", "Validating upload…", 2.0)
+    request_id = start_progress(
+        "upload",
+        "Validating upload…",
+        2.0,
+        request_id=request_id_header.strip() if request_id_header and request_id_header.strip() else None,
+    )
     if not file.filename or not file.filename.endswith(".zip"):
         return _error_response("Only zip files allowed", request_id, 400)
 
@@ -206,24 +216,26 @@ async def upload_zip(file: UploadFile = File(...)):
     staging_dir, java_root_relatives = prepared
     backup_dir = None
     publication = None
-    try:
-        update_progress("upload", "Replacing workspace…", 19.0)
-        backup_dir = await asyncio.to_thread(_swap_workspace, staging_dir)
-        staging_dir = None
-        update_progress("upload", "Publishing uploaded graph revision…", 20.0)
-        upload_root = os.path.abspath(settings.upload_dir)
-        publication = await asyncio.to_thread(
-            _ingest_upload_workspace, upload_root, _final_java_roots(java_root_relatives),
-        )
-        await asyncio.to_thread(_build_upload_embeddings)
-    except Exception as exc:
-        return await _handle_workspace_processing_error(
-            exc,
-            request_id=request_id,
-            staging_dir=staging_dir,
-            backup_dir=backup_dir,
-            publication=publication,
-        )
+    update_progress("upload", "Waiting for workspace publication slot…", 19.0)
+    async with async_workspace_mutation_guard():
+        try:
+            update_progress("upload", "Replacing workspace…", 19.0)
+            backup_dir = await asyncio.to_thread(_swap_workspace, staging_dir)
+            staging_dir = None
+            update_progress("upload", "Publishing uploaded graph revision…", 20.0)
+            upload_root = os.path.abspath(settings.upload_dir)
+            publication = await asyncio.to_thread(
+                _ingest_upload_workspace, upload_root, _final_java_roots(java_root_relatives),
+            )
+            await asyncio.to_thread(_build_upload_embeddings)
+        except Exception as exc:
+            return await _handle_workspace_processing_error(
+                exc,
+                request_id=request_id,
+                staging_dir=staging_dir,
+                backup_dir=backup_dir,
+                publication=publication,
+            )
     await asyncio.to_thread(_cleanup_dir, backup_dir)
     complete_progress("Codebase processed!")
     final_java_roots = _final_java_roots(java_root_relatives)

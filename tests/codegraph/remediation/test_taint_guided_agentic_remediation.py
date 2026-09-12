@@ -5,13 +5,16 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from codegraph.ingestion.snapshots import create_source_snapshot_from_bytes, sha256_hex
 from codegraph.remediation.agentic.agent import (
     AgenticRemediationService,
     _build_initial_user_prompt,
     _format_taint_path_dossier,
 )
-from codegraph.remediation.agentic.contracts import AgentRemediationResult
+from codegraph.remediation.agentic.contracts import AgentRemediationResult, AgentVerificationStatus
+from codegraph.remediation.agentic.environment import IsolatedWorktreeEnvironment
 
 
 class TestTaintGuidedAgenticRemediation(unittest.TestCase):
@@ -71,6 +74,15 @@ class TestTaintGuidedAgenticRemediation(unittest.TestCase):
                 "package com.acme;\npublic class UserDao {\n  public void query(String sql) {\n    java.sql.Statement stmt = null;\n  }\n}\n",
                 encoding="utf-8",
             )
+            dao_source = dao_file.read_bytes()
+            snapshot = create_source_snapshot_from_bytes(
+                workspace_root=root,
+                source_path=dao_file,
+                source_bytes=dao_source,
+                method_selector="com.acme.UserDao#query(String)",
+                expected_source_sha256=sha256_hex(dao_source),
+            )
+            method_key = f"workspace@revision:UserDao.java#{snapshot.identity.source_key}"
 
             # Mock LLM executing multi-file edits and finishing
             turns_responses = [
@@ -142,17 +154,28 @@ class TestTaintGuidedAgenticRemediation(unittest.TestCase):
             def mock_client(messages, tools, model):
                 return next(turn_iter)
 
-            service = AgenticRemediationService(llm_client=mock_client)
-            result = service.remediate_finding(
-                {
-                    "violation_id": "ISO-A.8-SQL-INJECTION",
-                    "target_method": "com.acme.UserDao.query(String)",
-                    "file_path": "UserDao.java",
-                    "code_snippet": "java.sql.Statement stmt = null;",
-                },
-                workspace_root=root,
-                max_turns=5,
+            verification = AgentVerificationStatus(
+                compile_passed=True,
+                compile_output="Maven build succeeded",
+                tests_passed=True,
+                test_output="Tests passed",
+                policy_passed=True,
+                policy_findings=[],
+                remaining_violations=[],
             )
+            service = AgenticRemediationService(llm_client=mock_client)
+            with patch.object(IsolatedWorktreeEnvironment, "run_full_verification", return_value=verification):
+                result = service.remediate_finding(
+                    {
+                        "violation_id": "ISO-A.8-SQL-INJECTION",
+                        "method_key": method_key,
+                        "target_method": "com.acme.UserDao.query(String)",
+                        "file_path": "UserDao.java",
+                        "code_snippet": "java.sql.Statement stmt = null;",
+                    },
+                    workspace_root=root,
+                    max_turns=5,
+                )
 
             self.assertIsInstance(result, AgentRemediationResult)
             self.assertEqual(result.status, "SUCCESS")

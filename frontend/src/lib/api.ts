@@ -155,7 +155,11 @@ function withTimeoutSignal(external: AbortSignal | undefined, ms: number): Abort
 
 // ---- Endpoints ----
 
-export async function uploadZip(file: File, signal?: AbortSignal): Promise<UploadResponse> {
+export async function uploadZip(
+  file: File,
+  signal?: AbortSignal,
+  requestId?: string,
+): Promise<UploadResponse> {
   if (isDemoMode()) {
     return DEMO_UPLOAD_RESPONSE;
   }
@@ -166,6 +170,7 @@ export async function uploadZip(file: File, signal?: AbortSignal): Promise<Uploa
   const response = await fetch(`${getRuntimeApiBase()}/upload`, {
     method: "POST",
     body: formData,
+    headers: requestId ? { "X-Request-Id": requestId } : undefined,
     signal,
   });
 
@@ -651,4 +656,3 @@ export async function runAgenticRemediation(
 
   return parseApiResponse(response, AgenticRemediationResponseSchema);
 }
-

@@ -134,6 +134,18 @@ class RemediationFlowTests(RemediationTestBase):
         self.assertFalse(unsupported.supported)
         self.assertEqual(unsupported.support_tier, "manual")
 
+    def test_default_remediation_capability_rejects_unregistered_rule(self):
+        from codegraph.remediation.capabilities import get_remediation_capability
+
+        capability = get_remediation_capability("java/sql-injection")
+
+        self.assertFalse(capability.supported)
+        self.assertEqual(capability.support_tier, "manual")
+        self.assertEqual(capability.reason_code, "unsupported_rule_for_auto_fix")
+        self.assertIsNone(capability.strategy)
+        self.assertFalse(capability.preview_available)
+        self.assertFalse(capability.verify_available)
+
     def test_preview_virtual_fix_rejects_unsupported_rule_without_llm_call(self):
         svc_mod = self.service
 

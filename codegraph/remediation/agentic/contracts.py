@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Literal
-
-import json
 
 AgentRole = Literal["system", "user", "assistant", "tool"]
 AgentOutcomeStatus = Literal[

@@ -5,7 +5,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from codegraph.ingestion.service import WorkspacePublication, ingest
+from codegraph.common.workspace_lock import workspace_mutation_guard
+from codegraph.embedding.service import EmbeddingService
+from codegraph.ingestion.service import WorkspacePublication, ingest, rollback_workspace_revision
 from codegraph.ingestion.snapshots import (
     SnapshotError,
     StaleSourceError,
@@ -145,8 +147,13 @@ def _publish_workspace_revision(workspace_root: Path) -> WorkspacePublication:
     return ingest(workspace_root.as_posix(), progress_callback=None, source_roots=None)
 
 
+def _build_search_embeddings() -> None:
+    EmbeddingService.build_embeddings(progress_callback=None)
+
+
 def _required_evidence_source_sha256(context: dict[str, Any]) -> str:
-    evidence = context.get("evidence") if isinstance(context.get("evidence"), dict) else {}
+    evidence_raw = context.get("evidence")
+    evidence: dict[str, Any] = evidence_raw if isinstance(evidence_raw, dict) else {}
     value = evidence.get("source_sha256")
     if not isinstance(value, str) or not value:
         raise ValueError("evidence.source_sha256 is required")
@@ -430,6 +437,7 @@ def _execute_apply_fix_inner(
     attempt_count = min(max_attempts, max(1, len(replacement.attempt_errors) + 1))
     live_workspace_modified = False
     restore_failed = False
+    graph_rollback_failed = False
     cleanup: dict[str, bool | None] = {"file_restored": None, "revision_published": None}
     before_trace_raw = None
     after_trace_raw = None
@@ -463,15 +471,39 @@ def _execute_apply_fix_inner(
         finally:
             tempdir.__exit__(None, None, None)
 
-        if resolved_path.read_bytes() != original_bytes:
-            verification = _stale_verification(str(context.get("rule_id")))
-
         apply_successful = _can_commit_apply(mode, verification, compilation)
         if apply_successful:
-            live_workspace_modified = True
-            resolved_path.write_bytes(replacement.candidate_file_bytes)
-            _publish_workspace_revision(workspace_root)
-            cleanup["revision_published"] = True
+            with workspace_mutation_guard():
+                if resolved_path.read_bytes() != original_bytes:
+                    verification = _stale_verification(str(context.get("rule_id")))
+                    apply_successful = False
+                else:
+                    publication: WorkspacePublication | None = None
+                    live_workspace_modified = True
+                    resolved_path.write_bytes(replacement.candidate_file_bytes)
+                    try:
+                        publication = _publish_workspace_revision(workspace_root)
+                        cleanup["revision_published"] = True
+                        _build_search_embeddings()
+                    except Exception as publication_exc:
+                        rollback_error: Exception | None = None
+                        if publication is not None:
+                            try:
+                                rollback_workspace_revision(publication)
+                            except Exception as exc:  # pragma: no cover - defensive recovery guard
+                                rollback_error = exc
+                                graph_rollback_failed = True
+                        cleanup["file_restored"] = _restore_file(
+                            resolved_path,
+                            original_bytes,
+                            replacement.candidate_file_bytes,
+                        )
+                        live_workspace_modified = False
+                        if rollback_error is not None:
+                            raise RuntimeError(
+                                f"{publication_exc}; graph rollback failed: {rollback_error}"
+                            ) from publication_exc
+                        raise
     except Exception as exc:  # pragma: no cover - runtime guard
         _err = {"err": str(exc), "err_type": type(exc).__name__, "violation_id": violation_id}
         if LOGGER.isEnabledFor(logging.DEBUG):
@@ -487,7 +519,7 @@ def _execute_apply_fix_inner(
                 original_bytes,
                 replacement.candidate_file_bytes,
             )
-        restore_failed = any(restored is False for restored in cleanup.values())
+        restore_failed = graph_rollback_failed or any(restored is False for restored in cleanup.values())
 
     verification["cleanup"] = cleanup
     status = _final_status(

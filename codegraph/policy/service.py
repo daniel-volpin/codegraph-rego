@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +44,7 @@ def import_sarif(sarif_data: str | dict[str, Any], *, workspace_root: str | None
         driver = None
     return import_findings_from_sarif(
         sarif_data,
-        workspace_root=workspace_root or settings.upload_dir,
+        workspace_root=Path(workspace_root or settings.upload_dir).resolve().as_posix(),
         neo4j_driver=driver,
     )
 

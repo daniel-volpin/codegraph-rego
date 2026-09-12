@@ -5,7 +5,6 @@ import {
   BookOpen,
   CheckCircle2,
   Search,
-  Shield,
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
@@ -25,7 +24,6 @@ export interface StandardRulesCatalogViewProps {
   packs: PolicyPackSpec[];
   findings: ViolationRow[];
   selectedStandard: string;
-  onSelectStandard: (standard: string) => void;
   onSelectRuleInFindings: (ruleId: string) => void;
 }
 
@@ -33,7 +31,6 @@ export const StandardRulesCatalogView = ({
   packs,
   findings,
   selectedStandard,
-  onSelectStandard,
   onSelectRuleInFindings,
 }: StandardRulesCatalogViewProps) => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -65,7 +62,6 @@ export const StandardRulesCatalogView = ({
     const seenRuleIds = new Set<string>();
 
     for (const pack of packs) {
-      const packStd = pack.standard;
       const stdId =
         pack.pack_id.includes("iso") ? "iso"
         : pack.pack_id.includes("pci") ? "pci"
