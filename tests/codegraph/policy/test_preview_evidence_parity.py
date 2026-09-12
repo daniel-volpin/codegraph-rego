@@ -168,7 +168,7 @@ def test_preview_is_read_only(tmp_path, monkeypatch) -> None:
 def test_virtual_bundle_carries_canonical_policy_input_fields() -> None:
     """The shared core must emit every input field the active Rego policies
     read (input.source_code, target_method, method_name, graph_context,
-    analysis_flags, taint_paths) plus the evidence fields downstream
+    analysis_flags) plus the evidence fields downstream
     consumers rely on."""
     source = FLAG_DEPENDENT_SQL
     virtual_graph = build_virtual_graph_context(source, base_graph={})
@@ -182,7 +182,6 @@ def test_virtual_bundle_carries_canonical_policy_input_fields() -> None:
         "graph_context",
         "analysis_flags",
         "helper_summaries",
-        "taint_paths",
         "vector_context",
     }
     assert required <= set(bundle), f"missing policy-input fields: {sorted(required - set(bundle))}"

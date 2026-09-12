@@ -10,6 +10,7 @@ from typing import Any
 from codegraph.common.concurrency import bounded_futures
 from codegraph.config import settings
 from codegraph.db import shared_neo4j_driver
+from codegraph.policy.opengrep_bridge import evaluate_opengrep_rules
 from codegraph.policy.runtime import bundles as runtime_bundles
 from codegraph.policy.runtime import catalog as runtime_catalog
 from codegraph.policy.runtime import opa as runtime_opa
@@ -151,6 +152,39 @@ def _collect_violation_responses(
     return violations, violation_counts_by_id, omitted_findings, excluded_findings
 
 
+def _collect_opengrep_violations(
+    *,
+    allowed_rule_ids: set[str],
+    violation_counts_by_id: dict[str, int],
+    workspace_root: str | None,
+) -> list[dict[str, Any]]:
+    """Merge findings from every auto-discovered OpenGrep taint rule.
+
+    Adding a new OpenGrep-backed rule requires no change here: it is picked
+    up automatically from ``policy/opengrep/`` by `evaluate_opengrep_rules`.
+    """
+    try:
+        opengrep_violations = evaluate_opengrep_rules(
+            workspace_root=workspace_root,
+            neo4j_driver=shared_neo4j_driver(),
+            timeout=settings.opengrep_timeout_seconds,
+        )
+    except Exception:
+        LOGGER.exception("OpenGrep-backed policy evaluation failed; continuing with OPA-only results.")
+        return []
+
+    accepted: list[dict[str, Any]] = []
+    for violation in opengrep_violations:
+        violation_id = violation.get("violation_id")
+        if not _is_allowed_rule(violation_id, allowed_rule_ids):
+            continue
+        accepted.append(violation)
+        if violation_id is not None:
+            key = str(violation_id)
+            violation_counts_by_id[key] = violation_counts_by_id.get(key, 0) + 1
+    return accepted
+
+
 def evaluate_policies(
     *,
     max_bundles: int | None = None,
@@ -185,6 +219,13 @@ def evaluate_policies(
         allowed_rule_ids=allowed_rule_ids,
         max_per_violation_id=max_per_violation_id,
         max_total_violations=max_total_violations,
+    )
+    violations.extend(
+        _collect_opengrep_violations(
+            allowed_rule_ids=allowed_rule_ids,
+            violation_counts_by_id=violation_counts_by_id,
+            workspace_root=workspace_root,
+        )
     )
 
     opa_runs = len(bundles)

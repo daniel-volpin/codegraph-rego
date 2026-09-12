@@ -1,0 +1,33 @@
+rules:
+  - id: ISO-A.8-LDAP-INJECTION
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Possible LDAP injection: a search filter built from untrusted HTTP
+      input reaches DirContext.search() without sanitization.
+    metadata:
+      cwe: CWE-90
+      references:
+        - https://owasp.org/www-project-benchmark/
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getParameterValues(...)
+          - pattern: $REQ.getParameterMap(...)
+          - pattern: $REQ.getParameterNames(...)
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getHeaders(...)
+          - pattern: $REQ.getQueryString(...)
+          - pattern: $REQ.getCookies(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $CTX.search(...)
+          - metavariable-type:
+              metavariable: $CTX
+              types:
+                - javax.naming.directory.DirContext
+                - javax.naming.directory.InitialDirContext
+                - javax.naming.ldap.LdapContext
+    pattern-sanitizers:
+      - pattern: $ESAPI.encoder().encodeForLDAP(...)

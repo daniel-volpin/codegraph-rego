@@ -1,11 +1,10 @@
-"""Policy package: OPA/Rego rule evaluation, catalog discovery, taint detection, pluggable packs, and SARIF bridge."""
+"""Policy package: OPA/Rego rule evaluation, catalog discovery, OpenGrep taint analysis, pluggable packs, and SARIF bridge."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from codegraph.policy.sarif import export_findings_to_sarif
-from codegraph.policy.taint_graph import TaintPathFinder
 
 if TYPE_CHECKING:
     from codegraph.policy.integration import (
@@ -15,12 +14,13 @@ if TYPE_CHECKING:
         load_iso_rules,
         load_policy_catalog,
     )
+    from codegraph.policy.opengrep_bridge import evaluate_opengrep_rules
     from codegraph.policy.packs import PolicyPackRegistry, get_policy_pack_registry
     from codegraph.policy.sarif_import import import_findings_from_sarif
 
 __all__ = [
     "PolicyPackRegistry",
-    "TaintPathFinder",
+    "evaluate_opengrep_rules",
     "evaluate_policies",
     "export_findings_to_sarif",
     "get_policy_catalog_entries",
@@ -43,6 +43,10 @@ def __getattr__(name: str):
         from codegraph.policy import integration
 
         return getattr(integration, name)
+    if name == "evaluate_opengrep_rules":
+        from codegraph.policy import opengrep_bridge
+
+        return getattr(opengrep_bridge, name)
     if name in {"PolicyPackRegistry", "get_policy_pack_registry"}:
         from codegraph.policy import packs
 

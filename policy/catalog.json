@@ -2,39 +2,41 @@
   "controls": [
     {
       "id": "ISO-A.9.4.1",
-      "alias_ids": [
-        "ISO-27001-A.9.4.1"
-      ],
       "control": "A.9.4.1",
       "title": "Access Control for Applications",
       "reference": "ISO/IEC 27001:2022 A.9.4.1",
       "summary": "Public endpoints should enforce access control and authentication policies.",
-      "rego_module": "policy/iso_27001_access.rego",
-      "rego_rule": "violations",
+      "evidence_source": "opa",
       "evidence_fields": [
         "signature",
         "annotations",
         "modifiers",
         "file_path"
+      ],
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "alias_ids": [
+        "ISO-27001-A.9.4.1"
       ]
     },
     {
       "id": "ISO-A.12.4.1",
-      "alias_ids": [
-        "ISO-27001-A.12.4.1"
-      ],
       "control": "A.12.4.1",
       "title": "Event Logging",
       "reference": "ISO/IEC 27001:2022 A.12.4.1",
       "summary": "Security events should be logged to record actions that could affect information security.",
-      "rego_module": "policy/iso_27001_access.rego",
-      "rego_rule": "violations",
+      "evidence_source": "opa",
       "evidence_fields": [
         "signature",
         "annotations",
         "modifiers",
         "file_path",
         "called_signatures"
+      ],
+      "rego_module": "policy/iso_27001_access.rego",
+      "rego_rule": "violations",
+      "alias_ids": [
+        "ISO-27001-A.12.4.1"
       ]
     },
     {
@@ -43,15 +45,16 @@
       "title": "Cryptography (Weak Hash)",
       "reference": "ISO/IEC 27001:2022 A.10",
       "summary": "Cryptographic controls should avoid weak hash algorithms such as MD5 and SHA-1.",
-      "rego_module": "policy/iso_27001_crypto.rego",
-      "rego_rule": "violations",
+      "evidence_source": "opa",
       "evidence_fields": [
         "signature",
         "file_path",
         "called_signatures",
         "source_code",
         "analysis_flags"
-      ]
+      ],
+      "rego_module": "policy/iso_27001_crypto.rego",
+      "rego_rule": "violations"
     },
     {
       "id": "ISO-A.10-WEAK-CRYPTO",
@@ -59,15 +62,16 @@
       "title": "Cryptography (Weak Cipher)",
       "reference": "ISO/IEC 27001:2022 A.10",
       "summary": "Cryptographic controls should avoid weak or deprecated ciphers and insecure modes.",
-      "rego_module": "policy/iso_27001_crypto.rego",
-      "rego_rule": "violations",
+      "evidence_source": "opa",
       "evidence_fields": [
         "signature",
         "file_path",
         "called_signatures",
         "source_code",
         "analysis_flags"
-      ]
+      ],
+      "rego_module": "policy/iso_27001_crypto.rego",
+      "rego_rule": "violations"
     },
     {
       "id": "ISO-A.10-WEAK-RANDOM",
@@ -75,14 +79,15 @@
       "title": "Cryptography (Insecure Randomness)",
       "reference": "ISO/IEC 27001:2022 A.10",
       "summary": "Security-sensitive code should use cryptographically strong randomness rather than predictable PRNGs.",
-      "rego_module": "policy/iso_27001_crypto.rego",
-      "rego_rule": "violations",
+      "evidence_source": "opa",
       "evidence_fields": [
         "signature",
         "file_path",
         "called_signatures",
         "source_code"
-      ]
+      ],
+      "rego_module": "policy/iso_27001_crypto.rego",
+      "rego_rule": "violations"
     },
     {
       "id": "ISO-A.8-SQL-INJECTION",
@@ -90,14 +95,13 @@
       "title": "Secure Development (SQL Injection)",
       "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
       "summary": "Application code should prevent SQL injection by avoiding dynamic query construction with untrusted input.",
-      "rego_module": "policy/iso_27001_injection.rego",
-      "rego_rule": "violations",
+      "evidence_source": "opengrep",
       "evidence_fields": [
         "signature",
         "file_path",
-        "source_code",
-        "called_signatures"
-      ]
+        "source_code"
+      ],
+      "opengrep_rules_dir": "policy/opengrep"
     },
     {
       "id": "ISO-A.8-PATH-TRAVERSAL",
@@ -105,15 +109,13 @@
       "title": "Secure Development (Path Traversal)",
       "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
       "summary": "Application code should prevent path traversal by avoiding direct file path construction from untrusted input.",
-      "rego_module": "policy/iso_27001_injection.rego",
-      "rego_rule": "violations",
+      "evidence_source": "opengrep",
       "evidence_fields": [
         "signature",
         "file_path",
-        "source_code",
-        "called_signatures",
-        "analysis_flags"
-      ]
+        "source_code"
+      ],
+      "opengrep_rules_dir": "policy/opengrep"
     },
     {
       "id": "ISO-A.8-CMD-INJECTION",
@@ -121,15 +123,13 @@
       "title": "Secure Development (Command Injection)",
       "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
       "summary": "Application code should prevent command injection by avoiding shell or process command construction from untrusted input.",
-      "rego_module": "policy/iso_27001_injection.rego",
-      "rego_rule": "violations",
+      "evidence_source": "opengrep",
       "evidence_fields": [
         "signature",
         "file_path",
-        "source_code",
-        "called_signatures",
-        "analysis_flags"
-      ]
+        "source_code"
+      ],
+      "opengrep_rules_dir": "policy/opengrep"
     },
     {
       "id": "ISO-A.8-LDAP-INJECTION",
@@ -137,15 +137,13 @@
       "title": "Secure Development (LDAP Injection)",
       "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
       "summary": "Application code should prevent LDAP injection by avoiding concatenated LDAP filter construction with untrusted input.",
-      "rego_module": "policy/iso_27001_injection.rego",
-      "rego_rule": "violations",
+      "evidence_source": "opengrep",
       "evidence_fields": [
         "signature",
         "file_path",
-        "source_code",
-        "called_signatures",
-        "analysis_flags"
-      ]
+        "source_code"
+      ],
+      "opengrep_rules_dir": "policy/opengrep"
     },
     {
       "id": "ISO-A.8-XPATH-INJECTION",
@@ -153,15 +151,13 @@
       "title": "Secure Development (XPath Injection)",
       "reference": "Pragmatic mapping for OWASP Benchmark evaluation",
       "summary": "Application code should prevent XPath injection by avoiding concatenated XPath expression construction with untrusted input.",
-      "rego_module": "policy/iso_27001_injection.rego",
-      "rego_rule": "violations",
+      "evidence_source": "opengrep",
       "evidence_fields": [
         "signature",
         "file_path",
-        "source_code",
-        "called_signatures",
-        "analysis_flags"
-      ]
+        "source_code"
+      ],
+      "opengrep_rules_dir": "policy/opengrep"
     }
   ]
 }

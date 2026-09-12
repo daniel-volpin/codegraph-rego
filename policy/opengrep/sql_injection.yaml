@@ -1,0 +1,47 @@
+rules:
+  - id: ISO-A.8-SQL-INJECTION
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Possible SQL injection: a query string built from untrusted HTTP input
+      reaches a JDBC execute/prepare call without parameterization.
+    metadata:
+      cwe: CWE-89
+      references:
+        - https://owasp.org/www-project-benchmark/
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getParameterValues(...)
+          - pattern: $REQ.getParameterMap(...)
+          - pattern: $REQ.getParameterNames(...)
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getHeaders(...)
+          - pattern: $REQ.getQueryString(...)
+          - pattern: $REQ.getCookies(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $STMT.executeQuery(...)
+              - pattern: $STMT.executeUpdate(...)
+              - pattern: $STMT.execute(...)
+              - pattern: $STMT.executeBatch(...)
+              - pattern: $CONN.prepareStatement(...)
+              - pattern: $CONN.prepareCall(...)
+              - pattern: $JT.query(...)
+              - pattern: $JT.queryForObject(...)
+              - pattern: $JT.queryForList(...)
+              - pattern: $JT.queryForMap(...)
+              - pattern: $JT.queryForRowSet(...)
+              - pattern: $JT.queryForInt(...)
+              - pattern: $JT.queryForLong(...)
+              - pattern: $JT.execute(...)
+              - pattern: $JT.update(...)
+              - pattern: $JT.batchUpdate(...)
+          - pattern-not: $STMT.executeQuery()
+          - pattern-not: $STMT.executeUpdate()
+          - pattern-not: $STMT.execute()
+          - pattern-not: $STMT.executeBatch()
+    pattern-sanitizers:
+      - pattern: $ESAPI.encoder().encodeForSQL(...)

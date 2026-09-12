@@ -234,6 +234,17 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("CODEGRAPH_OPA_TIMEOUT", "opa_timeout_seconds"),
         description="Per-invocation timeout for OPA eval subprocesses.",
     )
+    opengrep_timeout_seconds: float = Field(
+        120.0,
+        gt=0.0,
+        validation_alias=AliasChoices("CODEGRAPH_OPENGREP_TIMEOUT", "opengrep_timeout_seconds"),
+        description="Per-invocation timeout for OpenGrep taint-analysis subprocesses.",
+    )
+    opengrep_rules_dir: str = Field(
+        "policy/opengrep",
+        validation_alias=AliasChoices("CODEGRAPH_OPENGREP_RULES_DIR", "opengrep_rules_dir"),
+        description="Directory of auto-discovered OpenGrep taint-mode rule files.",
+    )
     policy_workers: int = Field(
         2, ge=1, le=32,
         description="Concurrent evidence/OPA workers per scan; at most twice this many tasks are submitted at once.",

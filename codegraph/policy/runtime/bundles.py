@@ -32,7 +32,6 @@ from codegraph.policy.runtime.graph_queries import (
 )
 from codegraph.policy.source_analysis import analyze_policy_indicators
 from codegraph.policy.source_analysis_core import strip_java_lexical_noise
-from codegraph.policy.taint_graph import TaintPathFinder
 from codegraph.search.service import HybridSearchService
 from codegraph.telemetry import get_tracer
 
@@ -166,12 +165,6 @@ def _vector_context(search_service: HybridSearchService | None, method_key: str)
         return []
 
 
-def _taint_paths(taint_path_finder: TaintPathFinder | None, method_key: str) -> list[dict[str, Any]]:
-    if taint_path_finder is None:
-        return []
-    return taint_path_finder.find_reachable_sinks(method_key)
-
-
 def _record_evidence_span_attributes(
     span: Any,
     *,
@@ -179,7 +172,6 @@ def _record_evidence_span_attributes(
     graph_context: dict[str, Any],
     vector_context: list[str],
     helper_summaries: dict[str, Any],
-    taint_paths: list[dict[str, Any]],
     analysis_flags: dict[str, Any],
 ) -> None:
     span.set_attribute("source_code_lines", len(source_code.splitlines()) if source_code else 0)
@@ -191,9 +183,6 @@ def _record_evidence_span_attributes(
     span.set_attribute("graph_nodes_count", graph_node_count)
     span.set_attribute("vector_results_count", len(vector_context))
     span.set_attribute("helper_summaries_count", len(helper_summaries))
-    span.set_attribute("taint_paths_count", len(taint_paths))
-    max_taint_hops = max((path.get("hops", 0) for path in taint_paths), default=0)
-    span.set_attribute("taint_hops_max", max_taint_hops)
     analysis_flag_count = sum(1 for value in analysis_flags.values() if value)
     span.set_attribute("analysis_flags_active", analysis_flag_count)
 
@@ -204,15 +193,14 @@ def build_evidence_bundle_from_source(
     *,
     search_service: HybridSearchService | None = None,
     method_index: dict[str, dict[str, Any]] | None = None,
-    taint_path_finder: TaintPathFinder | None = None,
     bundle_file_path: str | None = None,
     vector_context: list[str] | None = None,
 ) -> dict[str, Any]:
     """Canonical source-text -> policy-input construction.
 
     This is the single owner of the evidence semantics Rego evaluates
-    against: lexical source views, analysis flags, helper summaries, and
-    taint-path shape. Every evaluation path — on-disk methods and virtual
+    against: lexical source views, analysis flags, and helper summaries.
+    Every evaluation path — on-disk methods and virtual
     remediation candidates alike — must go through here so the policy
     input cannot fork. Pure with respect to the workspace and graph; the
     only optional I/O is the vector lookup when ``vector_context`` is not
@@ -267,16 +255,12 @@ def build_evidence_bundle_from_source(
             "source_sha256": method_snapshot.get("source_sha256"),
         }
 
-        taint_paths = _taint_paths(taint_path_finder, method_key) if method_key else []
-        result["taint_paths"] = taint_paths
-
         _record_evidence_span_attributes(
             span,
             source_code=source_code,
             graph_context=graph_context,
             vector_context=vector_context,
             helper_summaries=helper_summaries,
-            taint_paths=taint_paths,
             analysis_flags=analysis_flags,
         )
 
@@ -288,7 +272,6 @@ def build_evidence_bundle(
     search_service: HybridSearchService | None = None,
     method_index: dict[str, dict[str, Any]] | None = None,
     source_path_override: str | Path | None = None,
-    taint_path_finder: TaintPathFinder | None = None,
 ) -> dict[str, Any]:
     """On-disk variant: extract the method source, then delegate to the core."""
     file_path = method_snapshot.get("file_path")
@@ -300,7 +283,6 @@ def build_evidence_bundle(
         source_code,
         search_service=search_service,
         method_index=method_index,
-        taint_path_finder=taint_path_finder,
         bundle_file_path=resolved_path.as_posix() if resolved_path else file_path,
     )
 
@@ -318,11 +300,8 @@ def build_policy_input(
     hybrid_search = load_hybrid_search()
 
     method_index = {snapshot["method_key"]: snapshot for snapshot in methods if snapshot.get("method_key")}
-    taint_finder = TaintPathFinder(method_index)
     bundles: list[dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
-    build = partial(
-        build_evidence_bundle, search_service=hybrid_search, method_index=method_index, taint_path_finder=taint_finder,
-    )
+    build = partial(build_evidence_bundle, search_service=hybrid_search, method_index=method_index)
     for index, future in bounded_futures(build, methods, max_workers=settings.policy_workers):
         bundles[index] = future.result()
 
