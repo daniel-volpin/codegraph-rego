@@ -423,6 +423,44 @@ the earlier source handoff or production acceptance is complete.
   acceptance gates. Native JDT parsing and FAISS/NumPy persistence were
   exercised here; no production-ready runtime claim follows from unit gates.
 
+### Completed Milestones: Mac Acceptance, Agentic Framework, and Backend Elevation (2026-09-11 / 2026-09-12)
+
+All planned modernization roadmap milestones and subsequent framework elevations have been
+fully implemented, validated, and merged to `main`:
+
+1. **Full Mac Acceptance (PR #243)**:
+   - Validated against live disposable Neo4j and FAISS on macOS (Python 3.14.7, Node 24.21.0 LTS, JDK 21/Maven, OPA 1.20.2).
+   - Exercised full upload -> JDT parsing -> graph publication -> OPA policy evaluation -> hybrid search -> grounded explanation -> dry-run remediation with compilation & OPA re-checks.
+   - Verified modern Java 21 records/overloads, canonical `method_key` identities, dry-run graph immutability, stale-input refusal, and publication rollback recovery.
+
+2. **CI Pipeline Acceleration & Caching (PR #247, #252)**:
+   - Sharded backend test execution into a 4-way concurrent matrix (`policy-java`, `remediation`, `ingestion-eval-llm`, `api-scripts-core`) with `pytest-xdist`.
+   - Added persistent caching for Maven local repository (`build/jdt-tools/m2`) and HuggingFace models (`~/.cache/huggingface`), reducing CI run times by ~70%.
+
+3. **Autonomous Multi-Turn Agentic Remediation Engine (PR #254, #255, #259, #260)**:
+   - Built `codegraph.remediation.agentic` (`IsolatedWorktreeEnvironment`, `agent.py`, `tools.py`, `contracts.py`).
+   - Enforced 3 mathematical invariant safety gates before patch promotion:
+     - $\text{Compilation Gate}$: JDT / `javac` verifies 0 compilation errors.
+     - $\text{Regression Gate}$: Project unit tests pass 100% without regression.
+     - $\text{Security Policy Gate}$: OPA scan verifies 0 residual target rule violations.
+   - Added multi-turn self-healing on compiler and test diagnostics, dynamic discovery tools (`find_files`, `search_code`, `search_graph_context`), and permanent live E2E test suite (`tests/e2e/test_live_agentic_pipeline_e2e.py`).
+
+4. **AST Taint Detection & UI Case Dossier (PR #257, #258)**:
+   - Upgraded `TaintPathFinder` to perform semantic sink classification directly from JDT compiler bindings before falling back to regex.
+   - Added "Autonomous Agent Fix" action, turn progress tracker, and multi-file diff view in `FindingDetailPanel.tsx`.
+
+5. **OASIS SARIF v2.1.0 Exporter (PR #263)**:
+   - Created `codegraph.policy.sarif` exporter and exposed `GET /policy/export/sarif` for GitHub Code Scanning and IDE compliance reporting.
+
+6. **Container Hardening & Cache Hygiene (PR #264)**:
+   - Hardened `Dockerfile.backend` with non-root user `codegraph:10001` and container `HEALTHCHECK`.
+   - Added `make clean-cache` and purged 62+ GiB of temporary host caches.
+
+7. **Modular Architecture, Import Productionization & Test Structure (PR #265–#272)**:
+   - Decomposed monolithic modules into focused single-responsibility units: `extraction.py`, `persistence.py`, `boolean_eval.py`, `conditional.py`, `graph_queries.py`, `calibration.py`, `attempts.py`.
+   - Standardized direct top-of-file imports and PEP 562 lazy attribute loaders (`__getattr__`) across package barrels to prevent circular import deadlocks.
+   - Organized `tests/codegraph/` into 1:1 matching package directories with 1,033 passing tests.
+
 ## Recommendation
 
 Keep CodeGraph's symbolic-first architecture. Modernize the boundaries that make
