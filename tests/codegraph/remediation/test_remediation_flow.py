@@ -121,7 +121,7 @@ class RemediationFlowTests(RemediationTestBase):
             supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
         )
         unsupported = get_remediation_capability(
-            "ISO-A.9.4.1",
+            "CUSTOM-UNSUPPORTED-RULE",
             supported_rule_ids=self.service.RemediationService._FIX_STRATEGIES.keys(),
         )
 
@@ -145,16 +145,16 @@ class RemediationFlowTests(RemediationTestBase):
         )
         remediation = svc_mod.RemediationService(llm_client=llm_client)
         remediation.get_violation_context = lambda *_args, **_kwargs: {  # type: ignore[method-assign]
-            "violation": {"violation_id": "ISO-A.12.4.1", "reason": "logging"},
+            "violation": {"violation_id": "CUSTOM-UNSUPPORTED-RULE", "reason": "unsupported"},
             "target_method": "com.example.Foo.update()",
             "file_path": "Example.java",
-            "rule_id": "ISO-A.12.4.1",
+            "rule_id": "CUSTOM-UNSUPPORTED-RULE",
             "evidence": {"source_code": "", "graph_context": {}, "vector_context": []},
-            "catalog_entry": {"title": "Event Logging"},
+            "catalog_entry": {"title": "Unsupported Rule"},
             "baseline_violations": [],
         }
 
-        out = remediation.preview_virtual_fix("ISO-A.12.4.1", method_key=DEFAULT_METHOD_KEY)
+        out = remediation.preview_virtual_fix("CUSTOM-UNSUPPORTED-RULE", method_key=DEFAULT_METHOD_KEY)
         self.assertEqual(out.get("status"), "INVALID")
         self.assertEqual(out.get("error"), "unsupported_rule_for_auto_fix")
         llm_client.assert_not_called()

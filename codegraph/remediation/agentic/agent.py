@@ -61,6 +61,8 @@ def _build_initial_user_prompt(finding: dict[str, Any]) -> str:
     method_key = str(finding.get("method_key") or "")
     target_method = str(finding.get("target_method") or method_key)
     file_path = str(finding.get("file_path") or "")
+    if "uploaded_code/" in file_path:
+        file_path = file_path.split("uploaded_code/", 1)[1]
     reason = str(finding.get("reason") or "Security finding detected")
     code_snippet = str(finding.get("code_snippet") or (finding.get("evidence") or {}).get("source_code") or "")
 
@@ -93,7 +95,13 @@ def _build_initial_user_prompt(finding: dict[str, Any]) -> str:
     if taint_paths:
         prompt_parts.append(_format_taint_path_dossier(taint_paths))
 
-    prompt_parts.append("\nPlease inspect the relevant files, design the necessary refactoring, and apply the fix.")
+    prompt_parts.append(
+        "\nAction Plan:\n"
+        "1. Call `read_file` with the File Path above to read the full context.\n"
+        "2. Call `edit_file` (and `add_import` if needed) to apply the minimal, secure refactoring.\n"
+        "3. Call `run_verification` to check compilation, tests, and policy re-evaluation.\n"
+        "4. Call `finish_remediation` once verification passes."
+    )
     return "\n".join(prompt_parts)
 
 
@@ -121,7 +129,7 @@ class AgenticRemediationService:
         finding: dict[str, Any],
         *,
         workspace_root: str | Path,
-        max_turns: int = 8,
+        max_turns: int = 15,
         model: str | None = None,
     ) -> AgentRemediationResult:
         rule_id = str(finding.get("violation_id") or finding.get("rule_id") or "")
@@ -237,7 +245,13 @@ class AgenticRemediationService:
 
             modified_files = env.get_modified_files()
             diff = env.compute_unified_diff() if modified_files else ""
-            if last_verification is None and final_status == "SUCCESS":
+            if modified_files and final_status != "REFUSED":
+                last_verification = env.run_full_verification(rule_id)
+                if last_verification.all_passed:
+                    final_status = "SUCCESS"
+                    if final_reason == "Exceeded maximum allowed agent turns.":
+                        final_reason = "Verified 3-gate remediation successfully applied."
+            elif last_verification is None and final_status == "SUCCESS":
                 last_verification = env.run_full_verification(rule_id)
 
             return AgentRemediationResult(

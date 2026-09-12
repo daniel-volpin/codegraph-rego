@@ -146,6 +146,48 @@ AGENTIC_FIX_STRATEGIES: dict[str, dict[str, Any]] = {
         ],
         "extra_examples": [],
     },
+    "ISO-A.8-LDAP-INJECTION": {
+        "objective": "Prevent LDAP injection by applying RFC 4515 compliant filter encoding or parameterized search controls.",
+        "allowed_transformations": [
+            "Escape untrusted user input before constructing LDAP search filter expressions.",
+            "Use SearchControls with parameterized arguments instead of raw string concatenation.",
+        ],
+        "non_goals": [
+            "Do not alter directory schema or connection credentials.",
+        ],
+        "extra_examples": [],
+    },
+    "ISO-A.8-XPATH-INJECTION": {
+        "objective": "Prevent XPath injection by parameterizing dynamic XPath queries using XPathVariableResolver.",
+        "allowed_transformations": [
+            "Bind untrusted variables using XPathVariableResolver or compile static XPath expressions with pre-compiled variables.",
+        ],
+        "non_goals": [
+            "Do not modify XML document schemas or node structures.",
+        ],
+        "extra_examples": [],
+    },
+    "ISO-A.9.4.1": {
+        "objective": "Enforce application access control on public HTTP endpoints.",
+        "allowed_transformations": [
+            "Add Spring Security annotations (e.g., @PreAuthorize('isAuthenticated()') or @Secured) to public controller endpoints.",
+            "Add authentication principal or session validation before executing endpoint business logic.",
+        ],
+        "non_goals": [
+            "Do not alter endpoint HTTP paths or response types.",
+        ],
+        "extra_examples": [],
+    },
+    "ISO-A.12.4.1": {
+        "objective": "Record security event audit logging for sensitive application operations.",
+        "allowed_transformations": [
+            "Add structured audit logging calls using logger.info/logger.warn for critical transactions or state changes.",
+        ],
+        "non_goals": [
+            "Do not log sensitive credentials or private tokens.",
+        ],
+        "extra_examples": [],
+    },
 }
 
 _DYNAMIC_FIX_STRATEGIES: dict[str, dict[str, Any]] = {}
@@ -160,13 +202,27 @@ def register_fix_strategy(rule_id: str, strategy: dict[str, Any], *, agentic: bo
         FIX_STRATEGIES[rule_id] = strategy
 
 
-def get_fix_strategy(rule_id: str, *, agentic: bool = False) -> dict[str, Any] | None:
-    """Retrieve the remediation guidance strategy for a rule."""
+def get_fix_strategy(rule_id: str, *, agentic: bool = False) -> dict[str, Any]:
+    """Retrieve the remediation guidance strategy for a rule, defaulting dynamically."""
     if rule_id in _DYNAMIC_FIX_STRATEGIES:
         return _DYNAMIC_FIX_STRATEGIES[rule_id]
-    if agentic:
-        return AGENTIC_FIX_STRATEGIES.get(rule_id)
-    return FIX_STRATEGIES.get(rule_id)
+    if agentic and rule_id in AGENTIC_FIX_STRATEGIES:
+        return AGENTIC_FIX_STRATEGIES[rule_id]
+    if rule_id in FIX_STRATEGIES:
+        return FIX_STRATEGIES[rule_id]
+    return {
+        "objective": f"Remediate security violation {rule_id} safely with minimal, semantically sound refactoring.",
+        "allowed_transformations": [
+            "Apply standard secure coding patterns and approved APIs to eliminate the security vulnerability.",
+            "Keep edits minimal and bounded to the affected method or call chain.",
+            "Add required package imports cleanly if new types are introduced.",
+        ],
+        "non_goals": [
+            "Do not alter public method signatures or return types.",
+            "Do not make unrelated refactoring or stylistic changes.",
+        ],
+        "extra_examples": [],
+    }
 
 
 def build_generation_payload(

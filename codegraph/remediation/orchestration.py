@@ -95,7 +95,7 @@ def run_agentic_remediation(
     finding: dict[str, Any],
     *,
     workspace_root: str | None = None,
-    max_turns: int = 8,
+    max_turns: int = 15,
     model: str | None = None,
 ) -> dict[str, Any]:
     """Public orchestration wrapper for autonomous multi-turn agentic remediation."""

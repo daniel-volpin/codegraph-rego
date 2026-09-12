@@ -1,4 +1,4 @@
-import { Download, Loader2, Sparkles, SlidersHorizontal, Upload } from "lucide-react";
+import { Download, Loader2, Sparkles, SlidersHorizontal, Upload, ShieldCheck } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Card } from "../../ui/card";
 import { Switch } from "../../ui/switch";
@@ -25,7 +25,7 @@ interface ControlsPanelProps {
   isImportingSarif?: boolean;
 }
 
-const ControlsPanel = ({
+export const ControlsPanel = ({
   viewPreset,
   onViewPresetChange,
   moduleFilter,
@@ -42,76 +42,59 @@ const ControlsPanel = ({
   onImportSarif,
   isImportingSarif = false,
 }: ControlsPanelProps) => (
-  <Card className="p-5 shadow-xs border-zinc-200/80 dark:border-zinc-800">
-    <div className="grid gap-4 lg:grid-cols-[minmax(380px,1fr)_auto] lg:items-center">
-      <div className="grid gap-4 xl:grid-cols-2">
-        <div className="space-y-1.5">
-          <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Scan Scope
-          </label>
-          <div className="flex items-center gap-3.5 rounded-lg border border-zinc-200 bg-zinc-50/70 px-3.5 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
-            <Switch
-              checked={viewPreset === "framework_demo"}
-              onCheckedChange={(checked) => onViewPresetChange(checked ? "framework_demo" : "all")}
-              aria-label="Framework demo focus"
-              aria-describedby={VIEW_MODE_DESCRIPTION_ID}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" />
-                <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Benchmark Demo Scope</p>
-              </div>
-              <p id={VIEW_MODE_DESCRIPTION_ID} className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                {viewPreset === "framework_demo"
-                  ? "On: Evaluates benchmark categories & research rules."
-                  : "Off: Evaluates entire policy catalog across all rules."}
-              </p>
-            </div>
+  <Card className="p-3 sm:p-4 shadow-xs border-slate-200/80 dark:border-zinc-800">
+    <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
+      {/* Left controls: Scan Scope & Target Module */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        {/* Scan Scope Toggle */}
+        <div className="flex h-9 items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50/70 px-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <Switch
+            checked={viewPreset === "framework_demo"}
+            onCheckedChange={(checked) => onViewPresetChange(checked ? "framework_demo" : "all")}
+            aria-label="Framework demo focus"
+            aria-describedby={VIEW_MODE_DESCRIPTION_ID}
+          />
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200 whitespace-nowrap">
+              Benchmark Demo Scope
+            </span>
           </div>
+          <span
+            id={VIEW_MODE_DESCRIPTION_ID}
+            className="text-[10px] font-medium text-slate-500 dark:text-zinc-400 ml-0.5 hidden sm:inline"
+          >
+            {viewPreset === "framework_demo" ? "(Targeted)" : "(All Rules)"}
+          </span>
         </div>
 
-        <div className="space-y-1.5">
+        {/* Target Module Selector */}
+        <div className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400 shrink-0" />
           <label
             htmlFor={MODULE_FILTER_SELECT_ID}
-            className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
+            className="text-xs font-medium text-slate-500 dark:text-zinc-400 whitespace-nowrap"
           >
-            Target Module
+            Module:
           </label>
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/40">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-              <select
-                id={MODULE_FILTER_SELECT_ID}
-                value={moduleFilter}
-                onChange={(event) => onModuleFilterChange(event.target.value)}
-                className="w-full bg-transparent text-xs font-medium text-zinc-900 focus:outline-hidden dark:text-zinc-100"
-              >
-                <option value="all">All scanned modules</option>
-                {availableModules.map((module) => (
-                  <option key={module} value={module}>
-                    {module}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {viewPreset === "framework_demo" && policyCatalogIsError && (
-              <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-                Backend demo metadata unavailable; using thesis fallback demo rules.
-              </p>
-            )}
-            {viewPreset === "framework_demo" &&
-              !policyCatalogIsLoading &&
-              frameworkDemoScopeSource === "legacy_fallback" &&
-              !policyCatalogIsError && (
-                <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-                  Using benchmark demo rule scope for compatibility.
-                </p>
-              )}
-          </div>
+          <select
+            id={MODULE_FILTER_SELECT_ID}
+            value={moduleFilter}
+            onChange={(event) => onModuleFilterChange(event.target.value)}
+            className="bg-transparent text-xs font-medium text-slate-800 dark:text-zinc-200 focus:outline-hidden cursor-pointer pr-1"
+          >
+            <option value="all">All scanned modules</option>
+            {availableModules.map((module) => (
+              <option key={module} value={module}>
+                {module}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-2 lg:justify-end lg:self-center">
+      {/* Right controls: SARIF Actions & Policy Scan Trigger */}
+      <div className="flex flex-wrap items-center gap-2 justify-end">
         {onImportSarif && (
           <Button
             variant="outline"
@@ -119,17 +102,17 @@ const ControlsPanel = ({
             onClick={onImportSarif}
             disabled={isImportingSarif || evalIsFetching}
             title="Import external SAST report in standard OASIS SARIF v2.1.0 format"
-            className="font-medium text-xs"
+            className="h-9 text-xs font-medium gap-1.5 border-slate-200 dark:border-zinc-800 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800"
           >
             {isImportingSarif ? (
               <>
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                Importing SARIF…
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+                <span>Importing SARIF…</span>
               </>
             ) : (
               <>
-                <Upload className="mr-1.5 h-3.5 w-3.5" />
-                Import SAST (SARIF)
+                <Upload className="h-3.5 w-3.5 text-slate-500 dark:text-zinc-400" />
+                <span>Import SAST (SARIF)</span>
               </>
             )}
           </Button>
@@ -141,17 +124,17 @@ const ControlsPanel = ({
             onClick={onExportSarif}
             disabled={isExportingSarif || evalIsFetching}
             title="Export policy findings in standard OASIS SARIF v2.1.0 format"
-            className="font-medium text-xs"
+            className="h-9 text-xs font-medium gap-1.5 border-slate-200 dark:border-zinc-800 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800"
           >
             {isExportingSarif ? (
               <>
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                Exporting SARIF…
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+                <span>Exporting SARIF…</span>
               </>
             ) : (
               <>
-                <Download className="mr-1.5 h-3.5 w-3.5" />
-                Export SARIF v2.1.0
+                <Download className="h-3.5 w-3.5 text-slate-500 dark:text-zinc-400" />
+                <span>Export SARIF v2.1.0</span>
               </>
             )}
           </Button>
@@ -165,23 +148,44 @@ const ControlsPanel = ({
               ? "Evaluate only the benchmark-aligned framework demo categories."
               : "Evaluate the full policy surface for the current upload."
           }
-          className="w-full lg:min-w-[17rem] lg:w-auto font-medium"
+          className="h-9 px-4 text-xs font-semibold gap-1.5 shadow-xs bg-indigo-600 hover:bg-indigo-700 text-white"
         >
           {evalIsFetching ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {viewPreset === "framework_demo" ? "Running demo scan..." : "Running full scan..."}
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>{viewPreset === "framework_demo" ? "Running demo scan..." : "Running full scan..."}</span>
             </>
           ) : policyCatalogIsLoading && viewPreset === "framework_demo" ? (
-            "Loading demo scope..."
+            <span>Loading demo scope...</span>
           ) : viewPreset === "framework_demo" ? (
-            "Run Framework Demo Scan"
+            <>
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span>Run Framework Demo Scan</span>
+            </>
           ) : (
-            "Run Full Policy Scan"
+            <>
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span>Run Full Policy Scan</span>
+            </>
           )}
         </Button>
       </div>
     </div>
+
+    {/* Inline Warning/Notice banner when metadata fallback occurs */}
+    {viewPreset === "framework_demo" && policyCatalogIsError && (
+      <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
+        Backend demo metadata unavailable; using thesis fallback demo rules.
+      </div>
+    )}
+    {viewPreset === "framework_demo" &&
+      !policyCatalogIsLoading &&
+      frameworkDemoScopeSource === "legacy_fallback" &&
+      !policyCatalogIsError && (
+        <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
+          Using benchmark demo rule scope for compatibility.
+        </div>
+      )}
   </Card>
 );
 

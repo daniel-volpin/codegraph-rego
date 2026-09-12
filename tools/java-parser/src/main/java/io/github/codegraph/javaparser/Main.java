@@ -339,7 +339,15 @@ public final class Main {
 
         private boolean isSymbolProblem(IProblem problem) {
             String message = problem.getMessage() == null ? "" : problem.getMessage().toLowerCase(Locale.ROOT);
-            return request.resolveBindings && (message.contains("cannot be resolved") || message.contains("is not a type"));
+            return request.resolveBindings && (
+                message.contains("cannot be resolved") ||
+                message.contains("is not a type") ||
+                message.contains("refers to the missing type") ||
+                message.contains("missing type") ||
+                message.contains("the hierarchy of the type") ||
+                message.contains("must override or implement") ||
+                message.contains("supertype method")
+            );
         }
 
         private List<ImportDto> collectImports() {
@@ -1120,7 +1128,8 @@ public final class Main {
         if (binding instanceof ITypeBinding type) return bindingOrigin(type);
         if (binding instanceof IMethodBinding method) {
             ITypeBinding declaring = method.getDeclaringClass();
-            return declaring == null ? "unknown" : bindingOrigin(declaring);
+            if (declaring != null && !declaring.isRecovered()) return bindingOrigin(declaring);
+            return "binary";
         }
         if (binding instanceof IVariableBinding variable) return variableBindingOrigin(variable);
         return "unknown";

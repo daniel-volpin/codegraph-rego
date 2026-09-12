@@ -223,7 +223,7 @@ class RemediationApplyResponse(BaseModel):
 class AgenticRemediationRequest(BaseModel):
     finding: dict[str, Any]
     workspace_root: str | None = None
-    max_turns: int = Field(8, ge=1, le=20)
+    max_turns: int = Field(15, ge=1, le=30)
     model: str | None = None
 
 
