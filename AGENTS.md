@@ -43,6 +43,13 @@ This file is the canonical, cross-agent operating guide.
   candidate must satisfy the 3 invariant gates (JDT compilation, project test regression,
   and OPA policy clearance) in an isolated scratch worktree before any live apply.
   Dry runs must never mutate original source or the shared graph.
+- LLM Transport and Tool-Calling Protocol:
+  - Tool calling uses strongly typed OpenAI-compatible envelopes (`ToolDefinition`, `ToolCall`, `ChatCompletionResponse`).
+  - `function.arguments` in tool calls must be serialized as valid JSON strings (e.g. `json.dumps(args)`), not raw Python dictionaries, when echoing tool calls back in multi-turn conversation messages.
+  - Local MLX inference via LM Studio (`http://127.0.0.1:1234/v1`) enforces single-concurrency safety (`llm_max_concurrent_requests=1`, `llm_concurrency=1`) and generous timeouts (`llm_timeout_seconds=180.0`, `llm_queue_timeout_seconds=60.0`) to avoid Apple Silicon unified memory thrashing and premature request drops.
+- Multi-Standard Policy Packs and Universal SAST (SARIF):
+  - Pluggable policy packs are discovered automatically from `policy/packs/` (PCI-DSS 4.0, NIST SP 800-53, OWASP Top 10, ISO-27001).
+  - External SAST reports in OASIS SARIF v2.1.0 format (`POST /policy/import/sarif`) are anchored against Neo4j AST `method_key` nodes and enter the same 3-gate agentic repair pipeline as native policy findings.
 - Keep backend DTOs and `frontend/src/lib/schemas.ts` aligned.
   `frontend/src/lib/types.ts` re-exports derived types; do not duplicate them.
 - Keep `policy/catalog.json`, Rego rules, and `configs/benchmark/` aligned.

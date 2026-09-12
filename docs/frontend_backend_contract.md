@@ -207,6 +207,9 @@ This document describes the HTTP API surface and the frontend integration patter
 | `evaluatePolicies` | `GET /policy/evaluate` | Supports repeated `rule_ids` query params for benchmark/demo-focused server-side filtering |
 | `evaluatePoliciesWithLLM` | `POST /policy/evaluate_with_llm` | JSON body accepts `limit`, `model`, and optional evaluate caps (`max_bundles`, `max_total_violations`, `max_per_violation_id`, `rule_ids`); returns full findings + metadata plus `enriched` |
 | `fetchPolicyCatalog` | `GET /policy/catalog` | Renders catalog entries |
+| `fetchPolicyPacks` | `GET /policy/packs` | Lists registered multi-standard compliance packs (PCI-DSS, NIST, OWASP, ISO) |
+| `registerPolicyPack` | `POST /policy/packs/register` | Registers custom policy pack from manifest specification |
+| `importSarifReport` | `POST /policy/import/sarif` | Ingests external SAST findings and anchors them to Neo4j AST method keys |
 | `exportPolicySarif` | `GET /policy/export/sarif` | Exports findings in standard OASIS SARIF v2.1.0 JSON format |
 | `explainPolicyViolationOne` | `POST /policy/explain_one` | 5 min timeout; per-row AbortController in `useExplainMutation` |
 | `saveViolationReview` / `fetchViolationReviews` | `POST`/`GET /policy/reviews` | Triage review persistence |
