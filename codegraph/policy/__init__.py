@@ -1,4 +1,4 @@
-"""Policy package: OPA/Rego rule evaluation, catalog discovery, taint detection, and SARIF export."""
+"""Policy package: OPA/Rego rule evaluation, catalog discovery, taint detection, pluggable packs, and SARIF bridge."""
 
 from __future__ import annotations
 
@@ -15,13 +15,18 @@ if TYPE_CHECKING:
         load_iso_rules,
         load_policy_catalog,
     )
+    from codegraph.policy.packs import PolicyPackRegistry, get_policy_pack_registry
+    from codegraph.policy.sarif_import import import_findings_from_sarif
 
 __all__ = [
+    "PolicyPackRegistry",
     "TaintPathFinder",
     "evaluate_policies",
     "export_findings_to_sarif",
     "get_policy_catalog_entries",
     "get_policy_catalog_payload",
+    "get_policy_pack_registry",
+    "import_findings_from_sarif",
     "load_iso_rules",
     "load_policy_catalog",
 ]
@@ -38,4 +43,12 @@ def __getattr__(name: str):
         from codegraph.policy import integration
 
         return getattr(integration, name)
+    if name in {"PolicyPackRegistry", "get_policy_pack_registry"}:
+        from codegraph.policy import packs
+
+        return getattr(packs, name)
+    if name == "import_findings_from_sarif":
+        from codegraph.policy import sarif_import
+
+        return getattr(sarif_import, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

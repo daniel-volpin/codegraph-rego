@@ -33,6 +33,9 @@ from codegraph.policy.service import (
 )
 from codegraph.policy.service import (
     export_sarif,
+    import_sarif,
+    list_policy_packs,
+    register_policy_pack_manifest,
 )
 
 router = APIRouter()
@@ -226,3 +229,35 @@ async def policy_catalog():
     response = dict(payload)
     response["controls"] = controls_sorted
     return JSONResponse(response)
+
+
+@router.get("/policy/packs")
+async def policy_packs():
+    """List all registered pluggable policy packs."""
+    packs = await asyncio.to_thread(list_policy_packs)
+    return JSONResponse({"status": "OK", "packs": packs})
+
+
+@router.post("/policy/packs/register")
+async def policy_register_pack(payload: dict):
+    """Register a custom policy pack from a manifest file or specification."""
+    manifest_path = payload.get("manifest_path")
+    if not manifest_path:
+        return JSONResponse({"status": "ERROR", "error": "manifest_path is required"}, status_code=400)
+    try:
+        pack = await asyncio.to_thread(register_policy_pack_manifest, manifest_path)
+        return JSONResponse({"status": "OK", "pack": pack})
+    except Exception as exc:
+        return JSONResponse({"status": "ERROR", "error": str(exc)}, status_code=400)
+
+
+@router.post("/policy/import/sarif")
+async def policy_import_sarif(payload: dict):
+    """Ingest external OASIS SARIF v2.1.0 findings and ground them against active Neo4j AST identities."""
+    try:
+        violations = await asyncio.to_thread(import_sarif, payload)
+        return JSONResponse({"status": "OK", "count": len(violations), "violations": violations})
+    except Exception as exc:
+        logger.exception("SARIF import failed", extra={"err": str(exc)})
+        return JSONResponse({"status": "ERROR", "error": str(exc)}, status_code=400)
+

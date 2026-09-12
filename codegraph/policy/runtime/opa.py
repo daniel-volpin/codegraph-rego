@@ -9,9 +9,11 @@ import uuid
 from collections.abc import Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from codegraph.config import settings
+from codegraph.policy.packs.loader import get_policy_pack_registry
 from codegraph.remediation.capabilities import remediation_capability_dict
 from codegraph.telemetry import get_tracer
 
@@ -22,7 +24,8 @@ _tracer = get_tracer("codegraph.policy.opa")
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.abspath(os.path.join(_THIS_DIR, os.pardir, os.pardir, os.pardir))
 POLICY_DIR = os.path.join(_PROJECT_ROOT, "policy")
-POLICY_QUERY = "data.iso27001.violations"
+DEFAULT_POLICY_QUERY = "data.iso27001.violations"
+POLICY_QUERY = DEFAULT_POLICY_QUERY
 
 
 def _opa_timeout_seconds() -> float:
@@ -186,6 +189,7 @@ def evaluate_bundle(
     *,
     policy_dir: str | None = None,
     work_dir: str | None = None,
+    query: str | None = None,
 ) -> list[dict[str, Any]]:
     serialized_bundle = _serialize_for_opa(bundle)
 
@@ -195,24 +199,35 @@ def evaluate_bundle(
         t0 = time.monotonic()
         with _opa_input_dir(work_dir) as tmp:
             input_path = _write_opa_input(tmp, serialized_bundle)
-            cmd = _opa_eval_command(input_path, POLICY_QUERY, policy_dir=policy_dir)
-            try:
-                proc = _run_opa_eval(cmd, serialized_bundle.get("target_method"))
-                out = _parse_opa_stdout(proc.stdout)
-            except RuntimeError as exc:
-                span.set_attribute("opa_error", str(exc)[:200])
-                raise
-            finally:
-                span.set_attribute("opa_duration_ms", round((time.monotonic() - t0) * 1000))
-            span.set_attribute("opa_returncode", proc.returncode)
-            violations = _extract_opa_value(out, list)
-            if any(
-                not isinstance(violation, dict) or not isinstance(violation.get("violation_id"), str)
-                for violation in violations
-            ):
-                raise RuntimeError("OPA returned an invalid violation")
-            span.set_attribute("violation_count", len(violations))
-            return violations
+            all_violations: list[dict[str, Any]] = []
+
+            # Determine entrypoints: explicit override or all registered active packs
+            if policy_dir or query:
+                entrypoints = [(Path(policy_dir or POLICY_DIR), query or POLICY_QUERY)]
+            else:
+                entrypoints = get_policy_pack_registry().get_active_query_entrypoints()
+                if not entrypoints:
+                    entrypoints = [(Path(POLICY_DIR), POLICY_QUERY)]
+
+            for rego_dir, entrypoint_query in entrypoints:
+                cmd = _opa_eval_command(input_path, entrypoint_query, policy_dir=str(rego_dir))
+                try:
+                    proc = _run_opa_eval(cmd, serialized_bundle.get("target_method"))
+                    out = _parse_opa_stdout(proc.stdout)
+                except RuntimeError as exc:
+                    span.set_attribute("opa_error", str(exc)[:200])
+                    raise
+                violations = _extract_opa_value(out, list)
+                if any(
+                    not isinstance(violation, dict) or not isinstance(violation.get("violation_id"), str)
+                    for violation in violations
+                ):
+                    raise RuntimeError("OPA returned an invalid violation")
+                all_violations.extend(violations)
+
+            span.set_attribute("opa_duration_ms", round((time.monotonic() - t0) * 1000))
+            span.set_attribute("violation_count", len(all_violations))
+            return all_violations
 
 
 def evaluate_package_root(
