@@ -22,11 +22,23 @@ class PolicyPackRegistry:
         self._packs: dict[str, PolicyPackSpec] = {}
         self._rules_by_id: dict[str, PolicyRuleDefinition] = {}
         self._register_default_iso_pack()
+        self._discover_built_in_packs()
+
+    def _discover_built_in_packs(self) -> None:
+        """Scan and register pre-packaged compliance policy packs (PCI-DSS, OWASP Top 10, NIST)."""
+        packs_dir = DEFAULT_POLICY_DIR / "packs"
+        if not packs_dir.is_dir():
+            return
+        for manifest in sorted(packs_dir.glob("*/manifest.json")):
+            try:
+                self.load_pack_from_manifest(manifest)
+            except Exception as exc:
+                LOGGER.warning("Could not load policy pack manifest at %s: %s", manifest, exc)
 
     def _register_default_iso_pack(self) -> None:
         """Register the default ISO-27001 benchmark compliance pack."""
         try:
-            registry_rules = load_policy_registry()
+            registry = load_policy_registry()
             rules = [
                 PolicyRuleDefinition(
                     id=spec.id,
@@ -40,7 +52,7 @@ class PolicyPackRegistry:
                     description=spec.description,
                     alias_ids=spec.alias_ids,
                 )
-                for spec in registry_rules
+                for spec in registry.rules
             ]
         except Exception as exc:
             LOGGER.warning("Could not pre-populate ISO rules from benchmark registry: %s", exc)
@@ -95,7 +107,11 @@ class PolicyPackRegistry:
             raise FileNotFoundError(f"Policy pack manifest not found at {path}")
 
         data = json.loads(path.read_text(encoding="utf-8"))
-        rego_dir = Path(data.get("rego_dir") or path.parent).resolve()
+        rego_dir_str = data.get("rego_dir")
+        if rego_dir_str:
+            rego_dir = Path(rego_dir_str).resolve()
+        else:
+            rego_dir = path.parent if any(path.parent.glob("*.rego")) else DEFAULT_POLICY_DIR
 
         rules = [
             PolicyRuleDefinition(
@@ -105,6 +121,7 @@ class PolicyPackRegistry:
                 summary=r.get("summary") or "",
                 rego_module=r.get("rego_module") or "main",
                 rego_rule=r.get("rego_rule") or "violation",
+                category=r.get("category") or "",
                 evidence_fields=tuple(r.get("evidence_fields") or ()),
                 severity=r.get("severity") or "high",
                 reference=r.get("reference") or "",

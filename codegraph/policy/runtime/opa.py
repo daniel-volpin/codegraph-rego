@@ -205,7 +205,7 @@ def evaluate_bundle(
             if policy_dir or query:
                 entrypoints = [(Path(policy_dir or POLICY_DIR), query or POLICY_QUERY)]
             else:
-                entrypoints = get_policy_pack_registry().get_active_query_entrypoints()
+                entrypoints = list(dict.fromkeys(get_policy_pack_registry().get_active_query_entrypoints()))
                 if not entrypoints:
                     entrypoints = [(Path(POLICY_DIR), POLICY_QUERY)]
 
@@ -223,7 +223,9 @@ def evaluate_bundle(
                     for violation in violations
                 ):
                     raise RuntimeError("OPA returned an invalid violation")
-                all_violations.extend(violations)
+                for v in violations:
+                    if v not in all_violations:
+                        all_violations.append(v)
 
             span.set_attribute("opa_duration_ms", round((time.monotonic() - t0) * 1000))
             span.set_attribute("violation_count", len(all_violations))
