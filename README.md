@@ -174,6 +174,7 @@ Further reading:
 - [Frontend/backend contract](./docs/frontend_backend_contract.md)
 - [Architecture roadmap](./docs/architecture/2026-09-11-backend-modernization-roadmap.md)
 - [Artifact and evidence policy](./docs/architecture/artifact-policy.md)
+- [Code property graph analysis boundary](./docs/architecture/2026-09-12-code-property-graph-analysis-boundary.md)
 
 ## Configuration
 
