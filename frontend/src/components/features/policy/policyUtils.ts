@@ -70,6 +70,8 @@ export const LEGACY_FRAMEWORK_DEMO_RULE_IDS = [
   "ISO-A.8-CMD-INJECTION",
   "ISO-A.8-LDAP-INJECTION",
   "ISO-A.8-XPATH-INJECTION",
+  "ISO-A.9.4.1",
+  "ISO-A.12.4.1",
 ];
 
 // ---- Display helpers ----

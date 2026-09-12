@@ -265,6 +265,24 @@
       "control_ids": ["A.8"],
       "remediation_tier": "manual",
       "framework_demo": true
+    },
+    {
+      "category_id": "access-control",
+      "label": "Access Control (A.9.4.1)",
+      "cwes": ["CWE-284"],
+      "rego_rule_ids": ["ISO-A.9.4.1"],
+      "control_ids": ["A.9.4.1"],
+      "remediation_tier": "manual",
+      "framework_demo": true
+    },
+    {
+      "category_id": "event-logging",
+      "label": "Event Logging (A.12.4.1)",
+      "cwes": ["CWE-778"],
+      "rego_rule_ids": ["ISO-A.12.4.1"],
+      "control_ids": ["A.12.4.1"],
+      "remediation_tier": "manual",
+      "framework_demo": true
     }
   ]
 }

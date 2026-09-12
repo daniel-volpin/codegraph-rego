@@ -215,9 +215,10 @@ export async function evaluatePolicies(
   if (isDemoMode()) {
     if (args?.ruleIds && args.ruleIds.length > 0) {
       const allowed = new Set(args.ruleIds);
-      const filtered = (DEMO_POLICY_EVALUATION.violations ?? []).filter((v) =>
-        v.rule_id ? allowed.has(v.rule_id) : true,
-      );
+      const filtered = (DEMO_POLICY_EVALUATION.violations ?? []).filter((v) => {
+        const id = v.violation_id ?? v.rule_id;
+        return id ? allowed.has(id) : true;
+      });
       return {
         ...DEMO_POLICY_EVALUATION,
         violations: filtered,
