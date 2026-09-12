@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileArchive, UploadCloud, CheckCircle2, AlertCircle, Copy, FolderGit2 } from "lucide-react";
+import { FileArchive, UploadCloud, CheckCircle2, AlertCircle, Copy, FolderGit2, ShieldAlert } from "lucide-react";
 import { fetchUploadStatus, uploadZip } from "../lib/api";
 import type { UploadResponse, UploadStatus } from "../lib/types";
 import { useClearActivity, useUpsertActivity } from "../store/activity";
@@ -29,6 +30,7 @@ const formatFileSize = (bytes: number): string => {
 };
 
 const UploadPage = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const refetchStatusRef = useRef<(() => void) | null>(null);
@@ -374,6 +376,32 @@ const UploadPage = () => {
           )}
         </Card>
       )}
+
+      {/* Universal SAST SARIF Import Card */}
+      <Card className="p-6 border-zinc-200 dark:border-zinc-800">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 shrink-0">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Universal SAST Ingestion &amp; Grounding
+              </h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Have existing findings from Semgrep, CodeQL, or SonarQube? Ingest your OASIS SARIF v2.1.0 reports on the Policy page to ground them in CodeGraph AST identities and trigger autonomous agentic repair.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => navigate("/policy")}
+            className="text-xs font-medium shrink-0"
+          >
+            Go to Policy Page
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 };
