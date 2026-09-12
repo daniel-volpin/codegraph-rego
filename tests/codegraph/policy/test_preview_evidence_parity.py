@@ -35,11 +35,10 @@ COMMENT_ONLY_MD5 = """public void doPost(HttpServletRequest request, HttpServlet
     md.update(request.getParameter("input").getBytes());
 }"""
 
-FLAG_DEPENDENT_SQL = """public void doPost(HttpServletRequest request, HttpServletResponse response) throws Exception {
-    String param = request.getParameter("id");
-    String sql = "SELECT * FROM users WHERE id = '" + param + "'";
-    java.sql.Statement stmt = connection.createStatement();
-    java.sql.ResultSet rs = stmt.executeQuery(sql);
+FLAG_DEPENDENT_WEAK_CIPHER = """public void doPost(HttpServletRequest request, HttpServletResponse response) throws Exception {
+    javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("DES/CBC/PKCS5Padding");
+    c.init(javax.crypto.Cipher.ENCRYPT_MODE, key);
+    c.doFinal(request.getParameter("input").getBytes());
 }"""
 
 SAFE_SHA256 = """public void doPost(HttpServletRequest request, HttpServletResponse response) throws Exception {
@@ -124,7 +123,9 @@ def _preview_violation_ids(source: str) -> set[str]:
         # Analysis-flag parity: this rule fires only via computed
         # analysis_flags. The old preview bundle omitted the flags and
         # reported no violation (false PASS).
-        pytest.param(FLAG_DEPENDENT_SQL, {"ISO-A.8-SQL-INJECTION"}, id="flag_dependent_sql"),
+        pytest.param(
+            FLAG_DEPENDENT_WEAK_CIPHER, {"ISO-A.10-WEAK-CRYPTO"}, id="flag_dependent_weak_cipher"
+        ),
         # A correctly remediated candidate passes through both paths.
         pytest.param(SAFE_SHA256, set(), id="safe_sha256"),
         # A still-vulnerable candidate fails through both paths.
@@ -170,7 +171,7 @@ def test_virtual_bundle_carries_canonical_policy_input_fields() -> None:
     read (input.source_code, target_method, method_name, graph_context,
     analysis_flags) plus the evidence fields downstream
     consumers rely on."""
-    source = FLAG_DEPENDENT_SQL
+    source = FLAG_DEPENDENT_WEAK_CIPHER
     virtual_graph = build_virtual_graph_context(source, base_graph={})
     bundle = build_virtual_bundle(_preview_context(source), source, virtual_graph)
 
@@ -188,8 +189,7 @@ def test_virtual_bundle_carries_canonical_policy_input_fields() -> None:
     assert set(bundle["graph_context"]) >= {"annotations", "uses_fields", "calls", "callers"}
     # The lexically active view drives the flags; the raw candidate remains
     # available for human-facing evidence.
-    assert bundle["analysis_flags"]["sql_dynamic_query_detected"] is True
-    assert bundle["analysis_flags"]["sql_query_uses_tainted_input"] is True
+    assert bundle["analysis_flags"]["weak_cipher_detected"] is True
     assert bundle["source_code_raw"] == source
     # Rego sees the substring-safe view, never raw string-literal text.
     assert "SELECT * FROM users" not in bundle["source_code"]
