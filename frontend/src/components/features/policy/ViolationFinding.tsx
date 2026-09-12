@@ -116,11 +116,11 @@ const ViolationFinding = memo(function ViolationFinding({
               {compactTargetMethod(finding.targetMethod)}
             </p>
             <p className="mt-0.5 truncate font-mono text-[11px] text-zinc-500 dark:text-zinc-400" title={finding.filePath}>
-              {finding.filePath}
+              {formatCitationDisplay(finding.filePath).display}
             </p>
             <div className="mt-2">
               <div className="flex flex-wrap gap-1.5">
-                <Badge variant="secondary" className="text-[10px]">{finding.module}</Badge>
+                <Badge variant="secondary" className="text-[10px]">{formatCitationDisplay(finding.module).display}</Badge>
                 <Badge variant="secondary" className="text-[10px]">Control {finding.controlLabel}</Badge>
                 <Badge variant="secondary" className="text-[10px]">{finding.cweLabel}</Badge>
               </div>

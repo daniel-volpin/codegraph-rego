@@ -13,15 +13,18 @@ export const relativeToUploadedWorkspace = (value: string) => {
 
 export const deriveModuleLabel = (value: string) => {
   if (!value || value === "—") {
-    return "unknown-module";
+    return "workspace-root";
+  }
+  const normalized = normalizePath(value);
+  const srcIndex = normalized.indexOf("/src/main/java");
+  if (srcIndex >= 0) {
+    const beforeSrc = normalized.slice(0, srcIndex);
+    const parts = beforeSrc.split("/").filter(Boolean);
+    return parts[parts.length - 1] || "workspace-root";
   }
   const relative = relativeToUploadedWorkspace(value);
-  const srcIndex = relative.indexOf("/src/main/java");
-  if (srcIndex < 0) {
-    return relative || "workspace-root";
-  }
-  const modulePath = relative.slice(0, srcIndex).replace(/^\/+|\/+$/g, "");
-  return modulePath || "workspace-root";
+  const parts = relative.split("/").filter(Boolean);
+  return parts[0] || "workspace-root";
 };
 
 export const uniqueSortedModuleLabels = (values: string[]) =>

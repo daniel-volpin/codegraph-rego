@@ -59,6 +59,7 @@ const PolicyPage = () => {
   const [viewPreset, setViewPreset] = useState<PolicyViewPreset>(initialViewPreset);
   const [uploadedModules, setUploadedModules] = useState<string[]>([]);
   const [moduleFilter, setModuleFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedStandard, setSelectedStandard] = useState<string>("all");
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [isExportingSarif, setIsExportingSarif] = useState<boolean>(false);
@@ -99,7 +100,7 @@ const PolicyPage = () => {
   const evalQuery = useQuery<PolicyEvaluateResponse, Error>({
     queryKey: evalQueryKey("all"),
     queryFn: ({ signal }) => evaluatePolicies(undefined, signal),
-    staleTime: 60_000,
+    staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 6,
     retry: false,
   });
@@ -147,13 +148,6 @@ const PolicyPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!evalQuery.dataUpdatedAt || !evalQuery.data) return;
-    if (lastEvalToastAtRef.current === evalQuery.dataUpdatedAt) return;
-    lastEvalToastAtRef.current = evalQuery.dataUpdatedAt;
-    toast.success(`${evalQuery.data.violations?.length ?? 0} violations loaded.`);
-  }, [evalQuery.data, evalQuery.dataUpdatedAt]);
-
-  useEffect(() => {
     if (!evalQuery.errorUpdatedAt || !evalQuery.isError || !evalQuery.error) return;
     if (lastEvalErrorToastAtRef.current === evalQuery.errorUpdatedAt) return;
     lastEvalErrorToastAtRef.current = evalQuery.errorUpdatedAt;
@@ -175,6 +169,29 @@ const PolicyPage = () => {
   const effectiveModuleFilter =
     moduleFilter === "all" || availableModules.includes(moduleFilter) ? moduleFilter : "all";
 
+  const standardCounts = useMemo(() => {
+    const base = effectiveModuleFilter === "all" ? findings : findings.filter((f) => f.module === effectiveModuleFilter);
+    const countFor = (stdId: string) => {
+      if (stdId === "all") return base.length;
+      if (stdId === "sarif") return base.filter((f) => f.raw.evidence?.imported_from_sarif).length;
+      return base.filter((f) => {
+        const rule = (f.ruleId || "").toLowerCase();
+        const std = stdId.toLowerCase();
+        const rawMeta = (f.raw.control_metadata || {}) as Record<string, unknown>;
+        const rawStd = String(rawMeta.standard || "").toLowerCase();
+        return rule.includes(std) || rawStd.includes(std);
+      }).length;
+    };
+    return {
+      all: countFor("all"),
+      iso: countFor("iso"),
+      pci: countFor("pci"),
+      owasp: countFor("owasp"),
+      nist: countFor("nist"),
+      sarif: countFor("sarif"),
+    };
+  }, [effectiveModuleFilter, findings]);
+
   const filteredFindings = useMemo(() => {
     let list = findings;
     if (effectiveModuleFilter !== "all") {
@@ -193,8 +210,20 @@ const PolicyPage = () => {
         });
       }
     }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (f) =>
+          f.ruleId.toLowerCase().includes(q) ||
+          f.targetMethod.toLowerCase().includes(q) ||
+          f.filePath.toLowerCase().includes(q) ||
+          f.reason.toLowerCase().includes(q) ||
+          f.controlLabel.toLowerCase().includes(q) ||
+          f.cweLabel.toLowerCase().includes(q),
+      );
+    }
     return list;
-  }, [effectiveModuleFilter, findings, selectedStandard]);
+  }, [effectiveModuleFilter, findings, searchQuery, selectedStandard]);
 
   const effectiveSelectedFindingId =
     selectedFindingId && filteredFindings.some((f) => f.id === selectedFindingId)
@@ -419,6 +448,8 @@ const PolicyPage = () => {
       </Card>
 
       <ControlsPanel
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
         moduleFilter={effectiveModuleFilter}
         onModuleFilterChange={setModuleFilter}
         availableModules={availableModules}
@@ -457,12 +488,12 @@ const PolicyPage = () => {
       {/* Compliance Standard & SAST Pack Filter Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
         {[
-          { id: "all", label: "All Standards" },
-          { id: "iso", label: "ISO/IEC 27001" },
-          { id: "pci", label: "PCI-DSS 4.0" },
-          { id: "owasp", label: "OWASP Top 10" },
-          { id: "nist", label: "NIST SP 800-53" },
-          { id: "sarif", label: "External SAST (SARIF)" },
+          { id: "all", label: "All Standards", count: standardCounts.all },
+          { id: "iso", label: "ISO/IEC 27001", count: standardCounts.iso },
+          { id: "pci", label: "PCI-DSS 4.0", count: standardCounts.pci },
+          { id: "owasp", label: "OWASP Top 10", count: standardCounts.owasp },
+          { id: "nist", label: "NIST SP 800-53", count: standardCounts.nist },
+          { id: "sarif", label: "External SAST (SARIF)", count: standardCounts.sarif },
         ].map((tab) => {
           const active = selectedStandard === tab.id;
           return (
@@ -471,13 +502,23 @@ const PolicyPage = () => {
               type="button"
               onClick={() => setSelectedStandard(tab.id)}
               className={cn(
-                "rounded-lg px-3 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap text-xs",
+                "rounded-lg px-3 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap text-xs flex items-center gap-1.5",
                 active
                   ? "bg-indigo-600 text-white shadow-xs font-semibold"
                   : "bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800",
               )}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.2 text-[10px] font-mono",
+                  active
+                    ? "bg-indigo-700 text-indigo-100"
+                    : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400",
+                )}
+              >
+                {tab.count}
+              </span>
             </button>
           );
         })}
