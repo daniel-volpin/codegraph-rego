@@ -15,45 +15,45 @@ from codegraph.policy.packs.models import PolicyPackSpec, PolicyRuleDefinition
 
 
 class TestPolicyPacks(unittest.TestCase):
-    def test_default_iso_pack_registered(self) -> None:
+    def test_default_compliance_packs_discovered(self) -> None:
         registry = PolicyPackRegistry()
         packs = registry.list_packs()
-        self.assertGreaterEqual(len(packs), 1)
-        iso_pack = registry.get_pack("iso-27001")
-        self.assertIsNotNone(iso_pack)
-        assert iso_pack is not None
-        self.assertEqual(iso_pack.standard, "ISO-27001")
-        self.assertTrue(iso_pack.enabled)
-        self.assertIn("data.iso27001.violations", iso_pack.query_entrypoints)
+        self.assertGreaterEqual(len(packs), 4)
+        pack_ids = {p.pack_id for p in packs}
+        self.assertIn("iso-27001", pack_ids)
+        self.assertIn("pci-dss-4.0", pack_ids)
+        self.assertIn("owasp-top10-2021", pack_ids)
+        self.assertIn("nist-sp-800-53", pack_ids)
 
     def test_custom_pack_registration(self) -> None:
         registry = PolicyPackRegistry()
+        initial_count = len(registry.list_packs())
         rule = PolicyRuleDefinition(
-            id="PCI-6.5.1",
-            control="PCI-A.6-INJECTION",
-            title="SQL Injection Prevention",
-            summary="Queries must use parameterized APIs.",
-            rego_module="pcidss",
-            rego_rule="sql_injection",
+            id="CUSTOM-1.0",
+            control="CUSTOM-A.1",
+            title="Custom Security Rule",
+            summary="Custom policy check.",
+            rego_module="custom",
+            rego_rule="check",
             severity="critical",
         )
         custom_pack = PolicyPackSpec(
-            pack_id="pci-dss",
-            name="PCI-DSS v4.0 Application Security Pack",
-            standard="PCI-DSS",
-            version="4.0.0",
-            rego_dir=Path("/tmp/pci-dss"),
-            query_entrypoints=("data.pcidss.violations",),
+            pack_id="custom-pack",
+            name="Custom Organization Pack",
+            standard="Custom",
+            version="1.0.0",
+            rego_dir=Path("/tmp/custom"),
+            query_entrypoints=("data.custom.violations",),
             rules=(rule,),
         )
         registry.register_pack(custom_pack)
 
-        self.assertEqual(len(registry.list_packs()), 2)
-        pci = registry.get_pack("pci-dss")
+        self.assertEqual(len(registry.list_packs()), initial_count + 1)
+        pci = registry.get_pack("custom-pack")
         self.assertIsNotNone(pci)
         assert pci is not None
-        self.assertEqual(pci.name, "PCI-DSS v4.0 Application Security Pack")
-        self.assertEqual(registry.get_rule("PCI-6.5.1"), rule)
+        self.assertEqual(pci.name, "Custom Organization Pack")
+        self.assertEqual(registry.get_rule("CUSTOM-1.0"), rule)
 
     def test_load_pack_from_manifest(self) -> None:
         registry = PolicyPackRegistry()

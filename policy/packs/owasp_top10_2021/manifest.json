@@ -1,0 +1,98 @@
+{
+  "pack_id": "owasp-top10-2021",
+  "name": "OWASP Top 10 Application Security Risks (2021)",
+  "standard": "OWASP-2021",
+  "version": "2021.1.0",
+  "description": "Compliance rules aligned with the OWASP Top 10 (2021) standard categories.",
+  "query_entrypoints": ["data.iso27001.violations"],
+  "rules": [
+    {
+      "id": "A03:2021-SQL-INJECTION",
+      "control": "A03:2021-Injection",
+      "title": "SQL Injection",
+      "summary": "User-supplied data is not sanitized, filtered, or parameterized by the application before query construction.",
+      "category": "sql_injection",
+      "severity": "critical",
+      "reference": "OWASP Top 10 A03:2021",
+      "description": "SQL Injection occurs when untrusted input is interpreted as SQL commands.",
+      "alias_ids": ["A03-SQLI", "OWASP-SQLI"]
+    },
+    {
+      "id": "A03:2021-CMD-INJECTION",
+      "control": "A03:2021-Injection",
+      "title": "OS Command Injection",
+      "summary": "Application executes system commands containing concatenated user data.",
+      "category": "command_injection",
+      "severity": "critical",
+      "reference": "OWASP Top 10 A03:2021",
+      "description": "Command Injection allows remote arbitrary command execution.",
+      "alias_ids": ["A03-CMDI", "OWASP-CMDI"]
+    },
+    {
+      "id": "A03:2021-LDAP-INJECTION",
+      "control": "A03:2021-Injection",
+      "title": "LDAP Injection",
+      "summary": "Application constructs LDAP search filters using unvalidated input.",
+      "category": "ldap_injection",
+      "severity": "high",
+      "reference": "OWASP Top 10 A03:2021",
+      "description": "LDAP injection allows unauthorized directory querying or authentication bypass.",
+      "alias_ids": ["A03-LDAP", "OWASP-LDAP"]
+    },
+    {
+      "id": "A03:2021-XPATH-INJECTION",
+      "control": "A03:2021-Injection",
+      "title": "XPath Injection",
+      "summary": "Application evaluates dynamic XPath queries constructed with untrusted input.",
+      "category": "xpath_injection",
+      "severity": "high",
+      "reference": "OWASP Top 10 A03:2021",
+      "description": "XPath injection allows unauthorized XML document querying.",
+      "alias_ids": ["A03-XPATH", "OWASP-XPATH"]
+    },
+    {
+      "id": "A01:2021-PATH-TRAVERSAL",
+      "control": "A01:2021-Broken Access Control",
+      "title": "Path Traversal / Arbitrary File Read",
+      "summary": "Application allows users to manipulate file paths to access files outside the intended directory.",
+      "category": "path_traversal",
+      "severity": "high",
+      "reference": "OWASP Top 10 A01:2021",
+      "description": "Path traversal leads to arbitrary file access or information disclosure.",
+      "alias_ids": ["A01-PATH", "OWASP-PATH"]
+    },
+    {
+      "id": "A02:2021-WEAK-CRYPTO",
+      "control": "A02:2021-Cryptographic Failures",
+      "title": "Weak or Deprecated Cryptographic Ciphers",
+      "summary": "Use of broken or obsolete cryptographic algorithms such as DES, RC4, or AES-ECB mode.",
+      "category": "weak_crypto",
+      "severity": "critical",
+      "reference": "OWASP Top 10 A02:2021",
+      "description": "Cryptographic failures compromise data confidentiality and integrity.",
+      "alias_ids": ["A02-CRYPTO", "OWASP-CRYPTO"]
+    },
+    {
+      "id": "A02:2021-WEAK-HASH",
+      "control": "A02:2021-Cryptographic Failures",
+      "title": "Broken Hash Algorithms (MD5 / SHA-1)",
+      "summary": "Use of collision-prone hash algorithms for integrity or cryptographic protection.",
+      "category": "weak_hash",
+      "severity": "high",
+      "reference": "OWASP Top 10 A02:2021",
+      "description": "MD5 and SHA-1 have known collision vulnerabilities and should be replaced with SHA-256.",
+      "alias_ids": ["A02-HASH", "OWASP-HASH"]
+    },
+    {
+      "id": "A02:2021-WEAK-RANDOM",
+      "control": "A02:2021-Cryptographic Failures",
+      "title": "Predictable Pseudorandom Number Generation",
+      "summary": "Use of predictable PRNGs for security-sensitive tokens, passwords, or salts.",
+      "category": "weak_random",
+      "severity": "high",
+      "reference": "OWASP Top 10 A02:2021",
+      "description": "Use SecureRandom instead of Random or Math.random() for security tokens.",
+      "alias_ids": ["A02-RANDOM", "OWASP-RANDOM"]
+    }
+  ]
+}

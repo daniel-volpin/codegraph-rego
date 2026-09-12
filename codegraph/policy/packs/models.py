@@ -17,6 +17,7 @@ class PolicyRuleDefinition:
     summary: str
     rego_module: str
     rego_rule: str
+    category: str = ""
     evidence_fields: tuple[str, ...] = ()
     severity: str = "high"
     reference: str = ""
@@ -57,6 +58,7 @@ class PolicyPackSpec:
                     "summary": r.summary,
                     "rego_module": r.rego_module,
                     "rego_rule": r.rego_rule,
+                    "category": r.category,
                     "severity": r.severity,
                     "reference": r.reference,
                     "description": r.description,

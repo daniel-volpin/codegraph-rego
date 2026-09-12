@@ -1,0 +1,65 @@
+{
+  "pack_id": "nist-sp-800-53",
+  "name": "NIST SP 800-53 Rev 5 Security Controls",
+  "standard": "NIST-800-53",
+  "version": "5.1.0",
+  "description": "Security and privacy controls for federal and enterprise information systems.",
+  "query_entrypoints": ["data.iso27001.violations"],
+  "rules": [
+    {
+      "id": "NIST-SI-10-SQL-INJECTION",
+      "control": "SI-10 Information Input Validation",
+      "title": "SQL Input Validation and Sanitization",
+      "summary": "The information system checks the validity of information inputs to prevent SQL injection.",
+      "category": "sql_injection",
+      "severity": "critical",
+      "reference": "NIST SP 800-53 Rev 5 SI-10",
+      "description": "Information input validation ensures inputs are verified against valid syntax and constraints.",
+      "alias_ids": ["NIST-SI-10-SQLI", "SI-10"]
+    },
+    {
+      "id": "NIST-SI-10-CMD-INJECTION",
+      "control": "SI-10 Information Input Validation",
+      "title": "Command Input Validation",
+      "summary": "The information system validates inputs passed to system commands to prevent command injection.",
+      "category": "command_injection",
+      "severity": "critical",
+      "reference": "NIST SP 800-53 Rev 5 SI-10",
+      "description": "Prevents arbitrary command execution on host operating systems.",
+      "alias_ids": ["NIST-SI-10-CMDI"]
+    },
+    {
+      "id": "NIST-SI-10-PATH-TRAVERSAL",
+      "control": "SI-10 Information Input Validation",
+      "title": "File Path Input Validation",
+      "summary": "The information system validates path inputs to enforce access control boundaries.",
+      "category": "path_traversal",
+      "severity": "high",
+      "reference": "NIST SP 800-53 Rev 5 SI-10",
+      "description": "Validates that path references remain within authorized storage boundaries.",
+      "alias_ids": ["NIST-SI-10-PATH"]
+    },
+    {
+      "id": "NIST-SC-13-CRYPTOGRAPHIC-PROTECTION",
+      "control": "SC-13 Cryptographic Protection",
+      "title": "FIPS-Compliant Cryptographic Ciphers",
+      "summary": "The information system implements approved cryptographic modules and key lengths (FIPS 140-3).",
+      "category": "weak_crypto",
+      "severity": "critical",
+      "reference": "NIST SP 800-53 Rev 5 SC-13",
+      "description": "Deprecated algorithms like DES and RC4 violate federal cryptographic standards.",
+      "alias_ids": ["NIST-SC-13", "SC-13"]
+    },
+    {
+      "id": "NIST-SC-28-PROTECTION-AT-REST",
+      "control": "SC-28 Protection of Information at Rest",
+      "title": "Strong Cryptographic Hashing at Rest",
+      "summary": "The information system protects the integrity and confidentiality of information at rest using strong hashes.",
+      "category": "weak_hash",
+      "severity": "high",
+      "reference": "NIST SP 800-53 Rev 5 SC-28",
+      "description": "Broken hashes like MD5 must not be used for data integrity verification.",
+      "alias_ids": ["NIST-SC-28", "SC-28"]
+    }
+  ]
+}

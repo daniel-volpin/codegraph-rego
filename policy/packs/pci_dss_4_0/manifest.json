@@ -1,0 +1,76 @@
+{
+  "pack_id": "pci-dss-4.0",
+  "name": "Payment Card Industry Data Security Standard (PCI-DSS) v4.0",
+  "standard": "PCI-DSS-4.0",
+  "version": "4.0.0",
+  "description": "Compliance rules enforcing PCI-DSS v4.0 secure software development standards.",
+  "query_entrypoints": ["data.iso27001.violations"],
+  "rules": [
+    {
+      "id": "PCI-6.2.4.1-SQL-INJECTION",
+      "control": "Requirement 6.2.4.1",
+      "title": "SQL Injection Prevention",
+      "summary": "Bespoke and custom software must prevent injection flaws by using parameterized queries and stored procedures.",
+      "category": "sql_injection",
+      "severity": "critical",
+      "reference": "PCI-DSS v4.0 Req 6.2.4.1",
+      "description": "SQL injection occurs when untrusted input is concatenated directly into SQL queries.",
+      "alias_ids": ["PCI-6.2.4.1", "PCI-SQLI"]
+    },
+    {
+      "id": "PCI-6.2.4.2-PATH-TRAVERSAL",
+      "control": "Requirement 6.2.4.2",
+      "title": "Path Traversal Prevention",
+      "summary": "Software must validate user-supplied file path input against an authorized directory boundary.",
+      "category": "path_traversal",
+      "severity": "high",
+      "reference": "PCI-DSS v4.0 Req 6.2.4.2",
+      "description": "Path traversal occurs when untrusted user input controls file path resolution.",
+      "alias_ids": ["PCI-6.2.4.2", "PCI-PATH"]
+    },
+    {
+      "id": "PCI-6.2.4.3-CMD-INJECTION",
+      "control": "Requirement 6.2.4.3",
+      "title": "OS Command Injection Prevention",
+      "summary": "Software must avoid executing operating system commands constructed from unvalidated input.",
+      "category": "command_injection",
+      "severity": "critical",
+      "reference": "PCI-DSS v4.0 Req 6.2.4.3",
+      "description": "OS command injection allows unauthorized execution of system commands.",
+      "alias_ids": ["PCI-6.2.4.3", "PCI-CMDI"]
+    },
+    {
+      "id": "PCI-3.4.1-WEAK-CRYPTO",
+      "control": "Requirement 3.4.1",
+      "title": "Strong Cryptography for Cardholder Data",
+      "summary": "Cardholder data must be protected using strong cryptography with acceptable key lengths and ciphers (e.g., AES-256).",
+      "category": "weak_crypto",
+      "severity": "critical",
+      "reference": "PCI-DSS v4.0 Req 3.4.1",
+      "description": "Legacy ciphers such as DES, 3DES, and RC4 are prohibited.",
+      "alias_ids": ["PCI-3.4.1", "PCI-CRYPTO"]
+    },
+    {
+      "id": "PCI-3.4.2-WEAK-HASH",
+      "control": "Requirement 3.4.2",
+      "title": "Secure One-Way Cryptographic Hashes",
+      "summary": "One-way cryptographic hashes must use strong collision-resistant algorithms such as SHA-256.",
+      "category": "weak_hash",
+      "severity": "high",
+      "reference": "PCI-DSS v4.0 Req 3.4.2",
+      "description": "Weak hashes such as MD5 and SHA-1 must not be used for cryptographic protection.",
+      "alias_ids": ["PCI-3.4.2", "PCI-HASH"]
+    },
+    {
+      "id": "PCI-8.3.1-WEAK-RANDOM",
+      "control": "Requirement 8.3.1",
+      "title": "Cryptographically Strong Random Number Generation",
+      "summary": "Authentication tokens, session identifiers, and cryptographic keys must be generated using cryptographically secure pseudorandom number generators.",
+      "category": "weak_random",
+      "severity": "high",
+      "reference": "PCI-DSS v4.0 Req 8.3.1",
+      "description": "Predictable random generators like java.util.Random and Math.random() must not be used for security tokens.",
+      "alias_ids": ["PCI-8.3.1", "PCI-RANDOM"]
+    }
+  ]
+}
