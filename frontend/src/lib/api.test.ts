@@ -8,7 +8,7 @@ import {
   searchCode,
   uploadZip,
 } from "./api";
-import { ViolationSchema } from "./schemas";
+import { RemediationGenerationResultSchema, ViolationSchema } from "./schemas";
 
 const jsonResponse = (payload: unknown, status: number) =>
   new Response(JSON.stringify(payload), {
@@ -101,5 +101,30 @@ describe("API error handling", () => {
     expect(fetchMock).toHaveBeenCalled();
     const [url] = fetchMock.mock.calls[0];
     expect(String(url)).toContain("/policy/export/sarif?rule_ids=ISO-A.10-WEAK-HASH");
+  });
+});
+
+describe("RemediationGenerationResult schema/DTO alignment", () => {
+  // Backend sends schema_error: null on success; `.optional()` alone rejected it.
+  it("accepts schema_error: null from a successful generation", () => {
+    const parsed = RemediationGenerationResultSchema.parse({
+      decision: "apply_edits",
+      replacement_method_lines: ["@PreAuthorize(\"isAuthenticated()\")"],
+      replacement_method_code: "@PreAuthorize(\"isAuthenticated()\")",
+      reason: "",
+      raw_response_valid: true,
+      schema_error: null,
+    });
+    expect(parsed.raw_response_valid).toBe(true);
+    expect(parsed.schema_error).toBeNull();
+  });
+
+  it("still accepts a schema_error string when generation failed", () => {
+    const parsed = RemediationGenerationResultSchema.parse({
+      decision: "no_fix",
+      raw_response_valid: false,
+      schema_error: "missing replacement_method_lines",
+    });
+    expect(parsed.schema_error).toBe("missing replacement_method_lines");
   });
 });
