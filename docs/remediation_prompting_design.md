@@ -10,16 +10,15 @@ The backend remediation flow (`codegraph/remediation/service.py`) selects a rule
 - Unsupported rules return `status=INVALID` with `error=unsupported_rule_for_auto_fix` without calling the LLM.
 - Guarded rules may return structured `decision="no_fix"` with a reason to refuse unsafe remediations.
 
-## Production-Minded Support Matrix
+## Runtime Support Matrix
 
 The thesis/demo surface now uses a bounded remediation matrix:
 
 - Full support:
   - `ISO-A.10-WEAK-HASH`
   - `ISO-A.10-WEAK-RANDOM`
-- Guarded support:
+- Guarded agentic support:
   - `ISO-A.10-WEAK-CRYPTO`
-- Manual review only:
   - `ISO-A.8-SQL-INJECTION`
   - `ISO-A.8-PATH-TRAVERSAL`
   - `ISO-A.8-CMD-INJECTION`
@@ -27,7 +26,13 @@ The thesis/demo surface now uses a bounded remediation matrix:
   - `ISO-A.8-XPATH-INJECTION`
   - access-control findings such as `ISO-A.9.4.1`
 
-This is intentional. "Production-ready" in this repo means deterministic support boundaries, auditable refusal behavior, and dry-run verification gates, not universal autonomous repair.
+Guarded support permits candidate generation but requires safe refusal whenever
+the Maven compilation gate, configured Java test suite, or candidate-local OPA
+gate cannot pass. It is not evidence that every rule can be repaired safely, and
+it does not expand the scope of the recorded thesis remediation results.
+External SARIF findings whose rule IDs do not map to this installed policy
+matrix remain explanation-first/manual review because no candidate-local policy
+verifier exists for their clearance gate.
 
 ## Decision
 
@@ -68,7 +73,7 @@ The service converts that schema into the additive API payload:
 
 - The system prompt is rule-agnostic and must not encode rule-specific details (e.g., no MD5/SHA-256 strings).
 - Unsupported rule IDs never call the LLM and return `INVALID`.
-- SQL injection remediation remains unsupported.
+- Injection remediation remains guarded and must refuse when safe query or input-handling semantics cannot be established.
 - Guarded weak-crypto remediation is allowed only for explicit literal weak-cipher subcases with enough method-local context to support a safe minimal change.
 - Weak-random remediation is allowed only for narrow local transformations such as `Random` to `SecureRandom`, `Math.random()` replacement, or `SHA1PRNG` fallback removal.
 - Output contract is strict JSON only. Free-form method text is no longer the primary protocol.

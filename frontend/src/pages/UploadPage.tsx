@@ -38,12 +38,13 @@ const UploadPage = () => {
   const [isDragActive, setDragActive] = useState(false);
   const [result, setResult] = useState<UploadResponse | null>(null);
   const [localStatus, setLocalStatus] = useState<UploadStatus | null>(null);
+  const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
   const upsertActivity = useUpsertActivity();
   const clearActivity = useClearActivity();
   const resetPolicyArtifacts = useResetAllPolicyArtifacts();
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadZip(file),
+    mutationFn: ({ file, requestId }: { file: File; requestId: string }) => uploadZip(file, undefined, requestId),
     onSuccess: (data) => {
       setResult(data);
       if (data.error || data.status === "error") {
@@ -66,7 +67,7 @@ const UploadPage = () => {
     },
   });
 
-  const trackedRequestId = result?.request_id ?? null;
+  const trackedRequestId = activeRequestId ?? result?.request_id ?? null;
   const { streamConnected } = useUploadStatusStream(trackedRequestId);
   const { data: statusData, refetch: refetchStatus } = useQuery({
     queryKey: ["uploadStatus", trackedRequestId],
@@ -162,6 +163,8 @@ const UploadPage = () => {
       return;
     }
     const now = new Date().toISOString();
+    const requestId = crypto.randomUUID().replace(/-/g, "");
+    setActiveRequestId(requestId);
     setResult(null);
     setLocalStatus({
       phase: "upload",
@@ -171,9 +174,10 @@ const UploadPage = () => {
       error: null,
       updated_at: now,
       started_at: now,
+      request_id: requestId,
     });
     refetchStatusRef.current?.();
-    uploadMutation.mutate(file);
+    uploadMutation.mutate({ file, requestId });
   };
 
   const progressValue = status ? Math.min(Math.max(status.progress, 0), 100) : 0;
@@ -407,4 +411,3 @@ const UploadPage = () => {
 };
 
 export default UploadPage;
-

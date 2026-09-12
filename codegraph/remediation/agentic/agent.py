@@ -137,7 +137,7 @@ class AgenticRemediationService:
         target_method = str(finding.get("target_method") or method_key)
 
         root = Path(workspace_root).resolve()
-        with IsolatedWorktreeEnvironment(root) as env:
+        with IsolatedWorktreeEnvironment(root, target_method_key=method_key) as env:
             executor = AgentToolExecutor(env, target_rule_id=rule_id)
             turns: list[AgentTurn] = []
 

@@ -35,15 +35,16 @@ This document describes the HTTP API surface and the frontend integration patter
 
 ### `POST /upload`
 - Router: `api/routers/upload.py`
-- Request: `multipart/form-data` with `file` (must be a `.zip`).
+- Request: `multipart/form-data` with `file` (must be a `.zip`) and optional `X-Request-Id`. The frontend generates this ID before submission so it can subscribe to progress before the response arrives.
 - Behavior:
   - streams the archive to disk instead of buffering in memory
   - rejects archives exceeding configured size, entry-count, extraction-size, or compression-ratio limits
   - discovers all `src/main/java` roots in the uploaded workspace and ingests them in deterministic sorted order
   - allocates a per-request progress slot via `codegraph/common/progress.py:start_progress` and echoes its `request_id`
+  - serializes workspace replacement, graph publication, embedding publication, and rollback within the backend process
 - Response:
   - HTTP `200`: `{ "status": string, "java_root": string|null, "java_roots": string[], "request_id": string|null }`
-  - HTTP `4xx`/`5xx`: `{ "error": string }`
+  - HTTP `4xx`/`5xx`: `{ "error": string, "request_id": string }`
 - Frontend schema: `UploadResponseSchema`.
 
 ### `GET /upload/status`
@@ -178,15 +179,15 @@ This document describes the HTTP API surface and the frontend integration patter
 - Note: `status="FAIL"` is an application-level outcome (verification failed), not a transport error.
 - The frontend hardcodes `mode="dry_run"` in `applyRemediation`.
 - Dry runs compile and verify the same candidate bytes in isolated temporary workspaces. They do not write the original source or publish a shared graph revision.
-- Cleanup metadata: `verification.cleanup.file_restored` reports source restoration after a failed apply, and `verification.cleanup.revision_published` records successful apply publication. Values are `true`/`false`, or `null` when no restoration or publication was required.
-- Apply requires passing policy verification and an attempted, successful compilation. Temporary workspace cleanup and a final source-freshness check precede source writes and whole-workspace revision publication.
+- Cleanup metadata: `verification.cleanup.file_restored` reports source restoration after a failed apply, and `verification.cleanup.revision_published` records whether a candidate revision was published during the transaction. Values are `true`/`false`, or `null` when no restoration or publication was required.
+- Apply requires passing policy verification and an attempted, successful compilation. A final source-freshness check precedes source writes. Source, active graph revision, and FAISS generation are then published under one process-local mutation lock; graph and source are rolled back if search-index rebuilding fails.
 
 ### `POST /remediation/agentic`
 - Router: `api/routers/remediation.py`
 - Request JSON: `{ "finding": object, "workspace_root"?: string|null, "max_turns"?: number, "model"?: string|null }`
 - Response HTTP `200`: `AgenticRemediationResponseSchema` (`{ status, rule_id, method_key, target_method, workspace_root, modified_files, diff, verification, reason, iterations, turns_count, error? }`).
 - Implementation: `codegraph/remediation/agentic/` → `AgenticRemediationService.remediate_finding()`.
-- Executes an autonomous multi-turn agent in an `IsolatedWorktreeEnvironment` with multi-file refactoring, automatic import additions, and 3-gate invariant verification (Compilation + Test Suite Regression + OPA Policy Clearance).
+- Executes an autonomous multi-turn agent in an `IsolatedWorktreeEnvironment` with multi-file refactoring, automatic import additions, and fail-closed 3-gate invariant verification (Maven compilation + configured Java test suite + candidate-local OPA policy clearance). A missing or failed gate is not reported as a pass.
 
 ---
 
@@ -199,7 +200,7 @@ This document describes the HTTP API surface and the frontend integration patter
 
 | Frontend function | Backend endpoint | Notes |
 |---|---|---|
-| `uploadZip` | `POST /upload` | Returns `request_id` for SSE / polling subscription |
+| `uploadZip` | `POST /upload` | Sends a preallocated `X-Request-Id`, allowing SSE/polling to subscribe while backend processing is running; the response echoes it |
 | `fetchUploadStatus` | `GET /upload/status` | Polling fallback (5 s) when the SSE stream is unavailable |
 | `useUploadStatusStream` (hook) | `GET /upload/status/stream` | Push-based SSE; schema-validates every frame; falls back to polling on EventSource error |
 | `fetchHealth` | `GET /health` | 15 s polling; renders per-subsystem booleans |
@@ -209,7 +210,7 @@ This document describes the HTTP API surface and the frontend integration patter
 | `fetchPolicyCatalog` | `GET /policy/catalog` | Renders catalog entries |
 | `fetchPolicyPacks` | `GET /policy/packs` | Lists registered multi-standard compliance packs (PCI-DSS, NIST, OWASP, ISO) |
 | `registerPolicyPack` | `POST /policy/packs/register` | Registers custom policy pack from manifest specification |
-| `importSarifReport` | `POST /policy/import/sarif` | Ingests external SAST findings and anchors them to Neo4j AST method keys |
+| `importSarifReport` | `POST /policy/import/sarif` | Resolves external locations or supplied key hints only against active Neo4j revisions; unverified external keys remain non-operational evidence |
 | `exportPolicySarif` | `GET /policy/export/sarif` | Exports findings in standard OASIS SARIF v2.1.0 JSON format |
 | `explainPolicyViolationOne` | `POST /policy/explain_one` | 5 min timeout; per-row AbortController in `useExplainMutation` |
 | `saveViolationReview` / `fetchViolationReviews` | `POST`/`GET /policy/reviews` | Triage review persistence |
@@ -233,6 +234,7 @@ This document describes the HTTP API surface and the frontend integration patter
   - `full`: bounded auto-fix and verify paths are available
   - `guarded`: the UI explains that `NO_FIX` is a valid safe outcome
   - `manual`: explanation-first / manual review only
+- Imported SARIF findings are automatic-remediation eligible only when their rule ID maps to an installed candidate-local policy verifier. Unknown external rule IDs are `manual`, even when their locations resolve to active graph methods.
 
 ### Distributed tracing
 

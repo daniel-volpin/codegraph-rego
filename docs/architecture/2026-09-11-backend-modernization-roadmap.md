@@ -439,10 +439,10 @@ fully implemented, validated, and merged to `main`:
 
 3. **Autonomous Multi-Turn Agentic Remediation Engine (PR #254, #255, #259, #260)**:
    - Built `codegraph.remediation.agentic` (`IsolatedWorktreeEnvironment`, `agent.py`, `tools.py`, `contracts.py`).
-   - Enforced 3 mathematical invariant safety gates before patch promotion:
-     - $\text{Compilation Gate}$: JDT / `javac` verifies 0 compilation errors.
-     - $\text{Regression Gate}$: Project unit tests pass 100% without regression.
-     - $\text{Security Policy Gate}$: OPA scan verifies 0 residual target rule violations.
+   - Enforced three fail-closed safety gates before agentic completion:
+     - $\text{Compilation Gate}$: the supported Maven build completes with zero compilation errors after JDT parsing succeeds.
+     - $\text{Regression Gate}$: a configured Java test suite completes successfully; an absent or unavailable suite does not count as a pass.
+     - $\text{Security Policy Gate}$: isolated candidate-local OPA comparison verifies removal of the target rule without introduced rule IDs.
    - Added multi-turn self-healing on compiler and test diagnostics, dynamic discovery tools (`find_files`, `search_code`, `search_graph_context`), and permanent live E2E test suite (`tests/e2e/test_live_agentic_pipeline_e2e.py`).
 
 4. **AST Taint Detection & UI Case Dossier (PR #257, #258)**:

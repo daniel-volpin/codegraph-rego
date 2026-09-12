@@ -262,15 +262,8 @@ async def policy_import_sarif(payload: dict):
         return JSONResponse({"status": "ERROR", "error": str(exc)}, status_code=400)
 
 
-@router.get("/policy/export/sarif")
 @router.post("/policy/export/sarif")
-async def policy_export_sarif(rule_ids: list[str] | None = Query(default=None)):
-    """Export policy findings in standard OASIS SARIF v2.1.0 format."""
-    try:
-        doc = await asyncio.to_thread(export_sarif, rule_ids=rule_ids)
-        return JSONResponse(doc)
-    except Exception as exc:
-        logger.exception("SARIF export failed", extra={"err": str(exc)})
-        return JSONResponse({"status": "ERROR", "error": str(exc)}, status_code=500)
-
+async def policy_export_sarif_post(rule_ids: list[str] | None = Query(default=None)):
+    """POST compatibility alias for SARIF export."""
+    return await policy_export_sarif(rule_ids)
 

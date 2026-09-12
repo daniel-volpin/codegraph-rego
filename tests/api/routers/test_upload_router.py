@@ -1,6 +1,9 @@
+import asyncio
 import io
 import os
 import shutil
+import threading
+import time
 import types
 import unittest
 import uuid
@@ -97,6 +100,69 @@ class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
                 source_roots=[os.path.abspath(upload_dir / "src" / "main" / "java")],
             )
             mock_build_embeddings.assert_called_once()
+
+    @patch("api.routers.upload.EmbeddingService.build_embeddings")
+    @patch("api.routers.upload.ingest")
+    async def test_upload_uses_client_request_id(
+        self,
+        mock_ingest,
+        _mock_build_embeddings,
+    ) -> None:
+        from api.routers.upload import upload_zip
+
+        with _workspace_case() as case_dir:
+            upload_dir = case_dir / "uploaded_code"
+            upload = UploadFile(
+                filename="code.zip",
+                file=io.BytesIO(_build_zip_bytes(("src/main/java/App.java", "class App {}"))),
+            )
+            with patch("api.routers.upload.settings", new=_test_settings(str(upload_dir))):
+                response = await upload_zip(upload, request_id_header="client-job-123")
+
+            self.assertEqual(response.request_id, "client-job-123")
+
+    @patch("api.routers.upload.EmbeddingService.build_embeddings")
+    @patch("api.routers.upload.ingest")
+    async def test_concurrent_upload_publications_are_serialized(
+        self,
+        mock_ingest,
+        _mock_build_embeddings,
+    ) -> None:
+        from api.routers.upload import upload_zip
+
+        active = 0
+        max_active = 0
+        counter_lock = threading.Lock()
+
+        def slow_ingest(*_args, **_kwargs):
+            nonlocal active, max_active
+            with counter_lock:
+                active += 1
+                max_active = max(max_active, active)
+            time.sleep(0.05)
+            with counter_lock:
+                active -= 1
+            return WorkspacePublication("workspace", uuid.uuid4().hex, None)
+
+        mock_ingest.side_effect = slow_ingest
+        with _workspace_case() as case_dir:
+            upload_dir = case_dir / "uploaded_code"
+            first = UploadFile(
+                filename="first.zip",
+                file=io.BytesIO(_build_zip_bytes(("one/src/main/java/One.java", "class One {}"))),
+            )
+            second = UploadFile(
+                filename="second.zip",
+                file=io.BytesIO(_build_zip_bytes(("two/src/main/java/Two.java", "class Two {}"))),
+            )
+            with patch("api.routers.upload.settings", new=_test_settings(str(upload_dir))):
+                responses = await asyncio.gather(
+                    upload_zip(first, request_id_header="first"),
+                    upload_zip(second, request_id_header="second"),
+                )
+
+        self.assertEqual(max_active, 1)
+        self.assertTrue(all(response.status == "Codebase processed!" for response in responses))
 
     @patch("api.routers.upload.EmbeddingService.build_embeddings")
     @patch("api.routers.upload.ingest")

@@ -120,18 +120,20 @@ The primary evaluation covers eight OWASP Benchmark categories:
 
 | CWE | Policy control | Remediation tier |
 | --- | --- | --- |
-| CWE-22 Path Traversal | `ISO-A.8-PATH-TRAVERSAL` | Manual |
-| CWE-78 Command Injection | `ISO-A.8-CMD-INJECTION` | Manual |
-| CWE-89 SQL Injection | `ISO-A.8-SQL-INJECTION` | Manual |
-| CWE-90 LDAP Injection | `ISO-A.8-LDAP-INJECTION` | Manual |
+| CWE-22 Path Traversal | `ISO-A.8-PATH-TRAVERSAL` | Guarded |
+| CWE-78 Command Injection | `ISO-A.8-CMD-INJECTION` | Guarded |
+| CWE-89 SQL Injection | `ISO-A.8-SQL-INJECTION` | Guarded |
+| CWE-90 LDAP Injection | `ISO-A.8-LDAP-INJECTION` | Guarded |
 | CWE-327 Weak Cryptography | `ISO-A.10-WEAK-CRYPTO` | Guarded |
 | CWE-328 Weak Hash | `ISO-A.10-WEAK-HASH` | Full |
 | CWE-330 Weak Randomness | `ISO-A.10-WEAK-RANDOM` | Full |
-| CWE-643 XPath Injection | `ISO-A.8-XPATH-INJECTION` | Manual |
+| CWE-643 XPath Injection | `ISO-A.8-XPATH-INJECTION` | Guarded |
 
-`full` means a bounded automatic fix path is available. `guarded` may return
-`NO_FIX` when the evidence is insufficient. `manual` is explanation-first and
-requires human remediation.
+`full` means a bounded automatic fix path is available. `guarded` means the
+agent may propose a candidate but must refuse when evidence or any verification
+gate is unavailable. These current runtime tiers are broader than the recorded
+thesis remediation experiment; they do not extend its `25/25` result to the
+guarded categories or to arbitrary applications.
 
 ## Research Results
 

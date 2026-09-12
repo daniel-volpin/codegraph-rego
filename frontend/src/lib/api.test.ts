@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, applyRemediation, evaluatePolicies, exportPolicySarif, previewRemediation, searchCode } from "./api";
+import {
+  ApiError,
+  applyRemediation,
+  evaluatePolicies,
+  exportPolicySarif,
+  previewRemediation,
+  searchCode,
+  uploadZip,
+} from "./api";
 import { ViolationSchema } from "./schemas";
 
 const jsonResponse = (payload: unknown, status: number) =>
@@ -41,6 +49,20 @@ describe("API error handling", () => {
       status: 500,
       message: "internal",
     } satisfies Partial<ApiError>);
+  });
+
+  it("sends the preallocated upload request id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ status: "Codebase processed!", request_id: "upload-job-1" }, 200),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await uploadZip(new File(["zip"], "code.zip"), undefined, "upload-job-1");
+
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: "POST",
+      headers: { "X-Request-Id": "upload-job-1" },
+    });
   });
 
   it("sends canonical method identity for preview and apply", async () => {

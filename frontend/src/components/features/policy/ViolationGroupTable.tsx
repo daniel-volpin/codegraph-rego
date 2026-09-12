@@ -5,7 +5,6 @@ import { Badge } from "../../ui/badge";
 import { Card } from "../../ui/card";
 import ViolationFinding from "./ViolationFinding";
 import {
-  type PolicyViewPreset,
   type ViolationGroupRow,
   colWidthClass,
   ruleGroupStatusLabel,

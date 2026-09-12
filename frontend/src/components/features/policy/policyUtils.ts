@@ -383,8 +383,10 @@ export const remediationBadgeLabel = (capability: RemediationCapability) => {
   return "Agent fix ready";
 };
 
-export const remediationBadgeVariant = (capability: RemediationCapability): "success" | "secondary" =>
-  "success";
+export const remediationBadgeVariant = (capability: RemediationCapability): "success" | "secondary" => {
+  void capability;
+  return "success";
+};
 
 export const confidenceBandVariant = (
   band: ConfidenceBandLabel,
@@ -448,8 +450,10 @@ export const ruleGroupStatusLabel = (group: ViolationGroupRow) => {
   return `${group.findingCount} with safety checks`;
 };
 
-export const ruleGroupStatusVariant = (group: ViolationGroupRow): "success" | "secondary" =>
-  "success";
+export const ruleGroupStatusVariant = (group: ViolationGroupRow): "success" | "secondary" => {
+  void group;
+  return "success";
+};
 
 export const artifactStatusVariant = (
   status: "idle" | "running" | "ready" | "error",

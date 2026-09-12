@@ -232,6 +232,7 @@ def test_public_apply_writes_exact_compiled_and_verified_candidate_bytes(tmp_pat
                 autospec=True,
             ),
             patch("codegraph.remediation.apply_flow.ingest", return_value=object()),
+            patch("codegraph.remediation.apply_flow._build_search_embeddings"),
         ):
             result = apply_remediation(
                 RULE_ID,

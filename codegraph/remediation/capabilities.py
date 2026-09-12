@@ -141,17 +141,20 @@ def get_remediation_capability(
                 safe_refusal_possible=bool(meta.get("safe_refusal_possible", False)),
             )
 
-    # Universal autonomous remediation fallback for arbitrary rules / SARIF / compliance standards
+    # Imported findings can only enter automatic remediation when an installed
+    # policy rule can verify the candidate locally.  Advertising arbitrary
+    # external rule IDs as guarded would make the fail-closed OPA gate
+    # impossible to satisfy.
     return RemediationCapability(
-        supported=True,
-        support_tier="guarded",
-        reason_code="supported_rule_for_auto_fix",
-        strategy="agentic_graph_repair",
-        preview_available=True,
-        verify_available=True,
+        supported=False,
+        support_tier="manual",
+        reason_code="unsupported_rule_for_auto_fix",
+        strategy=None,
+        preview_available=False,
+        verify_available=False,
         ui_apply_mode="dry_run",
-        rationale="Autonomous 3-gate agentic remediation (Compilation, Test Suite Regression, and Policy Clearance) is enabled for this security rule.",
-        safe_refusal_possible=True,
+        rationale="Automatic remediation requires a registered rule with candidate-local policy verification.",
+        safe_refusal_possible=False,
     )
 
 

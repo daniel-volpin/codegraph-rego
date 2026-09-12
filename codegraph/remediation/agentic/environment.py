@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import Any
 
 from codegraph.db import shared_neo4j_driver
-from codegraph.policy.service import evaluate as evaluate_policies
+from codegraph.ingestion.snapshots import create_source_snapshot_from_bytes, sha256_hex
 from codegraph.remediation.agentic.contracts import AgentVerificationStatus
+from codegraph.remediation.scoped_verification import verify_candidate
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,12 +23,33 @@ LOGGER = logging.getLogger(__name__)
 class IsolatedWorktreeEnvironment:
     """Manages an isolated scratch workspace for autonomous agent edits and verification."""
 
-    def __init__(self, workspace_root: str | Path) -> None:
+    def __init__(self, workspace_root: str | Path, *, target_method_key: str | None = None) -> None:
         self.original_root = Path(workspace_root).resolve()
         self.temp_dir = Path(tempfile.mkdtemp(prefix="codegraph_agentic_ws_")).resolve()
         self.scratch_root = self.temp_dir / self.original_root.name
         self._initial_hashes: dict[str, str] = {}
+        self.target_method_key = target_method_key
+        self.target_relative_path = self._method_key_relative_path(target_method_key)
+        self._target_original_bytes: bytes | None = None
         self._setup_scratch_copy()
+        if self.target_relative_path is not None:
+            target = self.scratch_root / self.target_relative_path
+            if target.is_file():
+                self._target_original_bytes = target.read_bytes()
+
+    @staticmethod
+    def _method_key_relative_path(method_key: str | None) -> Path | None:
+        if not method_key:
+            return None
+        try:
+            _, tail = method_key.split(":", 1)
+        except ValueError:
+            return None
+        relative = tail.split("#file:", 1)[0] if "#file:" in tail else tail.split("#", 1)[0]
+        path = Path(relative)
+        if not relative or path.is_absolute() or ".." in path.parts:
+            return None
+        return path
 
     def _setup_scratch_copy(self) -> None:
         if self.original_root.is_dir():
@@ -188,9 +210,10 @@ class IsolatedWorktreeEnvironment:
     def compile_workspace(self, timeout: int = 60) -> tuple[bool, str]:
         """Compile Java sources in the scratch workspace using JDT parser and Maven."""
         # 1. Authoritative JDT AST and Syntax Verification on modified Java files
-        for p in self.scratch_root.rglob("*.java"):
-            if not p.is_file():
-                continue
+        java_files = [p for p in self.scratch_root.rglob("*.java") if p.is_file()]
+        if not java_files:
+            return False, "Compilation gate unavailable: no Java source files found."
+        for p in java_files:
             try:
                 from codegraph.java.service import parse_java_source
                 rel = p.relative_to(self.scratch_root).as_posix()
@@ -199,9 +222,10 @@ class IsolatedWorktreeEnvironment:
                     relative_path=rel,
                     resolve_bindings=False,
                 )
-                if res.coverage == "failed":
-                    errors = [d.message for d in res.diagnostics if d.severity == "error"]
-                    return False, f"JDT Syntax Error in {p.name}: {'; '.join(errors)}"
+                errors = [d.message for d in res.diagnostics if d.severity == "error"]
+                if res.coverage != "complete" or errors:
+                    detail = "; ".join(errors) or f"parser coverage was {res.coverage!r}"
+                    return False, f"JDT verification failed in {p.name}: {detail}"
             except Exception as exc:
                 return False, f"JDT Parser Error in {p.name}: {exc}"
 
@@ -219,20 +243,29 @@ class IsolatedWorktreeEnvironment:
                 )
                 if res.returncode == 0:
                     return True, "Maven build succeeded (0 errors)."
-            except Exception:
-                pass
+                output = (res.stdout + "\n" + res.stderr).strip()
+                return False, output or f"Maven compile failed with exit code {res.returncode}."
+            except Exception as exc:
+                return False, f"Maven compile unavailable: {exc}"
 
-        return True, "JDT AST compilation verified (0 syntax/structural errors)."
+        return False, "Compilation gate unavailable: no supported Maven build was found."
 
     def run_tests(self, timeout: int = 60) -> tuple[bool, str]:
         """Run project tests in the scratch workspace to ensure no behavioral regression."""
         build_root = self._find_build_root()
         pom = build_root / "pom.xml"
         if not pom.exists():
-            return True, "No test suite configured."
-        test_dir = build_root / "src/test/java"
-        if not test_dir.exists() or not any(test_dir.rglob("*.java")):
-            return True, "No test suite configured in workspace."
+            return False, "Regression gate unavailable: no supported Maven build was found."
+        test_sources = []
+        for path in build_root.rglob("*.java"):
+            relative_parts = path.relative_to(build_root).parts
+            if any(
+                relative_parts[index : index + 3] == ("src", "test", "java")
+                for index in range(len(relative_parts) - 2)
+            ):
+                test_sources.append(path)
+        if not test_sources:
+            return False, "Regression gate unavailable: no Java test suite was found."
         try:
             res = subprocess.run(
                 ["mvn", "--batch-mode", "-q", "test"],
@@ -242,27 +275,80 @@ class IsolatedWorktreeEnvironment:
                 timeout=timeout,
             )
             out = (res.stdout + "\n" + res.stderr).strip()
-            if res.returncode == 0 or "No tests to run" in out:
+            if res.returncode == 0 and "No tests to run" not in out:
                 return True, "Tests passed (0 regressions)."
-            return False, out
+            return False, out or f"Maven tests failed with exit code {res.returncode}."
         except Exception as exc:
-            return True, f"Test execution skipped: {exc}"
+            return False, f"Test execution unavailable: {exc}"
 
     IGNORED_DIRS = {"classes", "target", "build", "bin", ".git", "__pycache__", ".venv", "node_modules"}
     IGNORED_EXTENSIONS = {".class", ".jar", ".zip", ".tar", ".gz", ".pyc", ".png", ".jpg", ".index"}
 
     def evaluate_policy(self, target_rule_id: str | None = None) -> tuple[bool, list[dict[str, Any]], list[str]]:
-        """Run OPA policy scan on the scratch workspace."""
+        """Evaluate the target method candidate with the isolated OPA verifier."""
+        if not target_rule_id or not self.target_method_key or self.target_relative_path is None:
+            return False, [{"error": "policy_target_unavailable"}], [target_rule_id] if target_rule_id else []
+        if self._target_original_bytes is None:
+            return False, [{"error": "policy_baseline_source_unavailable"}], [target_rule_id]
+
+        candidate_path = self.scratch_root / self.target_relative_path
+        if not candidate_path.is_file():
+            return False, [{"error": "policy_candidate_source_unavailable"}], [target_rule_id]
         try:
-            res = evaluate_policies(workspace_root=self.scratch_root.as_posix())
-            violations = res.get("violations", [])
-            violation_ids = [str(v.get("violation_id")) for v in violations if v.get("violation_id")]
-            passed = target_rule_id not in violation_ids if target_rule_id else len(violations) == 0
-            return passed, violations, violation_ids
+            candidate_bytes = candidate_path.read_bytes()
+            baseline_snapshot = create_source_snapshot_from_bytes(
+                workspace_root=self.scratch_root,
+                source_path=candidate_path,
+                source_bytes=self._target_original_bytes,
+                method_selector=self.target_method_key,
+                expected_source_sha256=sha256_hex(self._target_original_bytes),
+            )
+            candidate_snapshot = create_source_snapshot_from_bytes(
+                workspace_root=self.scratch_root,
+                source_path=candidate_path,
+                source_bytes=candidate_bytes,
+                method_selector=baseline_snapshot.identity.selector,
+                expected_source_sha256=sha256_hex(candidate_bytes),
+            )
+            with tempfile.TemporaryDirectory(prefix="policy-verification-", dir=self.temp_dir) as temp:
+                verification_root = Path(temp)
+                baseline_path = verification_root / self.target_relative_path
+                baseline_path.parent.mkdir(parents=True, exist_ok=True)
+                baseline_path.write_bytes(self._target_original_bytes)
+                candidate_method = verification_root / ".candidate" / "candidate-method.java"
+                candidate_method.parent.mkdir(parents=True, exist_ok=True)
+                candidate_method.write_bytes(candidate_snapshot.method_bytes)
+                report = verify_candidate(
+                    workspace_root=verification_root,
+                    source=self.target_relative_path,
+                    method_selector=self.target_method_key,
+                    candidate=candidate_method.relative_to(verification_root),
+                    rule_id=target_rule_id,
+                    expected_source_sha256=sha256_hex(self._target_original_bytes),
+                    work_dir=verification_root / "work",
+                )
+            findings_raw = report.get("findings")
+            findings: dict[str, Any] = findings_raw if isinstance(findings_raw, dict) else {}
+            candidate_findings_raw = findings.get("candidate")
+            candidate_findings: list[dict[str, Any]] = (
+                [dict(finding) for finding in candidate_findings_raw if isinstance(finding, dict)]
+                if isinstance(candidate_findings_raw, list)
+                else []
+            )
+            violation_ids = [
+                str(finding.get("violation_id"))
+                for finding in candidate_findings
+                if isinstance(finding, dict) and finding.get("violation_id")
+            ]
+            passed = bool(report.get("status") == "POLICY_PASS" and report.get("policy_status") == "PASS")
+            if not passed and target_rule_id not in violation_ids:
+                violation_ids.append(target_rule_id)
+            if not passed and not candidate_findings:
+                candidate_findings = [{"error": report.get("error") or report.get("status") or "policy_failed"}]
+            return passed, candidate_findings, violation_ids
         except Exception as exc:
-            LOGGER.debug("Graph-backed policy evaluation unavailable in standalone mode (%s).", exc)
-            # Fallback for standalone/unit test scratch environments
-            return True, [], []
+            LOGGER.warning("Candidate-local policy evaluation failed: %s", exc)
+            return False, [{"error": str(exc)}], [target_rule_id]
 
     def run_full_verification(self, target_rule_id: str) -> AgentVerificationStatus:
         """Run all 3 invariant gates: Compile + Test Regression + Policy Check."""

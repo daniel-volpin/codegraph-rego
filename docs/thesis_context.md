@@ -37,9 +37,12 @@
   It is sound by construction (visited set prevents loops) but incomplete: any
   data flow that bypasses the call graph (e.g. through a primitive type passed
   via a method we did not analyse) is missed.
-- Several Rego heuristics use case-insensitive `contains()` over the raw
-  source string. They do not strip comments or string literals. Be explicit
-  about this whenever describing detection behavior.
+- Several Rego heuristics use case-insensitive `contains()` over a deterministic
+  lexical view. `source_code_substring_safe` blanks comments and literals,
+  while `source_code_active` blanks comments but preserves literals for rules
+  that must inspect algorithm names or query strings. This is lexical
+  anchoring, not value-flow analysis; describe the selected view when reporting
+  detection behavior.
 
 ## Ablation Semantics (Citation@Context vs Citation@NoContext)
 - Both modes share the same violation set and the same expected citation

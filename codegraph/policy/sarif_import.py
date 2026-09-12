@@ -26,23 +26,28 @@ def _resolve_method_for_location(
     *,
     file_path: str,
     start_line: int,
+    workspace_root: str | None = None,
 ) -> tuple[str | None, str | None, str | None]:
-    """Query Neo4j to find the enclosing Method node for a file and line number."""
+    """Find the enclosing method only within an active workspace revision."""
     try:
         clean_path = file_path.replace("\\", "/").lstrip("/")
         with driver.session() as session:
             record = session.run(
                 """
-                MATCH (m:Method)
+                MATCH (aw:ActiveWorkspace)-[:ACTIVE_REVISION]->(wr:WorkspaceRevision)
+                MATCH (m:Method {workspace_id: wr.workspace_id, revision_id: wr.revision_id})
                 WHERE (m.file_path ENDS WITH $clean_path OR m.relative_path = $clean_path OR m.relative_path ENDS WITH $clean_path)
+                  AND wr.schema_version = 'codegraph-jdt/v1'
                   AND (m.start_line IS NULL OR m.start_line <= $start_line)
                   AND (m.end_line IS NULL OR m.end_line >= $start_line)
+                  AND ($workspace_root IS NULL OR m.file_path STARTS WITH $workspace_root)
                 RETURN m.method_key AS method_key, m.signature AS signature, m.file_path AS file_path
                 ORDER BY (m.end_line - m.start_line) ASC
                 LIMIT 1
                 """,
                 clean_path=clean_path,
                 start_line=start_line,
+                workspace_root=workspace_root,
             ).single()
             if record:
                 return (
@@ -52,6 +57,39 @@ def _resolve_method_for_location(
                 )
     except Exception as exc:
         LOGGER.debug("Could not resolve method for %s:%d in Neo4j: %s", file_path, start_line, exc)
+    return None, None, None
+
+
+def _resolve_active_method_key(
+    driver: Driver,
+    *,
+    method_key: str,
+    workspace_root: str | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    """Validate a SARIF-supplied method key against the active graph revision."""
+    try:
+        with driver.session() as session:
+            record = session.run(
+                """
+                MATCH (aw:ActiveWorkspace)-[:ACTIVE_REVISION]->(wr:WorkspaceRevision)
+                MATCH (m:Method {workspace_id: wr.workspace_id, revision_id: wr.revision_id})
+                WHERE m.method_key = $method_key
+                  AND wr.schema_version = 'codegraph-jdt/v1'
+                  AND ($workspace_root IS NULL OR m.file_path STARTS WITH $workspace_root)
+                RETURN m.method_key AS method_key, m.signature AS signature, m.file_path AS file_path
+                LIMIT 1
+                """,
+                method_key=method_key,
+                workspace_root=workspace_root,
+            ).single()
+            if record:
+                return (
+                    record.get("method_key"),
+                    record.get("signature"),
+                    record.get("file_path"),
+                )
+    except Exception as exc:
+        LOGGER.debug("Could not validate SARIF method key %s in Neo4j: %s", method_key, exc)
     return None, None, None
 
 
@@ -116,17 +154,27 @@ def import_findings_from_sarif(
 
             # Check properties for existing method_key
             props = result.get("properties") or {}
-            method_key = props.get("methodKey") or props.get("method_key")
+            supplied_method_key = props.get("methodKey") or props.get("method_key")
+            method_key = None
             target_method = props.get("targetMethod") or props.get("target_method")
             resolved_file_path = props.get("filePath") or props.get("file_path") or file_uri
 
-            # Attempt AST method resolution via Neo4j if method_key not provided
-            if not method_key and neo4j_driver is not None:
-                mk, sig, fp = _resolve_method_for_location(
-                    neo4j_driver,
-                    file_path=file_uri,
-                    start_line=start_line,
-                )
+            # Treat external identities as hints: only active graph identities are operational.
+            if neo4j_driver is not None:
+                mk, sig, fp = (None, None, None)
+                if supplied_method_key:
+                    mk, sig, fp = _resolve_active_method_key(
+                        neo4j_driver,
+                        method_key=str(supplied_method_key),
+                        workspace_root=workspace_root,
+                    )
+                if not mk:
+                    mk, sig, fp = _resolve_method_for_location(
+                        neo4j_driver,
+                        file_path=file_uri,
+                        start_line=start_line,
+                        workspace_root=workspace_root,
+                    )
                 if mk:
                     method_key = mk
                     target_method = sig or target_method
@@ -170,6 +218,8 @@ def import_findings_from_sarif(
                 "evidence": {
                     "file_path": resolved_file_path,
                     "method_key": method_key,
+                    "external_method_key": supplied_method_key,
+                    "method_key_verified": method_key is not None,
                     "target_method": target_method,
                     "start_line": start_line,
                     "end_line": end_line,
