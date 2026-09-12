@@ -21,15 +21,12 @@ def evaluate(
     workspace_root: str | None = None,
 ) -> dict[str, Any]:
     """Run OPA evaluation and return the enriched result dictionary."""
-    resolved_workspace_root = workspace_root
-    if resolved_workspace_root is None:
-        resolved_workspace_root = os.path.abspath(settings.upload_dir)
     return evaluate_policies(
         max_bundles=max_bundles,
         max_total_violations=max_total_violations,
         max_per_violation_id=max_per_violation_id,
         rule_ids=rule_ids,
-        workspace_root=resolved_workspace_root,
+        workspace_root=workspace_root,
     )
 
 
