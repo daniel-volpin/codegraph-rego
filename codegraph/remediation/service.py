@@ -48,6 +48,7 @@ from codegraph.remediation.context import (
     sanitize_method_snippet,
 )
 from codegraph.remediation.contracts import (
+    AGENTIC_FIX_STRATEGIES,
     FIX_STRATEGIES,
     NO_FIX_PREFIX,
     build_no_fix_response,
@@ -101,7 +102,7 @@ class RemediationService:
     """Preview-only remediation using virtual OPA evaluation."""
 
     _NO_FIX_PREFIX = NO_FIX_PREFIX
-    _FIX_STRATEGIES: dict[str, dict[str, Any]] = FIX_STRATEGIES
+    _FIX_STRATEGIES: dict[str, dict[str, Any]] = AGENTIC_FIX_STRATEGIES
 
     def __init__(self, *, llm_client=generate_chat_completion) -> None:
         self._generation_service = RemediationGenerationService(llm_client=llm_client)

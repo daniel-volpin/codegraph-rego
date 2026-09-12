@@ -131,12 +131,6 @@ const PolicyPage = () => {
   }, [queryClient, viewPreset]);
 
   const frameworkDemoReady = viewPreset !== "framework_demo" || frameworkDemoRuleIds.length > 0;
-  const frameworkDemoScopeSource =
-    (policyCatalogQuery.data?.framework_demo_rule_ids?.length ?? 0) > 0
-      ? "catalog"
-      : (policyCatalogQuery.data?.benchmark_categories?.some((category) => category.framework_demo) ?? false)
-        ? "benchmark_categories"
-        : "legacy_fallback";
 
   // ---- Effects ----
 
@@ -450,7 +444,6 @@ const PolicyPage = () => {
         frameworkDemoReady={frameworkDemoReady}
         policyCatalogIsLoading={policyCatalogQuery.isLoading}
         policyCatalogIsError={policyCatalogQuery.isError}
-        frameworkDemoScopeSource={frameworkDemoScopeSource}
         onExportSarif={handleExportSarif}
         isExportingSarif={isExportingSarif}
         onImportSarif={handleImportSarifClick}

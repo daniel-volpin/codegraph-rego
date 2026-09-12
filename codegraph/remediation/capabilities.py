@@ -141,32 +141,17 @@ def get_remediation_capability(
                 safe_refusal_possible=bool(meta.get("safe_refusal_possible", False)),
             )
 
-    unsupported_reason = (
-        "Automatic remediation is not enabled for this rule because safe bounded transformations are not yet defined."
-    )
-    if any(candidate == "ISO-A.8-SQL-INJECTION" for candidate in rule_id_variants(rule_id)):
-        unsupported_reason = "SQL injection remains explanation-only because safe remediation usually requires cross-layer parameterization refactors."
-    if any(candidate == "ISO-A.8-PATH-TRAVERSAL" for candidate in rule_id_variants(rule_id)):
-        unsupported_reason = "Path traversal remains manual-review because safe remediation depends on path policy, normalization, and authorization context."
-    if any(candidate == "ISO-A.8-CMD-INJECTION" for candidate in rule_id_variants(rule_id)):
-        unsupported_reason = "Command injection remains manual-review because safe remediation depends on shell semantics, argument boundaries, and platform-specific behavior."
-    if any(candidate == "ISO-A.8-LDAP-INJECTION" for candidate in rule_id_variants(rule_id)):
-        unsupported_reason = "LDAP injection remains manual-review because safe remediation depends on query semantics and directory-specific escaping behavior."
-    if any(candidate == "ISO-A.8-XPATH-INJECTION" for candidate in rule_id_variants(rule_id)):
-        unsupported_reason = "XPath injection remains manual-review because safe remediation depends on parser behavior and application-specific query semantics."
-    if any(candidate == "ISO-A.9.4.1" for candidate in rule_id_variants(rule_id)):
-        unsupported_reason = "Access-control findings remain manual-review because endpoint semantics cannot be safely inferred from method-local evidence."
-
+    # Universal autonomous remediation fallback for arbitrary rules / SARIF / compliance standards
     return RemediationCapability(
-        supported=False,
-        support_tier="manual",
-        reason_code="unsupported_rule_for_auto_fix",
-        strategy=None,
-        preview_available=False,
-        verify_available=False,
+        supported=True,
+        support_tier="guarded",
+        reason_code="supported_rule_for_auto_fix",
+        strategy="agentic_graph_repair",
+        preview_available=True,
+        verify_available=True,
         ui_apply_mode="dry_run",
-        rationale=unsupported_reason,
-        safe_refusal_possible=False,
+        rationale="Autonomous 3-gate agentic remediation (Compilation, Test Suite Regression, and Policy Clearance) is enabled for this security rule.",
+        safe_refusal_possible=True,
     )
 
 

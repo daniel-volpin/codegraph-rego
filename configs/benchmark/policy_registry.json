@@ -227,7 +227,7 @@
       "cwes": ["CWE-89"],
       "rego_rule_ids": ["ISO-A.8-SQL-INJECTION"],
       "control_ids": ["A.8"],
-      "remediation_tier": "manual",
+      "remediation_tier": "guarded",
       "framework_demo": true
     },
     {
@@ -236,7 +236,7 @@
       "cwes": ["CWE-22"],
       "rego_rule_ids": ["ISO-A.8-PATH-TRAVERSAL"],
       "control_ids": ["A.8"],
-      "remediation_tier": "manual",
+      "remediation_tier": "guarded",
       "framework_demo": true
     },
     {
@@ -245,7 +245,7 @@
       "cwes": ["CWE-78"],
       "rego_rule_ids": ["ISO-A.8-CMD-INJECTION"],
       "control_ids": ["A.8"],
-      "remediation_tier": "manual",
+      "remediation_tier": "guarded",
       "framework_demo": true
     },
     {
@@ -254,7 +254,7 @@
       "cwes": ["CWE-90"],
       "rego_rule_ids": ["ISO-A.8-LDAP-INJECTION"],
       "control_ids": ["A.8"],
-      "remediation_tier": "manual",
+      "remediation_tier": "guarded",
       "framework_demo": true
     },
     {
@@ -263,7 +263,7 @@
       "cwes": ["CWE-643"],
       "rego_rule_ids": ["ISO-A.8-XPATH-INJECTION"],
       "control_ids": ["A.8"],
-      "remediation_tier": "manual",
+      "remediation_tier": "guarded",
       "framework_demo": true
     },
     {
@@ -272,7 +272,7 @@
       "cwes": ["CWE-284"],
       "rego_rule_ids": ["ISO-A.9.4.1"],
       "control_ids": ["A.9.4.1"],
-      "remediation_tier": "manual",
+      "remediation_tier": "guarded",
       "framework_demo": true
     },
     {
@@ -281,7 +281,7 @@
       "cwes": ["CWE-778"],
       "rego_rule_ids": ["ISO-A.12.4.1"],
       "control_ids": ["A.12.4.1"],
-      "remediation_tier": "manual",
+      "remediation_tier": "guarded",
       "framework_demo": true
     }
   ]

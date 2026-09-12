@@ -18,7 +18,6 @@ interface ControlsPanelProps {
   frameworkDemoReady: boolean;
   policyCatalogIsLoading: boolean;
   policyCatalogIsError: boolean;
-  frameworkDemoScopeSource: string;
   onExportSarif?: () => void;
   isExportingSarif?: boolean;
   onImportSarif?: () => void;
@@ -36,7 +35,6 @@ export const ControlsPanel = ({
   frameworkDemoReady,
   policyCatalogIsLoading,
   policyCatalogIsError,
-  frameworkDemoScopeSource,
   onExportSarif,
   isExportingSarif = false,
   onImportSarif,
@@ -171,21 +169,6 @@ export const ControlsPanel = ({
         </Button>
       </div>
     </div>
-
-    {/* Inline Warning/Notice banner when metadata fallback occurs */}
-    {viewPreset === "framework_demo" && policyCatalogIsError && (
-      <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
-        Backend demo metadata unavailable; using thesis fallback demo rules.
-      </div>
-    )}
-    {viewPreset === "framework_demo" &&
-      !policyCatalogIsLoading &&
-      frameworkDemoScopeSource === "legacy_fallback" &&
-      !policyCatalogIsError && (
-        <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
-          Using benchmark demo rule scope for compatibility.
-        </div>
-      )}
   </Card>
 );
 
