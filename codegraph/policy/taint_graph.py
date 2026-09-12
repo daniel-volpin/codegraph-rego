@@ -151,6 +151,65 @@ class TaintPathFinder:
 
         return [{"sink_type": st, "hops": h} for st, h in found.items()]
 
+    def find_reachable_sink_paths(
+        self,
+        method_key: str,
+        max_depth: int = 4,
+    ) -> list[dict[str, Any]]:
+        """Trace full interprocedural paths from *method_key* to reachable sinks."""
+        paths: list[dict[str, Any]] = []
+        visited: set[str] = {method_key}
+        queue: deque[tuple[str, list[str]]] = deque([(method_key, [method_key])])
+
+        while queue:
+            current, path = queue.popleft()
+            depth = len(path) - 1
+
+            if depth >= 1:
+                snapshot = self._index.get(current)
+                if snapshot:
+                    ast_sinks = _ast_sinks_from_evidence(snapshot.get("call_evidence") or [])
+                    source = self._load_source(current)
+                    matched_sinks = set(ast_sinks)
+                    if source:
+                        for st, patterns in _SINK_SOURCE_PATTERNS.items():
+                            if any(p.search(source) for p in patterns):
+                                matched_sinks.add(st)
+                    for st in matched_sinks:
+                        chain = []
+                        for mk in path:
+                            s = self._index.get(mk) or {}
+                            chain.append(
+                                {
+                                    "method_key": mk,
+                                    "signature": s.get("signature") or mk,
+                                    "file_path": s.get("file_path") or s.get("relative_path"),
+                                }
+                            )
+                        paths.append(
+                            {
+                                "sink_type": st,
+                                "hops": depth,
+                                "target_method": snapshot.get("signature"),
+                                "sink_file_path": snapshot.get("file_path"),
+                                "chain": chain,
+                            }
+                        )
+
+            if depth >= max_depth:
+                continue
+
+            snapshot = self._index.get(current)
+            if snapshot is None:
+                continue
+
+            for callee_key in snapshot.get("calls") or ():
+                if callee_key and callee_key in self._index and callee_key not in visited:
+                    visited.add(callee_key)
+                    queue.append((callee_key, path + [callee_key]))
+
+        return paths
+
     def _load_source(self, method_key: str) -> str:
         """Return source code for *method_key*, loading from disk if needed."""
         if method_key in self._source_cache:
