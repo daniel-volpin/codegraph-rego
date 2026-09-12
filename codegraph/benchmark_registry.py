@@ -305,6 +305,21 @@ def supported_remediation_rule_ids(path: str | None = None) -> list[str]:
     return [rule_id for rule_id, tier in remediation_tier_by_rule_id(path).items() if tier in {"full", "guarded"}]
 
 
+def evidence_source_for_rule_id(rule_id: str | None, path: str | None = None) -> str | None:
+    """Return which detection engine owns *rule_id* ("opa"/"opengrep"), or None if unknown.
+
+    Callers that must re-verify a finding use this to route the recheck to the
+    engine that produced it; routing to the wrong engine silently finds nothing.
+    """
+    if not rule_id:
+        return None
+    wanted = str(rule_id).strip()
+    for rule in load_policy_registry(path).rules:
+        if rule.id == wanted or wanted in rule.alias_ids:
+            return rule.evidence_source
+    return None
+
+
 def policy_catalog_entries_from_registry(path: str | None = None) -> list[dict[str, Any]]:
     return [rule.as_catalog_entry() for rule in load_policy_registry(path).rules]
 

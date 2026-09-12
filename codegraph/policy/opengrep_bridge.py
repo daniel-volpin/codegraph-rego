@@ -116,6 +116,41 @@ def run_opengrep_scan(
         sarif_path.unlink(missing_ok=True)
 
 
+def verify_candidate_source(
+    *,
+    rule_id: str,
+    candidate_file_source: str,
+    source_file_name: str,
+    rules_dir: Path = DEFAULT_RULES_DIR,
+    timeout: float = 120.0,
+) -> list[dict[str, Any]]:
+    """Re-run OpenGrep over a candidate compilation unit and return findings for *rule_id*.
+
+    Raises on engine failure: a remediation gate must fail closed rather than
+    treat "the scanner did not run" as "the finding is fixed".
+    """
+    if not shutil.which("opengrep"):
+        raise RuntimeError("opengrep_unavailable")
+
+    with tempfile.TemporaryDirectory(prefix="opengrep-verify-") as tmp_dir:
+        # Java resolution expects the file name to match its public type, so the
+        # candidate keeps the original file's name.
+        candidate_path = Path(tmp_dir) / Path(source_file_name).name
+        candidate_path.write_text(candidate_file_source, encoding="utf-8")
+        sarif_doc = run_opengrep_scan([str(candidate_path)], rules_dir=rules_dir, timeout=timeout)
+        if sarif_doc is None:
+            raise RuntimeError("opengrep_verification_failed")
+
+    findings: list[dict[str, Any]] = []
+    for run in sarif_doc.get("runs") or []:
+        for result in run.get("results") or []:
+            if str(result.get("ruleId") or "") != rule_id:
+                continue
+            message = str((result.get("message") or {}).get("text") or "OpenGrep taint finding")
+            findings.append({"violation_id": rule_id, "rule_id": rule_id, "reason": message})
+    return findings
+
+
 def evaluate_opengrep_rules(
     *,
     workspace_root: str | None,
