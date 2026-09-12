@@ -20,6 +20,7 @@ from codegraph.remediation.agentic.contracts import (
 )
 from codegraph.remediation.agentic.environment import IsolatedWorktreeEnvironment
 from codegraph.remediation.agentic.tools import AGENT_TOOL_DEFINITIONS, AgentToolExecutor
+from codegraph.remediation.contracts import get_fix_strategy
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +39,62 @@ Rules & Invariants:
 6. When all 3 gates pass, call 'finish_remediation' with a clear explanation.
 7. If the vulnerability fundamentally cannot be safely automated without external policy or human architectural decisions, call 'refuse_remediation'.
 """
+
+
+def _format_taint_path_dossier(taint_paths: list[dict[str, Any]]) -> str:
+    """Format interprocedural call-graph trace for multi-file context grounding."""
+    lines = ["\nInterprocedural Taint Propagation Trace (Call Graph):"]
+    for idx, tp in enumerate(taint_paths, start=1):
+        sink_type = tp.get("sink_type", "unknown")
+        hops = tp.get("hops", 1)
+        chain = tp.get("chain") or []
+        if chain:
+            chain_str = " -> ".join(f"`{hop.get('signature') or hop.get('method_key')}`" for hop in chain)
+            lines.append(f"  Path {idx} ({sink_type.upper()} sink, {hops} hops): {chain_str}")
+        else:
+            lines.append(f"  Path {idx} ({sink_type.upper()} sink, {hops} hops)")
+    return "\n".join(lines)
+
+
+def _build_initial_user_prompt(finding: dict[str, Any]) -> str:
+    rule_id = str(finding.get("violation_id") or finding.get("rule_id") or "")
+    method_key = str(finding.get("method_key") or "")
+    target_method = str(finding.get("target_method") or method_key)
+    file_path = str(finding.get("file_path") or "")
+    reason = str(finding.get("reason") or "Security finding detected")
+    code_snippet = str(finding.get("code_snippet") or (finding.get("evidence") or {}).get("source_code") or "")
+
+    prompt_parts = [
+        f"Target Security Violation: {rule_id}",
+        f"Target Method: {target_method}",
+        f"File Path: {file_path}",
+        f"Reason: {reason}",
+    ]
+
+    if code_snippet:
+        prompt_parts.append(f"Code Snippet:\n{code_snippet}")
+
+    strategy = get_fix_strategy(rule_id, agentic=True)
+    if strategy:
+        prompt_parts.append("\nRecommended Fix Guidance:")
+        prompt_parts.append(f"- Objective: {strategy.get('objective', '')}")
+        allowed = strategy.get("allowed_transformations") or []
+        if allowed:
+            prompt_parts.append("- Allowed Transformations:")
+            for t in allowed:
+                prompt_parts.append(f"  * {t}")
+        non_goals = strategy.get("non_goals") or []
+        if non_goals:
+            prompt_parts.append("- Non-Goals:")
+            for ng in non_goals:
+                prompt_parts.append(f"  * {ng}")
+
+    taint_paths = finding.get("taint_paths") or (finding.get("evidence") or {}).get("taint_paths") or []
+    if taint_paths:
+        prompt_parts.append(_format_taint_path_dossier(taint_paths))
+
+    prompt_parts.append("\nPlease inspect the relevant files, design the necessary refactoring, and apply the fix.")
+    return "\n".join(prompt_parts)
 
 
 def _parse_model_response(raw_response: Any) -> tuple[str, list[AgentToolCall]]:
@@ -96,23 +153,15 @@ class AgenticRemediationService:
     ) -> AgentRemediationResult:
         rule_id = str(finding.get("violation_id") or finding.get("rule_id") or "")
         method_key = str(finding.get("method_key") or "")
-        target_method = str(finding.get("target_method") or "")
-        file_path = str(finding.get("file_path") or "")
+        target_method = str(finding.get("target_method") or method_key)
 
         root = Path(workspace_root).resolve()
         with IsolatedWorktreeEnvironment(root) as env:
             executor = AgentToolExecutor(env, target_rule_id=rule_id)
             turns: list[AgentTurn] = []
 
-            # Initialize conversation
-            initial_user_msg = (
-                f"Target Security Violation: {rule_id}\n"
-                f"Target Method: {target_method}\n"
-                f"File Path: {file_path}\n"
-                f"Reason: {finding.get('reason', 'Security finding detected')}\n"
-                f"Code Snippet:\n{finding.get('code_snippet', '')}\n\n"
-                "Please inspect the source file, design the necessary refactoring, and apply the fix."
-            )
+            # Initialize conversation with taint trace and fix guidance
+            initial_user_msg = _build_initial_user_prompt(finding)
 
             messages: list[dict[str, Any]] = [
                 {"role": "system", "content": SYSTEM_PROMPT_TEMPLATE},
