@@ -64,15 +64,15 @@ const HomePage = () => {
               CodeGraph Workspace
             </h1>
             <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-              Graph-based code understanding for JVM projects: ingest Java sources, evaluate ISO 27001 policy rules with
-              OPA, inspect grounded evidence, and run bounded dry-run remediation.
+              Graph-based code understanding for JVM projects: ingest Java sources, evaluate multi-standard policy rules
+              (ISO 27001, PCI-DSS, OWASP Top 10, NIST 800-53) with OPA, inspect grounded evidence, and run autonomous agentic repair.
             </p>
           </div>
 
           <div className="flex flex-wrap md:flex-col gap-2 shrink-0">
             <div className="flex items-center gap-2 rounded-lg border border-slate-200/70 bg-white px-3 py-2 text-xs text-slate-700 shadow-2xs">
               <ShieldCheck className="h-4 w-4 text-indigo-600" />
-              <span className="font-semibold">RQ1:</span> Symbolic Rego Policy
+              <span className="font-semibold">RQ1:</span> Multi-Standard Rego Policy
             </div>
             <div className="flex items-center gap-2 rounded-lg border border-slate-200/70 bg-white px-3 py-2 text-xs text-slate-700 shadow-2xs">
               <GitGraph className="h-4 w-4 text-sky-600" />
@@ -80,7 +80,7 @@ const HomePage = () => {
             </div>
             <div className="flex items-center gap-2 rounded-lg border border-slate-200/70 bg-white px-3 py-2 text-xs text-slate-700 shadow-2xs">
               <FileCode2 className="h-4 w-4 text-emerald-600" />
-              <span className="font-semibold">RQ3:</span> Bounded Remediation
+              <span className="font-semibold">RQ3:</span> Autonomous 3-Gate Remediation
             </div>
           </div>
         </div>
