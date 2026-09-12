@@ -14,7 +14,8 @@ revision; runs of this modernized branch are new evidence, not historical reruns
 - OpenGrep `v1.30.0+` on `PATH` (required for the injection controls; without it
   those rules are skipped and detection recall drops silently)
 - JDK 21+ and Maven for the JDT adapter; the analyzed project's build may require its own configured Java release
-- local checkout of `BenchmarkJava`
+- local checkout of `BenchmarkJava` (as a sibling directory `../BenchmarkJava`, or
+  anywhere with `OWASP_BENCHMARK_ROOT` pointing at it)
 - LM Studio, OpenAI, or another OpenAI-compatible LLM endpoint for explanation/remediation runs
 
 ## 2. Environment
@@ -26,7 +27,8 @@ source .venv/bin/activate
 export NEO4J_URI=bolt://127.0.0.1:7687
 export NEO4J_USER=neo4j
 export NEO4J_PASS=your_password
-export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
+# Optional: only needed if BenchmarkJava is not a sibling of this repo.
+# export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
 
 export LLM_API_BASE=http://localhost:1234/v1
 export LLM_API_KEY=lm-studio
@@ -55,11 +57,12 @@ matching defaults — keep it in sync when adding new variables.
 | `NEO4J_URI` | `bolt://127.0.0.1:7687` | Neo4j Bolt endpoint. Required at runtime. |
 | `NEO4J_USER` | `neo4j` | Neo4j auth user. Required. |
 | `NEO4J_PASS` | _unset_ | Neo4j auth password. Required (no default). |
-| `OWASP_BENCHMARK_ROOT` | _unset_ | Absolute path to the local `BenchmarkJava` checkout. Required for benchmark eval scripts. |
+| `OWASP_BENCHMARK_ROOT` | auto-discovered | Absolute path to the local `BenchmarkJava` checkout. Resolved automatically when the clone sits beside this repository (`../BenchmarkJava`), in it, or at `~/BenchmarkJava`; set it only for a non-standard location. |
 | `CODEGRAPH_HOST` | `127.0.0.1` | Bind host for the backend service. Loopback by default for safe local-only operation. |
 | `CODEGRAPH_OPA_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OPA eval subprocesses. |
 | `CODEGRAPH_OPENGREP_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OpenGrep taint subprocesses. |
 | `CODEGRAPH_OPENGREP_RULES_DIR` | `policy/opengrep` | Directory of auto-discovered OpenGrep taint rule files. |
+| `CODEGRAPH_DETECTION_ENGINES_ENABLED` | `true` | Master switch for non-OPA engines. Disabling drops the rules they own, so coverage falls. |
 | `JAVA_PARSER_JAR` | `tools/java-parser/target/codegraph-java-parser.jar` | Explicit path to the Eclipse JDT parser fat jar. Build with `make java-parser-build`; the Python adapter never downloads or builds it at runtime. |
 | `JAVA_PARSER_TIMEOUT_SECONDS` | `30.0` | Per-request deadline for the fresh JVM parser process. |
 | `JAVA_PARSER_HEAP_MB` | `384` | Heap cap passed as `-Xmx` to each parser JVM. |
@@ -133,6 +136,12 @@ uv run python run_remediation_eval.py \
   --sample-size 3 \
   --reset-neo4j
 ```
+
+Current detection baseline, measured on `multicat_full.json` (60
+cases/category, seed 7): precision `0.793`, recall `0.888`, F1 `0.838`
+(`TP/FP/FN = 207/54/26`), artifact `outputs/local_smoke/detection_matched/`.
+A detection figure is a property of the engine configuration as well as the
+corpus, so state which engines a run used.
 
 The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/thesis_final_remediation_v4/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier historical runs (`detection_calibration_path_precision_v4`, `repro_supported_medium_branch_benchmarktest01017_fix`) are no longer tracked in the repository.
 
