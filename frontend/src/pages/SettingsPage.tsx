@@ -179,6 +179,34 @@ const SettingsPage = () => {
       </Card>
 
       <Card className="space-y-3.5 p-5 shadow-xs border-zinc-200/80 dark:border-zinc-800">
+        <div className="flex items-center gap-2 border-b border-zinc-100 pb-3 dark:border-zinc-800/80">
+          <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+            LLM Engine &amp; Autonomous Agent
+          </h2>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+              Local Inference (LM Studio)
+            </p>
+            <p className="mt-1.5 text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
+              Default endpoint: <code className={CODE_TOKEN_CLASS}>http://127.0.0.1:1234/v1</code>. Supports Apple Silicon MLX GPU acceleration for local Qwen models (<code className={CODE_TOKEN_SMALL_CLASS}>qwen3.8-27b</code>, <code className={CODE_TOKEN_SMALL_CLASS}>qwen3.5-9b-mlx</code>).
+            </p>
+          </div>
+          <div className="rounded-lg border border-zinc-200/80 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+              Autonomous 3-Gate Safety
+            </p>
+            <p className="mt-1.5 text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
+              Multi-turn agentic repair validates every patch against 3 invariant gates: JDT AST Compilation, Test Suite Regression, and OPA Policy Clearance.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="space-y-3.5 p-5 shadow-xs border-zinc-200/80 dark:border-zinc-800">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">Quick Reference Links</h2>
         <div className="grid gap-2.5 sm:grid-cols-2">
           <a

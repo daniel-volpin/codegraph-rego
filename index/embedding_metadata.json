@@ -1,15 +1,41 @@
 {
-  "model": "all-MiniLM-L6-v2",
-  "dim": 384,
-  "metric": "cosine",
-  "count": 4308,
-  "built_at": "2026-02-14T12:44:57.689898+00:00",
-  "index_path": "index/code_embeddings.index",
-  "signature_map": {
-    "full": "index/embedding_full_signature_map.json",
-    "legacy": "index/embedding_signature_map.json"
-  },
-  "cache_path": "index/embedding_cache.json",
-  "cache_hits": 4308,
-  "cache_misses": 0
+  "schema": "embedding_generation_manifest.v1",
+  "switched_at": "2026-09-12T14:06:33.105852+00:00",
+  "generation": {
+    "id": "8a87cc3c043844df9f448cc391fe4de8",
+    "model": "all-MiniLM-L6-v2",
+    "dim": 384,
+    "count": 169,
+    "graph_generation": {
+      "workspace_revisions": 1,
+      "method_count": 189,
+      "indexable_method_count": 169,
+      "schema_versions": [
+        "codegraph-jdt/v1"
+      ],
+      "parser_backends": [
+        "eclipse-jdt"
+      ],
+      "active_revisions": [
+        {
+          "workspace_id": "77a827a17fbfe43f",
+          "revision_id": "ede0b3b631fa2e708460cf0f2cd6f6414ddb9c42a3ef13501eaf627f379ecf1d",
+          "schema_version": "codegraph-jdt/v1",
+          "parser_backend": "eclipse-jdt",
+          "parser_version": "3.47.0",
+          "adapter_version": "0.1.0",
+          "method_count": 189,
+          "indexable_method_count": 169
+        }
+      ]
+    },
+    "metadata": {
+      "index_path": "index/code_embeddings.8a87cc3c043844df9f448cc391fe4de8.index",
+      "index_sha256": "77e46812fba83b275d2d8efd3b18a789987770aae574be9c22a1652de88db500",
+      "signature_map_path": "index/embedding_full_signature_map.8a87cc3c043844df9f448cc391fe4de8.json",
+      "signature_map_sha256": "40e750b0048dc10c442a425a896279040ec2ea17f91a4c2a9a66ac22e34150a5",
+      "metadata_path": "index/embedding_metadata.8a87cc3c043844df9f448cc391fe4de8.json",
+      "metadata_sha256": "1cf44cc7a90960899f87425341cd8e1a48df720ec928b7ac6dd0a3fa60bb2651"
+    }
+  }
 }

@@ -95,10 +95,10 @@ class Settings(BaseSettings):
         description="Explicit provider endpoint; auto preserves hosted Responses and local LM Studio Chat behavior.",
     )
     llm_timeout_seconds: float = Field(
-        60.0, gt=0, le=600, description="HTTP request timeout for model calls, not a total agent-run deadline.",
+        180.0, gt=0, le=600, description="HTTP request timeout for model calls, not a total agent-run deadline.",
     )
     llm_max_concurrent_requests: int = Field(
-        2,
+        1,
         ge=1,
         le=8,
         validation_alias=AliasChoices("LLM_MAX_CONCURRENT_REQUESTS", "llm_max_concurrent_requests"),
@@ -112,7 +112,7 @@ class Settings(BaseSettings):
         description="Process-local cap on generation calls waiting for provider admission.",
     )
     llm_queue_timeout_seconds: float = Field(
-        5.0,
+        60.0,
         gt=0.0,
         le=120.0,
         validation_alias=AliasChoices("LLM_QUEUE_TIMEOUT_SECONDS", "llm_queue_timeout_seconds"),
@@ -181,12 +181,12 @@ class Settings(BaseSettings):
         description="Optional LM Studio model TTL (seconds) for remediation requests.",
     )
     llm_concurrency: int = Field(
-        2,
+        1,
         ge=1,
         validation_alias=AliasChoices("LLM_CONCURRENCY", "llm_concurrency"),
         description=(
-            "Maximum number of concurrent LLM HTTP requests. Keep at 2 for local models "
-            "(LM Studio handles limited parallelism). Increase for hosted APIs."
+            "Maximum number of concurrent LLM HTTP requests. Keep at 1 for local models "
+            "(LM Studio handles single-stream efficiently without GPU memory thrashing)."
         ),
     )
     remediation_raw_capture_enabled: bool = Field(
@@ -309,9 +309,14 @@ class Settings(BaseSettings):
 
 def resolve_explicit_env_file() -> str | None:
     configured = os.environ.get(ENV_FILE_OVERRIDE_VAR)
-    if not configured:
+    if configured == "":
         return None
-    return configured
+    if configured:
+        return configured
+    default_env = PROJECT_ROOT / ".env"
+    if default_env.is_file():
+        return str(default_env)
+    return None
 
 
 @lru_cache(maxsize=1)

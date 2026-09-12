@@ -4,6 +4,7 @@ import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -44,6 +45,12 @@ def _default_startup_status() -> dict[str, Any]:
 
 def _configure_runtime() -> None:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    if not os.environ.get("CODEGRAPH_ENV_FILE"):
+        default_env = Path(__file__).resolve().parents[1] / ".env"
+        if default_env.is_file():
+            os.environ["CODEGRAPH_ENV_FILE"] = str(default_env)
+            from codegraph.config import clear_settings_cache
+            clear_settings_cache()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s [%(name)s] [%(otel_trace_id)s/%(otel_span_id)s] %(message)s",

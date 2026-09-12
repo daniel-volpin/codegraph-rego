@@ -160,7 +160,7 @@ class TestConfigSettings(unittest.TestCase):
             env_file = Path(tmp_dir) / "dev.env"
             env_file.write_text("NEO4J_PASS=from-explicit-env\n", encoding="utf-8")
 
-            with patch.dict(os.environ, {}, clear=True):
+            with patch.dict(os.environ, {ENV_FILE_OVERRIDE_VAR: ""}, clear=True):
                 clear_settings_cache()
                 self.assertIsNone(get_settings().neo4j_pass)
 

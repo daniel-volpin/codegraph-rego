@@ -257,6 +257,11 @@ class AgentToolExecutor:
                     "policy_passed": status.policy_passed,
                     "remaining_rule_violations": status.remaining_violations,
                     "all_3_gates_passed": status.all_passed,
+                    "next_step": (
+                        "All 3 gates passed! Please call 'finish_remediation' now with a clear summary explanation."
+                        if status.all_passed
+                        else "Verification failed. Please read the errors above, fix the issues with 'edit_file', and verify again."
+                    ),
                 }
                 return AgentToolResult(
                     call_id=tool_call.call_id,

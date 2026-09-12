@@ -10,9 +10,26 @@ from codegraph.benchmark_registry import load_policy_registry
 SUPPORTED_RULE_RATIONALES = {
     "ISO-A.10-WEAK-HASH": "Bounded weak-hash replacements such as MD5 or SHA-1 to SHA-256 can be applied with minimal local edits.",
     "ISO-A.10-WEAK-RANDOM": "Local randomness upgrades can often be made safely with narrow replacements to SecureRandom-based APIs.",
-    "ISO-A.10-WEAK-CRYPTO": "Weak-cipher remediation is available only for explicit literal subcases where a safe minimal replacement is evident.",
+    "ISO-A.10-WEAK-CRYPTO": "Weak-cipher remediation replaces legacy ciphers (DES/RC4) with AES-GCM or approved algorithms with 3-gate verification.",
+    "ISO-A.8-SQL-INJECTION": "SQL injection remediation transforms dynamic SQL concatenations into parameterized PreparedStatements with 3-gate safety verification.",
+    "ISO-A.8-PATH-TRAVERSAL": "Path traversal remediation applies canonical directory normalization and boundary containment checks.",
+    "ISO-A.8-CMD-INJECTION": "Command injection remediation replaces shell concatenation with structured ProcessBuilder argument arrays.",
+    "ISO-A.8-LDAP-INJECTION": "LDAP injection remediation applies RFC-compliant filter escaping or parameterized search constraints.",
+    "ISO-A.8-XPATH-INJECTION": "XPath injection remediation binds external parameters via XPathVariableResolver to prevent query manipulation.",
+    "ISO-A.9.4.1": "Access-control remediation adds Spring Security access control annotations and authentication guard checks.",
+    "ISO-A.12.4.1": "Logging and monitoring remediation inserts structured security audit events using standard logging frameworks.",
 }
-SAFE_REFUSAL_RULE_IDS = frozenset({"ISO-A.10-WEAK-RANDOM", "ISO-A.10-WEAK-CRYPTO"})
+SAFE_REFUSAL_RULE_IDS = frozenset({
+    "ISO-A.10-WEAK-RANDOM",
+    "ISO-A.10-WEAK-CRYPTO",
+    "ISO-A.8-SQL-INJECTION",
+    "ISO-A.8-PATH-TRAVERSAL",
+    "ISO-A.8-CMD-INJECTION",
+    "ISO-A.8-LDAP-INJECTION",
+    "ISO-A.8-XPATH-INJECTION",
+    "ISO-A.9.4.1",
+    "ISO-A.12.4.1",
+})
 
 
 # The default matrix derives from the benchmark policy registry on disk, so it
@@ -81,32 +98,37 @@ def get_remediation_capability(
     supported_rule_ids: Iterable[str] | None = None,
 ) -> RemediationCapability:
     default_matrix = default_remediation_rule_matrix()
-    if supported_rule_ids is None:
-        supported_ids = set(default_matrix)
-        capability_map = dict(default_matrix)
-    else:
+    if supported_rule_ids is not None:
         supported_ids = set(supported_rule_ids)
-        capability_map = {
-            rule_id_value: dict(
-                default_matrix.get(
-                    rule_id_value,
-                    {
-                        "support_tier": "full",
-                        "reason_code": "supported_rule_for_auto_fix",
-                        "strategy": "llm_method_replacement",
-                        "preview_available": True,
-                        "verify_available": True,
-                        "safe_refusal_possible": False,
-                        "rationale": "Automatic remediation is enabled for this supported rule.",
-                    },
+        for candidate in rule_id_variants(rule_id):
+            if candidate in supported_ids:
+                meta = default_matrix.get(candidate, {})
+                return RemediationCapability(
+                    supported=True,
+                    support_tier=str(meta.get("support_tier") or "full"),
+                    reason_code=str(meta.get("reason_code") or "supported_rule_for_auto_fix"),
+                    strategy=str(meta.get("strategy")) if meta.get("strategy") is not None else None,
+                    preview_available=bool(meta.get("preview_available", True)),
+                    verify_available=bool(meta.get("verify_available", True)),
+                    ui_apply_mode="dry_run",
+                    rationale=str(meta.get("rationale") or "Automatic remediation is enabled for this supported rule."),
+                    safe_refusal_possible=bool(meta.get("safe_refusal_possible", False)),
                 )
-            )
-            for rule_id_value in supported_ids
-        }
+        return RemediationCapability(
+            supported=False,
+            support_tier="manual",
+            reason_code="unsupported_rule_for_auto_fix",
+            strategy=None,
+            preview_available=False,
+            verify_available=False,
+            ui_apply_mode="dry_run",
+            rationale="Automatic remediation is not enabled for this rule under the requested strategy set.",
+            safe_refusal_possible=False,
+        )
 
     for candidate in rule_id_variants(rule_id):
-        if candidate in supported_ids:
-            meta = capability_map.get(candidate, {})
+        if candidate in default_matrix:
+            meta = default_matrix[candidate]
             return RemediationCapability(
                 supported=True,
                 support_tier=str(meta.get("support_tier") or "full"),

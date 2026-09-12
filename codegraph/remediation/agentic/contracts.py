@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+import json
+
 AgentRole = Literal["system", "user", "assistant", "tool"]
 AgentOutcomeStatus = Literal[
     "SUCCESS",
@@ -28,7 +30,7 @@ class AgentToolCall:
             "type": "function",
             "function": {
                 "name": self.name,
-                "arguments": self.arguments,
+                "arguments": json.dumps(self.arguments) if isinstance(self.arguments, dict) else str(self.arguments),
             },
         }
 

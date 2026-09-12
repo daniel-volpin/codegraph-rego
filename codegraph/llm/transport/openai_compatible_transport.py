@@ -57,6 +57,22 @@ def _is_lm_studio_api_base(api_base: str | None) -> bool:
     return "localhost:1234" in lowered or "127.0.0.1:1234" in lowered
 
 
+def _is_local_model_name(model_name: str) -> bool:
+    lowered = model_name.lower()
+    return any(
+        kw in lowered
+        for kw in ("qwen", "gemma", "llama", "mistral", "mlx", "deepseek", "phi", "starcoder", "codellama")
+    )
+
+
+def _resolve_effective_api_base(configured_base: str | None, model: str) -> str | None:
+    if configured_base and not ("api.openai.com" in configured_base and _is_local_model_name(model)):
+        return configured_base
+    if _is_local_model_name(model):
+        return "http://127.0.0.1:1234/v1"
+    return configured_base
+
+
 def _infer_provider(api_base: str | None) -> str:
     if not api_base:
         return "openai"
@@ -183,7 +199,8 @@ class _GenerationConfig:
 
 
 def _generation_config(request: LLMRequest) -> _GenerationConfig:
-    api_base = settings.llm_api_base
+    model_name = request.model or settings.llm_model or "gpt-4o-mini"
+    api_base = _resolve_effective_api_base(settings.llm_api_base, model_name)
     is_lm_studio = _is_lm_studio_api_base(api_base)
     extra_body: dict[str, Any] = {}
     if is_lm_studio and not settings.llm_enable_thinking:
@@ -196,14 +213,15 @@ def _generation_config(request: LLMRequest) -> _GenerationConfig:
 
     return _GenerationConfig(
         api_base=api_base,
-        model=request.model or settings.llm_model or "gpt-4o-mini",
+        model=model_name,
         max_tokens=request.max_tokens if request.max_tokens is not None else settings.llm_max_tokens_explanation,
         temperature=(
             (request.temperature if request.temperature is not None else settings.llm_temperature)
             if settings.llm_send_temperature else None
         ),
         use_chat_completions=(
-            settings.llm_api_mode == "chat_completions"
+            request.tools is not None
+            or settings.llm_api_mode == "chat_completions"
             or (settings.llm_api_mode == "auto" and is_lm_studio)
         ),
         extra_body=extra_body,
