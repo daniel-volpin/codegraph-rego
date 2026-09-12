@@ -434,16 +434,12 @@ const PolicyPage = () => {
       </Card>
 
       <ControlsPanel
-        viewPreset={viewPreset}
-        onViewPresetChange={setViewPreset}
         moduleFilter={effectiveModuleFilter}
         onModuleFilterChange={setModuleFilter}
         availableModules={availableModules}
         evalIsFetching={evalQuery.isFetching}
         onEvalRefetch={() => evalQuery.refetch()}
-        frameworkDemoReady={frameworkDemoReady}
         policyCatalogIsLoading={policyCatalogQuery.isLoading}
-        policyCatalogIsError={policyCatalogQuery.isError}
         onExportSarif={handleExportSarif}
         isExportingSarif={isExportingSarif}
         onImportSarif={handleImportSarifClick}
@@ -506,7 +502,7 @@ const PolicyPage = () => {
 
       <div
         data-testid="policy-results-layout"
-        className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] 2xl:items-start"
+        className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,540px)] xl:items-start"
       >
         <ViolationGroupTable
           table={table}

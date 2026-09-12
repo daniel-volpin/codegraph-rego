@@ -105,7 +105,7 @@ export const FindingDetailPanel = ({ selectedFinding }: FindingDetailPanelProps)
   return (
     <>
       <Card
-        className="min-w-0 p-5 2xl:sticky 2xl:top-24 2xl:max-h-[calc(100vh-11rem)] 2xl:overflow-auto shadow-xs border-zinc-200/80 dark:border-zinc-800"
+        className="min-w-0 p-5 xl:sticky xl:top-24 xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto shadow-xs border-zinc-200/80 dark:border-zinc-800"
         data-testid="finding-dossier"
       >
         <div role="status" aria-live="polite" className="sr-only">

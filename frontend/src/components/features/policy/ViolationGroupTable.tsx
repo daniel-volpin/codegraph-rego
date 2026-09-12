@@ -47,7 +47,7 @@ const ViolationGroupTable = ({
       )}
       <div
         data-testid="policy-group-table-scroll"
-        className="max-w-full overflow-x-auto 2xl:max-h-[calc(100vh-11rem)]"
+        className="max-w-full overflow-x-auto xl:max-h-[calc(100vh-8rem)]"
       >
         <table className="w-full table-fixed border-collapse text-xs">
           <thead className="border-b border-zinc-200 bg-zinc-100/75 text-left text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">

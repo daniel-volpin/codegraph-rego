@@ -1,10 +1,12 @@
-import { Copy } from "lucide-react";
+import { Code2, Copy, GitFork, Network } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../../ui/button";
+import { Badge } from "../../../ui/badge";
 import CodeHighlight from "../../../ui/CodeHighlight";
 import { copyTextToClipboard } from "../../../../lib/utils";
 import {
   formatCitationDisplay,
+  parseMethodKey,
   type ViolationRow,
 } from "../policyUtils";
 
@@ -50,6 +52,8 @@ const buildImmediateEvidence = (finding: ViolationRow): ImmediateEvidence => {
 
 export const EvidenceSection = ({ finding }: EvidenceSectionProps) => {
   const immediateEvidence = buildImmediateEvidence(finding);
+  const parsedTarget = parseMethodKey(finding.targetMethod || finding.methodKey);
+  const cleanCitation = formatCitationDisplay(immediateEvidence.citation);
 
   return (
     <div className="rounded-lg border border-zinc-200 p-4 space-y-3 bg-white dark:border-zinc-800 dark:bg-zinc-900">
@@ -84,36 +88,129 @@ export const EvidenceSection = ({ finding }: EvidenceSectionProps) => {
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Citation</p>
             <p className="mt-0.5 break-all font-mono text-xs text-zinc-900 font-medium dark:text-zinc-100">
-              {formatCitationDisplay(immediateEvidence.citation).display}
+              {cleanCitation.display}
             </p>
           </div>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Target Method</p>
-            <p className="mt-0.5 break-all font-mono text-xs text-zinc-900 font-medium dark:text-zinc-100">
-              {finding.targetMethod}
+            <p className="mt-0.5 break-all font-mono text-xs text-zinc-900 font-medium dark:text-zinc-100" title={finding.targetMethod}>
+              {parsedTarget.shortSignature}
             </p>
           </div>
         </div>
-        {(immediateEvidence.callers.length > 0 || immediateEvidence.neighbors.length > 0) && (
-          <div className="mt-3 grid gap-3 md:grid-cols-2 border-t border-zinc-200/60 pt-2.5 dark:border-zinc-800">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Callers</p>
-              <p className="mt-0.5 text-xs text-zinc-700 break-all font-mono dark:text-zinc-300">
-                {immediateEvidence.callers.length > 0
-                  ? immediateEvidence.callers.slice(0, 3).join(", ")
-                  : "No caller summary available."}
+
+        {/* Callers & Neighbors Graph Grounding */}
+        <div className="mt-3 grid gap-3.5 md:grid-cols-2 border-t border-zinc-200/60 pt-3 dark:border-zinc-800">
+          {/* Callers Section */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <GitFork className="h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500" />
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Callers {immediateEvidence.callers.length > 0 ? `(${immediateEvidence.callers.length})` : ""}
               </p>
             </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Neighbors</p>
-              <p className="mt-0.5 text-xs text-zinc-700 break-all font-mono dark:text-zinc-300">
-                {immediateEvidence.neighbors.length > 0
-                  ? immediateEvidence.neighbors.slice(0, 3).join(", ")
-                  : "No semantic neighbors available."}
-              </p>
-            </div>
+            {immediateEvidence.callers.length > 0 ? (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {immediateEvidence.callers.map((callerRaw, idx) => {
+                  const parsed = parseMethodKey(callerRaw);
+                  const fullFqcn = parsed.packageName
+                    ? `${parsed.packageName}.${parsed.className}.${parsed.methodName}()`
+                    : parsed.shortSignature;
+                  return (
+                    <div
+                      key={idx}
+                      className="group flex items-start justify-between gap-2 rounded-md border border-zinc-200/80 bg-white p-2 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900"
+                      title={callerRaw}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="secondary" className="px-1 py-0 text-[9px] font-mono font-medium">
+                            {parsed.className}
+                          </Badge>
+                          <span className="truncate font-mono text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                            {parsed.methodName}()
+                          </span>
+                        </div>
+                        <p className="mt-0.5 truncate font-mono text-[10px] text-zinc-400 dark:text-zinc-500">
+                          {fullFqcn}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                        title="Copy caller signature"
+                        onClick={async () => {
+                          const ok = await copyTextToClipboard(parsed.shortSignature);
+                          if (ok) toast.success("Caller signature copied.");
+                        }}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">No direct AST callers recorded.</p>
+            )}
           </div>
-        )}
+
+          {/* Neighbors Section */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <Network className="h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500" />
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Semantic Graph Neighbors {immediateEvidence.neighbors.length > 0 ? `(${immediateEvidence.neighbors.length})` : ""}
+              </p>
+            </div>
+            {immediateEvidence.neighbors.length > 0 ? (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {immediateEvidence.neighbors.map((neighborRaw, idx) => {
+                  const parsed = parseMethodKey(neighborRaw);
+                  return (
+                    <div
+                      key={idx}
+                      className="group flex items-start justify-between gap-2 rounded-md border border-zinc-200/80 bg-white p-2 shadow-2xs dark:border-zinc-800 dark:bg-zinc-900"
+                      title={neighborRaw}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="outline" className="px-1 py-0 text-[9px] font-mono font-medium text-indigo-600 border-indigo-200 dark:text-indigo-400 dark:border-indigo-900/50">
+                            {parsed.className}
+                          </Badge>
+                          <span className="truncate font-mono text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                            {parsed.methodName}({parsed.paramTypes.length > 0 ? "…" : ""})
+                          </span>
+                        </div>
+                        {parsed.filePath && (
+                          <p className="mt-0.5 truncate font-mono text-[10px] text-zinc-400 dark:text-zinc-500">
+                            {parsed.filePath}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                        title="Copy neighbor signature"
+                        onClick={async () => {
+                          const ok = await copyTextToClipboard(parsed.shortSignature);
+                          if (ok) toast.success("Neighbor signature copied.");
+                        }}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">No semantic neighbors available.</p>
+            )}
+          </div>
+        </div>
+
         {immediateEvidence.taintPaths.length > 0 && (
           <div className="mt-3 border-t border-zinc-200/60 pt-2.5 dark:border-zinc-800">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
@@ -145,7 +242,10 @@ export const EvidenceSection = ({ finding }: EvidenceSectionProps) => {
       {/* Evidence Code Snippet */}
       <div className="rounded-lg border border-zinc-200 overflow-hidden dark:border-zinc-800">
         <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-1.5 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/50">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Evidence snippet</span>
+          <div className="flex items-center gap-1.5">
+            <Code2 className="h-3.5 w-3.5 text-zinc-400" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Evidence snippet</span>
+          </div>
           <Button
             variant="ghost"
             size="sm"

@@ -44,27 +44,56 @@ export const DEMO_POLICY_CATALOG: PolicyCatalogResponse = {
     {
       control_id: "ISO-A.10.1",
       title: "Cryptographic Controls and Key Management",
-      rego_rules: ["ISO-A.10-WEAK-HASH", "ISO-A.10-WEAK-CRYPTO"],
+      rego_rules: ["ISO-A.10-WEAK-HASH", "ISO-A.10-WEAK-CRYPTO", "ISO-A.10-WEAK-RANDOM"],
     },
     {
       control_id: "ISO-A.8.2",
       title: "Privileged Access and Injection Prevention",
-      rego_rules: ["ISO-A.8-SQL-INJECTION", "ISO-A.8-PATH-TRAVERSAL"],
+      rego_rules: ["ISO-A.8-SQL-INJECTION", "ISO-A.8-PATH-TRAVERSAL", "ISO-A.9.4.1"],
     },
     {
       control_id: "PCI-Req-6.2.4",
-      title: "PCI-DSS 4.0: Injection Flaw Prevention",
-      rego_rules: ["PCI-6.2.4.1-SQL-INJECTION"],
+      title: "PCI-DSS 4.0: Software Security & Injection Flaws",
+      rego_rules: [
+        "PCI-6.2.4.1-SQL-INJECTION",
+        "PCI-6.2.4.2-PATH-TRAVERSAL",
+        "PCI-6.2.4.3-CMD-INJECTION",
+        "PCI-3.4.1-WEAK-CRYPTO",
+        "PCI-3.4.2-WEAK-HASH",
+        "PCI-8.3.1-WEAK-RANDOM",
+      ],
     },
     {
       control_id: "OWASP-A03:2021",
-      title: "OWASP Top 10: Injection Flaws",
-      rego_rules: ["A03:2021-CMD-INJECTION"],
+      title: "OWASP Top 10: Injection Flaws & Broken Access",
+      rego_rules: [
+        "A03:2021-SQL-INJECTION",
+        "A03:2021-CMD-INJECTION",
+        "A03:2021-LDAP-INJECTION",
+        "A03:2021-XPATH-INJECTION",
+        "A01:2021-PATH-TRAVERSAL",
+        "A02:2021-WEAK-CRYPTO",
+      ],
     },
     {
       control_id: "NIST-AC-3",
-      title: "NIST SP 800-53: Access Enforcement",
-      rego_rules: ["AC-3-ACCESS-CONTROL"],
+      title: "NIST SP 800-53: Access Enforcement & Audit",
+      rego_rules: [
+        "AC-3-ACCESS-CONTROL",
+        "AU-2-EVENT-LOGGING",
+        "SC-13-CRYPTOGRAPHIC-PROTECTION",
+        "SC-28-PROTECTION-AT-REST",
+      ],
+    },
+    {
+      control_id: "SAST-SARIF-RULES",
+      title: "Universal SAST: Third-Party Finding Rules",
+      rego_rules: [
+        "SEMGREP-CWE-79",
+        "CODEQL-CWE-502",
+        "SONAR-CWE-611",
+        "SEMGREP-CWE-352",
+      ],
     },
   ],
   rules: [
@@ -87,6 +116,15 @@ export const DEMO_POLICY_CATALOG: PolicyCatalogResponse = {
       remediation_tier: "full",
     },
     {
+      rule_id: "ISO-A.10-WEAK-RANDOM",
+      title: "Insecure Random Number Generator",
+      severity: "MEDIUM",
+      cwe: "CWE-330",
+      frameworks: ["ISO 27001"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "full",
+    },
+    {
       rule_id: "ISO-A.8-SQL-INJECTION",
       title: "SQL Injection via Concatenation",
       severity: "CRITICAL",
@@ -105,11 +143,74 @@ export const DEMO_POLICY_CATALOG: PolicyCatalogResponse = {
       remediation_tier: "guarded",
     },
     {
+      rule_id: "ISO-A.9.4.1",
+      title: "Access Control on Public Controller Endpoints",
+      severity: "HIGH",
+      cwe: "CWE-284",
+      frameworks: ["ISO 27001"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
       rule_id: "PCI-6.2.4.1-SQL-INJECTION",
       title: "PCI-DSS 4.0: SQL Injection in Cardholder Store",
       severity: "CRITICAL",
       cwe: "CWE-89",
       frameworks: ["PCI-DSS-4.0"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
+      rule_id: "PCI-6.2.4.2-PATH-TRAVERSAL",
+      title: "PCI-DSS 4.0: Card Statement Path Traversal",
+      severity: "HIGH",
+      cwe: "CWE-22",
+      frameworks: ["PCI-DSS-4.0"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
+      rule_id: "PCI-6.2.4.3-CMD-INJECTION",
+      title: "PCI-DSS 4.0: Payment Batch Command Injection",
+      severity: "CRITICAL",
+      cwe: "CWE-78",
+      frameworks: ["PCI-DSS-4.0"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
+      rule_id: "PCI-3.4.1-WEAK-CRYPTO",
+      title: "PCI-DSS 4.0: Cardholder PAN Encryption with DES",
+      severity: "CRITICAL",
+      cwe: "CWE-327",
+      frameworks: ["PCI-DSS-4.0"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
+      rule_id: "PCI-3.4.2-WEAK-HASH",
+      title: "PCI-DSS 4.0: Deprecated MD5 for Transaction Hash",
+      severity: "HIGH",
+      cwe: "CWE-328",
+      frameworks: ["PCI-DSS-4.0"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "full",
+    },
+    {
+      rule_id: "PCI-8.3.1-WEAK-RANDOM",
+      title: "PCI-DSS 4.0: Non-Cryptographic MFA Code RNG",
+      severity: "HIGH",
+      cwe: "CWE-330",
+      frameworks: ["PCI-DSS-4.0"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "full",
+    },
+    {
+      rule_id: "A03:2021-SQL-INJECTION",
+      title: "OWASP Top 10: Dynamic JDBC Query Injection",
+      severity: "CRITICAL",
+      cwe: "CWE-89",
+      frameworks: ["OWASP-2021"],
       remediation_strategy: "agentic_graph_repair",
       remediation_tier: "guarded",
     },
@@ -123,6 +224,42 @@ export const DEMO_POLICY_CATALOG: PolicyCatalogResponse = {
       remediation_tier: "guarded",
     },
     {
+      rule_id: "A03:2021-LDAP-INJECTION",
+      title: "OWASP Top 10: LDAP Search Filter Injection",
+      severity: "HIGH",
+      cwe: "CWE-90",
+      frameworks: ["OWASP-2021"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
+      rule_id: "A03:2021-XPATH-INJECTION",
+      title: "OWASP Top 10: XPath Query Expression Injection",
+      severity: "HIGH",
+      cwe: "CWE-643",
+      frameworks: ["OWASP-2021"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
+      rule_id: "A01:2021-PATH-TRAVERSAL",
+      title: "OWASP Top 10: Arbitrary File Read via Path Traversal",
+      severity: "HIGH",
+      cwe: "CWE-22",
+      frameworks: ["OWASP-2021"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
+      rule_id: "A02:2021-WEAK-CRYPTO",
+      title: "OWASP Top 10: Deprecated Session Cookie Encryption",
+      severity: "HIGH",
+      cwe: "CWE-327",
+      frameworks: ["OWASP-2021"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "full",
+    },
+    {
       rule_id: "AC-3-ACCESS-CONTROL",
       title: "NIST SP 800-53: Access Enforcement Missing",
       severity: "HIGH",
@@ -132,36 +269,108 @@ export const DEMO_POLICY_CATALOG: PolicyCatalogResponse = {
       remediation_tier: "guarded",
     },
     {
+      rule_id: "AU-2-EVENT-LOGGING",
+      title: "NIST SP 800-53: Event Logging for Sensitive Actions",
+      severity: "MEDIUM",
+      cwe: "CWE-778",
+      frameworks: ["NIST-SP-800-53"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
+      rule_id: "SC-13-CRYPTOGRAPHIC-PROTECTION",
+      title: "NIST SP 800-53: Cryptographic Protection Weakness",
+      severity: "HIGH",
+      cwe: "CWE-328",
+      frameworks: ["NIST-SP-800-53"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "full",
+    },
+    {
+      rule_id: "SC-28-PROTECTION-AT-REST",
+      title: "NIST SP 800-53: Protection of Information at Rest",
+      severity: "HIGH",
+      cwe: "CWE-311",
+      frameworks: ["NIST-SP-800-53"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
       rule_id: "SEMGREP-CWE-79",
-      title: "Universal SAST: Reflected XSS",
+      title: "Universal SAST (Semgrep): Reflected XSS",
       severity: "HIGH",
       cwe: "CWE-79",
       frameworks: ["SAST-SARIF"],
       remediation_strategy: "agentic_graph_repair",
       remediation_tier: "full",
     },
+    {
+      rule_id: "CODEQL-CWE-502",
+      title: "Universal SAST (CodeQL): Insecure Deserialization",
+      severity: "CRITICAL",
+      cwe: "CWE-502",
+      frameworks: ["SAST-SARIF"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
+      rule_id: "SONAR-CWE-611",
+      title: "Universal SAST (SonarQube): XML External Entity (XXE)",
+      severity: "HIGH",
+      cwe: "CWE-611",
+      frameworks: ["SAST-SARIF"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
+    {
+      rule_id: "SEMGREP-CWE-352",
+      title: "Universal SAST (Semgrep): Missing CSRF Protection",
+      severity: "MEDIUM",
+      cwe: "CWE-352",
+      frameworks: ["SAST-SARIF"],
+      remediation_strategy: "agentic_graph_repair",
+      remediation_tier: "guarded",
+    },
   ],
   benchmark_categories: [
     {
       category_id: "crypto-compliance",
       label: "Cryptographic Compliance",
-      cwes: ["CWE-328", "CWE-327"],
-      rego_rule_ids: ["ISO-A.10-WEAK-HASH", "ISO-A.10-WEAK-CRYPTO"],
-      control_ids: ["ISO-A.10.1"],
+      cwes: ["CWE-328", "CWE-327", "CWE-330"],
+      rego_rule_ids: [
+        "ISO-A.10-WEAK-HASH",
+        "ISO-A.10-WEAK-CRYPTO",
+        "ISO-A.10-WEAK-RANDOM",
+        "PCI-3.4.1-WEAK-CRYPTO",
+        "PCI-3.4.2-WEAK-HASH",
+        "PCI-8.3.1-WEAK-RANDOM",
+        "A02:2021-WEAK-CRYPTO",
+        "SC-13-CRYPTOGRAPHIC-PROTECTION",
+      ],
+      control_ids: ["ISO-A.10.1", "PCI-Req-6.2.4", "NIST-AC-3"],
       remediation_tier: "full",
       framework_demo: true,
     },
     {
       category_id: "injection-compliance",
       label: "Injection & Input Validation",
-      cwes: ["CWE-89", "CWE-22", "CWE-78"],
+      cwes: ["CWE-89", "CWE-22", "CWE-78", "CWE-90", "CWE-643", "CWE-79", "CWE-502", "CWE-611"],
       rego_rule_ids: [
         "ISO-A.8-SQL-INJECTION",
         "ISO-A.8-PATH-TRAVERSAL",
         "PCI-6.2.4.1-SQL-INJECTION",
+        "PCI-6.2.4.2-PATH-TRAVERSAL",
+        "PCI-6.2.4.3-CMD-INJECTION",
+        "A03:2021-SQL-INJECTION",
         "A03:2021-CMD-INJECTION",
+        "A03:2021-LDAP-INJECTION",
+        "A03:2021-XPATH-INJECTION",
+        "A01:2021-PATH-TRAVERSAL",
+        "SEMGREP-CWE-79",
+        "CODEQL-CWE-502",
+        "SONAR-CWE-611",
       ],
-      control_ids: ["ISO-A.8.2", "PCI-Req-6.2.4", "OWASP-A03:2021"],
+      control_ids: ["ISO-A.8.2", "PCI-Req-6.2.4", "OWASP-A03:2021", "SAST-SARIF-RULES"],
       remediation_tier: "guarded",
       framework_demo: true,
     },
@@ -169,12 +378,30 @@ export const DEMO_POLICY_CATALOG: PolicyCatalogResponse = {
   framework_demo_rule_ids: [
     "ISO-A.10-WEAK-HASH",
     "ISO-A.10-WEAK-CRYPTO",
+    "ISO-A.10-WEAK-RANDOM",
     "ISO-A.8-SQL-INJECTION",
     "ISO-A.8-PATH-TRAVERSAL",
+    "ISO-A.9.4.1",
     "PCI-6.2.4.1-SQL-INJECTION",
+    "PCI-6.2.4.2-PATH-TRAVERSAL",
+    "PCI-6.2.4.3-CMD-INJECTION",
+    "PCI-3.4.1-WEAK-CRYPTO",
+    "PCI-3.4.2-WEAK-HASH",
+    "PCI-8.3.1-WEAK-RANDOM",
+    "A03:2021-SQL-INJECTION",
     "A03:2021-CMD-INJECTION",
+    "A03:2021-LDAP-INJECTION",
+    "A03:2021-XPATH-INJECTION",
+    "A01:2021-PATH-TRAVERSAL",
+    "A02:2021-WEAK-CRYPTO",
     "AC-3-ACCESS-CONTROL",
+    "AU-2-EVENT-LOGGING",
+    "SC-13-CRYPTOGRAPHIC-PROTECTION",
+    "SC-28-PROTECTION-AT-REST",
     "SEMGREP-CWE-79",
+    "CODEQL-CWE-502",
+    "SONAR-CWE-611",
+    "SEMGREP-CWE-352",
   ],
 };
 
@@ -507,34 +734,39 @@ public ResponseEntity<Void> deleteAccount(@PathVariable Long id) {
     },
   },
   {
-    violation_id: "SEMGREP-CWE-79",
-    rule_id: "SEMGREP-CWE-79",
-    target_method: "com.acme.view.ReportView.render(HttpServletResponse, String)",
-    method_key: "demo@v1:ReportView.java#render",
-    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/view/ReportView.java",
-    severity: "HIGH",
-    reason: "Universal SAST Import (Semgrep): Reflected Cross-Site Scripting (XSS) in HTTP response.",
-    description: "Untrusted user query parameter written unencoded to response output stream (CWE-79 / Semgrep Rule java.xss.response-writer).",
-    code_snippet: `public void render(HttpServletResponse response, String query) throws IOException {
-    response.getWriter().println("<h1>Results for: " + query + "</h1>");
+    violation_id: "ISO-A.10-WEAK-RANDOM",
+    rule_id: "ISO-A.10-WEAK-RANDOM",
+    target_method: "com.acme.security.TokenService.generateSessionToken()",
+    method_key: "demo@v1:TokenService.java#generateSessionToken",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/security/TokenService.java",
+    severity: "MEDIUM",
+    reason: "Insecure java.util.Random used for security-sensitive session token generation.",
+    description: "Standard java.util.Random is linearly predictable and must not be used for cryptographically sensitive values (CWE-330 / ISO A.10).",
+    code_snippet: `public String generateSessionToken() {
+    Random rng = new Random();
+    byte[] token = new byte[32];
+    rng.nextBytes(token);
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(token);
 }`,
-    snippet_start_line: 18,
-    snippet_end_line: 20,
+    snippet_start_line: 22,
+    snippet_end_line: 27,
     control_metadata: {
-      standard: "SAST-SARIF",
-      control: "CWE-79",
-      title: "Universal SAST: Reflected XSS",
-      cwes: ["CWE-79"],
+      standard: "ISO-27001",
+      control: "A.10.1",
+      title: "Cryptographic Protection: Insecure Randomness",
+      cwes: ["CWE-330"],
     },
     evidence: {
-      imported_from_sarif: true,
-      source_code: `public void render(HttpServletResponse response, String query) throws IOException {
-    response.getWriter().println("<h1>Results for: " + query + "</h1>");
+      source_code: `public String generateSessionToken() {
+    Random rng = new Random();
+    byte[] token = new byte[32];
+    rng.nextBytes(token);
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(token);
 }`,
       graph_context: {
-        callers: ["com.acme.controller.SearchController.handleSearch(String)"],
+        callers: ["com.acme.security.SessionManager.createSession(User)"],
       },
-      vector_context: ["com.acme.view.ReportView.renderHeader()"],
+      vector_context: ["com.acme.security.TokenService.validateSessionToken(String)"],
     },
     remediation: {
       supported: true,
@@ -544,8 +776,539 @@ public ResponseEntity<Void> deleteAccount(@PathVariable Long id) {
       preview_available: true,
       verify_available: true,
       ui_apply_mode: "dry_run",
-      rationale: "Autonomous 3-gate agentic repair applies HTML entity encoding via ESAPI or Spring HtmlUtils.",
+      rationale: "Autonomous 3-gate agentic repair replaces Random with java.security.SecureRandom.",
       safe_refusal_possible: false,
+    },
+  },
+  {
+    violation_id: "ISO-A.9.4.1",
+    rule_id: "ISO-A.9.4.1",
+    target_method: "com.acme.controller.UserController.resetPassword(ResetRequest)",
+    method_key: "demo@v1:UserController.java#resetPassword",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/controller/UserController.java",
+    severity: "HIGH",
+    reason: "Public endpoint missing authorization annotation guard.",
+    description: "Controller endpoint executes administrative reset without @PreAuthorize or session guard (CWE-284 / ISO A.9.4.1).",
+    code_snippet: `@PostMapping("/reset-password")
+public ResponseEntity<Void> resetPassword(@RequestBody ResetRequest req) {
+    authService.executeReset(req.getEmail());
+    return ResponseEntity.ok().build();
+}`,
+    snippet_start_line: 52,
+    snippet_end_line: 56,
+    control_metadata: {
+      standard: "ISO-27001",
+      control: "A.9.4.1",
+      title: "Access Control for Applications",
+      cwes: ["CWE-284"],
+    },
+    evidence: {
+      source_code: `@PostMapping("/reset-password")
+public ResponseEntity<Void> resetPassword(@RequestBody ResetRequest req) {
+    authService.executeReset(req.getEmail());
+    return ResponseEntity.ok().build();
+}`,
+      graph_context: {
+        annotations: ["PostMapping"],
+        callers: [],
+      },
+      vector_context: ["com.acme.controller.UserController.updateProfile(ProfileDTO)"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "guarded",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair adds @PreAuthorize and principal validation.",
+      safe_refusal_possible: true,
+    },
+  },
+  {
+    violation_id: "PCI-6.2.4.2-PATH-TRAVERSAL",
+    rule_id: "PCI-6.2.4.2-PATH-TRAVERSAL",
+    target_method: "com.acme.statement.StatementStorage.getStatementPdf(String)",
+    method_key: "demo@v1:StatementStorage.java#getStatementPdf",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/statement/StatementStorage.java",
+    severity: "HIGH",
+    reason: "PCI-DSS 4.0 Req 6.2.4.2: Unsanitized file path parameter in statement retrieval.",
+    description: "Cardholder statement document lookup vulnerable to path traversal (CWE-22 / PCI-DSS 4.0).",
+    code_snippet: `public byte[] getStatementPdf(String filename) throws IOException {
+    File statement = new File("/var/statements/" + filename);
+    return Files.readAllBytes(statement.toPath());
+}`,
+    snippet_start_line: 30,
+    snippet_end_line: 33,
+    control_metadata: {
+      standard: "PCI-DSS-4.0",
+      control: "Req 6.2.4.2",
+      title: "PCI-DSS 4.0: Path Traversal Prevention",
+      cwes: ["CWE-22"],
+    },
+    evidence: {
+      source_code: `public byte[] getStatementPdf(String filename) throws IOException {
+    File statement = new File("/var/statements/" + filename);
+    return Files.readAllBytes(statement.toPath());
+}`,
+      graph_context: {
+        callers: ["com.acme.controller.StatementController.download(String)"],
+      },
+      vector_context: ["com.acme.statement.StatementStorage.saveStatement(byte[])"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "guarded",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair enforces canonical path boundary check.",
+      safe_refusal_possible: true,
+    },
+  },
+  {
+    violation_id: "PCI-3.4.1-WEAK-CRYPTO",
+    rule_id: "PCI-3.4.1-WEAK-CRYPTO",
+    target_method: "com.acme.payment.PANEncryptionService.encryptPAN(String)",
+    method_key: "demo@v1:PANEncryptionService.java#encryptPAN",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/payment/PANEncryptionService.java",
+    severity: "CRITICAL",
+    reason: "PCI-DSS 4.0 Req 3.4.1: Primary Account Number (PAN) encrypted using deprecated 3DES cipher.",
+    description: "Cardholder data encrypted with weak 3DES algorithm prohibited under PCI-DSS 4.0 (CWE-327 / PCI-DSS 4.0).",
+    code_snippet: `public byte[] encryptPAN(String pan) throws Exception {
+    Cipher cipher = Cipher.getInstance("DESede/CBC/PKCS5Padding");
+    cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec);
+    return cipher.doFinal(pan.getBytes(StandardCharsets.UTF_8));
+}`,
+    snippet_start_line: 40,
+    snippet_end_line: 44,
+    control_metadata: {
+      standard: "PCI-DSS-4.0",
+      control: "Req 3.4.1",
+      title: "PCI-DSS 4.0: Strong Cryptography for PAN",
+      cwes: ["CWE-327"],
+    },
+    evidence: {
+      source_code: `public byte[] encryptPAN(String pan) throws Exception {
+    Cipher cipher = Cipher.getInstance("DESede/CBC/PKCS5Padding");
+    cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec);
+    return cipher.doFinal(pan.getBytes(StandardCharsets.UTF_8));
+}`,
+      graph_context: {
+        callers: ["com.acme.payment.CardStorageService.storeCard(CardDTO)"],
+      },
+      vector_context: ["com.acme.payment.PANEncryptionService.decryptPAN(byte[])"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "guarded",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair upgrades 3DES to AES-256 GCM authenticated encryption.",
+      safe_refusal_possible: true,
+    },
+  },
+  {
+    violation_id: "PCI-3.4.2-WEAK-HASH",
+    rule_id: "PCI-3.4.2-WEAK-HASH",
+    target_method: "com.acme.transaction.TransactionVerifier.computeChecksum(Transaction)",
+    method_key: "demo@v1:TransactionVerifier.java#computeChecksum",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/transaction/TransactionVerifier.java",
+    severity: "HIGH",
+    reason: "PCI-DSS 4.0 Req 3.4.2: Deprecated MD5 hash used for payment transaction integrity checksum.",
+    description: "Transaction verification uses MD5 which is vulnerable to preimage attacks (CWE-328 / PCI-DSS 4.0).",
+    code_snippet: `public String computeChecksum(Transaction tx) throws Exception {
+    MessageDigest md = MessageDigest.getInstance("MD5");
+    return Hex.encodeHexString(md.digest(tx.getPayload()));
+}`,
+    snippet_start_line: 18,
+    snippet_end_line: 21,
+    control_metadata: {
+      standard: "PCI-DSS-4.0",
+      control: "Req 3.4.2",
+      title: "PCI-DSS 4.0: Strong One-Way Hash",
+      cwes: ["CWE-328"],
+    },
+    evidence: {
+      source_code: `public String computeChecksum(Transaction tx) throws Exception {
+    MessageDigest md = MessageDigest.getInstance("MD5");
+    return Hex.encodeHexString(md.digest(tx.getPayload()));
+}`,
+      graph_context: {
+        callers: ["com.acme.transaction.TransactionService.verify(Transaction)"],
+      },
+      vector_context: ["com.acme.transaction.TransactionVerifier.validateSignature(Transaction)"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "full",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair replaces MD5 with SHA-256.",
+      safe_refusal_possible: false,
+    },
+  },
+  {
+    violation_id: "PCI-8.3.1-WEAK-RANDOM",
+    rule_id: "PCI-8.3.1-WEAK-RANDOM",
+    target_method: "com.acme.auth.MfaTokenGenerator.generateOtpCode()",
+    method_key: "demo@v1:MfaTokenGenerator.java#generateOtpCode",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/auth/MfaTokenGenerator.java",
+    severity: "HIGH",
+    reason: "PCI-DSS 4.0 Req 8.3.1: Non-cryptographic Math.random used for multi-factor authentication token.",
+    description: "MFA code generated with predictable Math.random() allowing token guessing (CWE-330 / PCI-DSS 4.0).",
+    code_snippet: `public int generateOtpCode() {
+    return 100000 + (int)(Math.random() * 900000);
+}`,
+    snippet_start_line: 12,
+    snippet_end_line: 14,
+    control_metadata: {
+      standard: "PCI-DSS-4.0",
+      control: "Req 8.3.1",
+      title: "PCI-DSS 4.0: Strong Cryptographic RNG for MFA",
+      cwes: ["CWE-330"],
+    },
+    evidence: {
+      source_code: `public int generateOtpCode() {
+    return 100000 + (int)(Math.random() * 900000);
+}`,
+      graph_context: {
+        callers: ["com.acme.auth.MfaService.sendOtp(User)"],
+      },
+      vector_context: ["com.acme.auth.MfaTokenGenerator.verifyOtp(User, int)"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "full",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair replaces Math.random with SecureRandom.",
+      safe_refusal_possible: false,
+    },
+  },
+  {
+    violation_id: "A03:2021-LDAP-INJECTION",
+    rule_id: "A03:2021-LDAP-INJECTION",
+    target_method: "com.acme.directory.LdapAuthenticator.findUser(String)",
+    method_key: "demo@v1:LdapAuthenticator.java#findUser",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/directory/LdapAuthenticator.java",
+    severity: "HIGH",
+    reason: "OWASP A03:2021: Unsanitized user string interpolated into LDAP search filter.",
+    description: "LDAP search filter constructed via concatenation, permitting directory authentication bypass (CWE-90 / OWASP A03).",
+    code_snippet: `public SearchResult findUser(String username) throws NamingException {
+    String filter = "(&(objectClass=user)(sAMAccountName=" + username + "))";
+    return dirContext.search("dc=acme,dc=com", filter, new SearchControls());
+}`,
+    snippet_start_line: 28,
+    snippet_end_line: 31,
+    control_metadata: {
+      standard: "OWASP-2021",
+      control: "A03:2021-Injection",
+      title: "OWASP Top 10: LDAP Search Filter Injection",
+      cwes: ["CWE-90"],
+    },
+    evidence: {
+      source_code: `public SearchResult findUser(String username) throws NamingException {
+    String filter = "(&(objectClass=user)(sAMAccountName=" + username + "))";
+    return dirContext.search("dc=acme,dc=com", filter, new SearchControls());
+}`,
+      graph_context: {
+        callers: ["com.acme.directory.DirectoryService.authenticate(Credentials)"],
+      },
+      vector_context: ["com.acme.directory.LdapAuthenticator.findGroup(String)"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "guarded",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair applies RFC 4515 LDAP filter escaping.",
+      safe_refusal_possible: true,
+    },
+  },
+  {
+    violation_id: "A03:2021-XPATH-INJECTION",
+    rule_id: "A03:2021-XPATH-INJECTION",
+    target_method: "com.acme.xml.XmlReportParser.extractUserNode(String)",
+    method_key: "demo@v1:XmlReportParser.java#extractUserNode",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/xml/XmlReportParser.java",
+    severity: "HIGH",
+    reason: "OWASP A03:2021: Dynamic XPath query concatenated with untrusted user input.",
+    description: "XPath query expression constructed dynamically, allowing extraction of sensitive XML nodes (CWE-643 / OWASP A03).",
+    code_snippet: `public Node extractUserNode(String role) throws XPathExpressionException {
+    String query = "/users/user[@role='" + role + "']";
+    return (Node) xpath.evaluate(query, doc, XPathConstants.NODE);
+}`,
+    snippet_start_line: 20,
+    snippet_end_line: 23,
+    control_metadata: {
+      standard: "OWASP-2021",
+      control: "A03:2021-Injection",
+      title: "OWASP Top 10: XPath Injection",
+      cwes: ["CWE-643"],
+    },
+    evidence: {
+      source_code: `public Node extractUserNode(String role) throws XPathExpressionException {
+    String query = "/users/user[@role='" + role + "']";
+    return (Node) xpath.evaluate(query, doc, XPathConstants.NODE);
+}`,
+      graph_context: {
+        callers: ["com.acme.xml.ReportService.parseUserReport(Document)"],
+      },
+      vector_context: ["com.acme.xml.XmlReportParser.extractConfigNode()"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "guarded",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair binds XPath variables via XPathVariableResolver.",
+      safe_refusal_possible: true,
+    },
+  },
+  {
+    violation_id: "AU-2-EVENT-LOGGING",
+    rule_id: "AU-2-EVENT-LOGGING",
+    target_method: "com.acme.transfer.TransferAuditService.executeTransfer(TransferRequest)",
+    method_key: "demo@v1:TransferAuditService.java#executeTransfer",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/transfer/TransferAuditService.java",
+    severity: "MEDIUM",
+    reason: "NIST SP 800-53 Rev 5 AU-2: Financial transfer transaction missing security event audit log.",
+    description: "Critical state-changing transaction executes without recording audit trail log (CWE-778 / NIST AU-2).",
+    code_snippet: `public TransferResult executeTransfer(TransferRequest req) {
+    accountService.debit(req.getFrom(), req.getAmount());
+    accountService.credit(req.getTo(), req.getAmount());
+    return TransferResult.success();
+}`,
+    snippet_start_line: 35,
+    snippet_end_line: 39,
+    control_metadata: {
+      standard: "NIST-SP-800-53",
+      control: "AU-2",
+      title: "NIST SP 800-53: Event Logging",
+      cwes: ["CWE-778"],
+    },
+    evidence: {
+      source_code: `public TransferResult executeTransfer(TransferRequest req) {
+    accountService.debit(req.getFrom(), req.getAmount());
+    accountService.credit(req.getTo(), req.getAmount());
+    return TransferResult.success();
+}`,
+      graph_context: {
+        callers: ["com.acme.controller.TransferController.processTransfer(TransferRequest)"],
+      },
+      vector_context: ["com.acme.transfer.TransferAuditService.getAuditTrail()"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "guarded",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair adds structured logger.info security audit trail.",
+      safe_refusal_possible: true,
+    },
+  },
+  {
+    violation_id: "SC-13-CRYPTOGRAPHIC-PROTECTION",
+    rule_id: "SC-13-CRYPTOGRAPHIC-PROTECTION",
+    target_method: "com.acme.crypto.SignatureValidator.verifySignature(byte[], byte[])",
+    method_key: "demo@v1:SignatureValidator.java#verifySignature",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/crypto/SignatureValidator.java",
+    severity: "HIGH",
+    reason: "NIST SP 800-53 Rev 5 SC-13: Cryptographic protection using deprecated SHA1withRSA algorithm.",
+    description: "Digital signature verification relies on SHA-1 which is disallowed by federal cryptographic standards (CWE-328 / NIST SC-13).",
+    code_snippet: `public boolean verifySignature(byte[] data, byte[] sig) throws Exception {
+    Signature signature = Signature.getInstance("SHA1withRSA");
+    signature.initVerify(publicKey);
+    signature.update(data);
+    return signature.verify(sig);
+}`,
+    snippet_start_line: 24,
+    snippet_end_line: 29,
+    control_metadata: {
+      standard: "NIST-SP-800-53",
+      control: "SC-13",
+      title: "NIST SP 800-53: Cryptographic Protection",
+      cwes: ["CWE-328"],
+    },
+    evidence: {
+      source_code: `public boolean verifySignature(byte[] data, byte[] sig) throws Exception {
+    Signature signature = Signature.getInstance("SHA1withRSA");
+    signature.initVerify(publicKey);
+    signature.update(data);
+    return signature.verify(sig);
+}`,
+      graph_context: {
+        callers: ["com.acme.service.DocumentSigningService.validate(SignedDoc)"],
+      },
+      vector_context: ["com.acme.crypto.SignatureValidator.signData(byte[])"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "full",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair upgrades SHA1withRSA to SHA256withRSA.",
+      safe_refusal_possible: false,
+    },
+  },
+  {
+    violation_id: "CODEQL-CWE-502",
+    rule_id: "CODEQL-CWE-502",
+    target_method: "com.acme.io.PayloadDeserializer.readPayload(byte[])",
+    method_key: "demo@v1:PayloadDeserializer.java#readPayload",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/io/PayloadDeserializer.java",
+    severity: "CRITICAL",
+    reason: "Universal SAST (CodeQL): Deserialization of untrusted Java ObjectInputStream data.",
+    description: "Raw ObjectInputStream deserialization allows remote code execution via gadget chains (CWE-502 / CodeQL java/unsafe-deserialization).",
+    code_snippet: `public Object readPayload(byte[] bytes) throws Exception {
+    ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes));
+    return ois.readObject();
+}`,
+    snippet_start_line: 16,
+    snippet_end_line: 19,
+    control_metadata: {
+      standard: "SAST-SARIF",
+      control: "CWE-502",
+      title: "Universal SAST: Insecure Deserialization",
+      cwes: ["CWE-502"],
+    },
+    evidence: {
+      imported_from_sarif: true,
+      source_code: `public Object readPayload(byte[] bytes) throws Exception {
+    ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes));
+    return ois.readObject();
+}`,
+      graph_context: {
+        callers: ["com.acme.messaging.QueueListener.onMessage(byte[])"],
+      },
+      vector_context: ["com.acme.io.PayloadDeserializer.writePayload(Object)"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "guarded",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair applies ValidatingObjectInputStream class filtering.",
+      safe_refusal_possible: true,
+    },
+  },
+  {
+    violation_id: "SONAR-CWE-611",
+    rule_id: "SONAR-CWE-611",
+    target_method: "com.acme.config.XmlConfigReader.loadXml(InputStream)",
+    method_key: "demo@v1:XmlConfigReader.java#loadXml",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/config/XmlConfigReader.java",
+    severity: "HIGH",
+    reason: "Universal SAST (SonarQube): XML External Entity (XXE) vulnerability in DocumentBuilderFactory.",
+    description: "DocumentBuilderFactory instantiated without disabling external general entities (CWE-611 / Sonar java:S2755).",
+    code_snippet: `public Document loadXml(InputStream in) throws Exception {
+    DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+    return dbf.newDocumentBuilder().parse(in);
+}`,
+    snippet_start_line: 14,
+    snippet_end_line: 17,
+    control_metadata: {
+      standard: "SAST-SARIF",
+      control: "CWE-611",
+      title: "Universal SAST: XML External Entity (XXE)",
+      cwes: ["CWE-611"],
+    },
+    evidence: {
+      imported_from_sarif: true,
+      source_code: `public Document loadXml(InputStream in) throws Exception {
+    DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+    return dbf.newDocumentBuilder().parse(in);
+}`,
+      graph_context: {
+        callers: ["com.acme.config.AppConfigLoader.init()"],
+      },
+      vector_context: ["com.acme.config.XmlConfigReader.writeXml(Document)"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "guarded",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair sets disallow-doctype-decl and external-general-entities feature flags.",
+      safe_refusal_possible: true,
+    },
+  },
+  {
+    violation_id: "SEMGREP-CWE-352",
+    rule_id: "SEMGREP-CWE-352",
+    target_method: "com.acme.controller.ProfileUpdateController.updateEmail(String)",
+    method_key: "demo@v1:ProfileUpdateController.java#updateEmail",
+    file_path: "/tmp/uploaded_code/app/src/main/java/com/acme/controller/ProfileUpdateController.java",
+    severity: "MEDIUM",
+    reason: "Universal SAST (Semgrep): State-changing POST endpoint missing CSRF token check.",
+    description: "Sensitive account mutation endpoint does not enforce CSRF protection (CWE-352 / Semgrep java.spring.csrf-disabled).",
+    code_snippet: `@PostMapping("/user/update-email")
+public ResponseEntity<Void> updateEmail(@RequestParam String email) {
+    userProfileService.changeEmail(email);
+    return ResponseEntity.ok().build();
+}`,
+    snippet_start_line: 22,
+    snippet_end_line: 26,
+    control_metadata: {
+      standard: "SAST-SARIF",
+      control: "CWE-352",
+      title: "Universal SAST: Cross-Site Request Forgery (CSRF)",
+      cwes: ["CWE-352"],
+    },
+    evidence: {
+      imported_from_sarif: true,
+      source_code: `@PostMapping("/user/update-email")
+public ResponseEntity<Void> updateEmail(@RequestParam String email) {
+    userProfileService.changeEmail(email);
+    return ResponseEntity.ok().build();
+}`,
+      graph_context: {
+        annotations: ["PostMapping"],
+        callers: [],
+      },
+      vector_context: ["com.acme.controller.ProfileUpdateController.getProfile()"],
+    },
+    remediation: {
+      supported: true,
+      support_tier: "guarded",
+      reason_code: "supported_rule_for_auto_fix",
+      strategy: "agentic_graph_repair",
+      preview_available: true,
+      verify_available: true,
+      ui_apply_mode: "dry_run",
+      rationale: "Autonomous 3-gate agentic repair ensures CSRF token requirement.",
+      safe_refusal_possible: true,
     },
   },
 ];
@@ -554,8 +1317,8 @@ export const DEMO_POLICY_EVALUATION: PolicyEvaluateResponse = {
   violations: DEMO_VIOLATIONS,
   evaluation: {
     status: "complete",
-    attempted_bundles: 8,
-    evaluated_bundles: 8,
+    attempted_bundles: DEMO_VIOLATIONS.length,
+    evaluated_bundles: DEMO_VIOLATIONS.length,
     failed_bundles: 0,
     omitted_findings: 0,
     excluded_findings: 0,
@@ -564,14 +1327,16 @@ export const DEMO_POLICY_EVALUATION: PolicyEvaluateResponse = {
     rule_ids: [],
   },
   opa_output: {
-    evaluated_rules: 8,
+    evaluated_rules: DEMO_VIOLATIONS.length,
     passed_rules: 0,
-    violated_rules: 8,
-    execution_time_ms: 18.4,
+    violated_rules: DEMO_VIOLATIONS.length,
+    execution_time_ms: 24.8,
   },
   enriched: DEMO_VIOLATIONS.map((v) => ({
     violation_id: v.violation_id,
-    cwe: v.rule_id === "ISO-A.10-WEAK-HASH" ? "CWE-328" : "CWE-327",
+    cwe: v.control_metadata && Array.isArray((v.control_metadata as Record<string, unknown>).cwes)
+      ? String(((v.control_metadata as Record<string, unknown>).cwes as string[])[0] || "CWE-General")
+      : "CWE-General",
   })),
 };
 
