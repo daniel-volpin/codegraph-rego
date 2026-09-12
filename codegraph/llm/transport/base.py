@@ -14,6 +14,7 @@ class LLMRequest:
     ttl_seconds: int | None = None
     stop: list[str] | str | None = None
     response_format: dict[str, Any] | None = None
+    tools: Sequence[Mapping[str, Any]] | None = None
     raise_on_error: bool = False
 
 
