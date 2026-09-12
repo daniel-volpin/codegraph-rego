@@ -21,6 +21,7 @@ backend-dev: ## Start Neo4j via Docker Compose and run the backend locally
 	@./scripts/start_backend_dev.sh
 
 dev: ## Run the application in development mode (backend + frontend)
+	@node scripts/check_frontend_node_engine.js
 	@echo "Starting development servers..."
 	@backend_pid=''; frontend_pid=''; \
 	trap 'status=$$?; trap - INT TERM EXIT; if [ -n "$$backend_pid" ]; then kill "$$backend_pid" 2>/dev/null || true; fi; if [ -n "$$frontend_pid" ]; then kill "$$frontend_pid" 2>/dev/null || true; fi; wait "$$backend_pid" 2>/dev/null || true; wait "$$frontend_pid" 2>/dev/null || true; exit $$status' INT TERM EXIT; \
