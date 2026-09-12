@@ -90,8 +90,20 @@ jobs:
           chmod +x /usr/local/bin/opa
           opa version
 
+      - name: Install OpenGrep
+        env:
+          OPENGREP_VERSION: v1.30.0
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh \
+            | bash -s -- -v "${OPENGREP_VERSION}"
+          echo "${HOME}/.opengrep/cli/latest" >> "${GITHUB_PATH}"
+          "${HOME}/.opengrep/cli/latest/opengrep" --version
+
       - name: Run policy check
         run: make policy-check
+
+      - name: Run OpenGrep taint rule contract tests
+        run: make opengrep-test
 
       - name: Run backend lint
         run: uvx ruff@0.16.7 check .
@@ -214,6 +226,15 @@ jobs:
           curl -fsSL -o /usr/local/bin/opa "https://github.com/open-policy-agent/opa/releases/download/${OPA_VERSION}/opa_linux_amd64_static"
           chmod +x /usr/local/bin/opa
           opa version
+
+      - name: Install OpenGrep
+        env:
+          OPENGREP_VERSION: v1.30.0
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh \
+            | bash -s -- -v "${OPENGREP_VERSION}"
+          echo "${HOME}/.opengrep/cli/latest" >> "${GITHUB_PATH}"
+          "${HOME}/.opengrep/cli/latest/opengrep" --version
 
       - name: Run backend tests (${{ matrix.name }})
         run: uv run python -m pytest -n auto --dist=loadfile -q ${{ matrix.paths }}
