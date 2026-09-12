@@ -22,8 +22,8 @@ system.
 - **Graph-structured analysis:** represents Java declarations and relationships
   in Neo4j using an Eclipse JDT parser.
 - **Policy as code:** evaluates versioned OPA/Rego rules mapped to ISO-aligned
-  controls, with injection controls backed by real dataflow taint analysis
-  (OpenGrep) rather than lexical pattern matching.
+  controls. Detection engines are pluggable behind a SARIF contract: injection
+  controls use dataflow taint analysis rather than lexical matching.
 - **Grounded explanations:** returns structured `Citation / Why / Fix` output
   backed by source, graph, and retrieval evidence.
 - **Bounded remediation:** supports automatic fixes only where deterministic
@@ -42,7 +42,7 @@ system.
 - Python 3.14+ (the project pins 3.14.7)
 - Node.js 24 LTS and Yarn 1.22+
 - OPA `v1.20.2` (installed into `.venv/bin` by `make install`)
-- OpenGrep `v1.30.0+` on `PATH` (taint analysis for the injection controls;
+- OpenGrep `v1.30.0+` on `PATH` (intra-file taint analysis for the injection controls;
   install with `curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash`)
 - JDK 21+ and Maven
 - Docker Compose, or Podman with a compatible Compose provider
@@ -174,7 +174,8 @@ Further reading:
 - [Frontend/backend contract](./docs/frontend_backend_contract.md)
 - [Architecture roadmap](./docs/architecture/2026-09-11-backend-modernization-roadmap.md)
 - [Artifact and evidence policy](./docs/architecture/artifact-policy.md)
-- [Code property graph analysis boundary](./docs/architecture/2026-09-12-code-property-graph-analysis-boundary.md)
+- [Detection engine plugin contract](./docs/architecture/2026-09-12-detection-engine-plugin-contract.md)
+- [Code property graph evaluation (not adopted)](./docs/architecture/2026-09-13-cpg-engine-evaluation.md)
 
 ## Configuration
 
@@ -187,6 +188,7 @@ CodeGraph loads validated settings through `codegraph.config`. Start from
 | LLM provider | `LLM_API_BASE`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_API_MODE` |
 | Java parser | `JAVA_PARSER_JAR`, `JAVA_PARSER_LANGUAGE_LEVEL` |
 | Taint analysis | `CODEGRAPH_OPENGREP_RULES_DIR`, `CODEGRAPH_OPENGREP_TIMEOUT` |
+| Engine control | `CODEGRAPH_DETECTION_ENGINES_ENABLED` |
 | Concurrency | `POLICY_WORKERS`, `LLM_MAX_CONCURRENT_REQUESTS` |
 | Remediation | `REMEDIATION_CONFIDENCE_THRESHOLD_APPLY`, `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW` |
 | Observability | `OTEL_TRACE_FILE`, `OTEL_EXPORTER_OTLP_ENDPOINT` |
