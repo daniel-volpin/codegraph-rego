@@ -143,8 +143,10 @@ jobs:
         include:
           - name: "policy-java"
             paths: "tests/codegraph/policy tests/codegraph/java"
-          - name: "remediation"
-            paths: "tests/codegraph/remediation"
+          - name: "remediation-runtime"
+            paths: "tests/codegraph/remediation/test_apply_fix.py tests/codegraph/remediation/test_agentic_remediation.py tests/codegraph/remediation/test_orchestration_*.py tests/codegraph/remediation/test_scoped_verification.py tests/codegraph/remediation/test_verification.py tests/codegraph/remediation/test_remediation_flow.py"
+          - name: "remediation-units"
+            paths: "tests/codegraph/remediation/test_repair_intent.py tests/codegraph/remediation/test_generation_parsing.py tests/codegraph/remediation/test_comparison.py tests/codegraph/remediation/test_candidate_overlay.py tests/codegraph/remediation/test_patch_compiler*.py tests/codegraph/remediation/test_file_format_preservation.py tests/codegraph/remediation/test_remediation_confidence.py tests/codegraph/remediation/test_ranking.py tests/codegraph/remediation/test_remediation_editing.py tests/codegraph/remediation/test_dossier.py tests/codegraph/remediation/test_attempts_unit.py tests/codegraph/remediation/test_jdt_remediation_cutover.py"
           - name: "ingestion-eval-llm"
             paths: "tests/codegraph/ingestion tests/codegraph/llm tests/codegraph/evaluation tests/codegraph/common tests/codegraph/app"
           - name: "api-scripts-core"
