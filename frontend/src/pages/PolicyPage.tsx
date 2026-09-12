@@ -6,9 +6,10 @@ import {
   type SortingState,
   useTable,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { evaluatePolicies, exportPolicySarif, fetchPolicyCatalog, importSarifReport } from "../lib/api";
+import { evaluatePolicies, exportPolicySarif, fetchPolicyCatalog, fetchPolicyPacks, importSarifReport } from "../lib/api";
+import { cn } from "../lib/utils";
 import { downloadSarifFile } from "../lib/sarif";
 import type { PolicyCatalogResponse, PolicyEvaluateResponse } from "../lib/types";
 import {
@@ -58,6 +59,7 @@ const PolicyPage = () => {
   const [viewPreset, setViewPreset] = useState<PolicyViewPreset>(initialViewPreset);
   const [uploadedModules, setUploadedModules] = useState<string[]>([]);
   const [moduleFilter, setModuleFilter] = useState<string>("all");
+  const [selectedStandard, setSelectedStandard] = useState<string>("all");
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [isExportingSarif, setIsExportingSarif] = useState<boolean>(false);
   const [isImportingSarif, setIsImportingSarif] = useState<boolean>(false);
@@ -194,10 +196,26 @@ const PolicyPage = () => {
   const effectiveModuleFilter =
     moduleFilter === "all" || availableModules.includes(moduleFilter) ? moduleFilter : "all";
 
-  const filteredFindings = useMemo(
-    () => (effectiveModuleFilter === "all" ? findings : findings.filter((f) => f.module === effectiveModuleFilter)),
-    [effectiveModuleFilter, findings],
-  );
+  const filteredFindings = useMemo(() => {
+    let list = findings;
+    if (effectiveModuleFilter !== "all") {
+      list = list.filter((f) => f.module === effectiveModuleFilter);
+    }
+    if (selectedStandard !== "all") {
+      if (selectedStandard === "sarif") {
+        list = list.filter((f) => f.raw.evidence?.imported_from_sarif);
+      } else {
+        list = list.filter((f) => {
+          const rule = (f.ruleId || "").toLowerCase();
+          const std = selectedStandard.toLowerCase();
+          const rawMeta = (f.raw.control_metadata || {}) as Record<string, unknown>;
+          const rawStd = String(rawMeta.standard || "").toLowerCase();
+          return rule.includes(std) || rawStd.includes(std);
+        });
+      }
+    }
+    return list;
+  }, [effectiveModuleFilter, findings, selectedStandard]);
 
   const effectiveSelectedFindingId =
     selectedFindingId && filteredFindings.some((f) => f.id === selectedFindingId)
@@ -461,6 +479,35 @@ const PolicyPage = () => {
           </p>
         </Card>
       )}
+
+      {/* Compliance Standard & SAST Pack Filter Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+        {[
+          { id: "all", label: "All Standards" },
+          { id: "iso", label: "ISO/IEC 27001" },
+          { id: "pci", label: "PCI-DSS 4.0" },
+          { id: "owasp", label: "OWASP Top 10" },
+          { id: "nist", label: "NIST SP 800-53" },
+          { id: "sarif", label: "External SAST (SARIF)" },
+        ].map((tab) => {
+          const active = selectedStandard === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setSelectedStandard(tab.id)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 font-medium transition-all cursor-pointer whitespace-nowrap text-xs",
+                active
+                  ? "bg-indigo-600 text-white shadow-xs font-semibold"
+                  : "bg-white dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800",
+              )}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
       <SummaryCards {...summary} />
 
