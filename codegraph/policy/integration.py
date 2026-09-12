@@ -10,7 +10,7 @@ from typing import Any
 from codegraph.common.concurrency import bounded_futures
 from codegraph.config import settings
 from codegraph.db import shared_neo4j_driver
-from codegraph.policy.opengrep_bridge import evaluate_opengrep_rules
+from codegraph.policy.engines import dedupe_violations, evaluate_all
 from codegraph.policy.runtime import bundles as runtime_bundles
 from codegraph.policy.runtime import catalog as runtime_catalog
 from codegraph.policy.runtime import opa as runtime_opa
@@ -152,29 +152,33 @@ def _collect_violation_responses(
     return violations, violation_counts_by_id, omitted_findings, excluded_findings
 
 
-def _collect_opengrep_violations(
+def _collect_engine_violations(
     *,
     allowed_rule_ids: set[str],
     violation_counts_by_id: dict[str, int],
     workspace_root: str | None,
 ) -> list[dict[str, Any]]:
-    """Merge findings from every auto-discovered OpenGrep taint rule.
+    """Merge findings from every registered non-OPA detection engine.
 
-    Adding a new OpenGrep-backed rule requires no change here: it is picked
-    up automatically from ``policy/opengrep/`` by `evaluate_opengrep_rules`.
+    Adding an engine or a rule requires no change here: engines come from
+    `codegraph.policy.engines` and each discovers its own rules.
     """
-    try:
-        opengrep_violations = evaluate_opengrep_rules(
-            workspace_root=workspace_root,
-            neo4j_driver=shared_neo4j_driver(),
-            timeout=settings.opengrep_timeout_seconds,
+
+    def _log(engine_name: str, exc: Exception) -> None:
+        LOGGER.error(
+            "%s-backed policy evaluation failed; continuing without its findings.",
+            engine_name,
+            exc_info=exc,
         )
-    except Exception:
-        LOGGER.exception("OpenGrep-backed policy evaluation failed; continuing with OPA-only results.")
-        return []
+
+    engine_violations = evaluate_all(
+        workspace_root=workspace_root,
+        neo4j_driver=shared_neo4j_driver(),
+        on_error=_log,
+    )
 
     accepted: list[dict[str, Any]] = []
-    for violation in opengrep_violations:
+    for violation in dedupe_violations(engine_violations):
         violation_id = violation.get("violation_id")
         if not _is_allowed_rule(violation_id, allowed_rule_ids):
             continue
@@ -221,7 +225,7 @@ def evaluate_policies(
         max_total_violations=max_total_violations,
     )
     violations.extend(
-        _collect_opengrep_violations(
+        _collect_engine_violations(
             allowed_rule_ids=allowed_rule_ids,
             violation_counts_by_id=violation_counts_by_id,
             workspace_root=workspace_root,

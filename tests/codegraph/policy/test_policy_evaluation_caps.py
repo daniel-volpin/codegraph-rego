@@ -25,6 +25,9 @@ def policy_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(integration, "load_iso_rules", lambda: {})
     monkeypatch.setattr(integration, "get_policy_catalog_entries", lambda: [])
     monkeypatch.setattr(runtime_catalog, "resolve_catalog_entry", lambda _violation_id, _catalog: None)
+    # These tests assert OPA aggregation and caps; external engines would add
+    # findings from the real workspace and are exercised in their own suites.
+    monkeypatch.setattr(integration, "_collect_engine_violations", lambda **_kwargs: [])
 
 
 def bundle(target_method: str, *, file_path: str | None = None, source_code: str = "") -> Bundle:

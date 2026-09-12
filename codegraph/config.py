@@ -245,6 +245,14 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("CODEGRAPH_OPENGREP_RULES_DIR", "opengrep_rules_dir"),
         description="Directory of auto-discovered OpenGrep taint-mode rule files.",
     )
+    detection_engines_enabled: bool = Field(
+        True,
+        validation_alias=AliasChoices("CODEGRAPH_DETECTION_ENGINES_ENABLED", "detection_engines_enabled"),
+        description=(
+            "Master switch for non-OPA detection engines. Disabling drops the rules they own, so "
+            "coverage falls: intended for triage and for hermetic tests, not for normal operation."
+        ),
+    )
     policy_workers: int = Field(
         2, ge=1, le=32,
         description="Concurrent evidence/OPA workers per scan; at most twice this many tasks are submitted at once.",

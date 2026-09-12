@@ -28,6 +28,7 @@ from codegraph.llm.client import generate_chat_completion
 from codegraph.llm.schema.remediation import parse_structured_generation_response
 from codegraph.llm.services.remediation_generation_service import RemediationGenerationService
 from codegraph.llm.tasks.remediation import RemediationTaskSpec
+from codegraph.policy.engines import get_engine
 from codegraph.policy.integration import (
     PolicyEvaluator,
     evaluate_bundle,
@@ -35,7 +36,6 @@ from codegraph.policy.integration import (
     load_policy_catalog,
     normalize_violation_payload,
 )
-from codegraph.policy.opengrep_bridge import verify_candidate_source
 from codegraph.remediation.apply_flow import execute_apply_fix
 from codegraph.remediation.capabilities import get_remediation_capability, rule_id_variants
 from codegraph.remediation.confidence import (
@@ -84,10 +84,12 @@ def _verify_non_opa_rule(*, context: dict[str, Any], updated_source: str) -> lis
 
     OPA only evaluates Rego-backed rules, so a rule detected by another engine
     would otherwise come back clean from the OPA recheck and be reported as
-    fixed without ever being re-examined.
+    fixed without ever being re-examined. The engine raises when it cannot run,
+    so an unrunnable recheck fails closed.
     """
     rule_id = str(context.get("rule_id") or "")
-    if evidence_source_for_rule_id(rule_id) != "opengrep":
+    engine = get_engine(evidence_source_for_rule_id(rule_id))
+    if engine is None:
         return []
 
     source_bytes = context.get("source_bytes")
@@ -101,11 +103,10 @@ def _verify_non_opa_rule(*, context: dict[str, Any], updated_source: str) -> lis
         raise RuntimeError("candidate_method_not_found_in_source")
     candidate_file = original_file.replace(original_method, updated_source, 1)
 
-    return verify_candidate_source(
+    return engine.verify_candidate(
         rule_id=rule_id,
         candidate_file_source=candidate_file,
         source_file_name=file_path or "Candidate.java",
-        timeout=settings.opengrep_timeout_seconds,
     )
 
 
