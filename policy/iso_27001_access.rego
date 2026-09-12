@@ -8,11 +8,17 @@ sensitive_keywords := {"delete", "remove", "destroy", "update", "modify", "drop"
 logger_indicators := {"logger", "audit", "tracer"}
 untrusted_input_markers := {"getparameter(", "getheader(", "getquerystring(", "getcookies("}
 
+# Annotations may appear qualified or not: JDT reports the written form, so
+# "@PreAuthorize" and "@org.springframework...PreAuthorize" are both valid and
+# must compare equal. Only the simple name is significant here, so the package
+# prefix is dropped; comparing the written form rejected correct fixes.
 normalized_annotations := {normalized |
 	annotations := input.graph_context.annotations
 	annotations != null
 	ann := annotations[_]
-	normalized := lower(replace(ann, "@", ""))
+	stripped := lower(replace(ann, "@", ""))
+	segments := split(stripped, ".")
+	normalized := segments[count(segments) - 1]
 }
 
 has_endpoint_annotation if {
