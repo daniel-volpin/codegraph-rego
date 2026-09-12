@@ -61,6 +61,29 @@ export const AgenticRemediationSection = ({
           </div>
         </div>
 
+        {agenticResult.verification && typeof agenticResult.verification === "object" && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+              <span className="text-zinc-600 dark:text-zinc-400 font-medium">1. Compilation Gate:</span>
+              <Badge variant={agenticResult.verification.compile_passed ? "success" : "destructive"}>
+                {agenticResult.verification.compile_passed ? "0 Errors" : "Failed"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+              <span className="text-zinc-600 dark:text-zinc-400 font-medium">2. Regression Gate:</span>
+              <Badge variant={agenticResult.verification.tests_passed ? "success" : "destructive"}>
+                {agenticResult.verification.tests_passed ? "100% Pass" : "Regressed"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white p-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+              <span className="text-zinc-600 dark:text-zinc-400 font-medium">3. Policy Clearance:</span>
+              <Badge variant={agenticResult.verification.policy_passed ? "success" : "destructive"}>
+                {agenticResult.verification.policy_passed ? "0 Violations" : "Violated"}
+              </Badge>
+            </div>
+          </div>
+        )}
+
         {agenticResult.modified_files && agenticResult.modified_files.length > 0 && (
           <div className="rounded-lg border border-zinc-200 bg-white p-3 text-xs dark:border-zinc-800 dark:bg-zinc-900">
             <span className="font-semibold text-zinc-700 dark:text-zinc-300">Modified Files:</span>
