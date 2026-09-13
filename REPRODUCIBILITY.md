@@ -70,6 +70,7 @@ The operator-facing variables consumed by `codegraph.config.Settings`, the uploa
 | `LLM_API_MODE` | `auto` | Endpoint mode selection (`auto`, `responses`, `chat_completions`). |
 | `LLM_TIMEOUT_SECONDS` | `180.0` | Per SDK HTTP operation timeout for model calls (not a total agent-run deadline). |
 | `LLM_MAX_CONCURRENT_REQUESTS` | `1` | Process-local cap on active provider SDK/client generation calls, shared by OpenAI-compatible transports. Not global across processes and not a durable run/token budget. |
+| `LLM_PRICE_PER_MILLION` | _empty_ | Per-model rates for run-cost estimation, as `{"model": {"input": 1.25, "output": 10.0}}` per million units. An unpriced model reports units with no cost rather than a cost guessed from a stale published rate. |
 | `LLM_MAX_PENDING_REQUESTS` | `4` | Process-local cap on provider generation calls waiting for admission before client construction. |
 | `LLM_QUEUE_TIMEOUT_SECONDS` | `60.0` | Maximum provider admission queue wait in seconds; separate from `LLM_TIMEOUT_SECONDS`, which applies after SDK/client operation starts. |
 | `LLM_MAX_RETRIES` | `0` | SDK transport retries per generation attempt (allowed range `0..2`). |
@@ -90,6 +91,7 @@ The operator-facing variables consumed by `codegraph.config.Settings`, the uploa
 | `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW` | `0.50` | Threshold for `review` band; below this falls to `abstain`. |
 | `REMEDIATION_CONFIDENCE_TEMPERATURE` | `1.0` | Sigmoid temperature scaling for confidence calibration. |
 | `REMEDIATION_TRACE_PROMPT_ENABLED` | `0` | Persist remediation prompt + trace context for audit. |
+| `CODEGRAPH_INGESTION_WORKERS` | `4` | Parser workers used while extracting a workspace (`1..32`). Each runs its own JDT subprocess and heap, so raise it with `JAVA_PARSER_MAX_CONCURRENT_REQUESTS` and host memory in mind. |
 | `POLICY_WORKERS` | `2` | OPA/evidence workers per scan; bounded submission caps in-flight+queued tasks at `<= 2 * POLICY_WORKERS`. |
 | `UI_REVIEW_STORE_PATH` | `outputs/policy_ui_reviews/reviews.jsonl` | JSONL append target for human review feedback from the UI. |
 | `UPLOAD_MAX_ARCHIVE_SIZE_BYTES` | `104857600` | Max total upload archive size (100 MB). |
