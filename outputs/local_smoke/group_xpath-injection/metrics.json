@@ -1,0 +1,290 @@
+{
+  "generated_at": "2026-09-13T01:42:16.056287+00:00",
+  "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+  "ground_truth_file": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+  "ground_truth_schema": {
+    "format": "csv",
+    "fieldnames": [
+      "# test name",
+      " category",
+      " real vulnerability",
+      " cwe",
+      " Benchmark version: 1.2",
+      " 2016-06-1"
+    ],
+    "normalized_fieldnames": [
+      "testname",
+      "category",
+      "realvulnerability",
+      "cwe",
+      "benchmarkversion:1.2",
+      "2016061"
+    ]
+  },
+  "categories": [
+    {
+      "id": "xpath-injection",
+      "label": "XPath Injection (CWE-643)",
+      "cwes": [
+        "CWE-643"
+      ],
+      "rego_rules": [
+        "ISO-A.8-XPATH-INJECTION"
+      ],
+      "iso_controls": [
+        "A.8"
+      ],
+      "remediation_tier": "guarded",
+      "framework_demo": true
+    }
+  ],
+  "selection": {
+    "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+    "java_relative_root": "src/main/java",
+    "ground_truth_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+    "categories": [
+      "xpath-injection"
+    ],
+    "testcase_ids": [],
+    "max_cases_per_category": null,
+    "seed": 7,
+    "debug_fn_analysis": false,
+    "build_command": "mvn -q -DskipTests -Dspotless.apply.skip=true -Dspotless.check.skip=true compile"
+  },
+  "coverage_by_category": {
+    "crypto-md5": {
+      "available_cases": 246,
+      "selected_cases": 246,
+      "sampled": false
+    },
+    "hash-md5": {
+      "available_cases": 236,
+      "selected_cases": 236,
+      "sampled": false
+    },
+    "rng-insecure": {
+      "available_cases": 493,
+      "selected_cases": 493,
+      "sampled": false
+    },
+    "sql-injection": {
+      "available_cases": 504,
+      "selected_cases": 504,
+      "sampled": false
+    },
+    "path-traversal": {
+      "available_cases": 268,
+      "selected_cases": 268,
+      "sampled": false
+    },
+    "command-injection": {
+      "available_cases": 251,
+      "selected_cases": 251,
+      "sampled": false
+    },
+    "ldap-injection": {
+      "available_cases": 59,
+      "selected_cases": 59,
+      "sampled": false
+    },
+    "xpath-injection": {
+      "available_cases": 35,
+      "selected_cases": 35,
+      "sampled": false
+    }
+  },
+  "metrics": {
+    "xpath-injection": {
+      "tp": 14,
+      "fp": 3,
+      "tn": 17,
+      "fn": 1,
+      "precision": 0.8235,
+      "recall": 0.9333,
+      "f1": 0.875,
+      "support": 35,
+      "precision_ci": {
+        "point": 0.8235294117647058,
+        "ci_low": 0.6111111111111112,
+        "ci_high": 1.0,
+        "n": 35,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "recall_ci": {
+        "point": 0.9333333333333333,
+        "ci_low": 0.7857142857142857,
+        "ci_high": 1.0,
+        "n": 35,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "f1_ci": {
+        "point": 0.8749999999999999,
+        "ci_low": 0.72,
+        "ci_high": 0.972972972972973,
+        "n": 35,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "precision_ci_wilson": {
+        "point": 0.8235294117647058,
+        "ci_low": 0.5897054143116588,
+        "ci_high": 0.9380887336237901,
+        "n": 17,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "recall_ci_wilson": {
+        "point": 0.9333333333333333,
+        "ci_low": 0.7018347012621998,
+        "ci_high": 0.9881331045067315,
+        "n": 15,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "available_cases": 35,
+      "selected_cases": 35,
+      "sampled": false
+    },
+    "overall": {
+      "tp": 14,
+      "fp": 3,
+      "tn": 17,
+      "fn": 1,
+      "precision": 0.8235,
+      "recall": 0.9333,
+      "f1": 0.875,
+      "support": 35,
+      "precision_ci": {
+        "point": 0.8235294117647058,
+        "ci_low": 0.6111111111111112,
+        "ci_high": 1.0,
+        "n": 35,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "recall_ci": {
+        "point": 0.9333333333333333,
+        "ci_low": 0.7857142857142857,
+        "ci_high": 1.0,
+        "n": 35,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "f1_ci": {
+        "point": 0.8749999999999999,
+        "ci_low": 0.72,
+        "ci_high": 0.972972972972973,
+        "n": 35,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "precision_ci_wilson": {
+        "point": 0.8235294117647058,
+        "ci_low": 0.5897054143116588,
+        "ci_high": 0.9380887336237901,
+        "n": 17,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "recall_ci_wilson": {
+        "point": 0.9333333333333333,
+        "ci_low": 0.7018347012621998,
+        "ci_high": 0.9881331045067315,
+        "n": 15,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    }
+  },
+  "violation_count": 35,
+  "sampled_testcases_by_category": {
+    "xpath-injection": [
+      "BenchmarkTest00116",
+      "BenchmarkTest00117",
+      "BenchmarkTest00118",
+      "BenchmarkTest00207",
+      "BenchmarkTest00442",
+      "BenchmarkTest00520",
+      "BenchmarkTest00607",
+      "BenchmarkTest00683",
+      "BenchmarkTest00852",
+      "BenchmarkTest00941",
+      "BenchmarkTest01013",
+      "BenchmarkTest01014",
+      "BenchmarkTest01223",
+      "BenchmarkTest01224",
+      "BenchmarkTest01225",
+      "BenchmarkTest01316",
+      "BenchmarkTest01397",
+      "BenchmarkTest01478",
+      "BenchmarkTest01479",
+      "BenchmarkTest01561",
+      "BenchmarkTest01562",
+      "BenchmarkTest01632",
+      "BenchmarkTest01633",
+      "BenchmarkTest01734",
+      "BenchmarkTest01735",
+      "BenchmarkTest01736",
+      "BenchmarkTest01821",
+      "BenchmarkTest01892",
+      "BenchmarkTest01893",
+      "BenchmarkTest01894",
+      "BenchmarkTest01974",
+      "BenchmarkTest02100",
+      "BenchmarkTest02189",
+      "BenchmarkTest02370",
+      "BenchmarkTest02457"
+    ]
+  },
+  "selected_testcases": [
+    "BenchmarkTest00116",
+    "BenchmarkTest00117",
+    "BenchmarkTest00118",
+    "BenchmarkTest00207",
+    "BenchmarkTest00442",
+    "BenchmarkTest00520",
+    "BenchmarkTest00607",
+    "BenchmarkTest00683",
+    "BenchmarkTest00852",
+    "BenchmarkTest00941",
+    "BenchmarkTest01013",
+    "BenchmarkTest01014",
+    "BenchmarkTest01223",
+    "BenchmarkTest01224",
+    "BenchmarkTest01225",
+    "BenchmarkTest01316",
+    "BenchmarkTest01397",
+    "BenchmarkTest01478",
+    "BenchmarkTest01479",
+    "BenchmarkTest01561",
+    "BenchmarkTest01562",
+    "BenchmarkTest01632",
+    "BenchmarkTest01633",
+    "BenchmarkTest01734",
+    "BenchmarkTest01735",
+    "BenchmarkTest01736",
+    "BenchmarkTest01821",
+    "BenchmarkTest01892",
+    "BenchmarkTest01893",
+    "BenchmarkTest01894",
+    "BenchmarkTest01974",
+    "BenchmarkTest02100",
+    "BenchmarkTest02189",
+    "BenchmarkTest02370",
+    "BenchmarkTest02457"
+  ]
+}

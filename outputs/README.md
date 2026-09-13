@@ -14,23 +14,26 @@ The existing `thesis_final_*` and `_vN` directories keep their names. They are p
 
 | Directory | Holds | Status | Provenance SHA | SHA reachable from |
 | --- | --- | --- | --- | --- |
-| `thesis_final_detection_full_v2/` | detection metrics on the 454-case `multicat_full.json` sample | qualified; does not reproduce on the current baseline | `7ad90a2` | no ref |
-| `thesis_final_explanation_full_v2/` | citation-grounding rates, with and without context | canonical | `701d051` | no ref |
+| `thesis_final_detection_full_v2/` | detection metrics on the 454-case `multicat_full.json` sample | qualified; does not reproduce on the current baseline | `7ad90a2` | tag `thesis-detection-v2-source` |
+| `thesis_final_explanation_full_v2/` | citation-grounding rates, with and without context | canonical | `701d051` | tag `thesis-explanation-v2-source` |
 | `thesis_final_remediation_v2/` | 181 files: per-case JSON plus 25 `.patch` files | superseded; carries no `provenance.json` | none recorded | — |
-| `thesis_final_remediation_v3/` | verified-success rate and confidence calibration | superseded by v4 | `7ad90a2` | no ref |
+| `thesis_final_remediation_v3/` | verified-success rate and confidence calibration | superseded by v4 | `7ad90a2` | tag `thesis-detection-v2-source` |
 | `thesis_final_remediation_v4/` | verified-success rate and confidence calibration | canonical | `80d0084` | tag `thesis-remediation-v4-source` |
+| `local_smoke/detection_composed_final/` | the current detection baseline, merged from the eight `group_*` runs | current; summary files only | none of its own | via `composed_from` |
+| `local_smoke/group_*/` | the eight per-group runs the baseline merges | current; summary and provenance only | `6aa9026`, `dirty: true` | branch `origin/feat/detection-engine-plugin-contract` |
 
-Three of these recorded SHAs are reachable from no ref. This repository squash-merges, so a feature-branch commit never becomes an ancestor of `main`; those objects exist only in a clone that fetched the branch and will not survive a fresh clone. Pin them with tags before publishing.
+This repository squash-merges, so a feature-branch commit never becomes an ancestor of `main`. `7ad90a2` and `701d051` were reachable from no ref at all and are now pinned by `thesis-detection-v2-source` and `thesis-explanation-v2-source`. `6aa9026` is still held only by a feature branch and will disappear if that branch is pruned.
+
+The `local_smoke/` files sit outside the checksum tripwire, which globs `outputs/thesis_final_*`. They are tracked so the current figure has evidence in the repository at all; they are not canonical thesis artifacts, and their provenance records a dirty tree.
 
 `thesis_final_remediation_v2/` is the largest tracked bundle and the only one with no `provenance.json`, so it cannot be cited the way the others are. It is also absent from the canonical-runs list in `docs/thesis_context.md`, while `copilot-context/benchmark.md` still calls it the remediation baseline.
 
 ## Untracked
 
-`.gitignore` ignores `outputs/*` and re-includes only canonical files by explicit negation, so everything below is absent from a clone.
+`.gitignore` ignores `outputs/*` and re-includes tracked files by explicit negation, so everything below is absent from a clone. Under `local_smoke/` that includes each group's `case_outcomes.jsonl`, the per-case record behind the union any-rule Overall row.
 
 | Directory | Holds | Note |
 | --- | --- | --- |
-| `local_smoke/` | the current detection baseline: `detection_composed_final/` and the eight `group_*` runs it composes | cited as evidence by `README.md` and `REPRODUCIBILITY.md`, but not present in the repository |
 | `branch_baseline_recovery/` | local comparison runs | disposable |
 | `test_policy_ui_reviews/` | UI review store fixtures | disposable |
 

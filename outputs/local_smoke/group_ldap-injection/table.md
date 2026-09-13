@@ -1,0 +1,4 @@
+| Category | TP | FP | FN | Precision | Recall | F1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| LDAP Injection (CWE-90) | 24 | 7 | 3 | 0.7742 | 0.8889 | 0.8276 |
+| Overall | 24 | 7 | 3 | 0.7742 | 0.8889 | 0.8276 |
