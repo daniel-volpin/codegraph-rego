@@ -26,6 +26,7 @@ from codegraph.evaluation.io import (
     write_csv,
     write_json,
 )
+from codegraph.llm.usage import usage_snapshot
 
 __all__ = [
     "ATTEMPTED_REMEDIATION_STATUSES",
@@ -321,6 +322,9 @@ def write_final_artifacts(
     *,
     table_format: str,
 ) -> None:
+    # Consumption is recorded beside the metrics so a run's cost is part of its
+    # evidence rather than something to reconstruct from a provider dashboard.
+    write_json(output_dir / "model_usage.json", usage_snapshot())
     write_json(output_dir / "remediation_metrics.json", metrics)
     calibration = metrics.get("confidence_calibration")
     if calibration is not None:

@@ -167,7 +167,8 @@ This file is the canonical, cross-agent operating guide.
 - The recorded `0.9528` detection figure is qualified evidence: it predates
   audit POLICY-C1's removal of the `benchmarktest` corpus fingerprint and does
   not reproduce on the current baseline under its own matched config
-  (measured: `0.838`). Cite it only with the caveat recorded in
+  (measured `0.838` on its own matched config; the current full-corpus
+  figure is `0.8591`). Cite it only with the caveat recorded in
   `docs/thesis_context.md`. **Open task:** the thesis prose still cites the
   unqualified figure and needs correcting; treat that as outstanding until the
   write-up is updated.

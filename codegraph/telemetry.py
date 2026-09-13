@@ -50,8 +50,10 @@ from __future__ import annotations
 import logging
 import os
 
-from opentelemetry import trace
+from opentelemetry import metrics, trace
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
@@ -163,6 +165,8 @@ def configure_telemetry(service_name: str = "codegraph") -> None:
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
 
+    _configure_metrics(otlp_endpoint)
+
     # Auto-instrument outbound HTTP calls made by the OpenAI SDK (uses httpx).
     try:
         HTTPXClientInstrumentor().instrument()
@@ -170,6 +174,34 @@ def configure_telemetry(service_name: str = "codegraph") -> None:
         pass
 
     _initialized = True
+
+
+def _configure_metrics(otlp_endpoint: str | None) -> None:
+    """Install a meter provider so usage metrics have somewhere to go.
+
+    Metrics are opt-in for export: without an OTLP endpoint or an explicit
+    console request, a provider with no reader is installed so instruments work
+    and the in-process ledger still fills, without printing on every call.
+    """
+    readers = []
+    if otlp_endpoint:
+        try:
+            from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (  # noqa: PLC0415
+                OTLPMetricExporter,
+            )
+
+            readers.append(PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True)))
+        except ImportError:
+            logging.getLogger(__name__).debug("OTLP metric exporter unavailable; usage metrics stay in-process")
+    elif os.environ.get("OTEL_METRICS_CONSOLE", "").lower() in ("1", "true", "yes"):
+        readers.append(PeriodicExportingMetricReader(ConsoleMetricExporter()))
+
+    metrics.set_meter_provider(MeterProvider(metric_readers=readers))
+
+
+def get_meter(name: str) -> metrics.Meter:
+    """Return a named meter.  Call ``configure_telemetry`` first."""
+    return metrics.get_meter(name)
 
 
 def get_tracer(name: str) -> trace.Tracer:

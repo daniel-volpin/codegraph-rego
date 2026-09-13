@@ -94,7 +94,8 @@ over-stripping active code**.
   {true, false}`).
 * File-level eval — no Neo4j, no LLM, no graph context — so the run
   is reproducible inside CI and isolates F10's contribution at the
-  pattern layer. The full-pipeline thesis-final numbers (P=R=F1=0.953)
+  pattern layer. The full-pipeline thesis-final numbers (P=R=F1=0.953, qualified evidence
+  that does not reproduce; current full-corpus F1 is 0.8591)
   add graph context and helper summaries on top.
 
 The OWASP eval has two structural roles in the thesis:
@@ -280,7 +281,8 @@ absent from OWASP Benchmark. This is the data-grounded confirmation
 of the synthetic-vs-real gap [4].
 
 The CodeGraph file-level F1 = 0.892 is the *lower bound* for the
-production full-pipeline number (F1 = 0.953); graph context and
+production full-pipeline number (F1 = 0.953, qualified evidence that does
+not reproduce; current full-corpus F1 is 0.8591); graph context and
 helper summaries supply the remaining ~6 F1 points.
 
 The SemGrep low recall on OWASP is **not** evidence that SemGrep is
