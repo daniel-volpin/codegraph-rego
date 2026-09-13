@@ -256,6 +256,68 @@ class PolicyHelperSummaries:
 
 
 @dataclass(frozen=True)
+class PolicyConfigProperty:
+    """A configuration value a method reads, with its declaring location."""
+
+    key: str
+    value: str
+    source_file: str
+    line: int
+    ambiguous: bool = False
+    conflicting_values: tuple[str, ...] = ()
+
+    @classmethod
+    def from_mapping(cls, raw: Mapping[str, Any]) -> PolicyConfigProperty:
+        for required in ("key", "value", "source_file"):
+            if not isinstance(raw.get(required), str):
+                raise TypeError(f"config_context.resolved entries require a string {required}")
+        return cls(
+            key=raw["key"],
+            value=raw["value"],
+            source_file=raw["source_file"],
+            line=int(raw.get("line") or 0),
+            ambiguous=bool(raw.get("ambiguous")),
+            conflicting_values=_normalize_string_list(
+                raw.get("conflicting_values", []), field_name="config_context.conflicting_values"
+            ),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "key": self.key,
+            "value": self.value,
+            "source_file": self.source_file,
+            "line": self.line,
+            "ambiguous": self.ambiguous,
+            "conflicting_values": list(self.conflicting_values),
+        }
+
+
+@dataclass(frozen=True)
+class PolicyConfigContext:
+    resolved: tuple[PolicyConfigProperty, ...] = ()
+
+    @classmethod
+    def from_mapping(cls, raw: Mapping[str, Any]) -> PolicyConfigContext:
+        entries = raw.get("resolved", [])
+        if entries is None:
+            entries = []
+        if not _is_sequence_but_not_string(entries):
+            raise TypeError("config_context.resolved must be a sequence")
+        for item in entries:
+            if not isinstance(item, Mapping):
+                raise TypeError("config_context.resolved entries must be mappings")
+        return cls(resolved=tuple(PolicyConfigProperty.from_mapping(item) for item in entries))
+
+    @classmethod
+    def empty(cls) -> PolicyConfigContext:
+        return cls()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"resolved": [entry.to_dict() for entry in self.resolved]}
+
+
+@dataclass(frozen=True)
 class PolicyBundle:
     target_method: str
     method_key: str | None = None
@@ -268,6 +330,7 @@ class PolicyBundle:
     source_code: str = ""
     source_code_raw: str = ""
     graph_context: PolicyGraphContext = field(default_factory=PolicyGraphContext)
+    config_context: PolicyConfigContext = field(default_factory=PolicyConfigContext.empty)
     vector_context: tuple[str, ...] = ()
     analysis_flags: PolicyAnalysisFlags | None = field(default_factory=PolicyAnalysisFlags.empty)
     helper_summaries: PolicyHelperSummaries = field(default_factory=PolicyHelperSummaries.empty)
@@ -289,6 +352,7 @@ class PolicyBundle:
             "source_code": self.source_code,
             "source_code_raw": self.source_code_raw,
             "graph_context": self.graph_context.to_dict(),
+            "config_context": self.config_context.to_dict(),
             "vector_context": list(self.vector_context),
             "analysis_flags": None if self.analysis_flags is None else self.analysis_flags.to_dict(),
             "helper_summaries": self.helper_summaries.to_dict(),
@@ -331,6 +395,7 @@ def build_policy_bundle(
     source_code: Any = "",
     source_code_raw: Any = "",
     graph_context: Mapping[str, Any] | PolicyGraphContext | None = None,
+    config_context: Mapping[str, Any] | PolicyConfigContext | None = None,
     vector_context: Any = (),
     analysis_flags: Mapping[str, Any] | PolicyAnalysisFlags | None = None,
     helper_summaries: Mapping[str, Any] | PolicyHelperSummaries | None = None,
@@ -349,6 +414,15 @@ def build_policy_bundle(
         normalized_graph_context = PolicyGraphContext.from_mapping(graph_context)
     else:
         raise TypeError("graph_context must be a mapping")
+
+    if config_context is None:
+        normalized_config_context = PolicyConfigContext.empty()
+    elif isinstance(config_context, PolicyConfigContext):
+        normalized_config_context = config_context
+    elif isinstance(config_context, Mapping):
+        normalized_config_context = PolicyConfigContext.from_mapping(config_context)
+    else:
+        raise TypeError("config_context must be a mapping")
 
     if isinstance(analysis_flags, PolicyAnalysisFlags) or analysis_flags is None:
         normalized_analysis_flags = analysis_flags
@@ -378,6 +452,7 @@ def build_policy_bundle(
         source_code="" if source_code is None else str(source_code),
         source_code_raw="" if source_code_raw is None else str(source_code_raw),
         graph_context=normalized_graph_context,
+        config_context=normalized_config_context,
         vector_context=_normalize_string_list(vector_context, field_name="vector_context"),
         analysis_flags=normalized_analysis_flags,
         helper_summaries=normalized_helper_summaries,
@@ -394,6 +469,9 @@ def normalize_policy_bundle_mapping(raw: Mapping[str, Any]) -> PolicyBundle:
     graph_context = raw.get("graph_context", {})
     if graph_context is None or not isinstance(graph_context, Mapping):
         raise TypeError("graph_context must be a mapping")
+    config_context = raw.get("config_context", {})
+    if config_context is None or not isinstance(config_context, Mapping):
+        raise TypeError("config_context must be a mapping")
     analysis_flags = raw.get("analysis_flags", _empty_analysis_flags_dict())
     helper_summaries = raw.get("helper_summaries", {})
     if helper_summaries is None or not isinstance(helper_summaries, Mapping):
@@ -412,6 +490,7 @@ def normalize_policy_bundle_mapping(raw: Mapping[str, Any]) -> PolicyBundle:
         source_code=raw.get("source_code", ""),
         source_code_raw=raw.get("source_code_raw", ""),
         graph_context=graph_context,
+        config_context=config_context,
         vector_context=raw.get("vector_context", []),
         analysis_flags=analysis_flags,
         helper_summaries=helper_summaries,

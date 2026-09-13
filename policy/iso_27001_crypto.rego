@@ -108,6 +108,70 @@ insecure_random if {
 	analysis_insecure_random
 }
 
+weak_hash_algorithms := {"md5", "md2", "md4", "sha", "sha1", "sha-1", "sha0"}
+
+weak_cipher_algorithm_prefixes := {"des", "desede", "rc2", "rc4", "arcfour", "blowfish"}
+
+weak_cipher_modes := {"ecb"}
+
+configured_values contains lower(entry.value) if {
+	resolved := input.config_context.resolved
+	resolved != null
+	entry := resolved[_]
+	entry.value != ""
+}
+
+# A transformation is "algorithm/mode/padding"; either part can be weak.
+configured_weak_cipher if {
+	some value in configured_values
+	parts := split(value, "/")
+	weak_cipher_algorithm_prefixes[parts[0]]
+}
+
+configured_weak_cipher if {
+	some value in configured_values
+	parts := split(value, "/")
+	count(parts) > 1
+	weak_cipher_modes[parts[1]]
+}
+
+configured_weak_hash if {
+	some value in configured_values
+	weak_hash_algorithms[value]
+}
+
+weak_hash_detected if {
+	reads_hash_algorithm
+	configured_weak_hash
+}
+
+weak_cipher_detected if {
+	reads_cipher_algorithm
+	configured_weak_cipher
+}
+
+# Only attribute a configured algorithm to the API that consumes it, so a
+# method that merely reads an unrelated property is not flagged.
+reads_hash_algorithm if {
+	graph_calls_contain("messagedigest")
+}
+
+reads_hash_algorithm if {
+	source_contains("messagedigest.getinstance(")
+}
+
+reads_cipher_algorithm if {
+	graph_calls_contain("cipher")
+}
+
+reads_cipher_algorithm if {
+	source_contains("cipher.getinstance(")
+}
+
+reads_cipher_algorithm if {
+	source_contains("keygenerator.getinstance(")
+}
+
 weak_hash_detected if {
 	calls_md5
 }

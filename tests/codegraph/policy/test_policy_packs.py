@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest import mock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from codegraph.policy.packs import loader
 from codegraph.policy.packs.loader import PolicyPackRegistry
 from codegraph.policy.packs.models import PolicyPackSpec, PolicyRuleDefinition
 
@@ -101,3 +106,72 @@ class TestPolicyPacksApi(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRegistrySingletonUnderConcurrency(unittest.TestCase):
+    """Policy evaluation is thread-pooled, so the lazy singleton must construct once.
+
+    Two registries were being built on first use: threads raced the
+    ``is None`` check, and the loser's instance was discarded. Identical
+    on-disk manifests made that invisible except as duplicated log lines,
+    but a pack registered at runtime on one instance is absent from the other.
+    """
+
+    def setUp(self) -> None:
+        self._saved = loader._GLOBAL_REGISTRY
+        loader._GLOBAL_REGISTRY = None
+
+    def tearDown(self) -> None:
+        loader._GLOBAL_REGISTRY = self._saved
+
+    def test_concurrent_first_use_constructs_one_registry(self) -> None:
+        workers = 16
+        constructed = itertools.count()
+        original_init = loader.PolicyPackRegistry.__init__
+
+        def counting_init(self, *args, **kwargs):
+            next(constructed)
+            original_init(self, *args, **kwargs)
+
+        start = threading.Barrier(workers)
+
+        def worker():
+            start.wait()
+            return loader.get_policy_pack_registry()
+
+        with mock.patch.object(loader.PolicyPackRegistry, "__init__", counting_init):
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                registries = [f.result() for f in [pool.submit(worker) for _ in range(workers)]]
+
+        self.assertEqual(next(constructed), 1, "registry constructed more than once")
+        self.assertEqual(len({id(r) for r in registries}), 1, "threads saw different registries")
+
+    def test_runtime_registration_is_visible_to_every_caller(self) -> None:
+        """The consequence the race would cause, asserted directly."""
+        rule = PolicyRuleDefinition(
+            id="RACE-1.0",
+            control="RACE-A.1",
+            title="Runtime registered rule",
+            summary="",
+            rego_module="race",
+            rego_rule="check",
+        )
+        loader.get_policy_pack_registry().register_pack(
+            PolicyPackSpec(
+                pack_id="race-pack",
+                name="Race Pack",
+                standard="Custom",
+                version="1.0.0",
+                rego_dir=loader.DEFAULT_POLICY_DIR,
+                query_entrypoints=("data.race.violations",),
+                rules=(rule,),
+            )
+        )
+
+        def lookup():
+            return loader.get_policy_pack_registry().get_rule("RACE-1.0")
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            found = [f.result() for f in [pool.submit(lookup) for _ in range(8)]]
+
+        self.assertTrue(all(r is not None for r in found), "a caller lost the runtime-registered pack")

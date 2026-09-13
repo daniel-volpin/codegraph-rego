@@ -47,6 +47,7 @@ class BundleBuilder:
         self.analysis_flags = None
         self.helper_summaries = None
         self.vector_context = []
+        self.config_context = None
         self.start_line = None
         self.end_line = None
 
@@ -83,6 +84,10 @@ class BundleBuilder:
         self.graph_context["annotations"] = list(annotations)
         return self
 
+    def with_config_context(self, *resolved):
+        self.config_context = {"resolved": list(resolved)}
+        return self
+
     def with_vector_context(self, vector_context):
         self.vector_context = vector_context
         return self
@@ -101,6 +106,8 @@ class BundleBuilder:
             "graph_context": self.graph_context,
             "vector_context": self.vector_context,
         }
+        if self.config_context is not None:
+            bundle["config_context"] = self.config_context
         if self.analysis_flags is not None:
             bundle["analysis_flags"] = self.analysis_flags
         if self.helper_summaries is not None:

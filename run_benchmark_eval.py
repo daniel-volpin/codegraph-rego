@@ -58,6 +58,16 @@ def parse_args() -> argparse.Namespace:
         help="Optional working directory to stage benchmark subset",
     )
     parser.add_argument(
+        "--categories",
+        default=None,
+        help=(
+            "Comma-separated category ids to evaluate, restricting this run to one "
+            "policy group. Ingestion then covers only that group's cases, so a "
+            "failure is re-run for that group alone instead of the whole corpus. "
+            "Merge group outputs with compose_benchmark_eval.py."
+        ),
+    )
+    parser.add_argument(
         "--reset-neo4j",
         action="store_true",
         help="Clear Neo4j before ingesting benchmark subset",
@@ -188,6 +198,21 @@ def main() -> int:
         category_id: [rec.testcase_id for rec in records]
         for category_id, records in context.selection.selected_by_category.items()
     }
+    requested_groups = [part.strip() for part in (args.categories or "").split(",") if part.strip()]
+    if requested_groups:
+        unknown = sorted(set(requested_groups) - set(context.categories_by_id))
+        if unknown:
+            LOGGER.error("Unknown category ids: %s", ", ".join(unknown))
+            return 1
+        context.selected_category_ids[:] = [
+            category_id for category_id in context.selected_category_ids if category_id in requested_groups
+        ]
+        sampled_by_category = {
+            category_id: testcases
+            for category_id, testcases in sampled_by_category.items()
+            if category_id in requested_groups
+        }
+        LOGGER.info("Restricted to policy group(s): %s", ", ".join(context.selected_category_ids))
     sampled_union = sorted({tc for tcs in sampled_by_category.values() for tc in tcs})
 
     ground_truth_lookup = {rec.testcase_id: rec.label for rec in context.truth_records}
@@ -307,6 +332,32 @@ def main() -> int:
                     )
 
         all_rules = {rule for spec in context.categories for rule in spec.rego_rules}
+
+        # Per-case fired rules, so composing groups recomputes the union
+        # Overall row exactly rather than summing per-category rows.
+        with (output_dir / "case_outcomes.jsonl").open("w", encoding="utf-8") as handle:
+            for category_id in context.selected_category_ids:
+                for testcase_id in sampled_by_category.get(category_id, []):
+                    if testcase_id not in ground_truth_lookup:
+                        continue
+                    fired = sorted(
+                        {
+                            str(violation.get("violation_id"))
+                            for violation in violations_by_testcase.get(testcase_id, [])
+                            if violation.get("violation_id")
+                        }
+                    )
+                    handle.write(
+                        json.dumps(
+                            {
+                                "testcase_id": testcase_id,
+                                "category_id": category_id,
+                                "label": bool(ground_truth_lookup[testcase_id]),
+                                "violation_ids": fired,
+                            }
+                        )
+                        + "\n"
+                    )
 
     overall = score_category(
         CategorySpec(id="overall", label="Overall", cwes=[], rego_rules=list(all_rules)),

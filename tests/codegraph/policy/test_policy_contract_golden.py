@@ -62,6 +62,7 @@ class TestPolicyContractSerialization(unittest.TestCase):
         self.assertEqual(
             set(bundle.keys()),
             {
+                "config_context",
                 "method_key",
                 "target_method",
                 "method_name",
@@ -217,3 +218,54 @@ class TestPolicyContractGoldenFixtures(unittest.TestCase):
                 expected = set(payload["expected_violation_ids"])
                 self.assertEqual(expected, set(), f"{negative_fixture} must assert an explicit safe outcome")
                 self.assertEqual(_violation_ids(violations), expected)
+
+
+class TestBundleRoundTripPreservesContent(unittest.TestCase):
+    """Envelope serialization must not drop evidence it does not recognise.
+
+    ``normalize_policy_bundle_mapping`` rebuilds a bundle field by field, so a
+    field added to the contract but not to that rebuild is silently discarded.
+    That produced a config-backed rule that fired in isolation and never fired
+    through the real evaluation path, with no error anywhere.
+    """
+
+    def _bundle(self) -> dict:
+        return {
+            "target_method": "org.example.Foo.hash()",
+            "graph_context": {"calls": ["a"], "annotations": ["@GetMapping"]},
+            "config_context": {
+                "resolved": [
+                    {
+                        "key": "hashAlg1",
+                        "value": "MD5",
+                        "source_file": "src/main/resources/benchmark.properties",
+                        "line": 4,
+                    }
+                ]
+            },
+            "helper_summaries": {"safe_constant_return_vars": ["x"]},
+            "vector_context": ["sibling"],
+        }
+
+    def test_config_context_survives_serialization(self) -> None:
+        resolved = serialize_policy_bundle(self._bundle())["config_context"]["resolved"]
+        self.assertEqual([entry["key"] for entry in resolved], ["hashAlg1"])
+        self.assertEqual(resolved[0]["value"], "MD5")
+        self.assertEqual(resolved[0]["line"], 4)
+
+    def test_config_context_survives_the_envelope(self) -> None:
+        from codegraph.policy.runtime.contracts import serialize_policy_input_envelope
+
+        envelope = serialize_policy_input_envelope(
+            bundles=[self._bundle()], rules_catalog={}, catalog=[]
+        )
+        self.assertEqual(
+            envelope["bundles"][0]["config_context"]["resolved"][0]["value"], "MD5"
+        )
+
+    def test_neighbouring_evidence_still_survives(self) -> None:
+        """Guards the same class of loss for the fields that were already there."""
+        bundle = serialize_policy_bundle(self._bundle())
+        self.assertEqual(bundle["graph_context"]["calls"], ["a"])
+        self.assertEqual(bundle["helper_summaries"]["safe_constant_return_vars"], ["x"])
+        self.assertEqual(bundle["vector_context"], ["sibling"])

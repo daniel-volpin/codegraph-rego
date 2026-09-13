@@ -190,17 +190,23 @@ def _validate_rule_module(rule: PolicyRuleSpec) -> None:
         raise ValueError(f"Policy registry rule {rule.id} references a missing module: {rule.rego_module}")
 
 
-def _validate_opengrep_rule(rule: PolicyRuleSpec) -> None:
-    # Local import: keeps the registry loader free of an opengrep_bridge
-    # dependency for the common (opa-only) case.
-    from codegraph.policy.opengrep_bridge import DEFAULT_RULES_DIR, discover_rule_ids  # noqa: PLC0415
+def _validate_engine_rule(rule: PolicyRuleSpec, engine_name: str) -> None:
+    """A rule must exist in the rule set of the engine it names.
 
-    rules_dir = (PROJECT_ROOT / rule.opengrep_rules_dir).resolve() if rule.opengrep_rules_dir else DEFAULT_RULES_DIR
-    discovered = discover_rule_ids(rules_dir)
-    if rule.id not in discovered:
+    Without this a typo, or a rule declared before its definition is written,
+    silently never fires.
+    """
+    # Local import: keeps the registry loader free of engine dependencies for
+    # the common (opa-only) case.
+    from codegraph.policy.engines import get_engine  # noqa: PLC0415
+
+    engine = get_engine(engine_name)
+    if engine is None:
+        raise ValueError(f"Policy registry rule {rule.id} has unknown evidence_source: {engine_name}")
+    if rule.id not in engine.discover_rule_ids():
         raise ValueError(
-            f"Policy registry rule {rule.id} declares evidence_source=opengrep but no rule with that id "
-            f"was found under {rules_dir}."
+            f"Policy registry rule {rule.id} declares evidence_source={engine.name} but no rule with that id "
+            f"was found in that engine's rule set."
         )
 
 
@@ -214,10 +220,8 @@ def _validate_rule(rule: PolicyRuleSpec, *, rule_ids: set[str], alias_ids: set[s
     iso_rule_ids.add(rule.iso_rule_id)
     if rule.evidence_source == "opa":
         _validate_rule_module(rule)
-    elif rule.evidence_source == "opengrep":
-        _validate_opengrep_rule(rule)
     else:
-        raise ValueError(f"Policy registry rule {rule.id} has unknown evidence_source: {rule.evidence_source}")
+        _validate_engine_rule(rule, rule.evidence_source)
 
     for evidence_field in rule.evidence_fields:
         if evidence_field not in EVIDENCE_FIELD_ALIAS_MAP:
@@ -306,10 +310,11 @@ def supported_remediation_rule_ids(path: str | None = None) -> list[str]:
 
 
 def evidence_source_for_rule_id(rule_id: str | None, path: str | None = None) -> str | None:
-    """Return which detection engine owns *rule_id* ("opa"/"opengrep"), or None if unknown.
+    """Return which detection engine owns *rule_id*, or None if unknown.
 
     Callers that must re-verify a finding use this to route the recheck to the
-    engine that produced it; routing to the wrong engine silently finds nothing.
+    engine that produced it; routing to the wrong engine silently finds nothing
+    and would read as "fixed".
     """
     if not rule_id:
         return None

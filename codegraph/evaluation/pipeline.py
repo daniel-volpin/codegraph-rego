@@ -56,11 +56,19 @@ class StagedBenchmarkWorkspace:
     staged_files: dict[str, Path]
 
 
+_GRAPH_DELETE_BATCH_ROWS = 10_000
+
+
 def clear_graph() -> None:
     driver = get_neo4j_driver()
     try:
         with driver.session() as session:
-            session.run("MATCH (n) DETACH DELETE n").consume()
+            # Deleting a full-corpus graph in one transaction exceeds Neo4j's
+            # transaction memory limit, so commit in batches.
+            session.run(
+                "MATCH (n) CALL (n) { DETACH DELETE n } "
+                f"IN TRANSACTIONS OF {_GRAPH_DELETE_BATCH_ROWS} ROWS"
+            ).consume()
     finally:
         driver.close()
 

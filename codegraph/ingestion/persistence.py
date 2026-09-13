@@ -238,6 +238,22 @@ def link_calls_batch(tx, relations: tuple[tuple[str, str, str], ...]) -> None:
     )
 
 
+def create_config_property_batch(tx, config_properties: tuple[dict[str, Any], ...]) -> None:
+    tx.run(
+        """
+        UNWIND $properties AS item
+        MERGE (prop:ConfigProperty {property_key: item.property_key})
+        SET prop.config_key = item.config_key,
+            prop.value = item.value,
+            prop.source_file = item.source_file,
+            prop.line = item.line,
+            prop.workspace_id = item.workspace_id,
+            prop.revision_id = item.revision_id
+        """,
+        properties=list(config_properties),
+    )
+
+
 def create_call_evidence_batch(tx, call_evidence: tuple[dict[str, Any], ...]) -> None:
     tx.run(
         """
@@ -247,6 +263,7 @@ def create_call_evidence_batch(tx, call_evidence: tuple[dict[str, Any], ...]) ->
         SET call.name = item.name,
             call.qualifier = item.qualifier,
             call.argument_count = item.argument_count,
+            call.argument_sources = item.argument_sources,
             call.resolution_status = item.resolution_status,
             call.binding_origin = item.binding_origin,
             call.resolved_binding_key = item.resolved_binding_key,
@@ -369,6 +386,9 @@ def ingest_to_neo4j(
             if structure.call_evidence:
                 for chunk in _chunked(structure.call_evidence, 5000):
                     execute_write_or_raise(session, "unresolved call evidence", create_call_evidence_batch, tuple(chunk))
+            if structure.config_properties:
+                for chunk in _chunked(structure.config_properties, 5000):
+                    execute_write_or_raise(session, "configuration properties", create_config_property_batch, tuple(chunk))
             if structure.method_field_relations:
                 for chunk in _chunked(structure.method_field_relations, 5000):
                     execute_write_or_raise(session, "field usage relations", link_method_field_use_batch, tuple(chunk))

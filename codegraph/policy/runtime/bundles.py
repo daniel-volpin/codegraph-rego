@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,11 @@ from typing import Any
 from codegraph.common.concurrency import bounded_futures
 from codegraph.config import settings
 from codegraph.db import shared_neo4j_driver
+from codegraph.ingestion.config_facts import (
+    ConfigProperty,
+    ResolvedProperty,
+    resolve_properties,
+)
 from codegraph.policy.helper_summaries import DirectCallSummaryBuilder
 from codegraph.policy.runtime.catalog import get_policy_catalog_entries, load_iso_rules
 from codegraph.policy.runtime.contracts import (
@@ -25,6 +31,7 @@ from codegraph.policy.runtime.graph_queries import (
     _snapshot_from_record,
     _sorted_non_empty_strings,
     _sorted_used_fields,
+    fetch_config_properties,
     fetch_method_snapshot,
     fetch_methods_with_context,
     is_test_source_path,
@@ -49,6 +56,7 @@ __all__ = [
     "is_test_source_path",
     "load_hybrid_search",
     "resolve_source_path",
+    "resolve_workspace_config",
     "validate_graph_generation",
 ]
 
@@ -140,6 +148,56 @@ def _graph_context(method_snapshot: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Accessors whose first argument names a configuration key.
+_CONFIG_ACCESSOR_NAMES = frozenset({"getProperty", "getString"})
+
+
+def _string_literal(argument_source: str | None) -> str | None:
+    """The literal's value, or None when the argument is not a string literal."""
+    if not argument_source:
+        return None
+    text = argument_source.strip()
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        return text[1:-1]
+    return None
+
+
+def _config_context(
+    method_snapshot: dict[str, Any],
+    resolved_config: Mapping[str, ResolvedProperty] | None,
+) -> dict[str, Any]:
+    """Configuration values this method reads, with declaring provenance.
+
+    The key comes from the parser's recorded argument literal, not from a
+    source-text search, so a key built at runtime simply does not resolve and
+    the policy stays silent rather than guessing.
+    """
+    if not resolved_config:
+        return {"resolved": []}
+
+    entries: dict[str, dict[str, Any]] = {}
+    for call in method_snapshot.get("call_evidence") or []:
+        if not isinstance(call, dict) or call.get("name") not in _CONFIG_ACCESSOR_NAMES:
+            continue
+        arguments = call.get("argument_sources") or []
+        key = _string_literal(arguments[0]) if arguments else None
+        if key is None or key in entries:
+            continue
+        resolution = resolved_config.get(key)
+        if resolution is None:
+            continue
+        declaration = resolution.sources[0]
+        entries[key] = {
+            "key": key,
+            "value": resolution.value,
+            "source_file": declaration.source_file,
+            "line": declaration.line,
+            "ambiguous": resolution.is_ambiguous,
+            "conflicting_values": list(resolution.conflicting_values),
+        }
+    return {"resolved": [entries[key] for key in sorted(entries)]}
+
+
 def _build_helper_summaries(
     *,
     source_code_active: str,
@@ -195,6 +253,7 @@ def build_evidence_bundle_from_source(
     method_index: dict[str, dict[str, Any]] | None = None,
     bundle_file_path: str | None = None,
     vector_context: list[str] | None = None,
+    resolved_config: Mapping[str, ResolvedProperty] | None = None,
 ) -> dict[str, Any]:
     """Canonical source-text -> policy-input construction.
 
@@ -214,6 +273,7 @@ def build_evidence_bundle_from_source(
         source_code_active, source_code_substring_safe = _source_views(source_code)
 
         graph_context = _graph_context(method_snapshot)
+        config_context = _config_context(method_snapshot, resolved_config)
         analysis_flags = analyze_policy_indicators(source_code_active)
         helper_summaries = _build_helper_summaries(
             source_code_active=source_code_active,
@@ -241,6 +301,7 @@ def build_evidence_bundle_from_source(
             # to set the analysis flags.
             source_code_raw=source_code,
             graph_context=graph_context,
+            config_context=config_context,
             vector_context=vector_context,
             analysis_flags=analysis_flags,
             helper_summaries=helper_summaries,
@@ -272,6 +333,7 @@ def build_evidence_bundle(
     search_service: HybridSearchService | None = None,
     method_index: dict[str, dict[str, Any]] | None = None,
     source_path_override: str | Path | None = None,
+    resolved_config: Mapping[str, ResolvedProperty] | None = None,
 ) -> dict[str, Any]:
     """On-disk variant: extract the method source, then delegate to the core."""
     file_path = method_snapshot.get("file_path")
@@ -284,7 +346,32 @@ def build_evidence_bundle(
         search_service=search_service,
         method_index=method_index,
         bundle_file_path=resolved_path.as_posix() if resolved_path else file_path,
+        resolved_config=resolved_config,
     )
+
+
+def resolve_workspace_config() -> dict[str, ResolvedProperty]:
+    """Configuration facts for the active revision, as the graph recorded them."""
+    try:
+        records = fetch_config_properties(shared_neo4j_driver())
+    except Exception as exc:  # pragma: no cover - graph availability
+        LOGGER.warning("Configuration facts unavailable; config-backed rules stay silent: %s", exc)
+        return {}
+    declarations = [
+        ConfigProperty(
+            key=record["config_key"],
+            value=record.get("value") or "",
+            source_file=record.get("source_file") or "",
+            line=int(record.get("line") or 0),
+        )
+        for record in records
+    ]
+    resolved = resolve_properties(declarations)
+    ambiguous = sorted(key for key, entry in resolved.items() if entry.is_ambiguous)
+    if ambiguous:
+        LOGGER.warning("Configuration keys declared with conflicting values: %s", ", ".join(ambiguous))
+    LOGGER.info("Resolved %d configuration keys for the active revision", len(resolved))
+    return resolved
 
 
 def build_policy_input(
@@ -298,10 +385,16 @@ def build_policy_input(
         workspace_root=workspace_root,
     )
     hybrid_search = load_hybrid_search()
+    resolved_config = resolve_workspace_config()
 
     method_index = {snapshot["method_key"]: snapshot for snapshot in methods if snapshot.get("method_key")}
     bundles: list[dict[str, Any]] = [None] * len(methods)  # type: ignore[list-item]
-    build = partial(build_evidence_bundle, search_service=hybrid_search, method_index=method_index)
+    build = partial(
+        build_evidence_bundle,
+        search_service=hybrid_search,
+        method_index=method_index,
+        resolved_config=resolved_config,
+    )
     for index, future in bounded_futures(build, methods, max_workers=settings.policy_workers):
         bundles[index] = future.result()
 

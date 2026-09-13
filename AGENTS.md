@@ -55,14 +55,35 @@ This file is the canonical, cross-agent operating guide.
 - Keep `policy/catalog.json`, Rego rules, OpenGrep rules, and
   `configs/benchmark/` aligned. Do not silently change control mappings or
   benchmark semantics.
-- Detection is multi-engine and registry-routed. Each rule in
+- Detection engines are plugins, registry-routed. Each rule in
   `configs/benchmark/policy_registry.json` declares `evidence_source`:
   `opa` (Rego module under `policy/`) or `opengrep` (taint rule under
-  `policy/opengrep/`, auto-discovered by `codegraph.policy.opengrep_bridge`
-  and imported through the SARIF bridge). Adding a rule means adding its
-  definition plus a fixture, never new dispatch code. Anything that
-  re-evaluates a finding must route by `evidence_source_for_rule_id`;
-  rechecking with the wrong engine finds nothing and reads as "fixed".
+  `policy/opengrep/`, auto-discovered and imported through the SARIF bridge).
+  Engines are registered once in `codegraph/policy/engines.py`; adding a rule
+  means adding its definition plus a fixture, never new dispatch code.
+  Anything that re-evaluates a finding must route by
+  `evidence_source_for_rule_id`; rechecking with the wrong engine finds
+  nothing and reads as "fixed". A missing engine fails rather than silently
+  reducing coverage. Each engine also costs install weight and CI time, so it
+  must earn its place on measured coverage — see
+  `docs/architecture/2026-09-13-cpg-engine-evaluation.md` for an engine that
+  was measured and rejected, and do not re-add one on intuition.
+- Configuration is evidence, recorded in the graph. Ingestion writes
+  `ConfigProperty` nodes for the analysed workspace; evaluation reads them from
+  the active revision and never from the filesystem, because the analysed
+  workspace is often temporary. A method is linked to a key by the parser's
+  recorded argument literal, never by a source-text search, so an unresolvable
+  key leaves the policy silent. Rego decides which values are unsafe; Python
+  only assembles facts. Conflicting declarations are reported, not resolved.
+  A finding means the configured value is unsafe, not that a deployment is
+  vulnerable. See `docs/architecture/2026-09-13-configuration-facts.md`.
+- Anything that re-evaluates a finding must be able to reproduce the evidence
+  the finding used. A recheck that cannot fails closed and refuses; it never
+  reports "fixed" from evidence it could not see.
+- Detection evaluation runs per policy group (`run_benchmark_eval.py
+  --categories`), and `compose_benchmark_eval.py` merges group outputs. The
+  Overall row is recomputed from per-case fired rules under the union any-rule
+  definition; never sum the per-category rows.
 - Injection controls use dataflow taint analysis, not lexical matching.
   Do not reintroduce substring/co-occurrence heuristics for them: the
   retired Rego versions failed OWASP Benchmark's deliberate
@@ -112,6 +133,8 @@ This file is the canonical, cross-agent operating guide.
   `make policy-fmt` rewrites files. Run `make opengrep-test` for the taint
   rules; every rule under `policy/opengrep/` needs an annotated fixture in
   `tests/fixtures/opengrep/` asserting both a detection and a non-detection.
+- Detection figures are a property of the engine configuration as well as the
+  corpus. State which engines a run used when citing one.
 - Frontend: `cd frontend && yarn lint && yarn test && yarn build`.
   Preserve file isolation and automatic test discovery when optimizing the runner.
 - Exercise the real public path. Mock external boundaries, not both orchestration
@@ -143,8 +166,11 @@ This file is the canonical, cross-agent operating guide.
   graph-based evidence is not full taint analysis or autonomous production repair.
 - The recorded `0.9528` detection figure is qualified evidence: it predates
   audit POLICY-C1's removal of the `benchmarktest` corpus fingerprint and does
-  not reproduce on the current baseline under its own matched config. Cite it
-  only with the caveat recorded in `docs/thesis_context.md`.
+  not reproduce on the current baseline under its own matched config
+  (measured: `0.838`). Cite it only with the caveat recorded in
+  `docs/thesis_context.md`. **Open task:** the thesis prose still cites the
+  unqualified figure and needs correcting; treat that as outstanding until the
+  write-up is updated.
 - Cite benchmark claims with artifact paths and provenance. Report exact evidence
   scope, skipped prerequisites, and remaining unknowns; distinguish wall-clock
   timings from aggregate worker timings and do not sum overlapping test packets.

@@ -14,7 +14,8 @@ revision; runs of this modernized branch are new evidence, not historical reruns
 - OpenGrep `v1.30.0+` on `PATH` (required for the injection controls; without it
   those rules are skipped and detection recall drops silently)
 - JDK 21+ and Maven for the JDT adapter; the analyzed project's build may require its own configured Java release
-- local checkout of `BenchmarkJava`
+- local checkout of `BenchmarkJava` (as a sibling directory `../BenchmarkJava`, or
+  anywhere with `OWASP_BENCHMARK_ROOT` pointing at it)
 - LM Studio, OpenAI, or another OpenAI-compatible LLM endpoint for explanation/remediation runs
 
 ## 2. Environment
@@ -26,7 +27,8 @@ source .venv/bin/activate
 export NEO4J_URI=bolt://127.0.0.1:7687
 export NEO4J_USER=neo4j
 export NEO4J_PASS=your_password
-export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
+# Optional: only needed if BenchmarkJava is not a sibling of this repo.
+# export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
 
 export LLM_API_BASE=http://localhost:1234/v1
 export LLM_API_KEY=lm-studio
@@ -55,11 +57,12 @@ matching defaults — keep it in sync when adding new variables.
 | `NEO4J_URI` | `bolt://127.0.0.1:7687` | Neo4j Bolt endpoint. Required at runtime. |
 | `NEO4J_USER` | `neo4j` | Neo4j auth user. Required. |
 | `NEO4J_PASS` | _unset_ | Neo4j auth password. Required (no default). |
-| `OWASP_BENCHMARK_ROOT` | _unset_ | Absolute path to the local `BenchmarkJava` checkout. Required for benchmark eval scripts. |
+| `OWASP_BENCHMARK_ROOT` | auto-discovered | Absolute path to the local `BenchmarkJava` checkout. Resolved automatically when the clone sits beside this repository (`../BenchmarkJava`), in it, or at `~/BenchmarkJava`; set it only for a non-standard location. |
 | `CODEGRAPH_HOST` | `127.0.0.1` | Bind host for the backend service. Loopback by default for safe local-only operation. |
 | `CODEGRAPH_OPA_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OPA eval subprocesses. |
 | `CODEGRAPH_OPENGREP_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OpenGrep taint subprocesses. |
 | `CODEGRAPH_OPENGREP_RULES_DIR` | `policy/opengrep` | Directory of auto-discovered OpenGrep taint rule files. |
+| `CODEGRAPH_DETECTION_ENGINES_ENABLED` | `true` | Master switch for non-OPA engines. Disabling drops the rules they own, so coverage falls. |
 | `JAVA_PARSER_JAR` | `tools/java-parser/target/codegraph-java-parser.jar` | Explicit path to the Eclipse JDT parser fat jar. Build with `make java-parser-build`; the Python adapter never downloads or builds it at runtime. |
 | `JAVA_PARSER_TIMEOUT_SECONDS` | `30.0` | Per-request deadline for the fresh JVM parser process. |
 | `JAVA_PARSER_HEAP_MB` | `384` | Heap cap passed as `-Xmx` to each parser JVM. |
@@ -133,6 +136,55 @@ uv run python run_remediation_eval.py \
   --sample-size 3 \
   --reset-neo4j
 ```
+
+### Detection evaluation by policy group
+
+A whole-corpus run ingests every category into one graph, so a failure anywhere
+discards the run. Evaluate one group at a time and merge the outputs; a failed
+group is then re-run on its own in seconds rather than re-running 2115 files.
+
+```bash
+for group in hash-md5 crypto-md5 rng-insecure sql-injection \
+             path-traversal command-injection ldap-injection xpath-injection; do
+  uv run python run_benchmark_eval.py \
+    --config configs/benchmark/multicat_all_available.json \
+    --mapping configs/benchmark/policy_registry.json \
+    --categories "$group" \
+    --output-dir "outputs/local_smoke/group_$group" \
+    --reset-neo4j
+done
+
+uv run python compose_benchmark_eval.py \
+  outputs/local_smoke/group_* \
+  --output-dir outputs/local_smoke/detection_composed
+```
+
+Compose recomputes the Overall row from each run's `case_outcomes.jsonl` under
+the union any-rule definition. Never sum the per-category rows: a case selected
+under one category can fire an off-target rule from another. Compose refuses to
+merge groups that disagree about a testcase, which means they came from
+different code or configuration.
+
+Group runs omit cross-file graph edges between categories. That is safe for
+OWASP Benchmark, whose cases are standalone and whose helpers are staged into
+every group, but it is a property of that corpus rather than a general
+guarantee. Verified equivalent on this corpus: run per group, every category
+reproduces the whole-corpus figures exactly.
+
+Current detection baseline, full corpus (2092 cases, all available per
+category, seed 7): precision `0.7966`, recall `0.9324`, F1 `0.8591`
+(`TP/FP/FN = 979/250/71`), artifact
+`outputs/local_smoke/detection_composed_final/`. On the 454-case
+`multicat_full.json` sample the same engines measured F1 `0.838`
+(`207/54/26`, `outputs/local_smoke/detection_matched/`) before
+configuration-backed crypto and hash detection.
+
+A detection figure is a property of the engine configuration as well as the
+corpus, so state which engines a run used, and whether configuration facts were
+available. Crypto and hash controls decide on values declared in the analysed
+workspace's `*.properties` files, so a corpus without them scores those
+categories differently; see
+`docs/architecture/2026-09-13-configuration-facts.md`.
 
 The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/thesis_final_remediation_v4/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier historical runs (`detection_calibration_path_precision_v4`, `repro_supported_medium_branch_benchmarktest01017_fix`) are no longer tracked in the repository.
 

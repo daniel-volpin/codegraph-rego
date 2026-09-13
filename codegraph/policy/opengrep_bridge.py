@@ -21,6 +21,8 @@ from typing import Any
 import yaml
 from neo4j import Driver
 
+from codegraph.config import settings
+from codegraph.policy.runtime.graph_queries import fetch_active_revision_file_paths
 from codegraph.policy.sarif_import import import_findings_from_sarif
 
 LOGGER = logging.getLogger(__name__)
@@ -50,28 +52,12 @@ def discover_rule_ids(rules_dir: Path = DEFAULT_RULES_DIR) -> set[str]:
     return rule_ids
 
 
-def _active_revision_file_paths(driver: Driver, *, workspace_root: str | None) -> list[str]:
-    with driver.session() as session:
-        records = session.run(
-            """
-            MATCH (aw:ActiveWorkspace)-[:ACTIVE_REVISION]->(wr:WorkspaceRevision)
-            MATCH (m:Method {workspace_id: wr.workspace_id, revision_id: wr.revision_id})
-            WHERE wr.schema_version = 'codegraph-jdt/v1'
-              AND m.file_path IS NOT NULL
-              AND ($workspace_root IS NULL OR m.file_path STARTS WITH $workspace_root)
-            RETURN DISTINCT m.file_path AS file_path
-            """,
-            workspace_root=workspace_root,
-        )
-        return [record["file_path"] for record in records if record["file_path"]]
-
-
 def run_opengrep_scan(
     file_paths: list[str],
     *,
     rules_dir: Path = DEFAULT_RULES_DIR,
     binary: str = "opengrep",
-    timeout: float = 120.0,
+    timeout: float | None = None,
 ) -> dict[str, Any] | None:
     """Run OpenGrep taint-mode over *file_paths*, returning the parsed SARIF document."""
     if not shutil.which(binary):
@@ -79,6 +65,7 @@ def run_opengrep_scan(
         return None
     if not file_paths:
         return None
+    effective_timeout = settings.opengrep_timeout_seconds if timeout is None else timeout
 
     with tempfile.NamedTemporaryFile(suffix=".sarif.json", delete=False) as handle:
         sarif_path = Path(handle.name)
@@ -100,7 +87,7 @@ def run_opengrep_scan(
             cmd,
             capture_output=True,
             text=True,
-            timeout=timeout,
+            timeout=effective_timeout,
             check=False,
         )
         if result.returncode not in (0, 1):  # 1 == findings present, still success
@@ -122,7 +109,7 @@ def verify_candidate_source(
     candidate_file_source: str,
     source_file_name: str,
     rules_dir: Path = DEFAULT_RULES_DIR,
-    timeout: float = 120.0,
+    timeout: float | None = None,
 ) -> list[dict[str, Any]]:
     """Re-run OpenGrep over a candidate compilation unit and return findings for *rule_id*.
 
@@ -156,13 +143,13 @@ def evaluate_opengrep_rules(
     workspace_root: str | None,
     neo4j_driver: Driver,
     rules_dir: Path = DEFAULT_RULES_DIR,
-    timeout: float = 120.0,
+    timeout: float | None = None,
 ) -> list[dict[str, Any]]:
     """Run every discovered OpenGrep rule and return violations in the same shape as OPA-native ones."""
     if not discover_rule_files(rules_dir):
         return []
 
-    file_paths = _active_revision_file_paths(neo4j_driver, workspace_root=workspace_root)
+    file_paths = fetch_active_revision_file_paths(neo4j_driver, workspace_root=workspace_root)
     sarif_doc = run_opengrep_scan(file_paths, rules_dir=rules_dir, timeout=timeout)
     if not sarif_doc:
         return []

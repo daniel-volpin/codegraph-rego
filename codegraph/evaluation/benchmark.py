@@ -88,10 +88,53 @@ def _parse_truth(value: str | None) -> bool | None:
     return None
 
 
+_BENCHMARK_ROOT_VAR = "OWASP_BENCHMARK_ROOT"
+_BENCHMARK_ROOT_MARKER = "expectedresults-1.2.csv"
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _discover_benchmark_root() -> Path | None:
+    """Locate a BenchmarkJava checkout in the conventional places.
+
+    The corpus is a separate clone, so requiring every user to export a path
+    makes the evaluation scripts fail for anyone who follows the README
+    literally. A checkout is identified by its ground-truth file rather than
+    by name, so an arbitrary directory is never mistaken for the corpus.
+    """
+    candidates = (
+        _PROJECT_ROOT.parent / "BenchmarkJava",
+        _PROJECT_ROOT / "BenchmarkJava",
+        Path.home() / "BenchmarkJava",
+    )
+    return next((c for c in candidates if (c / _BENCHMARK_ROOT_MARKER).is_file()), None)
+
+
+def ensure_benchmark_root_env() -> str | None:
+    """Populate the benchmark-root variable from a discovered checkout if unset."""
+    configured = os.environ.get(_BENCHMARK_ROOT_VAR)
+    if configured:
+        return configured
+    discovered = _discover_benchmark_root()
+    if discovered is None:
+        return None
+    LOGGER.info("Using discovered OWASP Benchmark checkout at %s", discovered)
+    os.environ[_BENCHMARK_ROOT_VAR] = str(discovered)
+    return str(discovered)
+
+
 def _expand_env_path(value: str | None) -> str | None:
     if value is None:
         return None
-    return os.path.expandvars(value)
+    expanded = os.path.expandvars(value)
+    # expandvars leaves an unset variable literal, which would surface later as
+    # a confusing "no such directory: ${VAR}/..." instead of a clear cause.
+    if "$" in expanded:
+        raise ValueError(
+            f"Could not resolve {value!r}: {_BENCHMARK_ROOT_VAR} is not set and no BenchmarkJava "
+            f"checkout was found next to the repository. Clone it as a sibling directory "
+            f"(../BenchmarkJava) or export {_BENCHMARK_ROOT_VAR}=/path/to/BenchmarkJava."
+        )
+    return expanded
 
 
 def load_mapping_config(path: Path) -> list[CategorySpec]:
@@ -123,6 +166,7 @@ def load_mapping_config(path: Path) -> list[CategorySpec]:
 
 
 def load_selection_config(path: Path) -> dict[str, Any]:
+    ensure_benchmark_root_env()
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     if not isinstance(payload, dict) or "benchmark_root" not in payload:

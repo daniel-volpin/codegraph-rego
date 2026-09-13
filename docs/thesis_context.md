@@ -167,15 +167,47 @@ Canonical thesis runs:
   | Engine | Precision | Recall | F1 |
   | --- | --- | --- | --- |
   | Rego lexical heuristics (pre-OpenGrep `main`) | 0.712 | 0.901 | 0.795 |
-  | OpenGrep taint analysis (current) | 0.793 | 0.888 | 0.838 |
+  | OpenGrep taint analysis | 0.793 | 0.888 | 0.838 |
   | Recorded detection v2 (SHA `7ad90a2`) | 0.953 | 0.953 | 0.953 |
 
-  Crypto and hash reproduce bit-identically across all three, which
-  pins the harness and sample; the divergence is confined to the
-  taint-dependent controls. For external context, published OWASP
+  Crypto and hash reproduced bit-identically across all three rows,
+  which pinned the harness and sample and confined the divergence to
+  the taint-dependent controls. That no longer holds after
+  configuration-backed detection: those two categories now decide on
+  the algorithm declared in the workspace's properties files and reach
+  `1.000` on both, so they are no longer the invariant control. The
+  taint-dependent controls have taken that role, reproducing exactly
+  across the configuration change. For external context, published OWASP
   Benchmark v1.2 figures put CodeQL near `0.744` F1 and Semgrep near
   `0.694`, so treat any result materially above that range as requiring
   construct-validity scrutiny rather than as a target.
+- detection, configuration-backed (current):
+  `outputs/local_smoke/detection_composed_final/`, full corpus of 2092
+  cases composed from eight per-group runs: precision `0.7966`, recall
+  `0.9324`, F1 `0.8591` (`TP/FP/FN = 979/250/71`). Crypto (CWE-327) and
+  hash (CWE-328) reach precision, recall and F1 of `1.000`
+  (`130/0/0` and `129/0/0`); every other category reproduces its prior
+  figures exactly, and false positives do not increase.
+
+  All 73 crypto and hash false negatives in the preceding baseline
+  selected their algorithm from a properties file rather than a
+  literal, so they were unreachable by API or alias patterns. The
+  in-source defaults mislead in both directions, and deciding on them
+  would have produced 40 false negatives and 27 false positives at
+  once. See `docs/architecture/2026-09-13-configuration-facts.md`.
+
+  Two claim limits belong with this figure. First, it means **the
+  configured value is unsafe**, not that a deployed system is
+  vulnerable: environment variables, system properties and profile
+  overlays can override a declared value at runtime. Second, the
+  per-category gain (+73 true positives) exceeds the Overall gain
+  (+48) because the Overall row is union any-rule, so 25 recovered
+  cases were already counted through an off-target rule from another
+  family; do not add the category rows.
+
+  These controls are detection-only. A remediation recheck cannot
+  reproduce configuration evidence from a virtual candidate snapshot,
+  so it refuses rather than reporting a candidate as fixed.
 - explanation v2: `outputs/thesis_final_explanation_full_v2/`,
   provenance SHA `701d051`, `Citation@TP=1.000` (`222/222`),
   `Citation@TP@NoContext=0.009` (`2/222`), `Citation@FP=1.000`

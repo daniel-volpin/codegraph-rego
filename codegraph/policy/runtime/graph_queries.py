@@ -207,6 +207,49 @@ def validate_graph_generation(driver, *, workspace_root: str | None = None) -> d
     }
 
 
+def fetch_active_revision_file_paths(driver, *, workspace_root: str | None = None) -> list[str]:
+    """Source files belonging to the active graph revision.
+
+    Detection engines analyse what was actually ingested, which the graph
+    records; deriving it from configuration instead would silently analyse a
+    stale directory.
+    """
+    with driver.session() as session:
+        records = session.run(
+            """
+            MATCH (aw:ActiveWorkspace)-[:ACTIVE_REVISION]->(wr:WorkspaceRevision)
+            MATCH (m:Method {workspace_id: wr.workspace_id, revision_id: wr.revision_id})
+            WHERE wr.schema_version = 'codegraph-jdt/v1'
+              AND m.file_path IS NOT NULL
+              AND ($workspace_root IS NULL OR m.file_path STARTS WITH $workspace_root)
+            RETURN DISTINCT m.file_path AS file_path
+            """,
+            workspace_root=workspace_root,
+        )
+        return [record["file_path"] for record in records if record["file_path"]]
+
+
+def fetch_config_properties(driver) -> list[dict[str, Any]]:
+    """Configuration declarations recorded for the active graph revision.
+
+    Read from the graph rather than the filesystem: the analysed workspace can
+    be temporary and already removed by the time policies are evaluated.
+    """
+    with driver.session() as session:
+        records = session.run(
+            """
+            MATCH (aw:ActiveWorkspace)-[:ACTIVE_REVISION]->(wr:WorkspaceRevision)
+            MATCH (prop:ConfigProperty {workspace_id: wr.workspace_id, revision_id: wr.revision_id})
+            RETURN prop.config_key AS config_key,
+                   prop.value AS value,
+                   prop.source_file AS source_file,
+                   prop.line AS line
+            ORDER BY source_file, line
+            """
+        )
+        return [dict(record) for record in records if record["config_key"]]
+
+
 def fetch_methods_with_context(
     driver,
     *,

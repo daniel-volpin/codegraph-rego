@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 
 from codegraph.benchmark_registry import load_policy_registry
@@ -147,11 +148,16 @@ class PolicyPackRegistry:
 
 
 _GLOBAL_REGISTRY: PolicyPackRegistry | None = None
+_REGISTRY_LOCK = threading.Lock()
 
 
 def get_policy_pack_registry() -> PolicyPackRegistry:
     """Return the process-wide singleton policy pack registry."""
     global _GLOBAL_REGISTRY
     if _GLOBAL_REGISTRY is None:
-        _GLOBAL_REGISTRY = PolicyPackRegistry()
+        # Policy evaluation is thread-pooled, so construction must happen once:
+        # a second instance would be discarded and lose runtime pack registrations.
+        with _REGISTRY_LOCK:
+            if _GLOBAL_REGISTRY is None:
+                _GLOBAL_REGISTRY = PolicyPackRegistry()
     return _GLOBAL_REGISTRY
