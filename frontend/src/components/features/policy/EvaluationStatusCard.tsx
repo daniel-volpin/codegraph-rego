@@ -67,7 +67,7 @@ export const EvaluationStatusCard = ({
       role="status"
       aria-label="Policy evaluation status"
       aria-live={isFetching ? "polite" : "off"}
-      className={`p-3.5 text-xs shadow-2xs ${config.tone}`}
+      className={`p-3.5 text-xs shadow-2xs backdrop-blur-xs transition-all duration-200 ${config.tone}`}
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">{config.icon}</div>
