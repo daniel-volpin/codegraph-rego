@@ -93,6 +93,10 @@ Schema v2 records repository- and corpus-relative paths where possible and other
 
 Cite the artifact directory **plus the SHA recorded in `provenance.json`** when referring to canonical numbers. v1 numbers are addressable via the `thesis-evidence-2026-05-31` git tag.
 
+A composed detection directory carries no `provenance.json` of its own. `compose_benchmark_eval.py` records `composed_from` in `metrics.json`, and each per-group directory it names carries the provenance; cite those. For `outputs/local_smoke/detection_composed_final/` the eight group runs all record SHA `6aa9026` with `dirty: true` (modified `policy/iso_27001_crypto.rego` and `run_benchmark_eval.py`, untracked `codegraph/ingestion/config_facts.py` and `compose_benchmark_eval.py`), so the current figure is reproducible by command but is not pinned to a clean commit.
+
+Recorded SHAs are feature-branch commits and this repository squash-merges, so none of them is an ancestor of `main`. `80d0084` (remediation v4) is held by the `thesis-remediation-v4-source` tag and `6aa9026` by `origin/feat/detection-engine-plugin-contract`, but `7ad90a2` (detection v2, remediation v3) and `701d051` (explanation v2) are reachable from no ref at all and will not survive a fresh clone. Pin them before publishing.
+
 Canonical thesis outputs that are intentionally versioned under `outputs/thesis_final_*` are protected by `outputs/canonical_manifest.sha256`. If a metric-affecting rerun is deliberate, regenerate the manifest with `scripts/evaluation/generate_canonical_manifest.py` and commit the updated artifacts and manifest together. Do not update the manifest for incidental local reruns.
 
 Canonical thesis runs:
