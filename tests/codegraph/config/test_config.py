@@ -82,7 +82,7 @@ class TestConfigSettings(unittest.TestCase):
             Settings(_env_file=None, java_parser_max_concurrent_requests=0)
 
         with self.assertRaises(ValidationError):
-            Settings(_env_file=None, java_parser_max_concurrent_requests=3)
+            Settings(_env_file=None, java_parser_max_concurrent_requests=33)
 
         with self.assertRaises(ValidationError):
             Settings(_env_file=None, java_parser_queue_timeout_seconds=0)
@@ -110,7 +110,7 @@ class TestConfigSettings(unittest.TestCase):
         self.assertEqual(settings.java_parser_jar, PROJECT_ROOT / "tools/java-parser/target/codegraph-java-parser.jar")
         self.assertEqual(settings.java_parser_timeout_seconds, 30.0)
         self.assertEqual(settings.java_parser_heap_mb, 384)
-        self.assertEqual(settings.java_parser_max_concurrent_requests, 1)
+        self.assertEqual(settings.java_parser_max_concurrent_requests, 4)
         self.assertEqual(settings.java_parser_queue_timeout_seconds, 5.0)
         self.assertEqual(settings.java_parser_max_source_bytes, 4 * 1024 * 1024)
         self.assertEqual(settings.java_parser_max_output_bytes, 16 * 1024 * 1024)
