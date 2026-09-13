@@ -85,7 +85,7 @@ const Layout = ({ children }: PropsWithChildren) => {
       <div className="lg:grid lg:min-h-screen lg:grid-cols-[18rem_1fr]">
         <SidebarNav className="hidden lg:flex" />
         <div className="p-4 sm:p-6 xl:p-8 min-w-0">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white px-4 py-2.5 shadow-subtle">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/90 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/90 px-4 py-2.5 backdrop-blur-md shadow-xs transition-all duration-200">
             <div className="min-w-0">
               <Breadcrumbs />
             </div>

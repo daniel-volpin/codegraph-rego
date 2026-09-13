@@ -130,6 +130,7 @@ const HealthStatus = () => {
         }}
         className={`flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 shadow-2xs [&::-webkit-details-marker]:hidden ${summaryTone}`}
       >
+        <span aria-hidden="true" className={`h-2 w-2 rounded-full shrink-0 motion-reduce:animate-none ${overall === "healthy" ? "bg-emerald-500 animate-pulse" : overall === "degraded" ? "bg-amber-500 animate-pulse" : "bg-rose-500 animate-pulse"}`} />
         <SummaryIcon aria-hidden="true" className="h-3.5 w-3.5" />
         {summaryLabel}
         <ChevronDown
