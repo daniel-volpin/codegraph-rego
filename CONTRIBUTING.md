@@ -82,5 +82,4 @@ git diff --check
 - **Include Tests**: Add regression or unit tests for any bug fix or clean-up.
 - **Clear Commit Messages**: Use clear conventional commit prefixes (e.g., `feat:`, `fix:`, `docs:`, `chore:`, `test:`).
 
-Release versioning and publication requirements are documented in
-[`docs/release_policy.md`](./docs/release_policy.md).
+Release versioning and publication requirements are documented in [`docs/release_policy.md`](./docs/release_policy.md).

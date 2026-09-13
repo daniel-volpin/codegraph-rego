@@ -65,8 +65,7 @@ frontend/
 
 ### Data and state architecture
 - **Wire validation:** every API response is parsed through a Zod schema. The
-  unified `parseApiResponse` accepts structured-error envelopes on 4xx, rejects
-  schema drift on 2xx (caught by the route-level ErrorBoundary).
+  unified `parseApiResponse` accepts structured-error envelopes on 4xx, rejects schema drift on 2xx (caught by the route-level ErrorBoundary).
 - **Server state:** TanStack Query, with one cache key per resource id
   (`["policy", "explain", id]`, etc.). Mutations carry per-call `AbortController`s.
 - **Client state:** Zustand stores with shallow-selector reads (see
@@ -74,17 +73,10 @@ frontend/
 - **Routing:** React Router v7 with `lazy()` route splitting and a shared
   Suspense/ErrorBoundary at the route root.
 - **A11y primitives:** Radix Dialog/Switch for WCAG-correct focus, scroll lock,
-  and keyboard handling. `@axe-core/react` runs in dev. Playwright + axe-core
-  cover e2e a11y.
+  and keyboard handling. `@axe-core/react` runs in dev. Playwright + axe-core cover e2e a11y.
 - **Observability:** `reportError` / `reportMetric` (with Web Vitals: LCP, INP,
-  CLS, FCP, TTFB) dispatch `codegraph:error` / `codegraph:metric` window events
-  for a future telemetry sink to subscribe.
+  CLS, FCP, TTFB) dispatch `codegraph:error` / `codegraph:metric` window events for a future telemetry sink to subscribe.
 - **Distributed tracing:** `lib/tracing.ts` configures a `WebTracerProvider`
-  with a `ZoneContextManager`. `FetchInstrumentation` injects a `traceparent`
-  header into every API-origin request (scoped via `getRuntimeApiBase`) so
-  the FastAPI `FastAPIInstrumentor` chains spans server-side. Console
-  exporter by default; OTLP/HTTP when `VITE_OTEL_EXPORTER_OTLP_ENDPOINT` is
-  set. Dynamically imported at boot (~31 kB gz, separate chunk).
+  with a `ZoneContextManager`. `FetchInstrumentation` injects a `traceparent` header into every API-origin request (scoped via `getRuntimeApiBase`) so the FastAPI `FastAPIInstrumentor` chains spans server-side. Console exporter by default; OTLP/HTTP when `VITE_OTEL_EXPORTER_OTLP_ENDPOINT` is set. Dynamically imported at boot (~31 kB gz, separate chunk).
 - **Live observability surface:** the `/settings` page surfaces the
-  resolved tracing state (on/disabled, exporter target) so you can see at
-  a glance whether traceparent is being injected.
+  resolved tracing state (on/disabled, exporter target) so you can see at a glance whether traceparent is being injected.
