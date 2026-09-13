@@ -24,7 +24,7 @@ from codegraph.evaluation.pipeline import (
     collect_category_violations,
 )
 
-_SCRIPT_PATH = pathlib.Path(__file__).resolve().parents[3] / "run_benchmark_eval.py"
+_SCRIPT_PATH = pathlib.Path(__file__).resolve().parents[3] / "scripts" / "evaluation" / "run_benchmark_eval.py"
 _spec = importlib.util.spec_from_file_location("_run_benchmark_eval", _SCRIPT_PATH)
 _module = importlib.util.module_from_spec(_spec)
 assert _spec.loader is not None

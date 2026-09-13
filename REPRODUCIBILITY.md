@@ -118,13 +118,13 @@ cd frontend && yarn lint && yarn test && yarn build
 Write local smoke evidence under `outputs/local_smoke/`:
 
 ```bash
-uv run python run_benchmark_eval.py \
+uv run python scripts/evaluation/run_benchmark_eval.py \
   --config configs/benchmark/smoke_mixed.json \
   --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/local_smoke/detection \
   --reset-neo4j
 
-uv run python run_remediation_eval.py \
+uv run python scripts/evaluation/run_remediation_eval.py \
   --config configs/benchmark/remediation_bounded_smoke.json \
   --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/local_smoke/remediation \
@@ -155,7 +155,7 @@ A whole-corpus run ingests every category into one graph, so a failure anywhere 
 ```bash
 for group in hash-md5 crypto-md5 rng-insecure sql-injection \
              path-traversal command-injection ldap-injection xpath-injection; do
-  uv run python run_benchmark_eval.py \
+  uv run python scripts/evaluation/run_benchmark_eval.py \
     --config configs/benchmark/multicat_all_available.json \
     --mapping configs/benchmark/policy_registry.json \
     --categories "$group" \
@@ -163,7 +163,7 @@ for group in hash-md5 crypto-md5 rng-insecure sql-injection \
     --reset-neo4j
 done
 
-uv run python compose_benchmark_eval.py \
+uv run python scripts/evaluation/compose_benchmark_eval.py \
   outputs/local_smoke/group_* \
   --output-dir outputs/local_smoke/detection_composed
 ```
@@ -244,7 +244,7 @@ The v1 baseline measured `Citation@Context` on the TP cohort only. The v2 run ad
 
 ```bash
 LLM_CONCURRENCY=1 \
-uv run python run_explanation_eval.py \
+uv run python scripts/evaluation/run_explanation_eval.py \
   --config configs/benchmark/multicat_full.json \
   --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/reproduction/explanation_full_v2 \
@@ -260,7 +260,7 @@ The explanation eval (~90 min wall-clock) is the longest leg of the pipeline. If
 ```bash
 # First run is interrupted after, say, 4 of 8 categories.
 LLM_CONCURRENCY=1 \
-uv run python run_explanation_eval.py \
+uv run python scripts/evaluation/run_explanation_eval.py \
   --config configs/benchmark/multicat_full.json \
   --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/reproduction/explanation_full_v2 \
@@ -286,7 +286,7 @@ The v2 baseline and provenance-backed v3/v4 follow-ups under `outputs/thesis_fin
 For a local supported-medium rerun, use a non-canonical output directory:
 
 ```bash
-uv run python run_remediation_eval.py \
+uv run python scripts/evaluation/run_remediation_eval.py \
   --config configs/benchmark/remediation_supported_medium.json \
   --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/local_smoke/remediation_supported_medium \
@@ -299,7 +299,7 @@ uv run python run_remediation_eval.py \
 For a bounded remediation refresh across full and guarded support tiers:
 
 ```bash
-uv run python run_remediation_eval.py \
+uv run python scripts/evaluation/run_remediation_eval.py \
   --config configs/benchmark/remediation_bounded_smoke.json \
   --mapping configs/benchmark/policy_registry.json \
   --output-dir outputs/remediation_eval_bounded_smoke \

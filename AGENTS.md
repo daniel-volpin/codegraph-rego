@@ -52,8 +52,8 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. OWASP Benchma
   `ConfigProperty` nodes for the analysed workspace; evaluation reads them from the active revision and never from the filesystem, because the analysed workspace is often temporary. A method is linked to a key by the parser's recorded argument literal, never by a source-text search, so an unresolvable key leaves the policy silent. Rego decides which values are unsafe; Python only assembles facts. Conflicting declarations are reported, not resolved. A finding means the configured value is unsafe, not that a deployment is vulnerable. See `docs/architecture/2026-09-13-configuration-facts.md`.
 - Anything that re-evaluates a finding must be able to reproduce the evidence
   the finding used. A recheck that cannot fails closed and refuses; it never reports "fixed" from evidence it could not see.
-- Detection evaluation runs per policy group (`run_benchmark_eval.py
-  --categories`), and `compose_benchmark_eval.py` merges group outputs. The Overall row is recomputed from per-case fired rules under the union any-rule definition; never sum the per-category rows.
+- Detection evaluation runs per policy group (`scripts/evaluation/run_benchmark_eval.py
+  --categories`), and `scripts/evaluation/compose_benchmark_eval.py` merges group outputs. The Overall row is recomputed from per-case fired rules under the union any-rule definition; never sum the per-category rows.
 - Injection controls use dataflow taint analysis, not lexical matching.
   Do not reintroduce substring/co-occurrence heuristics for them: the retired Rego versions failed OWASP Benchmark's deliberate "looks tainted, isn't" cases. Known engine limits are cross-file taint and collection index-sensitivity; treat those as documented scope, not as bugs to paper over with pattern matching.
 - Explanation uses structured `Citation / Why / Fix`; remediation uses

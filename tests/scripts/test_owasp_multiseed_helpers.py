@@ -18,7 +18,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def _load_multiseed_module():
     spec = importlib.util.spec_from_file_location(
         "run_owasp_multiseed_eval",
-        _PROJECT_ROOT / "run_owasp_multiseed_eval.py",
+        _PROJECT_ROOT / "scripts" / "evaluation" / "run_owasp_multiseed_eval.py",
     )
     module = importlib.util.module_from_spec(spec)
     sys.modules["run_owasp_multiseed_eval"] = module

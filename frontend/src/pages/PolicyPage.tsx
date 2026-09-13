@@ -87,7 +87,14 @@ const PolicyPage = () => {
 
   const evalQuery = useQuery<PolicyEvaluateResponse, Error>({
     queryKey: evalQueryKey(),
-    queryFn: ({ signal }) => evaluatePolicies(undefined, signal),
+    queryFn: async ({ signal }) => {
+      const result = await evaluatePolicies(undefined, signal);
+      return (
+        result ?? {
+          violations: [],
+        }
+      );
+    },
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 6,
     retry: false,

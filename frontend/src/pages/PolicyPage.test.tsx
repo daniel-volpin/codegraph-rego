@@ -11,7 +11,20 @@ vi.mock("../lib/api", () => ({
     benchmark_categories: [],
     framework_demo_rule_ids: [],
   }),
-  evaluatePolicies: vi.fn(),
+  evaluatePolicies: vi.fn().mockResolvedValue({
+    violations: [],
+    evaluation: {
+      status: "complete",
+      attempted_bundles: 0,
+      evaluated_bundles: 0,
+      failed_bundles: 0,
+      omitted_findings: 0,
+      excluded_findings: 0,
+      truncated: false,
+      scope_limited: false,
+      rule_ids: [],
+    },
+  }),
   exportPolicySarif: vi.fn().mockResolvedValue({
     version: "2.1.0",
     runs: [],
