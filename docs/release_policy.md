@@ -28,6 +28,6 @@ Git tags and GitHub releases identify source revisions. CodeGraph is currently d
 Two tag schemes are in use and should stay distinct:
 
 - Release tags are `vX.Y.Z`, matching the `version` in `pyproject.toml`.
-- Evidence tags are `<subject>-<version-or-date>-source` and pin the commit an artifact's `provenance.json` records, because this repository squash-merges and a feature-branch commit never becomes an ancestor of `main`. `outputs/README.md` maps each artifact to its tag. `thesis-evidence-2026-05-31` predates the scheme and tags a whole evidence package rather than one run.
+- Evidence tags are `<subject>-<version-or-date>-source` and pin the commit an artifact's `provenance.json` records, because this repository squash-merges and a feature-branch commit never becomes an ancestor of `main`. `outputs/README.md` maps each artifact to its tag. `thesis-evidence-2026-05-31-source` is the one exception to the per-run rule: it pins a whole evidence package.
 
 See [`release_checklist.md`](./release_checklist.md) for the operational gate and [`public_release_checklist.md`](./public_release_checklist.md) for the separate private-to-public transition.
