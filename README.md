@@ -59,6 +59,19 @@ Open:
 - Backend API: <http://127.0.0.1:8000>
 - Health check: <http://127.0.0.1:8000/health>
 
+### First run
+
+A fresh checkout has no analysed code, so `/health` reports `degraded` with HTTP 503 and the retrieval checks fail until you load a project. That is expected, not a broken install. Upload a ZIP through the web application — the upload pipeline parses the project, publishes a graph revision, and builds the embedding index in one pass — after which `/health` returns `ok`.
+
+To populate it from the command line instead:
+
+```bash
+uv run python scripts/ingestion/codebase_to_neo4j.py --java-root <path>/src/main/java
+uv run python scripts/ingestion/build_code_embeddings.py --rebuild-index
+```
+
+The `index/` artifacts tracked in git are the recorded thesis retrieval generation. A workspace identity is derived from the absolute path of its source root, so those artifacts cannot match a graph built on another machine or from another checkout path; the backend detects the mismatch and asks for a rebuild rather than serving stale retrieval. Build your own index with the commands above, or by uploading a project.
+
 `make install` builds the required Eclipse JDT adapter, installs locked Python and frontend dependencies, and installs the pinned OPA binary into `.venv/bin`. CodeGraph does not download or substitute a Java parser at request time.
 
 For benchmark datasets, model configuration, and exact rerun commands, continue with [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md).

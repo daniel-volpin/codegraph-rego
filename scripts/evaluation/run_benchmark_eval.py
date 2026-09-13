@@ -7,24 +7,29 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from codegraph.db import get_neo4j_driver
-from codegraph.evaluation.benchmark import (
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from codegraph.db import get_neo4j_driver  # noqa: E402
+from codegraph.evaluation.benchmark import (  # noqa: E402
     CategorySpec,
 )
-from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
-from codegraph.evaluation.pipeline import (
+from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json  # noqa: E402
+from codegraph.evaluation.pipeline import (  # noqa: E402
     group_violations_by_testcase,
     ingest_and_evaluate_subset,
     load_benchmark_evaluation_context,
     staged_benchmark_workspace,
 )
-from codegraph.evaluation.provenance import collect_provenance, write_provenance
-from codegraph.evaluation.uncertainty import bootstrap_prf_ci, wilson_score_ci
-from codegraph.telemetry import install_log_correlation
+from codegraph.evaluation.provenance import collect_provenance, write_provenance  # noqa: E402
+from codegraph.evaluation.uncertainty import bootstrap_prf_ci, wilson_score_ci  # noqa: E402
+from codegraph.telemetry import install_log_correlation  # noqa: E402
 
 LOGGER = logging.getLogger("codegraph.eval.benchmark")
 

@@ -16,8 +16,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from codegraph.benchmark_registry import supported_remediation_rule_ids
-from codegraph.evaluation.benchmark import load_mapping_config
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from codegraph.benchmark_registry import supported_remediation_rule_ids  # noqa: E402
+from codegraph.evaluation.benchmark import load_mapping_config  # noqa: E402
 
 LOGGER = logging.getLogger("codegraph.eval.experiments")
 

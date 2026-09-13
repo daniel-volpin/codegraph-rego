@@ -28,19 +28,24 @@ from __future__ import annotations
 import argparse
 import logging
 import random
+import sys
 from pathlib import Path
 from typing import Any
 
-from codegraph.evaluation.io import write_json
-from codegraph.evaluation.pipeline import (
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from codegraph.evaluation.io import write_json  # noqa: E402
+from codegraph.evaluation.pipeline import (  # noqa: E402
     collect_category_violations,
     group_violations_by_testcase,
     ingest_and_evaluate_subset,
     load_benchmark_evaluation_context,
     staged_benchmark_workspace,
 )
-from codegraph.evaluation.remediation_runtime import build_case_id
-from codegraph.remediation.comparison import (
+from codegraph.evaluation.remediation_runtime import build_case_id  # noqa: E402
+from codegraph.remediation.comparison import (  # noqa: E402
     ComparisonResult,
     build_comparison_summary,
     build_deterministic_outcome,
@@ -48,9 +53,9 @@ from codegraph.remediation.comparison import (
     compare_remediation,
     render_comparison_summary_markdown,
 )
-from codegraph.remediation.dossier import build_dossier
-from codegraph.remediation.orchestration import apply_remediation
-from codegraph.remediation.ranking import (
+from codegraph.remediation.dossier import build_dossier  # noqa: E402
+from codegraph.remediation.orchestration import apply_remediation  # noqa: E402
+from codegraph.remediation.ranking import (  # noqa: E402
     RankingResult,
     build_ranking_summary,
     rank_candidates,

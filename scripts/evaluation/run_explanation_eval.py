@@ -6,37 +6,42 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from codegraph.config import settings
-from codegraph.evaluation.explanation_runtime import (
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from codegraph.config import settings  # noqa: E402
+from codegraph.evaluation.explanation_runtime import (  # noqa: E402
     ExplanationRuntime,
     load_completed_violation_outcomes,
     utc_now_iso,
 )
-from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json
-from codegraph.evaluation.pipeline import (
+from codegraph.evaluation.io import render_latex_table, render_markdown_table, write_csv, write_json  # noqa: E402
+from codegraph.evaluation.pipeline import (  # noqa: E402
     collect_category_false_positive_violations,
     collect_category_violations,
     ingest_and_evaluate_subset,
     load_benchmark_evaluation_context,
     staged_benchmark_workspace,
 )
-from codegraph.evaluation.pipeline import (
+from codegraph.evaluation.pipeline import (  # noqa: E402
     group_violations_by_testcase as index_violations_by_testcase,
 )
-from codegraph.evaluation.provenance import collect_provenance, write_provenance
-from codegraph.evaluation.uncertainty import wilson_score_ci
-from codegraph.llm.evidence_cards import format_citation
-from codegraph.llm.explanation_prompting import build_explanation_evidence, build_explanation_prompt
-from codegraph.llm.integration import (
+from codegraph.evaluation.provenance import collect_provenance, write_provenance  # noqa: E402
+from codegraph.evaluation.uncertainty import wilson_score_ci  # noqa: E402
+from codegraph.llm.evidence_cards import format_citation  # noqa: E402
+from codegraph.llm.explanation_prompting import build_explanation_evidence, build_explanation_prompt  # noqa: E402
+from codegraph.llm.integration import (  # noqa: E402
     generate_policy_explanation_structured,
     render_policy_explanation_structured,
 )
-from codegraph.telemetry import install_log_correlation
+from codegraph.telemetry import install_log_correlation  # noqa: E402
 
 LOGGER = logging.getLogger("codegraph.eval.explanation")
 

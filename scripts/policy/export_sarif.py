@@ -8,7 +8,11 @@ import json
 import sys
 from pathlib import Path
 
-from codegraph.policy.service import export_sarif
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from codegraph.policy.service import export_sarif  # noqa: E402
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

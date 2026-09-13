@@ -256,11 +256,20 @@ class RemediationService:
                 "file_path": file_path or exc.file_path,
             }
         if context is None:
+            searched_root = self._resolve_policy_workspace_root(file_path)
             return {
                 "status": "NOT_FOUND",
-                "error": f"Violation {violation_id} not found",
+                "error": (
+                    f"Violation {violation_id} not found under workspace root {searched_root}"
+                ),
+                "hint": (
+                    "Policy re-evaluation is scoped to a workspace root. Without file_path that "
+                    "root defaults to the upload workspace, so a violation in a workspace ingested "
+                    "elsewhere is invisible. Pass file_path from the violation."
+                ),
                 "violation_id": violation_id,
                 "method_key": method_key,
+                "workspace_root": searched_root,
             }
 
         rule_id = context.get("rule_id")

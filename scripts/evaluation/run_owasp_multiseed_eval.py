@@ -35,7 +35,12 @@ from pathlib import Path
 from typing import Any
 
 from baselines.semgrep.runner import run_semgrep_baseline
-from codegraph.evaluation.owasp_lexical_eval import (
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from codegraph.evaluation.owasp_lexical_eval import (  # noqa: E402
     SUPPORTED_CWES,
     evaluate_owasp,
     load_owasp_cases,
@@ -43,7 +48,7 @@ from codegraph.evaluation.owasp_lexical_eval import (
     owasp_paths,
     resolve_owasp_root,
 )
-from codegraph.evaluation.provenance import collect_provenance, write_provenance
+from codegraph.evaluation.provenance import collect_provenance, write_provenance  # noqa: E402
 
 _METRIC_KEYS = ("tp", "fp", "tn", "fn", "precision", "recall", "f1")
 
