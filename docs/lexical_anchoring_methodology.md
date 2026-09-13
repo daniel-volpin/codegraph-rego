@@ -111,12 +111,12 @@ The evaluator is LLM-free and Neo4j-free. The required external binaries are `op
 
 ```bash
 # LexicalNoiseJava — 30 cases, ~5s
-.venv/bin/python run_lexical_noise_eval.py \
+.venv/bin/python scripts/evaluation/run_lexical_noise_eval.py \
     --output-dir outputs/lexical_noise_eval_v1 \
     --seed 42
 
 # LexicalNoiseJava with optional SemGrep registry 4th column (needs network)
-.venv/bin/python run_lexical_noise_eval.py \
+.venv/bin/python scripts/evaluation/run_lexical_noise_eval.py \
     --output-dir outputs/lexical_noise_eval_v1 \
     --seed 42 \
     --semgrep-registry-config p/java
@@ -125,13 +125,13 @@ The evaluator is LLM-free and Neo4j-free. The required external binaries are `op
 # 8 cores with multiprocessing
 git clone --depth=1 https://github.com/OWASP-Benchmark/BenchmarkJava.git \
     .benchmark_cache/owasp-benchmark
-.venv/bin/python run_owasp_lexical_eval.py \
+.venv/bin/python scripts/evaluation/run_owasp_lexical_eval.py \
     --owasp-root .benchmark_cache/owasp-benchmark \
     --output-dir outputs/owasp_lexical_eval_v1 \
     --limit-per-cwe 50 --seed 7
 
 # OWASP Benchmark multi-seed stability — ~2 min on 8 cores
-.venv/bin/python run_owasp_multiseed_eval.py \
+.venv/bin/python scripts/evaluation/run_owasp_multiseed_eval.py \
     --owasp-root .benchmark_cache/owasp-benchmark \
     --output-dir outputs/owasp_multiseed_v1 \
     --seeds 7,13,23,42,101 --limit-per-cwe 50
