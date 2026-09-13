@@ -77,7 +77,7 @@ export function setDemoMode(enabled: boolean): void {
   }
 }
 
-// ---- Error classes ----
+// Error classes
 
 export class ApiError extends Error {
   status: number;
@@ -105,7 +105,7 @@ export class SchemaValidationError extends Error {
   }
 }
 
-// ---- Unified response parser ----
+// Unified response parser
 //
 // Strategy:
 // 1. Parse JSON if Content-Type advertises it.
@@ -153,7 +153,7 @@ function withTimeoutSignal(external: AbortSignal | undefined, ms: number): Abort
   return external;
 }
 
-// ---- Endpoints ----
+// Endpoints
 
 export async function uploadZip(
   file: File,

@@ -16,9 +16,7 @@ import type {
   Violation,
 } from "./schemas";
 
-// ============================================================================
 // Helper factory to generate concise, rich demo violations without boilerplate
-// ============================================================================
 
 interface DemoFindingSpec {
   id: string;
@@ -76,9 +74,7 @@ const makeFinding = (spec: DemoFindingSpec): Violation => {
   };
 };
 
-// ============================================================================
 // 1. Health & Startup Fixtures
-// ============================================================================
 
 export const DEMO_HEALTH: HealthCheckResponse = {
   status: "ok",
@@ -106,12 +102,10 @@ export const DEMO_HEALTH: HealthCheckResponse = {
   },
 };
 
-// ============================================================================
 // 2. Curated Multi-Standard Violations Dataset (24 Findings)
-// ============================================================================
 
 export const DEMO_VIOLATIONS: Violation[] = [
-  // --- ISO-27001 ---
+// ISO-27001
   makeFinding({
     id: "ISO-A.10-WEAK-HASH",
     method: "com.acme.security.AuthService.hashPassword(String)",
@@ -218,7 +212,7 @@ export const DEMO_VIOLATIONS: Violation[] = [
     code: `public PaymentReceipt charge(PaymentRequest request) {\n    PaymentReceipt receipt = paymentGateway.execute(request);\n    return receipt;\n}`,
   }),
 
-  // --- PCI-DSS 4.0 ---
+// PCI-DSS 4.0
   makeFinding({
     id: "PCI-6.2.4.1-SQL-INJECTION",
     method: "com.acme.card.CardStore.queryCard(String)",
@@ -293,7 +287,7 @@ export const DEMO_VIOLATIONS: Violation[] = [
     code: `public String generateOtp() {\n    Random r = new Random();\n    int otp = 100000 + r.nextInt(900000);\n    return String.valueOf(otp);\n}`,
   }),
 
-  // --- OWASP Top 10 ---
+// OWASP Top 10
   makeFinding({
     id: "A03:2021-SQL-INJECTION",
     method: "com.acme.dao.UserDao.findUser(String)",
@@ -355,7 +349,7 @@ export const DEMO_VIOLATIONS: Violation[] = [
     code: `public File loadAvatar(String name) {\n    return new File("/var/avatars/" + name);\n}`,
   }),
 
-  // --- NIST SP 800-53 ---
+// NIST SP 800-53
   makeFinding({
     id: "NIST-SI-10-SQL-INJECTION",
     method: "com.gov.tax.TaxRecordRepo.fetch(String)",
@@ -381,7 +375,7 @@ export const DEMO_VIOLATIONS: Violation[] = [
     code: `public TransferResult executeTransfer(TransferRequest req) {\n    accountService.debit(req.getFrom(), req.getAmount());\n    accountService.credit(req.getTo(), req.getAmount());\n    return TransferResult.success();\n}`,
   }),
 
-  // --- Universal SAST (SARIF) ---
+// Universal SAST (SARIF)
   makeFinding({
     id: "SEMGREP-CWE-79",
     method: "com.acme.controller.CommentController.renderComment(String)",
@@ -436,9 +430,7 @@ export const DEMO_VIOLATIONS: Violation[] = [
   }),
 ];
 
-// ============================================================================
 // 3. Policy Evaluation Response Fixture
-// ============================================================================
 
 export const DEMO_POLICY_EVALUATION: PolicyEvaluateResponse = {
   violations: DEMO_VIOLATIONS,
@@ -467,9 +459,7 @@ export const DEMO_POLICY_EVALUATION: PolicyEvaluateResponse = {
   })),
 };
 
-// ============================================================================
 // 4. Policy Catalog and Benchmark Categories
-// ============================================================================
 
 export const DEMO_POLICY_CATALOG: PolicyCatalogResponse = {
   controls: [
@@ -501,9 +491,7 @@ export const DEMO_POLICY_CATALOG: PolicyCatalogResponse = {
   framework_demo_rule_ids: ["ISO-A.10-WEAK-HASH", "ISO-A.10-WEAK-RANDOM", "ISO-A.10-WEAK-CRYPTO", "ISO-A.8-SQL-INJECTION", "ISO-A.8-PATH-TRAVERSAL"],
 };
 
-// ============================================================================
 // 5. Pluggable Policy Packs Specifications
-// ============================================================================
 
 const makePackRule = (id: string, control: string, title: string, summary: string, severity: string, category: string): PolicyPackRule => ({
   id,
@@ -602,9 +590,7 @@ export const DEMO_POLICY_PACKS: PolicyPacksResponse = {
   ],
 };
 
-// ============================================================================
 // 6. Remediation, Diffs, Previews & Agentic Execution Results
-// ============================================================================
 
 export const DEMO_DIFFS: Record<string, string> = {
   "ISO-A.10-WEAK-HASH": `@@ -42,5 +42,5 @@
@@ -751,9 +737,7 @@ export const DEMO_EXPLANATION: PolicyExplainOneResponse = {
   include_graph_context: true,
 };
 
-// ============================================================================
 // 7. Search, Upload & SARIF Bridge Fixtures
-// ============================================================================
 
 export const DEMO_SEARCH_MATCHES: SearchResponse = {
   matches: [

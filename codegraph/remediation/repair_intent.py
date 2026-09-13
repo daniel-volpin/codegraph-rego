@@ -34,9 +34,6 @@ from codegraph.remediation.contracts import (
 LOGGER = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
 
 
 class RepairIntentKind(StrEnum):
@@ -68,9 +65,6 @@ class RefusalCode(StrEnum):
     MANUAL_REVIEW_REQUIRED = "manual_review_required"
 
 
-# ---------------------------------------------------------------------------
-# Pydantic models
-# ---------------------------------------------------------------------------
 
 
 class SourceSpan(BaseModel):
@@ -104,9 +98,6 @@ class RefusalReason(BaseModel):
     explanation: str
 
 
-# ---------------------------------------------------------------------------
-# Operation specs (Step 2) — typed executable descriptions of each edit
-# ---------------------------------------------------------------------------
 
 
 class LiteralReplacementOp(BaseModel):
@@ -171,9 +162,6 @@ class RepairIntent(BaseModel):
     operations: list[RepairOperation] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Rule → intent-kind mapping
-# ---------------------------------------------------------------------------
 
 _RULE_INTENT_KIND: dict[str, RepairIntentKind] = {
     "ISO-A.10-WEAK-HASH": RepairIntentKind.LITERAL_REPLACEMENT,
@@ -193,9 +181,6 @@ _DEFAULT_INVARIANTS: list[Invariant] = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Preflight helpers (mirrors service._preflight_fixability_reason semantics)
-# ---------------------------------------------------------------------------
 
 
 def _preflight_refusal(rule_id: str, source_code: str) -> RefusalReason | None:
@@ -212,9 +197,6 @@ def _preflight_refusal(rule_id: str, source_code: str) -> RefusalReason | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# Planner
-# ---------------------------------------------------------------------------
 
 
 def plan_repair_intent(
@@ -338,9 +320,7 @@ def plan_repair_intent(
     return intent
 
 
-# ---------------------------------------------------------------------------
 # Operation builders (per-rule)
-# ---------------------------------------------------------------------------
 
 
 def _build_operations(rule_id: str, source_code: str) -> list[RepairOperation]:

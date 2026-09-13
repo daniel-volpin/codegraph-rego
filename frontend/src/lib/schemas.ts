@@ -7,7 +7,7 @@ import { z } from "zod";
 // - Sensible defaults / .catch fallbacks so the UI degrades instead of
 //   crashing when a non-critical field is missing or unknown.
 
-// ---- Common ----
+// Common
 
 export const RemediationCapabilitySchema = z.object({
   supported: z.boolean().default(false),
@@ -50,7 +50,7 @@ export const ViolationSchema = z
   .loose();
 export type Violation = z.infer<typeof ViolationSchema>;
 
-// ---- Upload / status ----
+// Upload / status
 
 export const UploadResponseSchema = z
   .object({
@@ -77,7 +77,7 @@ export const UploadStatusSchema = z
   .loose();
 export type UploadStatus = z.infer<typeof UploadStatusSchema>;
 
-// ---- Search ----
+// Search
 
 export const SearchMatchSchema = z
   .object({
@@ -96,7 +96,7 @@ export const SearchResponseSchema = z
   .loose();
 export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 
-// ---- Policy ----
+// Policy
 
 export const PolicyEvaluationSummarySchema = z.object({
   status: z.enum(["complete", "partial", "failed"]),
@@ -149,7 +149,7 @@ export type PolicyExplainOneResponse = z.infer<
   typeof PolicyExplainOneResponseSchema
 >;
 
-// ---- Policy reviews ----
+// Policy reviews
 
 export const PolicyReviewCreateResponseSchema = z
   .object({
@@ -175,7 +175,7 @@ export type PolicyReviewListResponse = z.infer<
   typeof PolicyReviewListResponseSchema
 >;
 
-// ---- Policy catalog ----
+// Policy catalog
 
 export const PolicyBenchmarkCategorySchema = z
   .object({
@@ -203,7 +203,7 @@ export const PolicyCatalogResponseSchema = z
   .loose();
 export type PolicyCatalogResponse = z.infer<typeof PolicyCatalogResponseSchema>;
 
-// ---- Policy Packs ----
+// Policy Packs
 
 export const PolicyPackRuleSchema = z
   .object({
@@ -247,7 +247,7 @@ export const PolicyPacksResponseSchema = z
   .loose();
 export type PolicyPacksResponse = z.infer<typeof PolicyPacksResponseSchema>;
 
-// ---- Policy SARIF export / import ----
+// Policy SARIF export / import
 
 export const SarifExportResponseSchema = z
   .object({
@@ -268,7 +268,7 @@ export const SarifImportResponseSchema = z
   .loose();
 export type SarifImportResponse = z.infer<typeof SarifImportResponseSchema>;
 
-// ---- Remediation ----
+// Remediation
 
 export const RemediationGenerationResultSchema = z
   .object({
@@ -410,7 +410,7 @@ export type AgenticRemediationResponse = z.infer<
   typeof AgenticRemediationResponseSchema
 >;
 
-// ---- Health ----
+// Health
 
 export const HealthStartupStatusSchema = z
   .object({

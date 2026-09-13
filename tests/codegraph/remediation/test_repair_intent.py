@@ -25,9 +25,7 @@ from codegraph.remediation.repair_intent import (
     plan_repair_intent,
 )
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _make_context(
@@ -50,9 +48,7 @@ def _make_context(
     return context
 
 
-# ---------------------------------------------------------------------------
 # Schema creation tests
-# ---------------------------------------------------------------------------
 
 
 class TestRepairIntentSchemaCreation(unittest.TestCase):
@@ -180,9 +176,7 @@ class TestRepairIntentSchemaCreation(unittest.TestCase):
         self.assertEqual(set(RepairIntentKind), expected)
 
 
-# ---------------------------------------------------------------------------
 # Refusal variant tests
-# ---------------------------------------------------------------------------
 
 
 class TestRefusalVariants(unittest.TestCase):
@@ -231,9 +225,7 @@ class TestRefusalVariants(unittest.TestCase):
         self.assertEqual(reason.code, RefusalCode.MANUAL_REVIEW_REQUIRED)
 
 
-# ---------------------------------------------------------------------------
 # Round-trip serialization tests
-# ---------------------------------------------------------------------------
 
 
 class TestRoundTripSerialization(unittest.TestCase):
@@ -348,9 +340,7 @@ class TestRoundTripSerialization(unittest.TestCase):
         self.assertEqual(restored, intent)
 
 
-# ---------------------------------------------------------------------------
 # Validation / rejection tests
-# ---------------------------------------------------------------------------
 
 
 class TestValidationRejection(unittest.TestCase):
@@ -425,9 +415,7 @@ class TestValidationRejection(unittest.TestCase):
             )  # type: ignore[call-arg]
 
 
-# ---------------------------------------------------------------------------
 # Preflight refusal tests
-# ---------------------------------------------------------------------------
 
 
 class TestPreflightRefusal(unittest.TestCase):
@@ -496,9 +484,7 @@ class TestPreflightRefusal(unittest.TestCase):
         self.assertIsNone(result)
 
 
-# ---------------------------------------------------------------------------
 # Planner output tests
-# ---------------------------------------------------------------------------
 
 
 class TestPlanRepairIntent(unittest.TestCase):
@@ -641,9 +627,7 @@ class TestPlanRepairIntent(unittest.TestCase):
         self.assertEqual(restored.kind, RepairIntentKind.NO_REPAIR)
 
 
-# ---------------------------------------------------------------------------
 # Operation spec validation tests (Step 2)
-# ---------------------------------------------------------------------------
 
 
 class TestOperationSpecValidation(unittest.TestCase):
@@ -744,9 +728,7 @@ class TestOperationSpecValidation(unittest.TestCase):
         self.assertIsInstance(intent.operations[1], ConstructorReplacementOp)
 
 
-# ---------------------------------------------------------------------------
 # Round-trip with operations (Step 2)
-# ---------------------------------------------------------------------------
 
 
 class TestRoundTripWithOperations(unittest.TestCase):
@@ -857,9 +839,7 @@ class TestRoundTripWithOperations(unittest.TestCase):
         )
 
 
-# ---------------------------------------------------------------------------
 # Planner populates operations (Step 2)
-# ---------------------------------------------------------------------------
 
 
 class TestPlannerPopulatesOperations(unittest.TestCase):
