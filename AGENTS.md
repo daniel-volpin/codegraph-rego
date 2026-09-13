@@ -7,7 +7,7 @@ CodeGraph is a benchmark-backed JVM security/compliance framework. OWASP Benchma
 - `README.md` and `REPRODUCIBILITY.md`: setup, runtime requirements, configuration,
   and runnable evaluation commands.
 - `docs/frontend_backend_contract.md`: API/SPA contracts.
-- `copilot-context/benchmark.md` and `docs/thesis_context.md`: control mappings,
+- `docs/benchmark_context.md` and `docs/thesis_context.md`: control mappings,
   evidence anchors, support tiers, and scientific claim limits.
 - `docs/architecture/2026-09-11-backend-modernization-roadmap.md`: migration
   decisions and acceptance boundaries. Historical milestones are not live status.

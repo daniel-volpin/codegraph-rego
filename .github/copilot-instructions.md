@@ -5,20 +5,21 @@ This repository uses Copilot Agent with context-based reference files for improv
 ---
 
 ## Context Anchors
-- Reference context from `/copilot-context/` before analyzing the entire codebase.
-- Use the following context files for fast and accurate reasoning:
-  - `benchmark.md` — Thesis benchmark scope, evidence anchors, and citation guardrails (the substantive context file).
-  - `architecture.md`, `dependencies.md`, `services.md`, `configuration.md`, `improvements.md` — pointer files only; each redirects to the canonical source (`README.md`, `REPRODUCIBILITY.md`, `docs/`, manifests) so facts do not drift across documents.
+- Read the canonical source directly; there is no separate context copy to keep in sync.
+  - `docs/benchmark_context.md` — thesis benchmark scope, evidence anchors, and citation guardrails.
+  - `docs/thesis_context.md` — claim limits, the provenance manifest, and the canonical runs.
+  - `README.md` and `REPRODUCIBILITY.md` — setup, architecture, and runnable evaluation commands.
+  - `outputs/README.md` — which artifact holds which result and how to cite it.
+  - `docs/frontend_backend_contract.md` — API and SPA contracts.
 
 ---
 
 ## Usage
-- Prefer `/copilot-context/` for completions, summaries, and PR reviews.
 - Avoid re-analyzing the entire codebase if relevant context exists.
-- For benchmark, thesis, or evaluation questions, read `benchmark.md` first.
-- For architecture-related questions, read from `architecture.md` and `services.md`.
-- For configuration and secrets, use `configuration.md`; avoid hardcoding values.
-- For refactoring, check `improvements.md` before suggesting new changes.
+- For benchmark, thesis, or evaluation questions, read `docs/benchmark_context.md` first.
+- For architecture questions, read `README.md` and `docs/frontend_backend_contract.md`.
+- For configuration and secrets, read the environment variable reference in `REPRODUCIBILITY.md`; never hardcode values.
+- For refactoring, check `docs/architecture/` for the decision record covering the area.
 
 ---
 
@@ -34,10 +35,10 @@ This repository uses Copilot Agent with context-based reference files for improv
 - Keep code modular and maintain separation of concerns.
 - Use environment variables for configuration and secrets (via `codegraph/config.py` Pydantic BaseSettings).
 - Add or update tests for new features.
-- Update `/copilot-context/` when architecture changes.
+- Update the canonical doc when architecture changes; do not add a parallel summary.
 - Do not invent or infer architecture beyond documented context.
 
 ---
 
 ## Context Refresh
-- Regenerate `/copilot-context/` files after significant codebase changes.
+- After significant changes, update the canonical docs listed under Context Anchors.
