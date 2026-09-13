@@ -24,7 +24,7 @@ The existing `thesis_final_*` and `_vN` directories keep their names. They are p
 
 This repository squash-merges, so a feature-branch commit never becomes an ancestor of `main`. `7ad90a2` and `701d051` were reachable from no ref at all and are now pinned by `thesis-detection-v2-source` and `thesis-explanation-v2-source`. `6aa9026` is still held only by a feature branch and will disappear if that branch is pruned.
 
-The `local_smoke/` files sit outside the checksum tripwire, which globs `outputs/thesis_final_*`. They are tracked so the current figure has evidence in the repository at all; they are not canonical thesis artifacts, and their provenance records a dirty tree.
+The `local_smoke/` files sit outside the checksum tripwire, which globs `outputs/thesis_final_*`. They are tracked so the current figure has evidence in the repository at all; they are not canonical thesis artifacts, and their provenance records a dirty tree. **Outstanding:** re-run the composed detection evaluation on a clean checkout into a dated directory, so the current figure gains clean-tree provenance under the naming convention above.
 
 `thesis_final_remediation_v2/` is the largest tracked bundle and the only one with no `provenance.json`, so it cannot be cited the way the others are. It is also absent from the canonical-runs list in `docs/thesis_context.md`, while `copilot-context/benchmark.md` still calls it the remediation baseline.
 
