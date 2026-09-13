@@ -69,6 +69,10 @@ export default defineConfig({
     ],
   },
   server: {
+    // Bind IPv4 loopback explicitly. Vite's default host is "localhost", which
+    // resolves to ::1 first on macOS and modern Linux, so the 127.0.0.1 URL in
+    // README.md refused connections while localhost worked.
+    host: "127.0.0.1",
     port: 5173,
     strictPort: true,
     proxy: {

@@ -205,7 +205,21 @@ def evaluate_policies(
             "hint": "Install OPA: https://www.openpolicyagent.org/docs/latest/#running-opa",
         }
 
-    policy_input = build_policy_input(max_bundles=max_bundles, workspace_root=workspace_root)
+    try:
+        policy_input = build_policy_input(max_bundles=max_bundles, workspace_root=workspace_root)
+    except ValueError as exc:
+        # Raised when a method's recorded source is unreadable: the file is gone
+        # (a temporary analysed workspace) or its bytes no longer match the
+        # recorded hash. Both are expected states, and both must fail closed
+        # rather than evaluate a subset, which would understate findings.
+        return {
+            "error": f"policy_evidence_unavailable: {exc}",
+            "hint": (
+                "The active graph revision references source that cannot be read. "
+                "Re-ingest the workspace so the graph and its source agree."
+            ),
+            "workspace_root": workspace_root,
+        }
     bundles = policy_input.get("bundles") or []
     catalog = load_policy_catalog()
     rules_catalog = load_iso_rules()
