@@ -56,6 +56,9 @@ index/*
 # summary/provenance files for thesis-useful follow-up reruns.
 outputs/*
 
+# Index of every artifact directory: what it holds and how to cite it.
+!outputs/README.md
+
 # Checksum manifest protecting the canonical artifacts below from silent change.
 !outputs/canonical_manifest.sha256
 

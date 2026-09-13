@@ -174,7 +174,7 @@ Current detection baseline, full corpus (2092 cases, all available per category,
 
 A detection figure is a property of the engine configuration as well as the corpus, so state which engines a run used, and whether configuration facts were available. Crypto and hash controls decide on values declared in the analysed workspace's `*.properties` files, so a corpus without them scores those categories differently; see `docs/architecture/2026-09-13-configuration-facts.md`.
 
-The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/thesis_final_remediation_v4/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier historical runs (`detection_calibration_path_precision_v4`, `repro_supported_medium_branch_benchmarktest01017_fix`) are no longer tracked in the repository.
+`outputs/README.md` indexes every artifact directory: what it holds, whether it is tracked, and which commit its provenance names. Cite the artifact directory plus the SHA recorded in its `provenance.json`, with the exceptions that index records — `thesis_final_remediation_v2/` has no provenance file, and a composed detection directory carries its provenance in the per-group runs named by `composed_from`. Earlier historical runs (`detection_calibration_path_precision_v4`, `repro_supported_medium_branch_benchmarktest01017_fix`) are no longer tracked in the repository.
 
 ## 4. Recommended Explanation-Eval Defaults
 
