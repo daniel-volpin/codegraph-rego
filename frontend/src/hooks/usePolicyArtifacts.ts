@@ -22,7 +22,7 @@ import {
   type ViolationRow,
 } from "../components/features/policy/policyUtils";
 
-// ---- Cache keys (one cache entry per violation, not per resource) ----
+// Cache keys (one cache entry per violation, not per resource)
 
 export const explainKey = (id: string) => ["policy", "explain", id] as const;
 export const previewKey = (id: string) => ["policy", "preview", id] as const;
@@ -42,7 +42,7 @@ export type PendingAction = "explain" | "preview" | "apply" | "agentic";
 // `enabled: false`; mutations are the only writers.
 const cacheOnlyFn = () => Promise.reject(new Error("manual cache only"));
 
-// ---- Read hooks (per-row subscriptions; precise re-renders) ----
+// Read hooks (per-row subscriptions; precise re-renders)
 
 export function useExplainResult(id: string | null | undefined) {
   return useQuery<PolicyExplainOneResponse | undefined>({
@@ -104,7 +104,7 @@ export function usePendingAction(id: string | null | undefined): PendingAction |
   return undefined;
 }
 
-// ---- Mutation hooks with per-call AbortControllers ----
+// Mutation hooks with per-call AbortControllers
 
 function useAbortOnUnmount() {
   const abortRef = useRef<AbortController | null>(null);

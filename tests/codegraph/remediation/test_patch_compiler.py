@@ -33,9 +33,7 @@ def _make_intent(
     )
 
 
-# ---------------------------------------------------------------------------
 # Literal replacement
-# ---------------------------------------------------------------------------
 
 
 class TestLiteralReplacement(unittest.TestCase):
@@ -182,9 +180,7 @@ class TestLiteralReplacement(unittest.TestCase):
         self.assertIn('"AES/GCM/NoPadding"', edits[0]["replacement_lines"][0])
 
 
-# ---------------------------------------------------------------------------
 # Constructor replacement
-# ---------------------------------------------------------------------------
 
 
 class TestConstructorReplacement(unittest.TestCase):
@@ -269,9 +265,7 @@ class TestConstructorReplacement(unittest.TestCase):
             compile_repair_intent(intent, source)
 
 
-# ---------------------------------------------------------------------------
 # Method call replacement
-# ---------------------------------------------------------------------------
 
 
 class TestMethodCallReplacement(unittest.TestCase):
@@ -373,9 +367,7 @@ class TestMethodCallReplacement(unittest.TestCase):
             compile_repair_intent(intent, source)
 
 
-# ---------------------------------------------------------------------------
 # Import adjustment
-# ---------------------------------------------------------------------------
 
 
 class TestImportAdjustment(unittest.TestCase):
@@ -396,9 +388,7 @@ class TestImportAdjustment(unittest.TestCase):
             compile_repair_intent(intent, source)
 
 
-# ---------------------------------------------------------------------------
 # Edge cases
-# ---------------------------------------------------------------------------
 
 
 class TestCompilerEdgeCases(unittest.TestCase):

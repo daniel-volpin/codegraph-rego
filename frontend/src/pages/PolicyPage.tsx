@@ -68,7 +68,7 @@ const PolicyPage = () => {
     }));
   };
 
-  // ---- Policy catalog + packs + eval queries ----
+// Policy catalog + packs + eval queries
 
   const policyCatalogQuery = useQuery<PolicyCatalogResponse, Error>({
     queryKey: ["policyCatalog"],
@@ -114,7 +114,7 @@ const PolicyPage = () => {
     };
   }, [queryClient]);
 
-  // ---- Effects ----
+// Effects
 
   useEffect(() => {
     if (!evalQuery.data) return;
@@ -142,7 +142,7 @@ const PolicyPage = () => {
     toast.error(`Evaluation failed: ${evalQuery.error.message}`);
   }, [evalQuery.error, evalQuery.errorUpdatedAt, evalQuery.isError]);
 
-  // ---- Derived data ----
+// Derived data
 
   const findings = useMemo(
     () => (evalQuery.data?.violations ?? []).map((v) => normalizeViolation(v)),
@@ -269,7 +269,7 @@ const PolicyPage = () => {
         ? "Evaluation completed successfully with zero findings for the selected scope."
         : "No findings match the current module filter.";
 
-  // ---- Table ----
+// Table
 
   const columns = useMemo<ColumnDef<PolicyTableFeatures, ViolationGroupRow>[]>(
     () => [
@@ -429,7 +429,7 @@ const PolicyPage = () => {
     }
   };
 
-  // ---- Render ----
+// Render
 
   return (
     <div className="space-y-4">

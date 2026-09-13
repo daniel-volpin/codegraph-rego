@@ -19,9 +19,7 @@ from codegraph.remediation.comparison import (
     render_comparison_summary_markdown,
 )
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _det(produced: bool = False, refused: bool = False, error: str | None = None, edits: int = 0) -> CandidateOutcome:
@@ -60,9 +58,7 @@ def _ctx(
     }
 
 
-# ---------------------------------------------------------------------------
 # Classification tests
-# ---------------------------------------------------------------------------
 
 
 class TestClassifyComparison(unittest.TestCase):
@@ -124,9 +120,7 @@ class TestClassifyComparison(unittest.TestCase):
         self.assertEqual(reachable, set(ComparisonLabel))
 
 
-# ---------------------------------------------------------------------------
 # Deterministic outcome builder
-# ---------------------------------------------------------------------------
 
 
 class TestBuildDeterministicOutcome(unittest.TestCase):
@@ -179,9 +173,7 @@ class TestBuildDeterministicOutcome(unittest.TestCase):
         self.assertIn("compile_error", outcome.error)
 
 
-# ---------------------------------------------------------------------------
 # LLM outcome builder
-# ---------------------------------------------------------------------------
 
 
 class TestBuildLlmOutcome(unittest.TestCase):
@@ -232,9 +224,7 @@ class TestBuildLlmOutcome(unittest.TestCase):
         self.assertFalse(outcome.refused)
 
 
-# ---------------------------------------------------------------------------
 # Compare remediation
-# ---------------------------------------------------------------------------
 
 
 class TestCompareRemediation(unittest.TestCase):
@@ -261,9 +251,7 @@ class TestCompareRemediation(unittest.TestCase):
         self.assertEqual(restored_json, result)
 
 
-# ---------------------------------------------------------------------------
 # Aggregate summary
-# ---------------------------------------------------------------------------
 
 
 class TestBuildComparisonSummary(unittest.TestCase):
@@ -350,9 +338,7 @@ class TestBuildComparisonSummary(unittest.TestCase):
         self.assertEqual(restored_json, summary)
 
 
-# ---------------------------------------------------------------------------
 # Markdown rendering
-# ---------------------------------------------------------------------------
 
 
 class TestRenderMarkdown(unittest.TestCase):

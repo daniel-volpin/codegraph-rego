@@ -32,9 +32,6 @@ class CompileError(Exception):
     """Raised when an operation cannot be deterministically compiled."""
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 
 def compile_repair_intent(
@@ -94,9 +91,6 @@ def compile_repair_intent(
     return edits
 
 
-# ---------------------------------------------------------------------------
-# Per-operation compilers
-# ---------------------------------------------------------------------------
 
 
 def _compile_literal_replacement(
@@ -204,9 +198,6 @@ def _compile_method_call_replacement(
     ]
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _find_literal_occurrences(

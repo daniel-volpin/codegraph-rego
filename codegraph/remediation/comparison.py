@@ -25,9 +25,6 @@ from codegraph.remediation.repair_intent import (
 LOGGER = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
 
 
 class ComparisonLabel(StrEnum):
@@ -42,9 +39,6 @@ class ComparisonLabel(StrEnum):
     LLM_REFUSED_DETERMINISTIC_PRODUCED = "llm_refused_deterministic_produced"
 
 
-# ---------------------------------------------------------------------------
-# Models
-# ---------------------------------------------------------------------------
 
 
 class CandidateOutcome(BaseModel):
@@ -81,9 +75,6 @@ class ComparisonSummary(BaseModel):
     per_rule: dict[str, dict[str, int]] = Field(default_factory=dict)
 
 
-# ---------------------------------------------------------------------------
-# Classification
-# ---------------------------------------------------------------------------
 
 
 def classify_comparison(
@@ -107,9 +98,6 @@ def classify_comparison(
     return ComparisonLabel.BOTH_FAILED
 
 
-# ---------------------------------------------------------------------------
-# Outcome builders
-# ---------------------------------------------------------------------------
 
 
 def build_deterministic_outcome(
@@ -208,9 +196,6 @@ def build_llm_outcome(apply_result: dict[str, Any]) -> CandidateOutcome:
     )
 
 
-# ---------------------------------------------------------------------------
-# Comparison
-# ---------------------------------------------------------------------------
 
 
 def compare_remediation(
@@ -231,9 +216,6 @@ def compare_remediation(
     )
 
 
-# ---------------------------------------------------------------------------
-# Aggregation
-# ---------------------------------------------------------------------------
 
 
 def build_comparison_summary(
@@ -289,9 +271,6 @@ def render_comparison_summary_markdown(summary: ComparisonSummary) -> str:
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _edits_to_diff_snippet(edits: list[dict[str, Any]]) -> str:

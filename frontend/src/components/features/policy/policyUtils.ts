@@ -15,7 +15,7 @@ const DEFAULT_REMEDIATION: RemediationCapability = Object.freeze(
   RemediationCapabilitySchema.parse({}),
 );
 
-// ---- Types ----
+// Types
 
 // A wire-shape violation kept loose so the explain endpoint still receives
 // the full original payload when we send `violationRow.raw` back.
@@ -57,7 +57,7 @@ export type ConfidenceBandLabel = "abstain" | "review" | "apply" | "pending";
 // Re-export response types so consumers can import everything from one place
 export type { PolicyExplainOneResponse, RemediationPreviewResponse, RemediationApplyResponse };
 
-// ---- Constants ----
+// Constants
 
 export const POLICY_VIEW_PRESET_STORAGE_KEY = "codegraph:policy:viewPreset";
 
@@ -144,7 +144,7 @@ export const deriveStandardFromRuleId = (ruleId: string, customStandard?: string
   return "Security Policy";
 };
 
-// ---- Display helpers ----
+// Display helpers
 
 export interface ParsedMethodInfo {
   raw: string;
@@ -355,7 +355,7 @@ export const normalizeViolation = (item: RawViolation): ViolationRow => {
   };
 };
 
-// ---- Display helpers (severity / remediation / status) ----
+// Display helpers (severity / remediation / status)
 
 export const severityVariant = (severity: string): "destructive" | "warning" | "secondary" => {
   if (severity === "HIGH") return "destructive";

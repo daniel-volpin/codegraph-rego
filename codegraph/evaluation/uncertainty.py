@@ -272,13 +272,11 @@ def bootstrap_prf_ci(
     }
 
 
-# ---------------------------------------------------------------------------
 # Paired classifier comparison — McNemar's exact test + paired bootstrap.
 #
 # These tests answer "is classifier B's behaviour significantly different
 # from classifier A's, on the same instances?" — the canonical paired-test
 # setting for SAST tool comparison.
-# ---------------------------------------------------------------------------
 
 PairedOutcome = tuple[bool, bool, bool]  # (pred_a, pred_b, label)
 

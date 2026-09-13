@@ -134,9 +134,7 @@ class PolicyTestBase(unittest.TestCase):
         return {item.get("violation_id") for item in normalized if item}
 
 
-# ---------------------------------------------------------------------------
 # Common Java source bodies used across DirectCallSummaryBuilder tests
-# ---------------------------------------------------------------------------
 
 _JAVA_TAINTED_PASSTHROUGH = [
     "class Helper {",
