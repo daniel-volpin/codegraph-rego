@@ -320,7 +320,7 @@ uv run python scripts/evaluation/run_remediation_model_bakeoff.py \
 
 ## 10. Expected Outputs
 
-Every eval run also writes a `provenance.json` with the git SHA, OPA version, model id, seed, config sha256, uv.lock hash, and pyproject hash. This is the canonical per-run manifest; cite it alongside any number you quote from the artifact.
+Every eval run also writes a `provenance.json` with the git SHA, OPA version, model id, seed, config sha256, uv.lock hash, and pyproject hash. This is the canonical per-run manifest; cite it alongside any number you quote from the artifact. A composed directory is a merge rather than a run and has none of its own: cite the per-group runs its `metrics.json` names in `composed_from`. `outputs/README.md` indexes every artifact, the SHA it records, and the tag that SHA is reachable from.
 
 Canonical artifact snapshot (generated 2026-05-03):
 
@@ -331,7 +331,7 @@ Canonical artifact snapshot (generated 2026-05-03):
 - remediation v3 (`outputs/thesis_final_remediation_v3/`): fully verified
   success rate `0.72` (`18/25`), build success rate `0.90` (`18/20` attempted builds), full-population Brier `0.095431` / ECE `0.095705`, attempted-only Brier `0.094698` / ECE `0.083900`, no-fix-only Brier `0.110091` / ECE `0.331800`; provenance SHA `7ad90a2`.
 - remediation v4 (`outputs/thesis_final_remediation_v4/`): raw-source
-  evidence preservation fix applied; fully verified success rate `1.00` (`25/25`), build success rate `1.00` (`25/25` attempted builds).
+  evidence preservation fix applied; fully verified success rate `1.00` (`25/25`), build success rate `1.00` (`25/25` attempted builds); provenance SHA `80d0084`.
 
 ### Detection
 
