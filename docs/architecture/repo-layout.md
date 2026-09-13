@@ -5,27 +5,25 @@ This repository keeps two explicit backend boundaries:
 - `api/` contains the FastAPI HTTP surface: routers plus request/response DTOs.
 - `codegraph/` contains domain logic: ingestion, policy evaluation, search, LLM integration, remediation, and evaluation orchestration.
 
-The root folder is intentionally small. It should contain only stable entrypoints and core project metadata:
+The root folder is intentionally clean and focused. It contains only the application entrypoint and core project metadata:
 
 - `app.py` for `uvicorn app:app`
-- the validated evaluation runners (`run_*_eval.py`)
 - repository metadata such as `README.md`, `REPRODUCIBILITY.md`, `pyproject.toml`, and `Makefile`
 
-Operational utilities that are useful but not part of the stable thesis entrypoint surface live under `scripts/`:
+Evaluation runners and CLI operational utilities live under `scripts/`:
 
+- `scripts/evaluation/` for benchmark evaluation runners (`run_*_eval.py`, `compose_benchmark_eval.py`) and reporting tooling
 - `scripts/ingestion/` for graph and embedding preparation helpers
 - `scripts/search/` for CLI search helpers
 - `scripts/policy/` for policy CLI helpers
-- `scripts/evaluation/` for auxiliary benchmark/evaluation tooling
 
 This split is intentional:
 
-- reviewers can quickly identify the stable entrypoints
+- reviewers can quickly identify the stable application entrypoint
 - HTTP concerns stay separate from domain orchestration
-- package code remains importable without depending on ad hoc root scripts
+- evaluation scripts remain centralized under `scripts/evaluation/`
 
 Repository compatibility rules:
 
 - keep `app.py` at the root
-- keep the `run_*_eval.py` evaluation runners at the root
-- avoid introducing new top-level utility scripts when equivalent functionality belongs under `scripts/`
+- place evaluation scripts under `scripts/evaluation/`
