@@ -137,6 +137,37 @@ uv run python run_remediation_eval.py \
   --reset-neo4j
 ```
 
+### Model consumption and cost
+
+Every provider call is recorded once, in the shared transport, so hosted and
+locally served models are accounted for identically. Consumption is emitted as
+OpenTelemetry metrics under the GenAI semantic conventions
+(`gen_ai.client.token.usage` partitioned by `gen_ai.token.type`, plus
+`gen_ai.client.operation.duration`) and also kept in a process-local ledger,
+which remediation runs write to `model_usage.json` beside their metrics.
+
+Those conventions are still in Development upstream, and a migration to
+counters named `gen_ai.client.inference.tokens` is proposed, so treat the
+metric names as liable to change.
+
+Cost is opt-in and never guessed. Set per-model rates to have an estimate
+computed:
+
+```bash
+export LLM_PRICE_PER_MILLION='{"gpt-5.4": {"input": 1.25, "output": 10.0, "cached_input": 0.125}}'
+```
+
+Rates are per million units and must come from the provider's current price
+list; nothing is hardcoded. A model with no configured rate reports its units
+with no cost rather than a fabricated one, and a partial total always names the
+unpriced models so it cannot be mistaken for complete. Configuring
+`cached_input` matters where a provider discounts cached input: without it the
+cached portion is charged at the full input rate, which overstates rather than
+understates, and the artifact records that it did in a `cost_note`.
+
+Metrics export nowhere by default. Set `OTEL_EXPORTER_OTLP_ENDPOINT` for a
+collector, or `OTEL_METRICS_CONSOLE=1` to print them locally.
+
 ### Detection evaluation by policy group
 
 A whole-corpus run ingests every category into one graph, so a failure anywhere

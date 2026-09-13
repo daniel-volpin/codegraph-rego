@@ -13,6 +13,7 @@ from codegraph.config import settings
 from codegraph.llm.schema.explanation import strip_structured_stop_tokens
 from codegraph.llm.transport.base import LLMRequest, LLMTransport, LLMUnavailableError
 from codegraph.llm.transport.provider_admission import provider_admission_gate
+from codegraph.llm.usage import record_llm_usage
 from codegraph.telemetry import get_tracer
 
 logger = logging.getLogger("codegraph.llm.transport.openai_compatible")
@@ -252,22 +253,77 @@ def _token_count(usage: Any, name: str) -> int:
     return value if isinstance(value, int) and value >= 0 else -1
 
 
-def _set_usage_attributes(span: Any, usage: Any, token_names: Mapping[str, str]) -> None:
-    if usage is None:
-        span.set_attribute("llm.prompt_tokens", -1)
-        span.set_attribute("llm.completion_tokens", -1)
-        span.set_attribute("llm.total_tokens", -1)
-        return
+def _nested_count(parent: Any, container_name: str, field_name: str) -> int:
+    container = getattr(parent, container_name, None)
+    if container is None:
+        return 0
+    value = getattr(container, field_name, None)
+    return value if isinstance(value, int) and value > 0 else 0
 
-    prompt_tokens = _token_count(usage, token_names["prompt"])
-    completion_tokens = _token_count(usage, token_names["completion"])
-    if token_names["total"]:
-        total_tokens = _token_count(usage, token_names["total"])
-    else:
-        total_tokens = max(0, prompt_tokens) + max(0, completion_tokens)
-    span.set_attribute("llm.prompt_tokens", prompt_tokens)
-    span.set_attribute("llm.completion_tokens", completion_tokens)
-    span.set_attribute("llm.total_tokens", total_tokens or -1)
+
+def _usage_detail_counts(usage: Any, token_names: Mapping[str, str]) -> tuple[int, int]:
+    """Cached input and reasoning output counts, when the provider reports them.
+
+    Cached input is billed at a discount, so ignoring it overstates cost.
+    Reasoning output is already inside the output count and is carried only for
+    visibility. The two response shapes name these containers differently, so
+    the detail field names are derived from the same mapping that selects the
+    top-level counts. Locally served models report neither; zero is correct.
+    """
+    if usage is None:
+        return 0, 0
+    input_container = f"{token_names['prompt']}_details"
+    output_container = f"{token_names['completion']}_details"
+    cached = _nested_count(usage, input_container, "cached_tokens")
+    reasoning = _nested_count(usage, output_container, "reasoning_tokens")
+    return cached, reasoning
+
+
+def _set_usage_attributes(
+    span: Any,
+    usage: Any,
+    token_names: Mapping[str, str],
+    *,
+    config: _GenerationConfig | None = None,
+    task_type: str = "",
+    duration_seconds: float | None = None,
+) -> None:
+    """Annotate the span and record the call in the usage ledger.
+
+    Every provider reaches this one function, so OpenAI-hosted and locally
+    served models are accounted for identically.
+    """
+    prompt_units = -1
+    completion_units = -1
+    total_units = -1
+    if usage is not None:
+        prompt_units = _token_count(usage, token_names["prompt"])
+        completion_units = _token_count(usage, token_names["completion"])
+        if token_names["total"]:
+            total_units = _token_count(usage, token_names["total"])
+        else:
+            total_units = max(0, prompt_units) + max(0, completion_units)
+
+    span.set_attribute("llm.prompt_tokens", prompt_units)
+    span.set_attribute("llm.completion_tokens", completion_units)
+    span.set_attribute("llm.total_tokens", total_units or -1)
+    # Also under the GenAI semantic conventions, so a collector that already
+    # knows them need not learn this codebase's own attribute names.
+    span.set_attribute("gen_ai.usage.input_tokens", prompt_units)
+    span.set_attribute("gen_ai.usage.output_tokens", completion_units)
+
+    if config is not None:
+        cached, reasoning = _usage_detail_counts(usage, token_names)
+        record_llm_usage(
+            provider=_infer_provider(config.api_base),
+            model=config.model or "unknown",
+            task_type=task_type or "unknown",
+            input_units=prompt_units,
+            output_units=completion_units,
+            cached_input_units=cached,
+            reasoning_output_units=reasoning,
+            duration_seconds=duration_seconds,
+        )
 
 
 def _chat_completion_params(request: LLMRequest, config: _GenerationConfig) -> dict[str, Any]:
@@ -310,12 +366,18 @@ def _responses_params(request: LLMRequest, config: _GenerationConfig) -> dict[st
     return params
 
 
-def _generate_with_chat_completions(client: OpenAI, request: LLMRequest, config: _GenerationConfig, span: Any) -> Any:
+def _generate_with_chat_completions(
+    client: OpenAI, request: LLMRequest, config: _GenerationConfig, span: Any, task_type: str = ""
+) -> Any:
+    started = time.perf_counter()
     response = client.chat.completions.create(**_chat_completion_params(request, config))
     _set_usage_attributes(
         span,
         getattr(response, "usage", None),
         {"prompt": "prompt_tokens", "completion": "completion_tokens", "total": "total_tokens"},
+        config=config,
+        task_type=task_type,
+        duration_seconds=time.perf_counter() - started,
     )
     if request.tools:
         choices = getattr(response, "choices", None) or []
@@ -345,12 +407,18 @@ def _generate_with_chat_completions(client: OpenAI, request: LLMRequest, config:
     return _extract_message_content(response, allow_reasoning_content=request.response_format is not None)
 
 
-def _generate_with_responses(client: OpenAI, request: LLMRequest, config: _GenerationConfig, span: Any) -> str:
+def _generate_with_responses(
+    client: OpenAI, request: LLMRequest, config: _GenerationConfig, span: Any, task_type: str = ""
+) -> str:
+    started = time.perf_counter()
     response = client.responses.create(**_responses_params(request, config))
     _set_usage_attributes(
         span,
         getattr(response, "usage", None),
         {"prompt": "input_tokens", "completion": "output_tokens", "total": ""},
+        config=config,
+        task_type=task_type,
+        duration_seconds=time.perf_counter() - started,
     )
     return _extract_responses_output_text(response)
 
@@ -378,9 +446,9 @@ class OpenAICompatibleTransport(LLMTransport):
                     try:
                         client = _build_client(api_base=config.api_base, api_key=settings.llm_api_key)
                         if config.use_chat_completions:
-                            output_text = _generate_with_chat_completions(client, request, config, span)
+                            output_text = _generate_with_chat_completions(client, request, config, span, task_type)
                         else:
-                            output_text = _generate_with_responses(client, request, config, span)
+                            output_text = _generate_with_responses(client, request, config, span, task_type)
                     finally:
                         if client is not None:
                             try:

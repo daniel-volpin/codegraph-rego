@@ -104,6 +104,16 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LLM_MAX_CONCURRENT_REQUESTS", "llm_max_concurrent_requests"),
         description="Process-local cap on active provider SDK/client generation calls.",
     )
+    llm_price_per_million: dict[str, dict[str, float]] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices("LLM_PRICE_PER_MILLION", "llm_price_per_million"),
+        description=(
+            "Per-model rates used to estimate run cost, as "
+            '{"model": {"input": 1.25, "output": 10.0}} per million units. Empty by '
+            "default: an unpriced model reports units without a cost rather than "
+            "one guessed from a stale published rate."
+        ),
+    )
     llm_max_pending_requests: int = Field(
         4,
         ge=0,
