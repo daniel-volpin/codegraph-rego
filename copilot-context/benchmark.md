@@ -33,6 +33,17 @@ Remediation support tiers:
     under its own matched config (60/category, seed 7): Rego lexical scores
     `0.795` F1 and OpenGrep taint analysis `0.838`. See
     `docs/thesis_context.md` ("Canonical thesis runs") before citing.
+- Detection, current: `outputs/local_smoke/detection_composed_final/`
+  - Full corpus of 2092 cases, composed from eight per-group runs
+  - `TP=979`, `FP=250`, `FN=71`
+  - `Precision=0.7966`, `Recall=0.9324`, `F1=0.8591`
+  - Crypto (CWE-327) `130/0/0` and hash (CWE-328) `129/0/0`, both `F1=1.000`,
+    because those controls decide on the algorithm declared in the analysed
+    workspace's properties files rather than on a source literal
+  - Means **the configured value is unsafe**, not that a deployment is
+    vulnerable: runtime overrides can replace a declared value
+  - Do not sum the category rows; the Overall row is union any-rule. See
+    `docs/architecture/2026-09-13-configuration-facts.md`.
 - Explanation: `outputs/thesis_final_explanation_full_v2/`
   - `Citation@TP (ctx)=1.000` (`222/222`)
   - `Citation@TP (no-ctx)=0.009` (`2/222`)

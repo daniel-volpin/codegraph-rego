@@ -137,11 +137,54 @@ uv run python run_remediation_eval.py \
   --reset-neo4j
 ```
 
-Current detection baseline, measured on `multicat_full.json` (60
-cases/category, seed 7): precision `0.793`, recall `0.888`, F1 `0.838`
-(`TP/FP/FN = 207/54/26`), artifact `outputs/local_smoke/detection_matched/`.
+### Detection evaluation by policy group
+
+A whole-corpus run ingests every category into one graph, so a failure anywhere
+discards the run. Evaluate one group at a time and merge the outputs; a failed
+group is then re-run on its own in seconds rather than re-running 2115 files.
+
+```bash
+for group in hash-md5 crypto-md5 rng-insecure sql-injection \
+             path-traversal command-injection ldap-injection xpath-injection; do
+  uv run python run_benchmark_eval.py \
+    --config configs/benchmark/multicat_all_available.json \
+    --mapping configs/benchmark/policy_registry.json \
+    --categories "$group" \
+    --output-dir "outputs/local_smoke/group_$group" \
+    --reset-neo4j
+done
+
+uv run python compose_benchmark_eval.py \
+  outputs/local_smoke/group_* \
+  --output-dir outputs/local_smoke/detection_composed
+```
+
+Compose recomputes the Overall row from each run's `case_outcomes.jsonl` under
+the union any-rule definition. Never sum the per-category rows: a case selected
+under one category can fire an off-target rule from another. Compose refuses to
+merge groups that disagree about a testcase, which means they came from
+different code or configuration.
+
+Group runs omit cross-file graph edges between categories. That is safe for
+OWASP Benchmark, whose cases are standalone and whose helpers are staged into
+every group, but it is a property of that corpus rather than a general
+guarantee. Verified equivalent on this corpus: run per group, every category
+reproduces the whole-corpus figures exactly.
+
+Current detection baseline, full corpus (2092 cases, all available per
+category, seed 7): precision `0.7966`, recall `0.9324`, F1 `0.8591`
+(`TP/FP/FN = 979/250/71`), artifact
+`outputs/local_smoke/detection_composed_final/`. On the 454-case
+`multicat_full.json` sample the same engines measured F1 `0.838`
+(`207/54/26`, `outputs/local_smoke/detection_matched/`) before
+configuration-backed crypto and hash detection.
+
 A detection figure is a property of the engine configuration as well as the
-corpus, so state which engines a run used.
+corpus, so state which engines a run used, and whether configuration facts were
+available. Crypto and hash controls decide on values declared in the analysed
+workspace's `*.properties` files, so a corpus without them scores those
+categories differently; see
+`docs/architecture/2026-09-13-configuration-facts.md`.
 
 The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/thesis_final_remediation_v4/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier historical runs (`detection_calibration_path_precision_v4`, `repro_supported_medium_branch_benchmarktest01017_fix`) are no longer tracked in the repository.
 
