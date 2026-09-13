@@ -382,10 +382,12 @@ Canonical artifact snapshot (generated 2026-05-03):
 ## 11. Interpretation
 
 - Detection is the baseline validity check.
-  - The reported run covers every available case in each evaluated family, so
-    it carries no sampling variance and needs no interval to account for case
-    selection. Quote the per-family rows alongside the aggregate: family sizes
-    are unequal, so the aggregate is weighted towards the larger families.
+  - The current baseline covers every available case in each evaluated family,
+    so it carries no case-selection variance and its composed metrics emit no
+    intervals. The recorded 454-case run sampled 60 cases per category and does
+    carry bootstrap and Wilson intervals in its artifact; quote them when citing
+    it. Quote the per-family rows alongside the aggregate either way: family
+    sizes are unequal, so the aggregate is weighted towards the larger families.
 - Explanation evaluation is mainly about citation grounding, not prose quality.
   - **Citation@TP** is the v1 metric (renamed for clarity): with-context
     citation rate over violations on positive testcases.
@@ -402,12 +404,12 @@ Canonical artifact snapshot (generated 2026-05-03):
     are still part of the prompt assembly inputs). See
     `docs/thesis_context.md` § "Ablation Semantics".
 - Remediation is judged by fix success and re-verification, not just patch text.
-- Production-minded remediation is intentionally bounded:
+- Production-minded remediation is intentionally bounded. `configs/benchmark/policy_registry.json` owns these tiers:
   - full support for weak hash and weak randomness
-  - guarded support for weak crypto
-  - explanation/manual-only for SQL injection, path traversal, command injection, LDAP injection, XPath injection, and broad access-control/logging findings
+  - guarded support for weak crypto, SQL injection, path traversal, command injection, LDAP injection, XPath injection, access control, and event logging
+  - guarded means the agent may propose a candidate but must refuse when evidence or any verification gate is unavailable
 - `NO_FIX` is an expected safe outcome for guarded remediation, not a crash.
-  - v3 reports calibration over **three populations**:
+  - the remediation calibration artifacts report **three populations**:
     - `full` — every result with a confidence score (legacy headline).
     - `attempted_only` — calibrated success probability on cases the
       system actually tried to fix. This is the right number for
@@ -470,7 +472,7 @@ The eval pipeline is **as deterministic as the underlying components allow**. Re
   (or restarts) and report mean ± standard deviation. The detection numbers are deterministic and need no repetition.
 - Pin the model version explicitly in `LLM_MODEL` and
   `REMEDIATION_LLM_MODEL`. Record the resolved model and runtime in the artifact's `provenance.json` (written by every `run_*_eval.py` script).
-- For statistical claims (P, R, F1, Citation@*), prefer the bootstrap and
-  Wilson confidence intervals emitted next to the point estimates over individual point values.
-- When citing thesis-final numbers, cite the artifact directory
-  (`outputs/thesis_final_*/`) plus the `thesis-evidence-2026-05-31` git tag — not the README prose.
+- For statistical claims (P, R, F1, Citation@*), prefer the confidence
+  intervals emitted next to the point estimates over individual point values. The 454-case detection artifact carries bootstrap and Wilson intervals and the explanation artifact carries Wilson intervals; the composed detection metrics carry none, for the reason given in section 11.
+- When citing numbers, cite the artifact directory plus the SHA recorded in its
+  `provenance.json`, not the README prose. `outputs/README.md` lists every artifact, the SHA it records, and the tag or branch that SHA is reachable from.
