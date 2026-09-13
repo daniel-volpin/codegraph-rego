@@ -43,11 +43,11 @@ If you are using LM Studio with different explanation/remediation models, enable
 
 ### Environment Variable Reference
 
-The operator-facing variables consumed by `codegraph.config.Settings`, the upload pipeline, the remediation gate, and the OpenTelemetry layer (internal path/index overrides live in `codegraph/config.py`). `.env.example` ships matching defaults — keep it in sync when adding new variables.
+The operator-facing variables consumed by `codegraph.config.Settings`, the upload pipeline, the remediation gate, and the OpenTelemetry layer (internal path/index overrides live in `codegraph/config.py`). The Default column is the value `Settings` falls back to with nothing set, which is what you are debugging against; `.env.example` sets several of them to local-MLX values instead, so check both.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `NEO4J_URI` | `bolt://127.0.0.1:7687` | Neo4j Bolt endpoint. Required at runtime. |
+| `NEO4J_URI` | `bolt://localhost:7687` | Neo4j Bolt endpoint. Required at runtime. |
 | `NEO4J_USER` | `neo4j` | Neo4j auth user. Required. |
 | `NEO4J_PASS` | _unset_ | Neo4j auth password. Required (no default). |
 | `OWASP_BENCHMARK_ROOT` | auto-discovered | Absolute path to the local `BenchmarkJava` checkout. Resolved automatically when the clone sits beside this repository (`../BenchmarkJava`), in it, or at `~/BenchmarkJava`; set it only for a non-standard location. |
@@ -59,31 +59,31 @@ The operator-facing variables consumed by `codegraph.config.Settings`, the uploa
 | `JAVA_PARSER_JAR` | `tools/java-parser/target/codegraph-java-parser.jar` | Explicit path to the Eclipse JDT parser fat jar. Build with `make java-parser-build`; the Python adapter never downloads or builds it at runtime. |
 | `JAVA_PARSER_TIMEOUT_SECONDS` | `30.0` | Per-request deadline for the fresh JVM parser process. |
 | `JAVA_PARSER_HEAP_MB` | `384` | Heap cap passed as `-Xmx` to each parser JVM. |
-| `JAVA_PARSER_MAX_CONCURRENT_REQUESTS` | `1` | Process-local Java parser admission cap (`1..2`); initial correctness uses a fresh JVM and AST per request. |
+| `JAVA_PARSER_MAX_CONCURRENT_REQUESTS` | `4` | Process-local Java parser admission cap (`1..32`); a fresh JVM and AST per request. |
 | `JAVA_PARSER_QUEUE_TIMEOUT_SECONDS` | `5.0` | Maximum wait for Java parser admission before failing fast. |
 | `JAVA_PARSER_MAX_SOURCE_BYTES` | `4194304` | Maximum UTF-8 Java source payload accepted by the Python adapter. |
 | `JAVA_PARSER_MAX_OUTPUT_BYTES` | `16777216` | Maximum stdout JSON payload accepted from the parser process. |
 | `JAVA_PARSER_LANGUAGE_LEVEL` | `25` | Default JDT language level sent in parser requests. |
-| `LLM_API_BASE` | `http://localhost:1234/v1` | OpenAI-compatible base URL (LM Studio, vLLM, etc.). |
+| `LLM_API_BASE` | _unset_ | OpenAI-compatible base URL (LM Studio, vLLM, etc.). Unset means the SDK's own default endpoint. |
 | `LLM_API_KEY` | _unset_ | API key sent to the LLM endpoint. Use `lm-studio` for LM Studio. |
-| `LLM_MODEL` | `qwen3.5-9b-mlx` | Default explanation model. |
+| `LLM_MODEL` | `gpt-4o-mini` | Default explanation model. |
 | `LLM_API_MODE` | `auto` | Endpoint mode selection (`auto`, `responses`, `chat_completions`). |
-| `LLM_TIMEOUT_SECONDS` | `60.0` | Per SDK HTTP operation timeout for model calls (not a total agent-run deadline). |
-| `LLM_MAX_CONCURRENT_REQUESTS` | `2` | Process-local cap on active provider SDK/client generation calls, shared by OpenAI-compatible transports. Not global across processes and not a durable run/token budget. |
+| `LLM_TIMEOUT_SECONDS` | `180.0` | Per SDK HTTP operation timeout for model calls (not a total agent-run deadline). |
+| `LLM_MAX_CONCURRENT_REQUESTS` | `1` | Process-local cap on active provider SDK/client generation calls, shared by OpenAI-compatible transports. Not global across processes and not a durable run/token budget. |
 | `LLM_MAX_PENDING_REQUESTS` | `4` | Process-local cap on provider generation calls waiting for admission before client construction. |
-| `LLM_QUEUE_TIMEOUT_SECONDS` | `5.0` | Maximum provider admission queue wait in seconds; separate from `LLM_TIMEOUT_SECONDS`, which applies after SDK/client operation starts. |
+| `LLM_QUEUE_TIMEOUT_SECONDS` | `60.0` | Maximum provider admission queue wait in seconds; separate from `LLM_TIMEOUT_SECONDS`, which applies after SDK/client operation starts. |
 | `LLM_MAX_RETRIES` | `0` | SDK transport retries per generation attempt (allowed range `0..2`). |
 | `LLM_SEND_TEMPERATURE` | `1` | When `0`, suppresses temperature for providers/models that reject it. |
 | `LLM_TEMPERATURE` | `0.2` | Sampling temperature for explanation. Note: not zero; outputs are not bitwise reproducible. |
-| `LLM_ENABLE_THINKING` | `false` | Disable extended thinking on supported models. |
-| `LLM_CONCURRENCY` | `2` | Max parallel LLM requests during eval. |
+| `LLM_ENABLE_THINKING` | `true` | Set to `false` to suppress `<think>` blocks on models that emit them (Qwen3, DeepSeek). |
+| `LLM_CONCURRENCY` | `1` | Max parallel LLM requests during eval. Keep at 1 for local models. |
 | `LLM_MAX_TOKENS_EXPLANATION` | `512` | Generation cap for the explanation task. |
 | `LLM_MAX_TOKENS_REMEDIATION` | `1024` | Generation cap for the remediation task. |
-| `LLM_MODEL_TTL_SECONDS` | `180` | Per-request TTL hint sent to LM Studio for auto-eviction. |
-| `REMEDIATION_LLM_MODEL` | `qwen/qwen3-coder-30b` | Override model for remediation generation. |
-| `REMEDIATION_LLM_MAX_TOKENS` | `2048` | Override max tokens for remediation. |
-| `REMEDIATION_LLM_TEMPERATURE` | `0.0` | Remediation sampling temperature. Lower than explanation; not strictly deterministic. |
-| `REMEDIATION_LLM_MODEL_TTL_SECONDS` | `300` | LM Studio TTL hint for the remediation model. |
+| `LLM_MODEL_TTL_SECONDS` | _unset_ | Per-request TTL hint sent to LM Studio for auto-eviction. No hint when unset. |
+| `REMEDIATION_LLM_MODEL` | _unset_ | Override model for remediation generation. Falls back to `LLM_MODEL`. |
+| `REMEDIATION_LLM_MAX_TOKENS` | _unset_ | Override the remediation generation cap. Falls back to `LLM_MAX_TOKENS_REMEDIATION`. |
+| `REMEDIATION_LLM_TEMPERATURE` | _unset_ | Override remediation sampling temperature. Falls back to `LLM_TEMPERATURE`; not strictly deterministic either way. |
+| `REMEDIATION_LLM_MODEL_TTL_SECONDS` | _unset_ | LM Studio TTL hint for the remediation model. Falls back to `LLM_MODEL_TTL_SECONDS`. |
 | `REMEDIATION_RAW_CAPTURE_ENABLED` | `0` | Persist raw LLM outputs alongside structured ones (audit aid). |
 | `REMEDIATION_CONFIDENCE_GATE_ENABLED` | `1` | Enforce the confidence gate on `mode="apply"`. **Disabling this allows low-confidence patches to apply.** |
 | `REMEDIATION_CONFIDENCE_THRESHOLD_APPLY` | `0.75` | Sigmoid threshold above which `apply_edits` proceeds. |
