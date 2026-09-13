@@ -29,7 +29,12 @@ import sys
 from pathlib import Path
 
 from baselines.semgrep.runner import run_semgrep_baseline
-from codegraph.evaluation.owasp_lexical_eval import (
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from codegraph.evaluation.owasp_lexical_eval import (  # noqa: E402
     SUPPORTED_CWES,
     evaluate_owasp,
     format_markdown_summary,
@@ -38,7 +43,7 @@ from codegraph.evaluation.owasp_lexical_eval import (
     owasp_paths,
     resolve_owasp_root,
 )
-from codegraph.evaluation.provenance import collect_provenance, write_provenance
+from codegraph.evaluation.provenance import collect_provenance, write_provenance  # noqa: E402
 
 
 def _build_argparser() -> argparse.ArgumentParser:

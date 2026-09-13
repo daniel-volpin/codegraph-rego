@@ -16,11 +16,16 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
-from codegraph.evaluation.benchmark import CategorySpec, load_mapping_config
-from codegraph.evaluation.io import render_markdown_table, write_csv, write_json
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from codegraph.evaluation.benchmark import CategorySpec, load_mapping_config  # noqa: E402
+from codegraph.evaluation.io import render_markdown_table, write_csv, write_json  # noqa: E402
 
 LOGGER = logging.getLogger("compose_benchmark_eval")
 

@@ -27,12 +27,17 @@ import sys
 from pathlib import Path
 
 from baselines.semgrep.runner import run_semgrep_baseline
-from codegraph.evaluation.lexical_noise import load_lexical_noise_manifest
-from codegraph.evaluation.lexical_noise_eval import (
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from codegraph.evaluation.lexical_noise import load_lexical_noise_manifest  # noqa: E402
+from codegraph.evaluation.lexical_noise_eval import (  # noqa: E402
     evaluate_benchmark,
     format_markdown_summary,
 )
-from codegraph.evaluation.provenance import collect_provenance, write_provenance
+from codegraph.evaluation.provenance import collect_provenance, write_provenance  # noqa: E402
 
 _DEFAULT_MANIFEST = "configs/benchmark/lexical_noise_v1.json"
 
