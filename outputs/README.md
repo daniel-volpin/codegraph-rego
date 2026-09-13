@@ -20,9 +20,9 @@ The existing `thesis_final_*` and `_vN` directories keep their names. They are p
 | `thesis_final_remediation_v3/` | verified-success rate and confidence calibration | superseded by v4 | `7ad90a2` | tag `thesis-detection-v2-source` |
 | `thesis_final_remediation_v4/` | verified-success rate and confidence calibration | canonical | `80d0084` | tag `thesis-remediation-v4-source` |
 | `local_smoke/detection_composed_final/` | the current detection baseline, merged from the eight `group_*` runs | current; summary files only | none of its own | via `composed_from` |
-| `local_smoke/group_*/` | the eight per-group runs the baseline merges | current; summary and provenance only | `6aa9026`, `dirty: true` | branch `origin/feat/detection-engine-plugin-contract` |
+| `local_smoke/group_*/` | the eight per-group runs the baseline merges | current; summary and provenance only | `6aa9026`, `dirty: true` | tag `detection-baseline-2026-09-13-source` |
 
-This repository squash-merges, so a feature-branch commit never becomes an ancestor of `main`. `7ad90a2` and `701d051` were reachable from no ref at all and are now pinned by `thesis-detection-v2-source` and `thesis-explanation-v2-source`. `6aa9026` is still held only by a feature branch and will disappear if that branch is pruned.
+This repository squash-merges, so a feature-branch commit never becomes an ancestor of `main`. Every recorded SHA is therefore pinned by a tag: `thesis-detection-v2-source`, `thesis-explanation-v2-source`, `thesis-remediation-v4-source`, and `detection-baseline-2026-09-13-source`. Without those, three of them were reachable from no ref and the fourth only from a feature branch that a prune would remove.
 
 The `local_smoke/` files sit outside the checksum tripwire, which globs `outputs/thesis_final_*`. They are tracked so the current figure has evidence in the repository at all; they are not canonical thesis artifacts, and their provenance records a dirty tree. **Outstanding:** re-run the composed detection evaluation on a clean checkout into a dated directory, so the current figure gains clean-tree provenance under the naming convention above.
 
