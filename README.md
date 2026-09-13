@@ -130,7 +130,7 @@ Repository-tracked evaluation artifacts report:
 
 The recorded `0.953` is **qualified evidence**: it was measured on the 454-case `multicat_full.json` sample, predates audit POLICY-C1's removal of a corpus fingerprint, and does not reproduce on the current baseline. Crypto (CWE-327) and hash (CWE-328) reach `1.000` in the current row by deciding on the algorithm declared in the analysed workspace's configuration, which means *the configured value is unsafe* rather than that a deployment is vulnerable. See [`docs/thesis_context.md`](./docs/thesis_context.md) and [`docs/architecture/2026-09-13-configuration-facts.md`](./docs/architecture/2026-09-13-configuration-facts.md) before citing either row.
 
-These values describe specific recorded runs, not guaranteed performance on arbitrary applications. Cite the artifact's `provenance.json`, recorded commit, and confidence intervals rather than this summary. See [`copilot-context/benchmark.md`](./copilot-context/benchmark.md) and [`docs/thesis_context.md`](./docs/thesis_context.md) for interpretation limits.
+These values describe specific recorded runs, not guaranteed performance on arbitrary applications. Cite the artifact rather than this summary, following [`outputs/README.md`](./outputs/README.md): it records each artifact's provenance SHA, the tag pinning it, and the two cases that need care — the composed detection directory carries its provenance in the per-group runs, and only the 454-case detection and the explanation artifacts carry confidence intervals. See [`copilot-context/benchmark.md`](./copilot-context/benchmark.md) and [`docs/thesis_context.md`](./docs/thesis_context.md) for interpretation limits.
 
 ## Architecture
 

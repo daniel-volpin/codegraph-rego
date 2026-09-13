@@ -30,7 +30,7 @@ Remediation support tiers:
   - `Citation@TP (no-ctx)=0.009` (`2/222`)
   - `Citation@FP (ctx)=1.000` (`9/9`)
   - `Citation@FP (no-ctx)=0.000` (`0/9`)
-- Remediation baseline: `outputs/thesis_final_remediation_v2/`
+- Remediation baseline: `outputs/thesis_final_remediation_v2/` (no `provenance.json`; cite the v4 anchor below when a recorded commit is needed)
   - `25/25` fully verified
   - `Brier=0.0057`, `ECE=0.0696` (per `remediation_metrics.json` / `confidence_calibration.json`; the prose block in that run's `summary.md` diverges and is not the canonical carrier)
 
