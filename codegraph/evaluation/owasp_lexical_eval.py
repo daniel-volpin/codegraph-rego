@@ -7,7 +7,9 @@ graph context, Neo4j, or LLM-driven explanations — so it is
 reproducible inside CI / local environments and quantifies F10's
 marginal value on a real-but-synthetic SAST benchmark.
 
-The full-pipeline thesis-final numbers (P=R=F1=0.953) reflect the
+The full-pipeline thesis-final numbers (P=R=F1=0.953) are qualified
+evidence that does not reproduce on the current baseline, whose full-corpus
+F1 is 0.8591. They reflect the
 combined contribution of F10 + graph context + helper summaries. The
 delta between pre_f10 and post_f10 here lower-bounds F10's
 file-level effect; the production pipeline only adds signal.
