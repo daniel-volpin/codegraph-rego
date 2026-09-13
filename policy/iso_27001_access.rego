@@ -6,7 +6,6 @@ endpoint_annotations := {"requestmapping", "getmapping", "postmapping", "putmapp
 security_annotations := {"preauthorize", "secured", "rolesallowed", "denyall", "authorize"}
 sensitive_keywords := {"delete", "remove", "destroy", "update", "modify", "drop"}
 logger_indicators := {"logger", "audit", "tracer"}
-untrusted_input_markers := {"getparameter(", "getheader(", "getquerystring(", "getcookies("}
 
 # Annotations may appear qualified or not: JDT reports the written form, so
 # "@PreAuthorize" and "@org.springframework...PreAuthorize" are both valid and
