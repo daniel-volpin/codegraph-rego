@@ -8,8 +8,7 @@ This file describes the evaluation workflow for the current source baseline. Pub
 - uv 0.12.13+
 - Neo4j 5.x
 - OPA `v1.20.2` on `PATH` (required for `make policy-check` and OPA policy evaluation)
-- OpenGrep `v1.30.0+` on `PATH` (required for the injection controls; without it
-  those rules are skipped and detection recall drops silently)
+- OpenGrep `v1.30.0+` on `PATH` (required for the injection controls; without it those rules are skipped and detection recall drops silently)
 - JDK 21+ and Maven for the JDT adapter; the analyzed project's build may require its own configured Java release
 - local checkout of `BenchmarkJava` (as a sibling directory `../BenchmarkJava`, or
   anywhere with `OWASP_BENCHMARK_ROOT` pointing at it)
@@ -229,19 +228,15 @@ The selected benchmark cases cover:
 
 For the UI thesis/demo, use the Policy page's `Framework demo focus` preset after upload. That preset sends an explicit `rule_ids` filter to the backend so the grouped table reflects the benchmark-aligned categories rather than the full servlet-heavy policy surface.
 
-## 6. Reproduce Thesis-Final Detection
+## 6. Reproduce the Reported Detection Result
 
-The tracked detection artifact set is `outputs/thesis_final_detection_full_v2/`. It carries bootstrap CIs and a per-run `provenance.json`. Reproduce it in a non-canonical directory:
+The reported figure comes from the full corpus, evaluated one policy group at a time and composed. Use the procedure in "Detection evaluation by policy group" above; it writes `outputs/local_smoke/detection_composed_final/`.
 
-```bash
-uv run python run_benchmark_eval.py \
-  --config configs/benchmark/multicat_full.json \
-  --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/reproduction/detection_full_v2 \
-  --reset-neo4j
-```
+`outputs/thesis_final_detection_full_v2/` is a historical artifact and is **not reproducible** on this baseline: it predates audit POLICY-C1's removal of a corpus fingerprint. Running its original config (`multicat_full.json`) gives neither that artifact's figure nor the reported one, so do not treat it as a reproduction step. `docs/thesis_context.md` records what it was and why it is retained.
 
 ## 7. Reproduce Thesis-Final Explanation Evaluation
+
+The recorded cohort of 222 true-positive and 9 false-positive findings comes from the detection configuration in use when that run was made. Detection has since changed, so the same command now yields a larger cohort; the recorded artifact is the reference for the reported figures.
 
 The v1 baseline measured `Citation@Context` on the TP cohort only. The v2 run additionally evaluates the FP cohort (citation grounding on the detector's false positives) and emits Wilson 95% CIs on every rate. Re-run into a fresh directory:
 
@@ -327,8 +322,8 @@ Every eval run also writes a `provenance.json` with the git SHA, OPA version, mo
 
 Canonical artifact snapshot (generated 2026-05-03):
 
-- detection v2 (`outputs/thesis_final_detection_full_v2/`): precision
-  `0.9528` (95% bootstrap CI `[0.9253, 0.9780]`), recall `0.9528` (`[0.9253, 0.9774]`), F1 `0.9528` (`[0.9314, 0.9709]`); provenance SHA `7ad90a2`.
+- detection v2 (`outputs/thesis_final_detection_full_v2/`): qualified evidence
+  that does not reproduce on the current baseline. The figure, its bootstrap intervals, and the reason it does not reproduce are recorded in `docs/thesis_context.md`; provenance SHA `7ad90a2`.
 - explanation v2 (`outputs/thesis_final_explanation_full_v2/`):
   `Citation@TP=1.000` (`222/222`), `Citation@TP@NoContext=0.009` (`2/222`), `Citation@FP=1.000` (`9/9`), `Citation@FP@NoContext=0.000` (`0/9`); provenance SHA `701d051`.
 - remediation v3 (`outputs/thesis_final_remediation_v3/`): fully verified
@@ -387,9 +382,10 @@ Canonical artifact snapshot (generated 2026-05-03):
 ## 11. Interpretation
 
 - Detection is the baseline validity check.
-  - v2 adds bootstrap CIs alongside the point estimates. Quote both when
-    reporting per-category numbers; the per-category sample sizes (60 by
-    default) make the intervals informative.
+  - The reported run covers every available case in each evaluated family, so
+    it carries no sampling variance and needs no interval to account for case
+    selection. Quote the per-family rows alongside the aggregate: family sizes
+    are unequal, so the aggregate is weighted towards the larger families.
 - Explanation evaluation is mainly about citation grounding, not prose quality.
   - **Citation@TP** is the v1 metric (renamed for clarity): with-context
     citation rate over violations on positive testcases.
