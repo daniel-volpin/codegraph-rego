@@ -119,16 +119,16 @@ The primary evaluation covers eight OWASP Benchmark categories:
 
 ## Research Results
 
-Repository-tracked thesis artifacts report:
+Repository-tracked evaluation artifacts report:
 
 | Evaluation | Result | Evidence |
 | --- | --- | --- |
 | Detection (current) | Precision `0.797`, recall `0.932`, F1 `0.859` on the full 2092-case corpus | [`outputs/local_smoke/detection_composed_final/`](./outputs/local_smoke/detection_composed_final/) |
-| Detection (recorded, qualified) | Precision, recall, and F1: `0.953` — **does not reproduce**, see below | [`outputs/thesis_final_detection_full_v2/`](./outputs/thesis_final_detection_full_v2/) |
+| Detection (recorded, qualified) | Precision, recall, and F1: `0.953` on a 454-case sample — **does not reproduce**, see below | [`outputs/thesis_final_detection_full_v2/`](./outputs/thesis_final_detection_full_v2/) |
 | Explanation grounding | `Citation@TP=1.000`; `Citation@FP=1.000` | [`outputs/thesis_final_explanation_full_v2/`](./outputs/thesis_final_explanation_full_v2/) |
 | Bounded remediation | `25/25` fully verified | [`outputs/thesis_final_remediation_v4/`](./outputs/thesis_final_remediation_v4/) |
 
-The recorded `0.953` is **qualified evidence**. It predates audit POLICY-C1's removal of a corpus fingerprint and does not reproduce on the current baseline; the current figure above is the reproducible one. Crypto (CWE-327) and hash (CWE-328) reach `1.000` there by deciding on the algorithm declared in the analysed workspace's configuration, which means *the configured value is unsafe* rather than that a deployment is vulnerable. See `docs/thesis_context.md` and `docs/architecture/2026-09-13-configuration-facts.md` before citing either row.
+The recorded `0.953` is **qualified evidence**: it was measured on the 454-case `multicat_full.json` sample, predates audit POLICY-C1's removal of a corpus fingerprint, and does not reproduce on the current baseline. Crypto (CWE-327) and hash (CWE-328) reach `1.000` in the current row by deciding on the algorithm declared in the analysed workspace's configuration, which means *the configured value is unsafe* rather than that a deployment is vulnerable. See [`docs/thesis_context.md`](./docs/thesis_context.md) and [`docs/architecture/2026-09-13-configuration-facts.md`](./docs/architecture/2026-09-13-configuration-facts.md) before citing either row.
 
 These values describe specific recorded runs, not guaranteed performance on arbitrary applications. Cite the artifact's `provenance.json`, recorded commit, and confidence intervals rather than this summary. See [`copilot-context/benchmark.md`](./copilot-context/benchmark.md) and [`docs/thesis_context.md`](./docs/thesis_context.md) for interpretation limits.
 
@@ -194,7 +194,7 @@ make neo4j-up
 make neo4j-down
 ```
 
-Benchmark-sensitive changes should also run the focused smoke evaluations documented in [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md#verification-contract).
+Benchmark-sensitive changes should also run the focused smoke evaluations documented in [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md#3-verification-contract).
 
 ## Safety
 

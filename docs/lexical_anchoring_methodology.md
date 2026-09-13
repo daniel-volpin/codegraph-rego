@@ -56,7 +56,7 @@ This benchmark is intentionally narrow. It is *not* a recall benchmark — it me
 * Ground truth from `expectedresults-1.2.csv` (`real_vulnerability ∈
   {true, false}`).
 * File-level eval — no Neo4j, no LLM, no graph context — so the run
-  is reproducible inside CI and isolates F10's contribution at the pattern layer. The full-pipeline thesis-final numbers (P=R=F1=0.953, qualified evidence that does not reproduce; current full-corpus F1 is 0.8591) add graph context and helper summaries on top.
+  is reproducible inside CI and isolates F10's contribution at the pattern layer. The full-pipeline thesis-final numbers, recorded in `docs/thesis_context.md`, add graph context and helper summaries on top.
 
 The OWASP eval has two structural roles in the thesis:
 
@@ -174,7 +174,7 @@ The overall and FP-class tests are significant at α=0.05 (exact p ≈ 0.0078); 
 
 An empirical scan over the full 2,740-case corpus confirms the underlying reason: zero comment occurrences of any of `MD5`, `MessageDigest`, `executeQuery`, `ProcessBuilder`, `new Random`, `XPathFactory` — i.e. the lexical-noise FP class F10 targets is absent from OWASP Benchmark. This is the data-grounded confirmation of the synthetic-vs-real gap [4].
 
-The CodeGraph file-level F1 = 0.892 is the *lower bound* for the production full-pipeline number (F1 = 0.953, qualified evidence that does not reproduce; current full-corpus F1 is 0.8591); graph context and helper summaries supply the remaining ~6 F1 points.
+The CodeGraph file-level F1 = 0.892 is the *lower bound* for the production full-pipeline number recorded in `docs/thesis_context.md`; graph context and helper summaries supply the remainder.
 
 The SemGrep low recall on OWASP is **not** evidence that SemGrep is weaker than CodeGraph — it reflects that our 8 hand-written rules are simple call-site patterns and do not track OWASP's `getPropertyValue()` / `getParameterValues()` wrapper indirection. A taint-aware SemGrep ruleset (or `--config p/owasp-top-ten` from the SemGrep registry) would close that gap; the apples-to-apples comparison this evaluator pins is *AST robustness to lexical noise*, not *recall on synthetic-benchmark wrappers*.
 

@@ -8,8 +8,7 @@ This file describes the evaluation workflow for the current source baseline. Pub
 - uv 0.12.13+
 - Neo4j 5.x
 - OPA `v1.20.2` on `PATH` (required for `make policy-check` and OPA policy evaluation)
-- OpenGrep `v1.30.0+` on `PATH` (required for the injection controls; without it
-  those rules are skipped and detection recall drops silently)
+- OpenGrep `v1.30.0+` on `PATH` (required for the injection controls; without it those rules are skipped and detection recall drops silently)
 - JDK 21+ and Maven for the JDT adapter; the analyzed project's build may require its own configured Java release
 - local checkout of `BenchmarkJava` (as a sibling directory `../BenchmarkJava`, or
   anywhere with `OWASP_BENCHMARK_ROOT` pointing at it)
@@ -44,11 +43,11 @@ If you are using LM Studio with different explanation/remediation models, enable
 
 ### Environment Variable Reference
 
-The operator-facing variables consumed by `codegraph.config.Settings`, the upload pipeline, the remediation gate, and the OpenTelemetry layer (internal path/index overrides live in `codegraph/config.py`). `.env.example` ships matching defaults — keep it in sync when adding new variables.
+The operator-facing variables consumed by `codegraph.config.Settings`, the upload pipeline, the remediation gate, and the OpenTelemetry layer (internal path/index overrides live in `codegraph/config.py`). The Default column is the value `Settings` falls back to with nothing set, which is what you are debugging against; `.env.example` sets several of them to local-MLX values instead, so check both.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `NEO4J_URI` | `bolt://127.0.0.1:7687` | Neo4j Bolt endpoint. Required at runtime. |
+| `NEO4J_URI` | `bolt://localhost:7687` | Neo4j Bolt endpoint. Required at runtime. |
 | `NEO4J_USER` | `neo4j` | Neo4j auth user. Required. |
 | `NEO4J_PASS` | _unset_ | Neo4j auth password. Required (no default). |
 | `OWASP_BENCHMARK_ROOT` | auto-discovered | Absolute path to the local `BenchmarkJava` checkout. Resolved automatically when the clone sits beside this repository (`../BenchmarkJava`), in it, or at `~/BenchmarkJava`; set it only for a non-standard location. |
@@ -60,37 +59,39 @@ The operator-facing variables consumed by `codegraph.config.Settings`, the uploa
 | `JAVA_PARSER_JAR` | `tools/java-parser/target/codegraph-java-parser.jar` | Explicit path to the Eclipse JDT parser fat jar. Build with `make java-parser-build`; the Python adapter never downloads or builds it at runtime. |
 | `JAVA_PARSER_TIMEOUT_SECONDS` | `30.0` | Per-request deadline for the fresh JVM parser process. |
 | `JAVA_PARSER_HEAP_MB` | `384` | Heap cap passed as `-Xmx` to each parser JVM. |
-| `JAVA_PARSER_MAX_CONCURRENT_REQUESTS` | `1` | Process-local Java parser admission cap (`1..2`); initial correctness uses a fresh JVM and AST per request. |
+| `JAVA_PARSER_MAX_CONCURRENT_REQUESTS` | `4` | Process-local Java parser admission cap (`1..32`); a fresh JVM and AST per request. |
 | `JAVA_PARSER_QUEUE_TIMEOUT_SECONDS` | `5.0` | Maximum wait for Java parser admission before failing fast. |
 | `JAVA_PARSER_MAX_SOURCE_BYTES` | `4194304` | Maximum UTF-8 Java source payload accepted by the Python adapter. |
 | `JAVA_PARSER_MAX_OUTPUT_BYTES` | `16777216` | Maximum stdout JSON payload accepted from the parser process. |
 | `JAVA_PARSER_LANGUAGE_LEVEL` | `25` | Default JDT language level sent in parser requests. |
-| `LLM_API_BASE` | `http://localhost:1234/v1` | OpenAI-compatible base URL (LM Studio, vLLM, etc.). |
+| `LLM_API_BASE` | _unset_ | OpenAI-compatible base URL (LM Studio, vLLM, etc.). Unset means the SDK's own default endpoint. |
 | `LLM_API_KEY` | _unset_ | API key sent to the LLM endpoint. Use `lm-studio` for LM Studio. |
-| `LLM_MODEL` | `qwen3.5-9b-mlx` | Default explanation model. |
+| `LLM_MODEL` | `gpt-4o-mini` | Default explanation model. |
 | `LLM_API_MODE` | `auto` | Endpoint mode selection (`auto`, `responses`, `chat_completions`). |
-| `LLM_TIMEOUT_SECONDS` | `60.0` | Per SDK HTTP operation timeout for model calls (not a total agent-run deadline). |
-| `LLM_MAX_CONCURRENT_REQUESTS` | `2` | Process-local cap on active provider SDK/client generation calls, shared by OpenAI-compatible transports. Not global across processes and not a durable run/token budget. |
+| `LLM_TIMEOUT_SECONDS` | `180.0` | Per SDK HTTP operation timeout for model calls (not a total agent-run deadline). |
+| `LLM_MAX_CONCURRENT_REQUESTS` | `1` | Process-local cap on active provider SDK/client generation calls, shared by OpenAI-compatible transports. Not global across processes and not a durable run/token budget. |
+| `LLM_PRICE_PER_MILLION` | _empty_ | Per-model rates for run-cost estimation, as `{"model": {"input": 1.25, "output": 10.0}}` per million units. An unpriced model reports units with no cost rather than a cost guessed from a stale published rate. |
 | `LLM_MAX_PENDING_REQUESTS` | `4` | Process-local cap on provider generation calls waiting for admission before client construction. |
-| `LLM_QUEUE_TIMEOUT_SECONDS` | `5.0` | Maximum provider admission queue wait in seconds; separate from `LLM_TIMEOUT_SECONDS`, which applies after SDK/client operation starts. |
+| `LLM_QUEUE_TIMEOUT_SECONDS` | `60.0` | Maximum provider admission queue wait in seconds; separate from `LLM_TIMEOUT_SECONDS`, which applies after SDK/client operation starts. |
 | `LLM_MAX_RETRIES` | `0` | SDK transport retries per generation attempt (allowed range `0..2`). |
 | `LLM_SEND_TEMPERATURE` | `1` | When `0`, suppresses temperature for providers/models that reject it. |
 | `LLM_TEMPERATURE` | `0.2` | Sampling temperature for explanation. Note: not zero; outputs are not bitwise reproducible. |
-| `LLM_ENABLE_THINKING` | `false` | Disable extended thinking on supported models. |
-| `LLM_CONCURRENCY` | `2` | Max parallel LLM requests during eval. |
+| `LLM_ENABLE_THINKING` | `true` | Set to `false` to suppress `<think>` blocks on models that emit them (Qwen3, DeepSeek). |
+| `LLM_CONCURRENCY` | `1` | Max parallel LLM requests during eval. Keep at 1 for local models. |
 | `LLM_MAX_TOKENS_EXPLANATION` | `512` | Generation cap for the explanation task. |
 | `LLM_MAX_TOKENS_REMEDIATION` | `1024` | Generation cap for the remediation task. |
-| `LLM_MODEL_TTL_SECONDS` | `180` | Per-request TTL hint sent to LM Studio for auto-eviction. |
-| `REMEDIATION_LLM_MODEL` | `qwen/qwen3-coder-30b` | Override model for remediation generation. |
-| `REMEDIATION_LLM_MAX_TOKENS` | `2048` | Override max tokens for remediation. |
-| `REMEDIATION_LLM_TEMPERATURE` | `0.0` | Remediation sampling temperature. Lower than explanation; not strictly deterministic. |
-| `REMEDIATION_LLM_MODEL_TTL_SECONDS` | `300` | LM Studio TTL hint for the remediation model. |
+| `LLM_MODEL_TTL_SECONDS` | _unset_ | Per-request TTL hint sent to LM Studio for auto-eviction. No hint when unset. |
+| `REMEDIATION_LLM_MODEL` | _unset_ | Override model for remediation generation. Falls back to `LLM_MODEL`. |
+| `REMEDIATION_LLM_MAX_TOKENS` | _unset_ | Override the remediation generation cap. Falls back to `LLM_MAX_TOKENS_REMEDIATION`. |
+| `REMEDIATION_LLM_TEMPERATURE` | _unset_ | Override remediation sampling temperature. Falls back to `LLM_TEMPERATURE`; not strictly deterministic either way. |
+| `REMEDIATION_LLM_MODEL_TTL_SECONDS` | _unset_ | LM Studio TTL hint for the remediation model. Falls back to `LLM_MODEL_TTL_SECONDS`. |
 | `REMEDIATION_RAW_CAPTURE_ENABLED` | `0` | Persist raw LLM outputs alongside structured ones (audit aid). |
 | `REMEDIATION_CONFIDENCE_GATE_ENABLED` | `1` | Enforce the confidence gate on `mode="apply"`. **Disabling this allows low-confidence patches to apply.** |
 | `REMEDIATION_CONFIDENCE_THRESHOLD_APPLY` | `0.75` | Sigmoid threshold above which `apply_edits` proceeds. |
 | `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW` | `0.50` | Threshold for `review` band; below this falls to `abstain`. |
 | `REMEDIATION_CONFIDENCE_TEMPERATURE` | `1.0` | Sigmoid temperature scaling for confidence calibration. |
 | `REMEDIATION_TRACE_PROMPT_ENABLED` | `0` | Persist remediation prompt + trace context for audit. |
+| `CODEGRAPH_INGESTION_WORKERS` | `4` | Parser workers used while extracting a workspace (`1..32`). Each runs its own JDT subprocess and heap, so raise it with `JAVA_PARSER_MAX_CONCURRENT_REQUESTS` and host memory in mind. |
 | `POLICY_WORKERS` | `2` | OPA/evidence workers per scan; bounded submission caps in-flight+queued tasks at `<= 2 * POLICY_WORKERS`. |
 | `UI_REVIEW_STORE_PATH` | `outputs/policy_ui_reviews/reviews.jsonl` | JSONL append target for human review feedback from the UI. |
 | `UPLOAD_MAX_ARCHIVE_SIZE_BYTES` | `104857600` | Max total upload archive size (100 MB). |
@@ -175,7 +176,7 @@ Current detection baseline, full corpus (2092 cases, all available per category,
 
 A detection figure is a property of the engine configuration as well as the corpus, so state which engines a run used, and whether configuration facts were available. Crypto and hash controls decide on values declared in the analysed workspace's `*.properties` files, so a corpus without them scores those categories differently; see `docs/architecture/2026-09-13-configuration-facts.md`.
 
-The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/thesis_final_remediation_v4/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier historical runs (`detection_calibration_path_precision_v4`, `repro_supported_medium_branch_benchmarktest01017_fix`) are no longer tracked in the repository.
+`outputs/README.md` indexes every artifact directory: what it holds, whether it is tracked, and which commit its provenance names. Cite the artifact directory plus the SHA recorded in its `provenance.json`, with the exceptions that index records — `thesis_final_remediation_v2/` has no provenance file, and a composed detection directory carries its provenance in the per-group runs named by `composed_from`. Earlier historical runs (`detection_calibration_path_precision_v4`, `repro_supported_medium_branch_benchmarktest01017_fix`) are no longer tracked in the repository.
 
 ## 4. Recommended Explanation-Eval Defaults
 
@@ -229,19 +230,15 @@ The selected benchmark cases cover:
 
 For the UI thesis/demo, use the Policy page's `Framework demo focus` preset after upload. That preset sends an explicit `rule_ids` filter to the backend so the grouped table reflects the benchmark-aligned categories rather than the full servlet-heavy policy surface.
 
-## 6. Reproduce Thesis-Final Detection
+## 6. Reproduce the Reported Detection Result
 
-The tracked detection artifact set is `outputs/thesis_final_detection_full_v2/`. It carries bootstrap CIs and a per-run `provenance.json`. Reproduce it in a non-canonical directory:
+The reported figure comes from the full corpus, evaluated one policy group at a time and composed. Use the procedure in "Detection evaluation by policy group" above; it writes `outputs/local_smoke/detection_composed_final/`.
 
-```bash
-uv run python run_benchmark_eval.py \
-  --config configs/benchmark/multicat_full.json \
-  --mapping configs/benchmark/policy_registry.json \
-  --output-dir outputs/reproduction/detection_full_v2 \
-  --reset-neo4j
-```
+`outputs/thesis_final_detection_full_v2/` is a historical artifact and is **not reproducible** on this baseline: it predates audit POLICY-C1's removal of a corpus fingerprint. Running its original config (`multicat_full.json`) gives neither that artifact's figure nor the reported one, so do not treat it as a reproduction step. `docs/thesis_context.md` records what it was and why it is retained.
 
 ## 7. Reproduce Thesis-Final Explanation Evaluation
+
+The recorded cohort of 222 true-positive and 9 false-positive findings comes from the detection configuration in use when that run was made. Detection has since changed, so the same command now yields a larger cohort; the recorded artifact is the reference for the reported figures.
 
 The v1 baseline measured `Citation@Context` on the TP cohort only. The v2 run additionally evaluates the FP cohort (citation grounding on the detector's false positives) and emits Wilson 95% CIs on every rate. Re-run into a fresh directory:
 
@@ -327,8 +324,8 @@ Every eval run also writes a `provenance.json` with the git SHA, OPA version, mo
 
 Canonical artifact snapshot (generated 2026-05-03):
 
-- detection v2 (`outputs/thesis_final_detection_full_v2/`): precision
-  `0.9528` (95% bootstrap CI `[0.9253, 0.9780]`), recall `0.9528` (`[0.9253, 0.9774]`), F1 `0.9528` (`[0.9314, 0.9709]`); provenance SHA `7ad90a2`.
+- detection v2 (`outputs/thesis_final_detection_full_v2/`): qualified evidence
+  that does not reproduce on the current baseline. The figure, its bootstrap intervals, and the reason it does not reproduce are recorded in `docs/thesis_context.md`; provenance SHA `7ad90a2`.
 - explanation v2 (`outputs/thesis_final_explanation_full_v2/`):
   `Citation@TP=1.000` (`222/222`), `Citation@TP@NoContext=0.009` (`2/222`), `Citation@FP=1.000` (`9/9`), `Citation@FP@NoContext=0.000` (`0/9`); provenance SHA `701d051`.
 - remediation v3 (`outputs/thesis_final_remediation_v3/`): fully verified
@@ -387,9 +384,12 @@ Canonical artifact snapshot (generated 2026-05-03):
 ## 11. Interpretation
 
 - Detection is the baseline validity check.
-  - v2 adds bootstrap CIs alongside the point estimates. Quote both when
-    reporting per-category numbers; the per-category sample sizes (60 by
-    default) make the intervals informative.
+  - The current baseline covers every available case in each evaluated family,
+    so it carries no case-selection variance and its composed metrics emit no
+    intervals. The recorded 454-case run sampled 60 cases per category and does
+    carry bootstrap and Wilson intervals in its artifact; quote them when citing
+    it. Quote the per-family rows alongside the aggregate either way: family
+    sizes are unequal, so the aggregate is weighted towards the larger families.
 - Explanation evaluation is mainly about citation grounding, not prose quality.
   - **Citation@TP** is the v1 metric (renamed for clarity): with-context
     citation rate over violations on positive testcases.
@@ -406,12 +406,12 @@ Canonical artifact snapshot (generated 2026-05-03):
     are still part of the prompt assembly inputs). See
     `docs/thesis_context.md` § "Ablation Semantics".
 - Remediation is judged by fix success and re-verification, not just patch text.
-- Production-minded remediation is intentionally bounded:
+- Production-minded remediation is intentionally bounded. `configs/benchmark/policy_registry.json` owns these tiers:
   - full support for weak hash and weak randomness
-  - guarded support for weak crypto
-  - explanation/manual-only for SQL injection, path traversal, command injection, LDAP injection, XPath injection, and broad access-control/logging findings
+  - guarded support for weak crypto, SQL injection, path traversal, command injection, LDAP injection, XPath injection, access control, and event logging
+  - guarded means the agent may propose a candidate but must refuse when evidence or any verification gate is unavailable
 - `NO_FIX` is an expected safe outcome for guarded remediation, not a crash.
-  - v3 reports calibration over **three populations**:
+  - the remediation calibration artifacts report **three populations**:
     - `full` — every result with a confidence score (legacy headline).
     - `attempted_only` — calibrated success probability on cases the
       system actually tried to fix. This is the right number for
@@ -474,7 +474,7 @@ The eval pipeline is **as deterministic as the underlying components allow**. Re
   (or restarts) and report mean ± standard deviation. The detection numbers are deterministic and need no repetition.
 - Pin the model version explicitly in `LLM_MODEL` and
   `REMEDIATION_LLM_MODEL`. Record the resolved model and runtime in the artifact's `provenance.json` (written by every `run_*_eval.py` script).
-- For statistical claims (P, R, F1, Citation@*), prefer the bootstrap and
-  Wilson confidence intervals emitted next to the point estimates over individual point values.
-- When citing thesis-final numbers, cite the artifact directory
-  (`outputs/thesis_final_*/`) plus the `thesis-evidence-2026-05-31` git tag — not the README prose.
+- For statistical claims (P, R, F1, Citation@*), prefer the confidence
+  intervals emitted next to the point estimates over individual point values. The 454-case detection artifact carries bootstrap and Wilson intervals and the explanation artifact carries Wilson intervals; the composed detection metrics carry none, for the reason given in section 11.
+- When citing numbers, cite the artifact directory plus the SHA recorded in its
+  `provenance.json`, not the README prose. `outputs/README.md` lists every artifact, the SHA it records, and the tag or branch that SHA is reachable from.

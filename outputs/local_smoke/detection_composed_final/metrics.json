@@ -1,0 +1,105 @@
+{
+  "composed_from": [
+    "outputs/local_smoke/group_hash-md5",
+    "outputs/local_smoke/group_crypto-md5",
+    "outputs/local_smoke/group_rng-insecure",
+    "outputs/local_smoke/group_sql-injection",
+    "outputs/local_smoke/group_path-traversal",
+    "outputs/local_smoke/group_command-injection",
+    "outputs/local_smoke/group_ldap-injection",
+    "outputs/local_smoke/group_xpath-injection"
+  ],
+  "total_cases": 2092,
+  "metrics": {
+    "command-injection": {
+      "label": "Command Injection (CWE-78)",
+      "true_positives": 115,
+      "false_positives": 30,
+      "true_negatives": 95,
+      "false_negatives": 11,
+      "precision": 0.7931,
+      "recall": 0.9127,
+      "f1": 0.8487
+    },
+    "crypto-md5": {
+      "label": "Crypto (CWE-327)",
+      "true_positives": 130,
+      "false_positives": 0,
+      "true_negatives": 116,
+      "false_negatives": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "hash-md5": {
+      "label": "Hash (CWE-328)",
+      "true_positives": 129,
+      "false_positives": 0,
+      "true_negatives": 107,
+      "false_negatives": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "ldap-injection": {
+      "label": "LDAP Injection (CWE-90)",
+      "true_positives": 24,
+      "false_positives": 7,
+      "true_negatives": 25,
+      "false_negatives": 3,
+      "precision": 0.7742,
+      "recall": 0.8889,
+      "f1": 0.8276
+    },
+    "path-traversal": {
+      "label": "Path Traversal (CWE-22)",
+      "true_positives": 104,
+      "false_positives": 42,
+      "true_negatives": 93,
+      "false_negatives": 29,
+      "precision": 0.7123,
+      "recall": 0.782,
+      "f1": 0.7455
+    },
+    "rng-insecure": {
+      "label": "Randomness (CWE-330)",
+      "true_positives": 218,
+      "false_positives": 52,
+      "true_negatives": 223,
+      "false_negatives": 0,
+      "precision": 0.8074,
+      "recall": 1.0,
+      "f1": 0.8934
+    },
+    "sql-injection": {
+      "label": "SQL Injection (CWE-89)",
+      "true_positives": 245,
+      "false_positives": 57,
+      "true_negatives": 175,
+      "false_negatives": 27,
+      "precision": 0.8113,
+      "recall": 0.9007,
+      "f1": 0.8537
+    },
+    "xpath-injection": {
+      "label": "XPath Injection (CWE-643)",
+      "true_positives": 14,
+      "false_positives": 3,
+      "true_negatives": 17,
+      "false_negatives": 1,
+      "precision": 0.8235,
+      "recall": 0.9333,
+      "f1": 0.875
+    },
+    "overall": {
+      "label": "Overall",
+      "true_positives": 979,
+      "false_positives": 250,
+      "true_negatives": 792,
+      "false_negatives": 71,
+      "precision": 0.7966,
+      "recall": 0.9324,
+      "f1": 0.8591
+    }
+  }
+}

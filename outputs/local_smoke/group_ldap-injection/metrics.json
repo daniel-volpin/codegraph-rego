@@ -1,0 +1,338 @@
+{
+  "generated_at": "2026-09-13T01:42:01.668682+00:00",
+  "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+  "ground_truth_file": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+  "ground_truth_schema": {
+    "format": "csv",
+    "fieldnames": [
+      "# test name",
+      " category",
+      " real vulnerability",
+      " cwe",
+      " Benchmark version: 1.2",
+      " 2016-06-1"
+    ],
+    "normalized_fieldnames": [
+      "testname",
+      "category",
+      "realvulnerability",
+      "cwe",
+      "benchmarkversion:1.2",
+      "2016061"
+    ]
+  },
+  "categories": [
+    {
+      "id": "ldap-injection",
+      "label": "LDAP Injection (CWE-90)",
+      "cwes": [
+        "CWE-90"
+      ],
+      "rego_rules": [
+        "ISO-A.8-LDAP-INJECTION"
+      ],
+      "iso_controls": [
+        "A.8"
+      ],
+      "remediation_tier": "guarded",
+      "framework_demo": true
+    }
+  ],
+  "selection": {
+    "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+    "java_relative_root": "src/main/java",
+    "ground_truth_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+    "categories": [
+      "ldap-injection"
+    ],
+    "testcase_ids": [],
+    "max_cases_per_category": null,
+    "seed": 7,
+    "debug_fn_analysis": false,
+    "build_command": "mvn -q -DskipTests -Dspotless.apply.skip=true -Dspotless.check.skip=true compile"
+  },
+  "coverage_by_category": {
+    "crypto-md5": {
+      "available_cases": 246,
+      "selected_cases": 246,
+      "sampled": false
+    },
+    "hash-md5": {
+      "available_cases": 236,
+      "selected_cases": 236,
+      "sampled": false
+    },
+    "rng-insecure": {
+      "available_cases": 493,
+      "selected_cases": 493,
+      "sampled": false
+    },
+    "sql-injection": {
+      "available_cases": 504,
+      "selected_cases": 504,
+      "sampled": false
+    },
+    "path-traversal": {
+      "available_cases": 268,
+      "selected_cases": 268,
+      "sampled": false
+    },
+    "command-injection": {
+      "available_cases": 251,
+      "selected_cases": 251,
+      "sampled": false
+    },
+    "ldap-injection": {
+      "available_cases": 59,
+      "selected_cases": 59,
+      "sampled": false
+    },
+    "xpath-injection": {
+      "available_cases": 35,
+      "selected_cases": 35,
+      "sampled": false
+    }
+  },
+  "metrics": {
+    "ldap-injection": {
+      "tp": 24,
+      "fp": 7,
+      "tn": 25,
+      "fn": 3,
+      "precision": 0.7742,
+      "recall": 0.8889,
+      "f1": 0.8276,
+      "support": 59,
+      "precision_ci": {
+        "point": 0.7741935483870968,
+        "ci_low": 0.6153846153846154,
+        "ci_high": 0.9117647058823529,
+        "n": 59,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "recall_ci": {
+        "point": 0.8888888888888888,
+        "ci_low": 0.7586206896551724,
+        "ci_high": 1.0,
+        "n": 59,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "f1_ci": {
+        "point": 0.8275862068965517,
+        "ci_low": 0.7083333333333333,
+        "ci_high": 0.9180327868852458,
+        "n": 59,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "precision_ci_wilson": {
+        "point": 0.7741935483870968,
+        "ci_low": 0.6018758161665794,
+        "ci_high": 0.886048644387375,
+        "n": 31,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "recall_ci_wilson": {
+        "point": 0.8888888888888888,
+        "ci_low": 0.7194219918172017,
+        "ci_high": 0.9614796517169016,
+        "n": 27,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "available_cases": 59,
+      "selected_cases": 59,
+      "sampled": false
+    },
+    "overall": {
+      "tp": 24,
+      "fp": 7,
+      "tn": 25,
+      "fn": 3,
+      "precision": 0.7742,
+      "recall": 0.8889,
+      "f1": 0.8276,
+      "support": 59,
+      "precision_ci": {
+        "point": 0.7741935483870968,
+        "ci_low": 0.6153846153846154,
+        "ci_high": 0.9117647058823529,
+        "n": 59,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "recall_ci": {
+        "point": 0.8888888888888888,
+        "ci_low": 0.7586206896551724,
+        "ci_high": 1.0,
+        "n": 59,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "f1_ci": {
+        "point": 0.8275862068965517,
+        "ci_low": 0.7083333333333333,
+        "ci_high": 0.9180327868852458,
+        "n": 59,
+        "method": "bootstrap_percentile",
+        "n_resamples": 2000,
+        "confidence": 0.95,
+        "seed": 7
+      },
+      "precision_ci_wilson": {
+        "point": 0.7741935483870968,
+        "ci_low": 0.6018758161665794,
+        "ci_high": 0.886048644387375,
+        "n": 31,
+        "method": "wilson",
+        "confidence": 0.95
+      },
+      "recall_ci_wilson": {
+        "point": 0.8888888888888888,
+        "ci_low": 0.7194219918172017,
+        "ci_high": 0.9614796517169016,
+        "n": 27,
+        "method": "wilson",
+        "confidence": 0.95
+      }
+    }
+  },
+  "violation_count": 49,
+  "sampled_testcases_by_category": {
+    "ldap-injection": [
+      "BenchmarkTest00012",
+      "BenchmarkTest00021",
+      "BenchmarkTest00044",
+      "BenchmarkTest00138",
+      "BenchmarkTest00139",
+      "BenchmarkTest00367",
+      "BenchmarkTest00530",
+      "BenchmarkTest00630",
+      "BenchmarkTest00694",
+      "BenchmarkTest00695",
+      "BenchmarkTest00701",
+      "BenchmarkTest00860",
+      "BenchmarkTest00861",
+      "BenchmarkTest00947",
+      "BenchmarkTest00948",
+      "BenchmarkTest00959",
+      "BenchmarkTest01023",
+      "BenchmarkTest01024",
+      "BenchmarkTest01154",
+      "BenchmarkTest01241",
+      "BenchmarkTest01242",
+      "BenchmarkTest01243",
+      "BenchmarkTest01326",
+      "BenchmarkTest01327",
+      "BenchmarkTest01402",
+      "BenchmarkTest01490",
+      "BenchmarkTest01491",
+      "BenchmarkTest01492",
+      "BenchmarkTest01501",
+      "BenchmarkTest01568",
+      "BenchmarkTest01569",
+      "BenchmarkTest01743",
+      "BenchmarkTest01753",
+      "BenchmarkTest01754",
+      "BenchmarkTest01755",
+      "BenchmarkTest01756",
+      "BenchmarkTest01831",
+      "BenchmarkTest01832",
+      "BenchmarkTest01902",
+      "BenchmarkTest01903",
+      "BenchmarkTest01909",
+      "BenchmarkTest02025",
+      "BenchmarkTest02036",
+      "BenchmarkTest02037",
+      "BenchmarkTest02104",
+      "BenchmarkTest02114",
+      "BenchmarkTest02115",
+      "BenchmarkTest02116",
+      "BenchmarkTest02196",
+      "BenchmarkTest02208",
+      "BenchmarkTest02299",
+      "BenchmarkTest02305",
+      "BenchmarkTest02306",
+      "BenchmarkTest02376",
+      "BenchmarkTest02384",
+      "BenchmarkTest02472",
+      "BenchmarkTest02553",
+      "BenchmarkTest02571",
+      "BenchmarkTest02572"
+    ]
+  },
+  "selected_testcases": [
+    "BenchmarkTest00012",
+    "BenchmarkTest00021",
+    "BenchmarkTest00044",
+    "BenchmarkTest00138",
+    "BenchmarkTest00139",
+    "BenchmarkTest00367",
+    "BenchmarkTest00530",
+    "BenchmarkTest00630",
+    "BenchmarkTest00694",
+    "BenchmarkTest00695",
+    "BenchmarkTest00701",
+    "BenchmarkTest00860",
+    "BenchmarkTest00861",
+    "BenchmarkTest00947",
+    "BenchmarkTest00948",
+    "BenchmarkTest00959",
+    "BenchmarkTest01023",
+    "BenchmarkTest01024",
+    "BenchmarkTest01154",
+    "BenchmarkTest01241",
+    "BenchmarkTest01242",
+    "BenchmarkTest01243",
+    "BenchmarkTest01326",
+    "BenchmarkTest01327",
+    "BenchmarkTest01402",
+    "BenchmarkTest01490",
+    "BenchmarkTest01491",
+    "BenchmarkTest01492",
+    "BenchmarkTest01501",
+    "BenchmarkTest01568",
+    "BenchmarkTest01569",
+    "BenchmarkTest01743",
+    "BenchmarkTest01753",
+    "BenchmarkTest01754",
+    "BenchmarkTest01755",
+    "BenchmarkTest01756",
+    "BenchmarkTest01831",
+    "BenchmarkTest01832",
+    "BenchmarkTest01902",
+    "BenchmarkTest01903",
+    "BenchmarkTest01909",
+    "BenchmarkTest02025",
+    "BenchmarkTest02036",
+    "BenchmarkTest02037",
+    "BenchmarkTest02104",
+    "BenchmarkTest02114",
+    "BenchmarkTest02115",
+    "BenchmarkTest02116",
+    "BenchmarkTest02196",
+    "BenchmarkTest02208",
+    "BenchmarkTest02299",
+    "BenchmarkTest02305",
+    "BenchmarkTest02306",
+    "BenchmarkTest02376",
+    "BenchmarkTest02384",
+    "BenchmarkTest02472",
+    "BenchmarkTest02553",
+    "BenchmarkTest02571",
+    "BenchmarkTest02572"
+  ]
+}

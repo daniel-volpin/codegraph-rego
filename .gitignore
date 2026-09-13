@@ -56,6 +56,26 @@ index/*
 # summary/provenance files for thesis-useful follow-up reruns.
 outputs/*
 
+# Index of every artifact directory: what it holds and how to cite it.
+!outputs/README.md
+
+# Current detection baseline: the composed summary plus the per-group runs that
+# carry its provenance. Summary/provenance files only, per the policy above.
+# Outside the canonical_manifest tripwire, which globs outputs/thesis_final_*.
+!outputs/local_smoke/
+outputs/local_smoke/*
+!outputs/local_smoke/detection_composed_final/
+outputs/local_smoke/detection_composed_final/*
+!outputs/local_smoke/detection_composed_final/metrics.csv
+!outputs/local_smoke/detection_composed_final/metrics.json
+!outputs/local_smoke/detection_composed_final/table.md
+!outputs/local_smoke/group_*/
+outputs/local_smoke/group_*/*
+!outputs/local_smoke/group_*/metrics.csv
+!outputs/local_smoke/group_*/metrics.json
+!outputs/local_smoke/group_*/provenance.json
+!outputs/local_smoke/group_*/table.md
+
 # Checksum manifest protecting the canonical artifacts below from silent change.
 !outputs/canonical_manifest.sha256
 
