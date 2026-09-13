@@ -68,6 +68,22 @@ This file is the canonical, cross-agent operating guide.
   must earn its place on measured coverage — see
   `docs/architecture/2026-09-13-cpg-engine-evaluation.md` for an engine that
   was measured and rejected, and do not re-add one on intuition.
+- Configuration is evidence, recorded in the graph. Ingestion writes
+  `ConfigProperty` nodes for the analysed workspace; evaluation reads them from
+  the active revision and never from the filesystem, because the analysed
+  workspace is often temporary. A method is linked to a key by the parser's
+  recorded argument literal, never by a source-text search, so an unresolvable
+  key leaves the policy silent. Rego decides which values are unsafe; Python
+  only assembles facts. Conflicting declarations are reported, not resolved.
+  A finding means the configured value is unsafe, not that a deployment is
+  vulnerable. See `docs/architecture/2026-09-13-configuration-facts.md`.
+- Anything that re-evaluates a finding must be able to reproduce the evidence
+  the finding used. A recheck that cannot fails closed and refuses; it never
+  reports "fixed" from evidence it could not see.
+- Detection evaluation runs per policy group (`run_benchmark_eval.py
+  --categories`), and `compose_benchmark_eval.py` merges group outputs. The
+  Overall row is recomputed from per-case fired rules under the union any-rule
+  definition; never sum the per-category rows.
 - Injection controls use dataflow taint analysis, not lexical matching.
   Do not reintroduce substring/co-occurrence heuristics for them: the
   retired Rego versions failed OWASP Benchmark's deliberate

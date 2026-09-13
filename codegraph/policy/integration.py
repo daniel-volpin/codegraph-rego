@@ -47,12 +47,14 @@ def build_evidence_bundle(
     search_service=None,
     method_index: dict[str, dict[str, Any]] | None = None,
     source_path_override: str | None = None,
+    resolved_config=None,
 ) -> dict[str, Any]:
     return runtime_bundles.build_evidence_bundle(
         method_snapshot,
         search_service=search_service,
         method_index=method_index,
         source_path_override=source_path_override,
+        resolved_config=resolved_config,
     )
 
 
@@ -307,7 +309,10 @@ class PolicyEvaluator:
                 "error": "method_not_found",
             }
         bundle = build_evidence_bundle(
-            snapshot, runtime_bundles.load_hybrid_search(), source_path_override=source_path_override
+            snapshot,
+            runtime_bundles.load_hybrid_search(),
+            source_path_override=source_path_override,
+            resolved_config=runtime_bundles.resolve_workspace_config(),
         )
         try:
             opa_output = runtime_opa.evaluate_bundle(bundle)
@@ -341,7 +346,10 @@ class PolicyEvaluator:
         if not snapshot:
             return {}
         bundle = build_evidence_bundle(
-            snapshot, runtime_bundles.load_hybrid_search(), source_path_override=source_path_override
+            snapshot,
+            runtime_bundles.load_hybrid_search(),
+            source_path_override=source_path_override,
+            resolved_config=runtime_bundles.resolve_workspace_config(),
         )
         try:
             return runtime_opa.evaluate_package_root(bundle)

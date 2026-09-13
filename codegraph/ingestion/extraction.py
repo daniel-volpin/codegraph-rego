@@ -12,6 +12,7 @@ from typing import Any
 
 from codegraph.common.concurrency import bounded_futures
 from codegraph.config import settings
+from codegraph.ingestion.config_facts import collect_config_properties, find_project_root
 from codegraph.ingestion.models import ClassEntity, FieldEntity, MethodEntity
 from codegraph.java.models import (
     FieldDeclarationDTO,
@@ -56,6 +57,7 @@ class ExtractedCodeStructure:
     implements_relations: tuple[tuple[str, str, str], ...] = ()
     calls_relations: tuple[tuple[str, str, str], ...] = ()
     call_evidence: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    config_properties: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     method_field_relations: tuple[tuple[str, str], ...] = ()
     diagnostics: tuple[dict[str, Any], ...] = ()
 
@@ -396,6 +398,9 @@ def extract_entities_from_parsed_files(
                         "name": invocation.name,
                         "qualifier": invocation.qualifier_source,
                         "argument_count": invocation.argument_count,
+                        "argument_sources": [
+                            argument.source for argument in invocation.arguments if argument.source is not None
+                        ],
                         "resolution_status": invocation.resolution_status,
                         "binding_origin": invocation.binding_origin,
                         "resolved_binding_key": invocation.resolved_binding_key,
@@ -427,8 +432,38 @@ def extract_entities_from_parsed_files(
         implements_relations=tuple(implements),
         calls_relations=tuple(dict.fromkeys(calls)),
         call_evidence=tuple(call_evidence),
+        config_properties=_collect_workspace_config(root_dir, workspace_id, revision_id),
         method_field_relations=tuple(dict.fromkeys(method_fields)),
         diagnostics=tuple(diagnostics),
+    )
+
+
+def _collect_workspace_config(
+    root_dir: str,
+    workspace_id: str,
+    revision_id: str,
+) -> tuple[dict[str, Any], ...]:
+    """Configuration declarations for the revision being ingested.
+
+    Captured here because the analysed workspace may be temporary: policy
+    evaluation runs after it is gone, so config has to be recorded alongside
+    the code facts rather than re-read from disk later.
+    """
+    if not root_dir:
+        return ()
+    scan_root = find_project_root(root_dir) or Path(root_dir)
+    declarations = collect_config_properties(scan_root)
+    return tuple(
+        {
+            "config_key": declaration.key,
+            "value": declaration.value,
+            "source_file": declaration.source_file,
+            "line": declaration.line,
+            "workspace_id": workspace_id,
+            "revision_id": revision_id,
+            "property_key": f"{workspace_id}:{revision_id}:{declaration.source_file}:{declaration.line}",
+        }
+        for declaration in declarations
     )
 
 

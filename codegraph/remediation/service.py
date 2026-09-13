@@ -79,6 +79,22 @@ from codegraph.remediation.verification import (
 LOGGER = logging.getLogger(__name__)
 
 
+def _assert_recheck_can_reproduce_evidence(context: dict[str, Any]) -> None:
+    """Refuse a recheck that cannot see the evidence the finding was based on.
+
+    A candidate is re-evaluated from a virtual snapshot that carries no call
+    evidence, so a finding decided on resolved configuration cannot be
+    reproduced: the recheck would report no violation and the candidate would
+    read as fixed whether or not it changed anything. Determined from the
+    baseline evidence rather than a rule list, so this covers any rule that
+    comes to depend on configuration.
+    """
+    evidence = context.get("evidence") or {}
+    config_context = evidence.get("config_context") or {}
+    if config_context.get("resolved"):
+        raise RuntimeError("candidate_reverification_requires_config_evidence")
+
+
 def _verify_non_opa_rule(*, context: dict[str, Any], updated_source: str) -> list[dict[str, Any]]:
     """Re-check a candidate with the engine that owns its rule, when that is not OPA.
 
@@ -346,6 +362,7 @@ class RemediationService:
             normalized_output.append(normalized)
 
         try:
+            _assert_recheck_can_reproduce_evidence(context)
             normalized_output.extend(
                 _verify_non_opa_rule(context=context, updated_source=updated_source or ""),
             )
