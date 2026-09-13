@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from codegraph.common.concurrency import bounded_futures
+from codegraph.config import settings
 from codegraph.ingestion.models import ClassEntity, FieldEntity, MethodEntity
 from codegraph.java.models import (
     FieldDeclarationDTO,
@@ -451,11 +453,11 @@ def collect_code_structure(
         for file_name in files:
             if file_name.endswith(".java"):
                 java_files.append(os.path.join(root, file_name))
-    parsed_files: list[ParsedJavaFileDTO] = []
-    for index, file_path in enumerate(sorted(java_files), start=1):
+    ordered_files = sorted(java_files)
+    total = len(ordered_files) or 1
+
+    def parse_one(file_path: str) -> ParsedJavaFileDTO:
         relative_path = os.path.relpath(file_path, root_dir).replace(os.sep, "/")
-        if progress_callback:
-            progress_callback("parsing", f"Parsing {relative_path}", min(20.0 + 40.0 * index / (len(java_files) or 1), 60.0))
         source_bytes = Path(file_path).read_bytes()
         parsed = _parse_java_source(
             source_bytes,
@@ -467,7 +469,20 @@ def collect_code_structure(
         )
         if parsed.source_sha256 != _sha256_bytes(source_bytes):
             raise IngestionError(f"Parser source hash mismatch for {relative_path}; refusing ingestion")
-        parsed_files.append(parsed)
+        return parsed
+
+    # Each parse is an independent subprocess; downstream ordering is by
+    # relative_path, so completion order cannot affect the revision id.
+    parsed_files: list[ParsedJavaFileDTO] = [None] * len(ordered_files)  # type: ignore[list-item]
+    completed = 0
+    for index, future in bounded_futures(parse_one, ordered_files, max_workers=settings.ingestion_workers):
+        parsed_files[index] = future.result()
+        completed += 1
+        if completed % settings.ingestion_progress_every == 0 or completed == len(ordered_files):
+            LOGGER.info("Parsed %d/%d Java files", completed, len(ordered_files))
+        if progress_callback:
+            relative_path = os.path.relpath(ordered_files[index], root_dir).replace(os.sep, "/")
+            progress_callback("parsing", f"Parsing {relative_path}", min(20.0 + 40.0 * completed / total, 60.0))
     revision_id = _revision_id(parsed_files)
     return extract_entities_from_parsed_files(
         parsed_files,

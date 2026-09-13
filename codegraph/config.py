@@ -281,11 +281,26 @@ class Settings(BaseSettings):
         description="Maximum heap for each fresh Java parser subprocess.",
     )
     java_parser_max_concurrent_requests: int = Field(
-        1,
+        4,
         ge=1,
-        le=2,
+        le=32,
         validation_alias=AliasChoices("JAVA_PARSER_MAX_CONCURRENT_REQUESTS", "java_parser_max_concurrent_requests"),
         description="Process-local cap on active Java parser subprocess requests.",
+    )
+    ingestion_workers: int = Field(
+        4,
+        ge=1,
+        le=32,
+        validation_alias=AliasChoices("CODEGRAPH_INGESTION_WORKERS", "ingestion_workers"),
+        description=(
+            "Parser workers used while extracting a workspace. Each worker runs one JDT subprocess "
+            "with its own heap, so raise it with java_parser_max_concurrent_requests and memory in mind."
+        ),
+    )
+    ingestion_progress_every: int = Field(
+        100,
+        ge=1,
+        description="Log extraction progress every N files so a long ingestion is observable.",
     )
     java_parser_queue_timeout_seconds: float = Field(
         5.0,
