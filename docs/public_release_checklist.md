@@ -1,8 +1,6 @@
 # Public Release Checklist
 
-Use this gate once, immediately before changing the repository from private to
-public. Routine tagged releases should continue to use
-[release_checklist.md](./release_checklist.md).
+Use this gate once, immediately before changing the repository from private to public. Routine tagged releases should continue to use [release_checklist.md](./release_checklist.md).
 
 ## 1. Scope and Licensing
 

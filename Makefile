@@ -1,4 +1,4 @@
-.PHONY: install java-parser-build backend-dev dev test policy-check policy-fmt opengrep-test lint format neo4j-up neo4j-down docker-up docker-down clean help
+.PHONY: install java-parser-build backend-dev dev test policy-check policy-fmt opengrep-test docs-check docs-fmt lint format neo4j-up neo4j-down docker-up docker-down clean help
 
 MVN ?= mvn
 
@@ -59,6 +59,12 @@ policy-check: ## Validate OPA/Rego policies (check-only; fails on format drift)
 
 policy-fmt: ## Format OPA/Rego policies in place
 	@opa fmt -w policy/
+
+docs-check: ## Verify Markdown prose keeps one line per paragraph
+	@uv run python scripts/markdown_prose_wrapping.py .
+
+docs-fmt: ## Rejoin hard-wrapped Markdown prose in place
+	@uv run python scripts/markdown_prose_wrapping.py . --fix
 
 opengrep-test: ## Validate OpenGrep taint rules against their annotated fixtures
 	@opengrep validate policy/opengrep/

@@ -2,8 +2,7 @@
 
 Use this checklist for small repository releases so Git tags, GitHub release notes, and manifest versions stay synchronized.
 
-Before changing repository visibility, complete the separate
-[public release checklist](./public_release_checklist.md).
+Before changing repository visibility, complete the separate [public release checklist](./public_release_checklist.md).
 
 ## Scope
 

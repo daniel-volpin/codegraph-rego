@@ -1,29 +1,19 @@
 # CodeGraph
 
-[![CI](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml)
-[![GitHub release](https://img.shields.io/github/v/release/daniel-volpin/codegraph-rego)](https://github.com/daniel-volpin/codegraph-rego/releases/latest)
-[![Python](https://img.shields.io/badge/python-3.14%2B-blue)](./pyproject.toml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-[![Citation](https://img.shields.io/badge/citation-CITATION.cff-orange)](./CITATION.cff)
+[![CI](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/daniel-volpin/codegraph-rego/actions/workflows/ci.yml) [![GitHub release](https://img.shields.io/github/v/release/daniel-volpin/codegraph-rego)](https://github.com/daniel-volpin/codegraph-rego/releases/latest) [![Python](https://img.shields.io/badge/python-3.14%2B-blue)](./pyproject.toml) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE) [![Citation](https://img.shields.io/badge/citation-CITATION.cff-orange)](./CITATION.cff)
 
 **Benchmark-backed security and compliance analysis for Java applications.**
 
-CodeGraph turns Java source code into a queryable knowledge graph, evaluates
-ISO-aligned OPA/Rego policies, produces evidence-grounded explanations, and
-attempts bounded remediation with compilation and policy re-verification.
+CodeGraph turns Java source code into a queryable knowledge graph, evaluates ISO-aligned OPA/Rego policies, produces evidence-grounded explanations, and attempts bounded remediation with compilation and policy re-verification.
 
-It is a master thesis research artifact evaluated primarily against
-[OWASP Benchmark](https://owasp.org/www-project-benchmark/). It is not a
-production security scanner, full taint-analysis engine, or autonomous repair
-system.
+It is a master thesis research artifact evaluated primarily against [OWASP Benchmark](https://owasp.org/www-project-benchmark/). It is not a production security scanner, full taint-analysis engine, or autonomous repair system.
 
 ## Why CodeGraph?
 
 - **Graph-structured analysis:** represents Java declarations and relationships
   in Neo4j using an Eclipse JDT parser.
 - **Policy as code:** evaluates versioned OPA/Rego rules mapped to ISO-aligned
-  controls. Detection engines are pluggable behind a SARIF contract: injection
-  controls use dataflow taint analysis rather than lexical matching.
+  controls. Detection engines are pluggable behind a SARIF contract: injection controls use dataflow taint analysis rather than lexical matching.
 - **Grounded explanations:** returns structured `Citation / Why / Fix` output
   backed by source, graph, and retrieval evidence.
 - **Bounded remediation:** supports automatic fixes only where deterministic
@@ -57,8 +47,7 @@ make install
 cp .env.example .env
 ```
 
-Set `NEO4J_PASS` in `.env`, then start the backend, frontend, and local Neo4j
-service:
+Set `NEO4J_PASS` in `.env`, then start the backend, frontend, and local Neo4j service:
 
 ```bash
 make dev
@@ -70,19 +59,13 @@ Open:
 - Backend API: <http://127.0.0.1:8000>
 - Health check: <http://127.0.0.1:8000/health>
 
-`make install` builds the required Eclipse JDT adapter, installs locked Python
-and frontend dependencies, and installs the pinned OPA binary into `.venv/bin`.
-CodeGraph does not download or substitute a Java parser at request time.
+`make install` builds the required Eclipse JDT adapter, installs locked Python and frontend dependencies, and installs the pinned OPA binary into `.venv/bin`. CodeGraph does not download or substitute a Java parser at request time.
 
-For benchmark datasets, model configuration, and exact rerun commands, continue
-with [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md).
+For benchmark datasets, model configuration, and exact rerun commands, continue with [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md).
 
 ### Distribution
 
-The supported installation path is a source checkout using `make install`.
-GitHub releases identify source revisions; CodeGraph is not currently published
-as a PyPI package or supported production container image. Pre-1.0 APIs and
-configuration may evolve between minor releases.
+The supported installation path is a source checkout using `make install`. GitHub releases identify source revisions; CodeGraph is not currently published as a PyPI package or supported production container image. Pre-1.0 APIs and configuration may evolve between minor releases.
 
 ## Workflow
 
@@ -132,11 +115,7 @@ The primary evaluation covers eight OWASP Benchmark categories:
 | CWE-330 Weak Randomness | `ISO-A.10-WEAK-RANDOM` | Full |
 | CWE-643 XPath Injection | `ISO-A.8-XPATH-INJECTION` | Guarded |
 
-`full` means a bounded automatic fix path is available. `guarded` means the
-agent may propose a candidate but must refuse when evidence or any verification
-gate is unavailable. These current runtime tiers are broader than the recorded
-thesis remediation experiment; they do not extend its `25/25` result to the
-guarded categories or to arbitrary applications.
+`full` means a bounded automatic fix path is available. `guarded` means the agent may propose a candidate but must refuse when evidence or any verification gate is unavailable. These current runtime tiers are broader than the recorded thesis remediation experiment; they do not extend its `25/25` result to the guarded categories or to arbitrary applications.
 
 ## Research Results
 
@@ -149,20 +128,9 @@ Repository-tracked thesis artifacts report:
 | Explanation grounding | `Citation@TP=1.000`; `Citation@FP=1.000` | [`outputs/thesis_final_explanation_full_v2/`](./outputs/thesis_final_explanation_full_v2/) |
 | Bounded remediation | `25/25` fully verified | [`outputs/thesis_final_remediation_v4/`](./outputs/thesis_final_remediation_v4/) |
 
-The recorded `0.953` is **qualified evidence**. It predates audit POLICY-C1's
-removal of a corpus fingerprint and does not reproduce on the current baseline;
-the current figure above is the reproducible one. Crypto (CWE-327) and hash
-(CWE-328) reach `1.000` there by deciding on the algorithm declared in the
-analysed workspace's configuration, which means *the configured value is
-unsafe* rather than that a deployment is vulnerable. See
-`docs/thesis_context.md` and
-`docs/architecture/2026-09-13-configuration-facts.md` before citing either row.
+The recorded `0.953` is **qualified evidence**. It predates audit POLICY-C1's removal of a corpus fingerprint and does not reproduce on the current baseline; the current figure above is the reproducible one. Crypto (CWE-327) and hash (CWE-328) reach `1.000` there by deciding on the algorithm declared in the analysed workspace's configuration, which means *the configured value is unsafe* rather than that a deployment is vulnerable. See `docs/thesis_context.md` and `docs/architecture/2026-09-13-configuration-facts.md` before citing either row.
 
-These values describe specific recorded runs, not guaranteed performance on
-arbitrary applications. Cite the artifact's `provenance.json`, recorded commit,
-and confidence intervals rather than this summary. See
-[`copilot-context/benchmark.md`](./copilot-context/benchmark.md) and
-[`docs/thesis_context.md`](./docs/thesis_context.md) for interpretation limits.
+These values describe specific recorded runs, not guaranteed performance on arbitrary applications. Cite the artifact's `provenance.json`, recorded commit, and confidence intervals rather than this summary. See [`copilot-context/benchmark.md`](./copilot-context/benchmark.md) and [`docs/thesis_context.md`](./docs/thesis_context.md) for interpretation limits.
 
 ## Architecture
 
@@ -189,8 +157,7 @@ Further reading:
 
 ## Configuration
 
-CodeGraph loads validated settings through `codegraph.config`. Start from
-[`.env.example`](./.env.example).
+CodeGraph loads validated settings through `codegraph.config`. Start from [`.env.example`](./.env.example).
 
 | Area | Key variables |
 | --- | --- |
@@ -203,8 +170,7 @@ CodeGraph loads validated settings through `codegraph.config`. Start from
 | Remediation | `REMEDIATION_CONFIDENCE_THRESHOLD_APPLY`, `REMEDIATION_CONFIDENCE_THRESHOLD_REVIEW` |
 | Observability | `OTEL_TRACE_FILE`, `OTEL_EXPORTER_OTLP_ENDPOINT` |
 
-The complete operator reference is in
-[`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md#environment-variable-reference).
+The complete operator reference is in [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md#environment-variable-reference).
 
 ## Development
 
@@ -228,8 +194,7 @@ make neo4j-up
 make neo4j-down
 ```
 
-Benchmark-sensitive changes should also run the focused smoke evaluations
-documented in [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md#verification-contract).
+Benchmark-sensitive changes should also run the focused smoke evaluations documented in [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md#verification-contract).
 
 ## Safety
 
@@ -241,19 +206,13 @@ CodeGraph is designed for **single-user, loopback-only research use**:
 - Source and graph context may be sent to the configured LLM provider.
 - Remediation apply mode can modify the active workspace.
 
-Keep the service bound to `127.0.0.1`, treat uploads as untrusted, and sandbox
-build verification when analyzing third-party code. See
-[`SECURITY.md`](./SECURITY.md) for the full trust boundary and private
-vulnerability reporting instructions.
+Keep the service bound to `127.0.0.1`, treat uploads as untrusted, and sandbox build verification when analyzing third-party code. See [`SECURITY.md`](./SECURITY.md) for the full trust boundary and private vulnerability reporting instructions.
 
 ## Contributing
 
-Contributions are welcome. Please read [`CONTRIBUTING.md`](./CONTRIBUTING.md)
-and the [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) before opening a pull
-request. Usage and reproducibility guidance is in [`SUPPORT.md`](./SUPPORT.md).
+Contributions are welcome. Please read [`CONTRIBUTING.md`](./CONTRIBUTING.md) and the [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) before opening a pull request. Usage and reproducibility guidance is in [`SUPPORT.md`](./SUPPORT.md).
 
-Changes must preserve benchmark provenance, policy mappings, parser source
-ranges, graph revision integrity, and frontend/backend schema alignment.
+Changes must preserve benchmark provenance, policy mappings, parser source ranges, graph revision integrity, and frontend/backend schema alignment.
 
 ## Reproducibility, Citation, and License
 

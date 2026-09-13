@@ -23,10 +23,6 @@ A release must:
 4. pass the repository release checklist;
 5. publish GitHub release notes that state research scope and limitations.
 
-Git tags and GitHub releases identify source revisions. CodeGraph is currently
-distributed from source; no PyPI package or production container image is part
-of the supported release contract.
+Git tags and GitHub releases identify source revisions. CodeGraph is currently distributed from source; no PyPI package or production container image is part of the supported release contract.
 
-See [`release_checklist.md`](./release_checklist.md) for the operational gate and
-[`public_release_checklist.md`](./public_release_checklist.md) for the separate
-private-to-public transition.
+See [`release_checklist.md`](./release_checklist.md) for the operational gate and [`public_release_checklist.md`](./public_release_checklist.md) for the separate private-to-public transition.

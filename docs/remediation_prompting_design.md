@@ -26,13 +26,7 @@ The thesis/demo surface now uses a bounded remediation matrix:
   - `ISO-A.8-XPATH-INJECTION`
   - access-control findings such as `ISO-A.9.4.1`
 
-Guarded support permits candidate generation but requires safe refusal whenever
-the Maven compilation gate, configured Java test suite, or candidate-local OPA
-gate cannot pass. It is not evidence that every rule can be repaired safely, and
-it does not expand the scope of the recorded thesis remediation results.
-External SARIF findings whose rule IDs do not map to this installed policy
-matrix remain explanation-first/manual review because no candidate-local policy
-verifier exists for their clearance gate.
+Guarded support permits candidate generation but requires safe refusal whenever the Maven compilation gate, configured Java test suite, or candidate-local OPA gate cannot pass. It is not evidence that every rule can be repaired safely, and it does not expand the scope of the recorded thesis remediation results. External SARIF findings whose rule IDs do not map to this installed policy matrix remain explanation-first/manual review because no candidate-local policy verifier exists for their clearance gate.
 
 ## Decision
 

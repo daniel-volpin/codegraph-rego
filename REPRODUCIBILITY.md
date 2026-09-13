@@ -1,9 +1,6 @@
 # Reproducibility Guide
 
-This file describes the evaluation workflow for the current source baseline.
-Published thesis-final results retain their original commit, dependencies, and
-OPA 1.15.1 provenance. Reproducing those exact results requires that recorded
-revision; runs of this modernized branch are new evidence, not historical reruns.
+This file describes the evaluation workflow for the current source baseline. Published thesis-final results retain their original commit, dependencies, and OPA 1.15.1 provenance. Reproducing those exact results requires that recorded revision; runs of this modernized branch are new evidence, not historical reruns.
 
 ## 1. Prerequisites
 
@@ -47,10 +44,7 @@ If you are using LM Studio with different explanation/remediation models, enable
 
 ### Environment Variable Reference
 
-The operator-facing variables consumed by `codegraph.config.Settings`, the
-upload pipeline, the remediation gate, and the OpenTelemetry layer (internal
-path/index overrides live in `codegraph/config.py`). `.env.example` ships
-matching defaults — keep it in sync when adding new variables.
+The operator-facing variables consumed by `codegraph.config.Settings`, the upload pipeline, the remediation gate, and the OpenTelemetry layer (internal path/index overrides live in `codegraph/config.py`). `.env.example` ships matching defaults — keep it in sync when adding new variables.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
@@ -139,40 +133,23 @@ uv run python run_remediation_eval.py \
 
 ### Model consumption and cost
 
-Every provider call is recorded once, in the shared transport, so hosted and
-locally served models are accounted for identically. Consumption is emitted as
-OpenTelemetry metrics under the GenAI semantic conventions
-(`gen_ai.client.token.usage` partitioned by `gen_ai.token.type`, plus
-`gen_ai.client.operation.duration`) and also kept in a process-local ledger,
-which remediation runs write to `model_usage.json` beside their metrics.
+Every provider call is recorded once, in the shared transport, so hosted and locally served models are accounted for identically. Consumption is emitted as OpenTelemetry metrics under the GenAI semantic conventions (`gen_ai.client.token.usage` partitioned by `gen_ai.token.type`, plus `gen_ai.client.operation.duration`) and also kept in a process-local ledger, which remediation runs write to `model_usage.json` beside their metrics.
 
-Those conventions are still in Development upstream, and a migration to
-counters named `gen_ai.client.inference.tokens` is proposed, so treat the
-metric names as liable to change.
+Those conventions are still in Development upstream, and a migration to counters named `gen_ai.client.inference.tokens` is proposed, so treat the metric names as liable to change.
 
-Cost is opt-in and never guessed. Set per-model rates to have an estimate
-computed:
+Cost is opt-in and never guessed. Set per-model rates to have an estimate computed:
 
 ```bash
 export LLM_PRICE_PER_MILLION='{"gpt-5.4": {"input": 1.25, "output": 10.0, "cached_input": 0.125}}'
 ```
 
-Rates are per million units and must come from the provider's current price
-list; nothing is hardcoded. A model with no configured rate reports its units
-with no cost rather than a fabricated one, and a partial total always names the
-unpriced models so it cannot be mistaken for complete. Configuring
-`cached_input` matters where a provider discounts cached input: without it the
-cached portion is charged at the full input rate, which overstates rather than
-understates, and the artifact records that it did in a `cost_note`.
+Rates are per million units and must come from the provider's current price list; nothing is hardcoded. A model with no configured rate reports its units with no cost rather than a fabricated one, and a partial total always names the unpriced models so it cannot be mistaken for complete. Configuring `cached_input` matters where a provider discounts cached input: without it the cached portion is charged at the full input rate, which overstates rather than understates, and the artifact records that it did in a `cost_note`.
 
-Metrics export nowhere by default. Set `OTEL_EXPORTER_OTLP_ENDPOINT` for a
-collector, or `OTEL_METRICS_CONSOLE=1` to print them locally.
+Metrics export nowhere by default. Set `OTEL_EXPORTER_OTLP_ENDPOINT` for a collector, or `OTEL_METRICS_CONSOLE=1` to print them locally.
 
 ### Detection evaluation by policy group
 
-A whole-corpus run ingests every category into one graph, so a failure anywhere
-discards the run. Evaluate one group at a time and merge the outputs; a failed
-group is then re-run on its own in seconds rather than re-running 2115 files.
+A whole-corpus run ingests every category into one graph, so a failure anywhere discards the run. Evaluate one group at a time and merge the outputs; a failed group is then re-run on its own in seconds rather than re-running 2115 files.
 
 ```bash
 for group in hash-md5 crypto-md5 rng-insecure sql-injection \
@@ -190,32 +167,13 @@ uv run python compose_benchmark_eval.py \
   --output-dir outputs/local_smoke/detection_composed
 ```
 
-Compose recomputes the Overall row from each run's `case_outcomes.jsonl` under
-the union any-rule definition. Never sum the per-category rows: a case selected
-under one category can fire an off-target rule from another. Compose refuses to
-merge groups that disagree about a testcase, which means they came from
-different code or configuration.
+Compose recomputes the Overall row from each run's `case_outcomes.jsonl` under the union any-rule definition. Never sum the per-category rows: a case selected under one category can fire an off-target rule from another. Compose refuses to merge groups that disagree about a testcase, which means they came from different code or configuration.
 
-Group runs omit cross-file graph edges between categories. That is safe for
-OWASP Benchmark, whose cases are standalone and whose helpers are staged into
-every group, but it is a property of that corpus rather than a general
-guarantee. Verified equivalent on this corpus: run per group, every category
-reproduces the whole-corpus figures exactly.
+Group runs omit cross-file graph edges between categories. That is safe for OWASP Benchmark, whose cases are standalone and whose helpers are staged into every group, but it is a property of that corpus rather than a general guarantee. Verified equivalent on this corpus: run per group, every category reproduces the whole-corpus figures exactly.
 
-Current detection baseline, full corpus (2092 cases, all available per
-category, seed 7): precision `0.7966`, recall `0.9324`, F1 `0.8591`
-(`TP/FP/FN = 979/250/71`), artifact
-`outputs/local_smoke/detection_composed_final/`. On the 454-case
-`multicat_full.json` sample the same engines measured F1 `0.838`
-(`207/54/26`, `outputs/local_smoke/detection_matched/`) before
-configuration-backed crypto and hash detection.
+Current detection baseline, full corpus (2092 cases, all available per category, seed 7): precision `0.7966`, recall `0.9324`, F1 `0.8591` (`TP/FP/FN = 979/250/71`), artifact `outputs/local_smoke/detection_composed_final/`. On the 454-case `multicat_full.json` sample the same engines measured F1 `0.838` (`207/54/26`, `outputs/local_smoke/detection_matched/`) before configuration-backed crypto and hash detection.
 
-A detection figure is a property of the engine configuration as well as the
-corpus, so state which engines a run used, and whether configuration facts were
-available. Crypto and hash controls decide on values declared in the analysed
-workspace's `*.properties` files, so a corpus without them scores those
-categories differently; see
-`docs/architecture/2026-09-13-configuration-facts.md`.
+A detection figure is a property of the engine configuration as well as the corpus, so state which engines a run used, and whether configuration facts were available. Crypto and hash controls decide on values declared in the analysed workspace's `*.properties` files, so a corpus without them scores those categories differently; see `docs/architecture/2026-09-13-configuration-facts.md`.
 
 The current repo-tracked thesis evidence outputs are `outputs/thesis_final_detection_full_v2/`, `outputs/thesis_final_explanation_full_v2/`, and `outputs/thesis_final_remediation_v2/`. The follow-up provenance-backed reruns are under `outputs/thesis_final_remediation_v3/` and `outputs/thesis_final_remediation_v4/`; cite the artifact directory plus the SHA recorded in each `provenance.json`. Earlier historical runs (`detection_calibration_path_precision_v4`, `repro_supported_medium_branch_benchmarktest01017_fix`) are no longer tracked in the repository.
 
@@ -273,9 +231,7 @@ For the UI thesis/demo, use the Policy page's `Framework demo focus` preset afte
 
 ## 6. Reproduce Thesis-Final Detection
 
-The tracked detection artifact set is
-`outputs/thesis_final_detection_full_v2/`. It carries bootstrap CIs and a
-per-run `provenance.json`. Reproduce it in a non-canonical directory:
+The tracked detection artifact set is `outputs/thesis_final_detection_full_v2/`. It carries bootstrap CIs and a per-run `provenance.json`. Reproduce it in a non-canonical directory:
 
 ```bash
 uv run python run_benchmark_eval.py \
@@ -287,10 +243,7 @@ uv run python run_benchmark_eval.py \
 
 ## 7. Reproduce Thesis-Final Explanation Evaluation
 
-The v1 baseline measured `Citation@Context` on the TP cohort only. The v2
-run additionally evaluates the FP cohort (citation grounding on the
-detector's false positives) and emits Wilson 95% CIs on every rate.
-Re-run into a fresh directory:
+The v1 baseline measured `Citation@Context` on the TP cohort only. The v2 run additionally evaluates the FP cohort (citation grounding on the detector's false positives) and emits Wilson 95% CIs on every rate. Re-run into a fresh directory:
 
 ```bash
 LLM_CONCURRENCY=1 \
@@ -305,12 +258,7 @@ uv run python run_explanation_eval.py \
 
 ### Resuming a crashed or interrupted explanation run
 
-The explanation eval (~90 min wall-clock) is the longest leg of the
-pipeline. If it is interrupted, pass `--resume` on the next invocation
-with the same `--output-dir`: the runner reads `request_metrics.jsonl`,
-treats every violation whose `with_context` and `without_context` rows
-are both already on disk as complete (no LLM calls), and appends to
-the existing artifacts rather than truncating them.
+The explanation eval (~90 min wall-clock) is the longest leg of the pipeline. If it is interrupted, pass `--resume` on the next invocation with the same `--output-dir`: the runner reads `request_metrics.jsonl`, treats every violation whose `with_context` and `without_context` rows are both already on disk as complete (no LLM calls), and appends to the existing artifacts rather than truncating them.
 
 ```bash
 # First run is interrupted after, say, 4 of 8 categories.
@@ -330,18 +278,13 @@ Notes:
 - Violations with a partially-complete pair (only one context mode on disk)
   are redone so the with/without semantics stay symmetric.
 - `--reset-neo4j` is still safe with `--resume`: the graph is rebuilt
-  from the same staged subset deterministically, and the OPA evaluation
-  is a pure function of the bundle.
+  from the same staged subset deterministically, and the OPA evaluation is a pure function of the bundle.
 - Per-category sample budget (`--sample-per-category`) applies only to
-  newly-executed violations on the resume run; samples written by the
-  prior run remain untouched.
+  newly-executed violations on the resume run; samples written by the prior run remain untouched.
 
 ## 8. Rerun Supported Remediation
 
-The v2 baseline and provenance-backed v3/v4 follow-ups under
-`outputs/thesis_final_remediation_*` are protected canonical evidence. Do not
-rerun directly into those directories unless intentionally regenerating the
-canonical artifact set and checksum manifest.
+The v2 baseline and provenance-backed v3/v4 follow-ups under `outputs/thesis_final_remediation_*` are protected canonical evidence. Do not rerun directly into those directories unless intentionally regenerating the canonical artifact set and checksum manifest.
 
 For a local supported-medium rerun, use a non-canonical output directory:
 
@@ -380,36 +323,23 @@ uv run python scripts/evaluation/run_remediation_model_bakeoff.py \
 
 ## 10. Expected Outputs
 
-Every eval run also writes a `provenance.json` with the git SHA, OPA
-version, model id, seed, config sha256, uv.lock hash, and pyproject hash.
-This is the canonical per-run manifest; cite it alongside any number you
-quote from the artifact.
+Every eval run also writes a `provenance.json` with the git SHA, OPA version, model id, seed, config sha256, uv.lock hash, and pyproject hash. This is the canonical per-run manifest; cite it alongside any number you quote from the artifact.
 
 Canonical artifact snapshot (generated 2026-05-03):
 
 - detection v2 (`outputs/thesis_final_detection_full_v2/`): precision
-  `0.9528` (95% bootstrap CI `[0.9253, 0.9780]`), recall `0.9528`
-  (`[0.9253, 0.9774]`), F1 `0.9528` (`[0.9314, 0.9709]`);
-  provenance SHA `7ad90a2`.
+  `0.9528` (95% bootstrap CI `[0.9253, 0.9780]`), recall `0.9528` (`[0.9253, 0.9774]`), F1 `0.9528` (`[0.9314, 0.9709]`); provenance SHA `7ad90a2`.
 - explanation v2 (`outputs/thesis_final_explanation_full_v2/`):
-  `Citation@TP=1.000` (`222/222`), `Citation@TP@NoContext=0.009`
-  (`2/222`), `Citation@FP=1.000` (`9/9`),
-  `Citation@FP@NoContext=0.000` (`0/9`); provenance SHA `701d051`.
+  `Citation@TP=1.000` (`222/222`), `Citation@TP@NoContext=0.009` (`2/222`), `Citation@FP=1.000` (`9/9`), `Citation@FP@NoContext=0.000` (`0/9`); provenance SHA `701d051`.
 - remediation v3 (`outputs/thesis_final_remediation_v3/`): fully verified
-  success rate `0.72` (`18/25`), build success rate `0.90` (`18/20`
-  attempted builds), full-population Brier `0.095431` / ECE `0.095705`,
-  attempted-only Brier `0.094698` / ECE `0.083900`, no-fix-only Brier
-  `0.110091` / ECE `0.331800`; provenance SHA `7ad90a2`.
+  success rate `0.72` (`18/25`), build success rate `0.90` (`18/20` attempted builds), full-population Brier `0.095431` / ECE `0.095705`, attempted-only Brier `0.094698` / ECE `0.083900`, no-fix-only Brier `0.110091` / ECE `0.331800`; provenance SHA `7ad90a2`.
 - remediation v4 (`outputs/thesis_final_remediation_v4/`): raw-source
-  evidence preservation fix applied; fully verified success rate `1.00`
-  (`25/25`), build success rate `1.00` (`25/25` attempted builds).
+  evidence preservation fix applied; fully verified success rate `1.00` (`25/25`), build success rate `1.00` (`25/25` attempted builds).
 
 ### Detection
 
 - `metrics.json` — per-category `tp/fp/fn/precision/recall/f1` and overall.
-  v2 adds `precision_ci`, `recall_ci`, `f1_ci` (percentile bootstrap, 2000
-  resamples by default, deterministic given the selection seed) and
-  `precision_ci_wilson`, `recall_ci_wilson` (closed-form sanity checks).
+  v2 adds `precision_ci`, `recall_ci`, `f1_ci` (percentile bootstrap, 2000 resamples by default, deterministic given the selection seed) and `precision_ci_wilson`, `recall_ci_wilson` (closed-form sanity checks).
 - `metrics.csv` — point estimates only (CSV stays backward-compatible;
   CIs live in JSON).
 - `table.md` or `table.tex`
@@ -426,11 +356,9 @@ Canonical artifact snapshot (generated 2026-05-03):
   - v2 adds a `metric_definitions` block that documents `Citation@TP`,
     `Citation@FP`, `Citation@NoContext`, and the legacy alias.
 - `citation_metrics.csv` — v2 has columns
-  `tp_count, citation_at_tp_with_context, citation_at_tp_without_context,
-  fp_count, citation_at_fp_with_context, citation_at_fp_without_context`.
+  `tp_count, citation_at_tp_with_context, citation_at_tp_without_context, fp_count, citation_at_fp_with_context, citation_at_fp_without_context`.
 - `table.md` or `table.tex` — v2 columns:
-  `Category, TP Count, Citation@TP (ctx), Citation@TP (no-ctx), FP Count,
-  Citation@FP (ctx), Citation@FP (no-ctx)`.
+  `Category, TP Count, Citation@TP (ctx), Citation@TP (no-ctx), FP Count, Citation@FP (ctx), Citation@FP (no-ctx)`.
 - `explanation_samples.jsonl` — v2 entries carry a new `cohort` field
   (`"tp"` or `"fp"`).
 - `request_metrics.jsonl` — v2 entries carry the same `cohort` field.
@@ -519,8 +447,7 @@ Canonical artifact snapshot (generated 2026-05-03):
 
 ## 13. Determinism and Reproducibility Caveats
 
-The eval pipeline is **as deterministic as the underlying components allow**.
-Read this section before treating any single re-run as canonical.
+The eval pipeline is **as deterministic as the underlying components allow**. Read this section before treating any single re-run as canonical.
 
 **Deterministic by construction.**
 
@@ -535,27 +462,19 @@ Read this section before treating any single re-run as canonical.
 **Not deterministic across re-runs.**
 
 - LLM outputs depend on the model server (LM Studio / vLLM / etc.), the model
-  weights, the quantization, the runtime version, and the host hardware. Even
-  with `temperature=0.0` and a fixed seed, identical prompts can produce
-  different completions across server restarts and model versions.
+  weights, the quantization, the runtime version, and the host hardware. Even with `temperature=0.0` and a fixed seed, identical prompts can produce different completions across server restarts and model versions.
 - This means `Citation@Context`, `Citation@TP`, and remediation `fix_success`
-  may shift by small amounts on re-run. Treat the headline values as a single
-  draw, not as point estimates of a fixed distribution.
+  may shift by small amounts on re-run. Treat the headline values as a single draw, not as point estimates of a fixed distribution.
 - Model TTL eviction in LM Studio (`LLM_MODEL_TTL_SECONDS`) reloads the model
-  on demand; immediately after a reload, the first few completions can differ
-  from later steady-state ones depending on backend-side caches.
+  on demand; immediately after a reload, the first few completions can differ from later steady-state ones depending on backend-side caches.
 
 **Recommended practice.**
 
 - For headline numbers, run each eval **N=3 times** with different LLM seeds
-  (or restarts) and report mean ± standard deviation. The detection numbers
-  are deterministic and need no repetition.
+  (or restarts) and report mean ± standard deviation. The detection numbers are deterministic and need no repetition.
 - Pin the model version explicitly in `LLM_MODEL` and
-  `REMEDIATION_LLM_MODEL`. Record the resolved model and runtime in the
-  artifact's `provenance.json` (written by every `run_*_eval.py` script).
+  `REMEDIATION_LLM_MODEL`. Record the resolved model and runtime in the artifact's `provenance.json` (written by every `run_*_eval.py` script).
 - For statistical claims (P, R, F1, Citation@*), prefer the bootstrap and
-  Wilson confidence intervals emitted next to the point estimates over
-  individual point values.
+  Wilson confidence intervals emitted next to the point estimates over individual point values.
 - When citing thesis-final numbers, cite the artifact directory
-  (`outputs/thesis_final_*/`) plus the `thesis-evidence-2026-05-31` git tag —
-  not the README prose.
+  (`outputs/thesis_final_*/`) plus the `thesis-evidence-2026-05-31` git tag — not the README prose.
