@@ -17,7 +17,7 @@ These remain tracked because they support thesis reproducibility and validated l
 
 - selected canonical thesis outputs under `outputs/thesis_final_*`
 - `outputs/canonical_manifest.sha256`
-- the current detection baseline under `outputs/local_smoke/`, summary and provenance files only
+- the current detection baseline under `outputs/<date>-detection-full/`, summary and provenance files only
 
 The retrieval artifacts under `index/` are no longer tracked. A workspace identity is `sha256` of the absolute path of its source root, so an index built here cannot match a graph built on another machine or from another checkout path. The tracked copies could not validate for anyone, and their presence turned a fresh clone's "no graph yet" state into a "stale artifact, rebuild embeddings" error. Build them locally with `scripts/ingestion/build_code_embeddings.py`, or by uploading a project; README.md documents the first run.
 

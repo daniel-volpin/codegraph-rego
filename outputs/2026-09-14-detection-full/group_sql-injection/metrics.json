@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-13T01:50:03.933401+00:00",
-  "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
-  "ground_truth_file": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+  "generated_at": "2026-09-14T07:33:28.160224+00:00",
+  "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/BenchmarkJava",
+  "ground_truth_file": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/BenchmarkJava/expectedresults-1.2.csv",
   "ground_truth_schema": {
     "format": "csv",
     "fieldnames": [
@@ -39,9 +39,9 @@
     }
   ],
   "selection": {
-    "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava",
+    "benchmark_root": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/BenchmarkJava",
     "java_relative_root": "src/main/java",
-    "ground_truth_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/BenchmarkJava/expectedresults-1.2.csv",
+    "ground_truth_path": "/Users/pnl11e4o/Documents/Academic/Thesis Project/Code/codegraph/BenchmarkJava/expectedresults-1.2.csv",
     "categories": [
       "sql-injection"
     ],

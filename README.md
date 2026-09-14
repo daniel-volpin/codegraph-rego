@@ -137,7 +137,7 @@ Repository-tracked evaluation artifacts report:
 
 | Evaluation | Result | Evidence |
 | --- | --- | --- |
-| Detection (current) | Precision `0.797`, recall `0.932`, F1 `0.859` on the full 2092-case corpus | [`outputs/local_smoke/detection_composed_final/`](./outputs/local_smoke/detection_composed_final/) |
+| Detection (current) | Precision `0.797`, recall `0.932`, F1 `0.859` on the full 2092-case corpus | [`outputs/2026-09-14-detection-full/detection_composed/`](./outputs/2026-09-14-detection-full/detection_composed/) |
 | Detection (recorded, qualified) | Precision, recall, and F1: `0.953` on a 454-case sample — **does not reproduce**, see below | [`outputs/thesis_final_detection_full_v2/`](./outputs/thesis_final_detection_full_v2/) |
 | Explanation grounding | `Citation@TP=1.000`; `Citation@FP=1.000` | [`outputs/thesis_final_explanation_full_v2/`](./outputs/thesis_final_explanation_full_v2/) |
 | Bounded remediation | `25/25` fully verified | [`outputs/thesis_final_remediation_v4/`](./outputs/thesis_final_remediation_v4/) |

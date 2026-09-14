@@ -158,20 +158,20 @@ for group in hash-md5 crypto-md5 rng-insecure sql-injection \
     --config configs/benchmark/multicat_all_available.json \
     --mapping configs/benchmark/policy_registry.json \
     --categories "$group" \
-    --output-dir "outputs/local_smoke/group_$group" \
+    --output-dir "outputs/$(date +%Y-%m-%d)-detection-full/group_$group" \
     --reset-neo4j
 done
 
 uv run python scripts/evaluation/compose_benchmark_eval.py \
-  outputs/local_smoke/group_* \
-  --output-dir outputs/local_smoke/detection_composed
+  outputs/$(date +%Y-%m-%d)-detection-full/group_* \
+  --output-dir outputs/$(date +%Y-%m-%d)-detection-full/detection_composed
 ```
 
 Compose recomputes the Overall row from each run's `case_outcomes.jsonl` under the union any-rule definition. Never sum the per-category rows: a case selected under one category can fire an off-target rule from another. Compose refuses to merge groups that disagree about a testcase, which means they came from different code or configuration.
 
 Group runs omit cross-file graph edges between categories. That is safe for OWASP Benchmark, whose cases are standalone and whose helpers are staged into every group, but it is a property of that corpus rather than a general guarantee. Verified equivalent on this corpus: run per group, every category reproduces the whole-corpus figures exactly.
 
-Current detection baseline, full corpus (2092 cases, all available per category, seed 7): precision `0.7966`, recall `0.9324`, F1 `0.8591` (`TP/FP/FN = 979/250/71`), artifact `outputs/local_smoke/detection_composed_final/`. On the 454-case `multicat_full.json` sample the same engines measured F1 `0.838` (`207/54/26`, `outputs/local_smoke/detection_matched/`) before configuration-backed crypto and hash detection.
+Current detection baseline, full corpus (2092 cases, all available per category, seed 7): precision `0.7966`, recall `0.9324`, F1 `0.8591` (`TP/FP/FN = 979/250/71`), artifact `outputs/2026-09-14-detection-full/detection_composed/`. Every group run records commit `1dd1510` with a clean tree, so the figure is reproducible from a named commit on `main`. On the 454-case `multicat_full.json` sample the same engines measured F1 `0.838` (`207/54/26`, `outputs/local_smoke/detection_matched/`) before configuration-backed crypto and hash detection.
 
 A detection figure is a property of the engine configuration as well as the corpus, so state which engines a run used, and whether configuration facts were available. Crypto and hash controls decide on values declared in the analysed workspace's `*.properties` files, so a corpus without them scores those categories differently; see `docs/architecture/2026-09-13-configuration-facts.md`.
 
@@ -231,7 +231,7 @@ For the UI thesis/demo, use the Policy page's `Framework demo focus` preset afte
 
 ## 6. Reproduce the Reported Detection Result
 
-The reported figure comes from the full corpus, evaluated one policy group at a time and composed. Use the procedure in "Detection evaluation by policy group" above; it writes `outputs/local_smoke/detection_composed_final/`.
+The reported figure comes from the full corpus, evaluated one policy group at a time and composed. Use the procedure in "Detection evaluation by policy group" above; the tracked result of that procedure is `outputs/2026-09-14-detection-full/detection_composed/`.
 
 `outputs/thesis_final_detection_full_v2/` is a historical artifact and is **not reproducible** on this baseline: it predates audit POLICY-C1's removal of a corpus fingerprint. Running its original config (`multicat_full.json`) gives neither that artifact's figure nor the reported one, so do not treat it as a reproduction step. `docs/thesis_context.md` records what it was and why it is retained.
 

@@ -19,8 +19,8 @@ The existing `thesis_final_*` and `_vN` names stay. `canonical_manifest.sha256` 
 | `thesis_final_remediation_v2/` | 181 files: per-case JSON plus 25 `.patch` files | superseded; no `provenance.json` | none recorded | — |
 | `thesis_final_remediation_v3/` | verified-success rate and confidence calibration | superseded by v4 | `7ad90a2` | `thesis-detection-v2-source` |
 | `thesis_final_remediation_v4/` | verified-success rate and confidence calibration | canonical | `80d0084` | `thesis-remediation-v4-source` |
-| `local_smoke/detection_composed_final/` | current detection baseline, merged from the eight `group_*` runs | current; summary files only | none of its own | see `composed_from` |
-| `local_smoke/group_*/` | the eight per-group runs it merges | current; summary and provenance only | `6aa9026`, `dirty: true` | `thesis-detection-baseline-2026-09-13-source` |
+| `2026-09-14-detection-full/detection_composed/` | current detection baseline, merged from the eight `group_*` runs | current; summary files only | none of its own | see `composed_from` |
+| `2026-09-14-detection-full/group_*/` | the eight per-group runs it merges | current; summary and provenance only | `1dd1510`, clean tree | ancestor of `main`, no tag needed |
 
 A composed directory is a merge, not a run, so nothing writes a `provenance.json` into it: `compose_benchmark_eval.py` records `composed_from` in `metrics.json`, and the per-group directories it names carry the provenance.
 
@@ -28,7 +28,7 @@ Tags are load-bearing here. This repository squash-merges, so a feature-branch c
 
 `local_smoke/` sits outside the checksum tripwire, which globs `outputs/thesis_final_*`. It is tracked so the current figure has evidence in the repository, but it is not canonical and its provenance records a dirty tree. **Outstanding:** re-run the composed evaluation on a clean checkout into a dated directory.
 
-`thesis_final_remediation_v2/` is missing from the canonical-runs list in `docs/thesis_context.md`, while `docs/benchmark_context.md` still calls it the remediation baseline.
+`thesis_final_remediation_v2/` is the per-case evidence behind the remediation result: 25 case directories and `results.jsonl`, with the same `25/25` outcome v4 records. It is kept because all 181 files are checksummed in `canonical_manifest.sha256` and a dated audit record cites it, and it has no `provenance.json`, so v4 is the anchor to cite for a recorded commit.
 
 ## Recorded absolute paths
 
@@ -38,10 +38,11 @@ Artifacts that are not evidence carry no such exemption: the demo SARIF fixtures
 
 ## Untracked
 
-`.gitignore` ignores `outputs/*` and re-includes tracked files by explicit negation, so these are absent from a clone — including each group's `case_outcomes.jsonl`, the per-case record behind the union any-rule Overall row.
+`.gitignore` ignores `outputs/*` and re-includes tracked files by explicit negation, so these are absent from a clone — including each group's `case_outcomes.jsonl`, the per-case record behind the union any-rule Overall row, and the superseded `local_smoke/` run.
 
 | Directory | Holds | Note |
 | --- | --- | --- |
+| `local_smoke/` | the superseded detection baseline, provenance `6aa9026` with `dirty: true` | replaced by `2026-09-14-detection-full/` |
 | `branch_baseline_recovery/` | local comparison runs | disposable |
 | `test_policy_ui_reviews/` | UI review store fixtures | disposable |
 

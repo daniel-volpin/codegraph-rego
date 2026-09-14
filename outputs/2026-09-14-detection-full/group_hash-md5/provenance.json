@@ -10,32 +10,13 @@
     "reset_neo4j": true,
     "table_format": "md"
   },
-  "generated_at": "2026-09-13T01:43:54+00:00",
+  "generated_at": "2026-09-14T03:06:18+00:00",
   "git": {
-    "branch": "feat/detection-engine-plugin-contract",
-    "dirty": true,
-    "dirty_files": [
-      "M .env.example",
-      "M codegraph/evaluation/pipeline.py",
-      "M codegraph/ingestion/extraction.py",
-      "M codegraph/ingestion/persistence.py",
-      "M codegraph/policy/packs/loader.py",
-      "M codegraph/policy/runtime/bundles.py",
-      "M codegraph/policy/runtime/contracts.py",
-      "M codegraph/policy/runtime/graph_queries.py",
-      "M policy/iso_27001_crypto.rego",
-      "M run_benchmark_eval.py",
-      "M tests/codegraph/config/test_config.py",
-      "M tests/codegraph/policy/_test_helpers.py",
-      "M tests/codegraph/policy/test_policy_contract_golden.py",
-      "M tests/codegraph/policy/test_policy_packs.py",
-      "?? codegraph/ingestion/config_facts.py",
-      "?? compose_benchmark_eval.py",
-      "?? tests/codegraph/ingestion/test_config_facts.py",
-      "?? tests/codegraph/policy/test_config_backed_crypto.py"
-    ],
-    "last_commit_subject": "perf(ingestion): parse files concurrently and report progress",
-    "sha": "6aa9026569243f2dbd4291830ff690238f4b3748"
+    "branch": "main",
+    "dirty": false,
+    "dirty_files": [],
+    "last_commit_subject": "fix: an upload replaces the active workspace, and readiness stops going stale (#302)",
+    "sha": "1dd15105c10ce7ed3cc263e32b0ea4848cc15ace"
   },
   "ground_truth": {
     "corpus_git_sha": "36f30ff537a4b839103b10a44c06d86a247507f5",
@@ -50,7 +31,7 @@
   "opa": {
     "raw": "Version: 1.20.2\nBuild Commit: b2c26708e9d55645d7f837db495031f7e4152594\nBuild Timestamp: 2026-09-03T20:35:14Z\nBuild Hostname: \nGo Version: go1.27.1\nPlatform: darwin/arm64\nRego Version: v1\nWebAssembly: available"
   },
-  "output_dir": "outputs/local_smoke/group_crypto-md5",
+  "output_dir": "outputs/2026-09-14-detection-full/group_hash-md5",
   "package_version": null,
   "platform": {
     "machine": "arm64",
