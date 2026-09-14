@@ -91,7 +91,7 @@ Every eval run writes a `provenance.json` next to its other artifacts (see `code
 
 Schema v2 records repository- and corpus-relative paths where possible and otherwise retains only the final path component, including path-like fields inside `extra`. This keeps new manifests portable and avoids publishing local machine prefixes. Historical canonical manifests remain unchanged as part of the thesis evidence record.
 
-Cite the artifact directory **plus the SHA recorded in `provenance.json`** when referring to canonical numbers. v1 numbers are addressable via the `thesis-evidence-2026-05-31` git tag.
+Cite the artifact directory **plus the SHA recorded in `provenance.json`** when referring to canonical numbers. v1 numbers are addressable via the `thesis-evidence-2026-05-31-source` git tag.
 
 A composed detection directory carries no `provenance.json` of its own. `compose_benchmark_eval.py` records `composed_from` in `metrics.json`, and each per-group directory it names carries the provenance; cite those. For `outputs/local_smoke/detection_composed_final/` the eight group runs all record SHA `6aa9026` with `dirty: true` (modified `policy/iso_27001_crypto.rego` and `run_benchmark_eval.py`, untracked `codegraph/ingestion/config_facts.py` and `compose_benchmark_eval.py`), so the current figure is reproducible by command but is not pinned to a clean commit.
 
