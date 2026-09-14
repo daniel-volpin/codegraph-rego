@@ -6,6 +6,7 @@ import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import CodeHighlight from "../../ui/CodeHighlight";
 import ConfidenceBand from "./ConfidenceBand";
+import { PreviewExplanationBox } from "./PreviewExplanationBox";
 import { copyTextToClipboard } from "../../../lib/utils";
 import type { PolicyExplanationStructured } from "../../../lib/types";
 import {
@@ -199,7 +200,7 @@ const ViolationFinding = memo(function ViolationFinding({
               >
                 {pendingAction === "apply" ? (
                   <>
-                    <Loader2 aria-hidden="true" className="mr-1 h-4 w-4 animate-spin" /> Applying…
+                    <Loader2 aria-hidden="true" className="mr-1 h-4 w-4 animate-spin" /> Verifying…
                   </>
                 ) : (
                   <>Verify fix (dry run)</>
@@ -270,10 +271,7 @@ const ViolationFinding = memo(function ViolationFinding({
               </div>
             )}
             {!previewResult?.diff && previewResult?.explanation && (
-              <div className="prose prose-xs max-w-none rounded-lg border border-emerald-200 bg-emerald-50/70 p-3.5 text-emerald-950 break-words dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
-                <strong>Preview:</strong>
-                <Markdown>{previewResult.explanation}</Markdown>
-              </div>
+              <PreviewExplanationBox heading="Preview:" explanation={previewResult.explanation} />
             )}
           </div>
         </div>

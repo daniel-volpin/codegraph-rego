@@ -6,7 +6,6 @@ import {
   FileCode,
   Terminal,
 } from "lucide-react";
-import Markdown from "react-markdown";
 import { toast } from "sonner";
 import { Badge } from "../../../ui/badge";
 import { Button } from "../../../ui/button";
@@ -17,6 +16,7 @@ import type {
 } from "../../../../lib/types";
 import { categorizeApplyOutcome } from "../policyUtils";
 import { ArtifactSkeleton } from "./ArtifactSkeleton";
+import { PreviewExplanationBox } from "../PreviewExplanationBox";
 
 export interface BoundedRemediationSectionProps {
   findingId: string | null;
@@ -92,10 +92,7 @@ export const BoundedRemediationSection = ({
     )}
 
     {!previewResult?.diff && previewResult?.explanation && (
-      <div className="prose prose-xs max-w-none rounded-lg border border-emerald-200 bg-emerald-50/70 p-3.5 text-emerald-950 break-words dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
-        <p className="font-semibold text-emerald-900 dark:text-emerald-300">Preview Guidance:</p>
-        <Markdown>{previewResult.explanation}</Markdown>
-      </div>
+      <PreviewExplanationBox heading="Preview Guidance:" explanation={previewResult.explanation} />
     )}
 
     {pendingAction === "preview" && <ArtifactSkeleton lines={5} />}
