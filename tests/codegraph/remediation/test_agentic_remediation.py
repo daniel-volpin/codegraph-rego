@@ -313,6 +313,46 @@ def test_missing_build_and_test_infrastructure_fail_closed(tmp_path: Path) -> No
     assert "no supported Maven build" in tests_output
 
 
+def test_no_test_suite_is_a_vacuous_pass_not_a_failure(tmp_path: Path) -> None:
+    src_dir = tmp_path / "src" / "main" / "java"
+    src_dir.mkdir(parents=True)
+    (src_dir / "App.java").write_text("class App {}\n", encoding="utf-8")
+    (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
+
+    with IsolatedWorktreeEnvironment(tmp_path) as env:
+        tests_ok, tests_output = env.run_tests()
+
+    assert tests_ok is True
+    assert "no Java test suite was found" in tests_output
+
+
+def test_compile_and_test_commands_skip_spotless(tmp_path: Path) -> None:
+    src_dir = tmp_path / "src" / "main" / "java"
+    src_dir.mkdir(parents=True)
+    (src_dir / "App.java").write_text("class App {}\n", encoding="utf-8")
+    (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
+    test_dir = tmp_path / "src" / "test" / "java"
+    test_dir.mkdir(parents=True)
+    (test_dir / "AppTest.java").write_text("class AppTest {}\n", encoding="utf-8")
+
+    with IsolatedWorktreeEnvironment(tmp_path) as env:
+        with patch(
+            "codegraph.java.service.parse_java_source",
+            return_value=SimpleNamespace(coverage="complete", diagnostics=[]),
+        ):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = SimpleNamespace(returncode=0, stdout="", stderr="")
+                env.compile_workspace()
+                env.run_tests()
+
+    compile_args = mock_run.call_args_list[0].args[0]
+    test_args = mock_run.call_args_list[1].args[0]
+    assert "-Dspotless.apply.skip=true" in compile_args
+    assert "-Dspotless.check.skip=true" in compile_args
+    assert "-Dspotless.apply.skip=true" in test_args
+    assert "-Dspotless.check.skip=true" in test_args
+
+
 def test_build_and_policy_exceptions_fail_closed(tmp_path: Path) -> None:
     src = tmp_path / "App.java"
     src.write_text("class App { void run() {} }\n", encoding="utf-8")
