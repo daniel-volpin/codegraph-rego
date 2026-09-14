@@ -154,6 +154,15 @@ def parse_args() -> argparse.Namespace:
         help="Benchmark selection config JSON (default: %(default)s)",
     )
     parser.add_argument(
+        "--categories",
+        default=None,
+        help=(
+            "Comma-separated category ids to evaluate, restricting this run to one "
+            "policy group. A failure is re-run for that group alone instead of the "
+            "whole sample. Merge group outputs with compose_agentic_eval.py."
+        ),
+    )
+    parser.add_argument(
         "--mapping",
         default="configs/benchmark/policy_registry.json",
         help="Control/CWE/Rego mapping JSON (default: %(default)s)",
@@ -228,7 +237,26 @@ def main() -> int:
     args = parse_args()
 
     context = load_benchmark_evaluation_context(Path(args.config), Path(args.mapping))
-    selected_ids = context.selection.selected_testcase_ids
+
+    requested_groups = [part.strip() for part in (args.categories or "").split(",") if part.strip()]
+    if requested_groups:
+        unknown = sorted(set(requested_groups) - set(context.categories_by_id))
+        if unknown:
+            LOGGER.error("Unknown category ids: %s", ", ".join(unknown))
+            return 1
+        context.selected_category_ids[:] = [
+            category_id for category_id in context.selected_category_ids if category_id in requested_groups
+        ]
+        LOGGER.info("Restricted to policy group(s): %s", ", ".join(context.selected_category_ids))
+
+    sampled_by_category = context.selection.selected_by_category
+    selected_ids = sorted(
+        {
+            record.testcase_id
+            for category_id in context.selected_category_ids
+            for record in sampled_by_category.get(category_id, [])
+        }
+    )
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
