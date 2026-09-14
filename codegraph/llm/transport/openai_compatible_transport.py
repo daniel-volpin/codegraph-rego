@@ -66,6 +66,13 @@ def _is_local_model_name(model_name: str) -> bool:
     )
 
 
+def _is_reasoning_model(model_name: str) -> bool:
+    """OpenAI's o1/o3/o4/gpt-5 family rejects `max_tokens` on chat.completions,
+    requiring `max_completion_tokens` instead."""
+    lowered = model_name.lower()
+    return lowered.startswith(("o1", "o3", "o4", "gpt-5"))
+
+
 def _resolve_effective_api_base(configured_base: str | None, model: str) -> str | None:
     if configured_base and not ("api.openai.com" in configured_base and _is_local_model_name(model)):
         return configured_base
@@ -334,7 +341,8 @@ def _chat_completion_params(request: LLMRequest, config: _GenerationConfig) -> d
     if config.temperature is not None:
         params["temperature"] = config.temperature
     if config.max_tokens is not None:
-        params["max_tokens"] = config.max_tokens
+        key = "max_completion_tokens" if _is_reasoning_model(config.model) else "max_tokens"
+        params[key] = config.max_tokens
     if request.stop is not None:
         params["stop"] = request.stop
     if request.response_format is not None:

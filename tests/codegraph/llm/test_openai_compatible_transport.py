@@ -154,6 +154,55 @@ class TestOpenAICompatibleTransport(unittest.TestCase):
                 with self.assertRaisesRegex(LLMUnavailableError, "empty response"):
                     transport.generate(request)
 
+    @patch("codegraph.llm.transport.openai_compatible_transport.OpenAI")
+    def test_reasoning_model_tool_call_uses_max_completion_tokens(self, mock_openai_cls) -> None:
+        # gpt-5/o1/o3/o4 reject `max_tokens` on chat.completions; tool-calling
+        # (agentic remediation) always routes there regardless of API mode.
+        mock_client = mock_openai_cls.return_value
+        mock_client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]
+        )
+
+        request = LLMRequest(
+            messages=[{"role": "user", "content": "hello"}],
+            model="gpt-5.4",
+            max_tokens=512,
+            tools=[{"type": "function", "function": {"name": "finish_remediation"}}],
+        )
+
+        with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_base", None):
+            with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_key", "test-key"):
+                transport = OpenAICompatibleTransport()
+                transport.generate(request)
+
+        mock_client.chat.completions.create.assert_called_once()
+        kwargs = mock_client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs["max_completion_tokens"], 512)
+        self.assertNotIn("max_tokens", kwargs)
+
+    @patch("codegraph.llm.transport.openai_compatible_transport.OpenAI")
+    def test_non_reasoning_model_tool_call_uses_max_tokens(self, mock_openai_cls) -> None:
+        mock_client = mock_openai_cls.return_value
+        mock_client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]
+        )
+
+        request = LLMRequest(
+            messages=[{"role": "user", "content": "hello"}],
+            model="gpt-4o-mini",
+            max_tokens=512,
+            tools=[{"type": "function", "function": {"name": "finish_remediation"}}],
+        )
+
+        with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_base", None):
+            with patch("codegraph.llm.transport.openai_compatible_transport.settings.llm_api_key", "test-key"):
+                transport = OpenAICompatibleTransport()
+                transport.generate(request)
+
+        kwargs = mock_client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs["max_tokens"], 512)
+        self.assertNotIn("max_completion_tokens", kwargs)
+
 
 if __name__ == "__main__":
     unittest.main()
