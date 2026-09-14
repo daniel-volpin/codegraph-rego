@@ -61,7 +61,7 @@ Open:
 
 ### First run
 
-A fresh checkout has no analysed code, so `/health` reports `degraded` with HTTP 503 and the retrieval checks fail until you load a project. That is expected, not a broken install. Upload a ZIP through the web application — the upload pipeline parses the project, publishes a graph revision, and builds the embedding index in one pass — after which `/health` returns `ok`.
+A fresh checkout has no analysed code, so `/health` reports `degraded` with HTTP 503 until you load a project. This is expected. Upload a ZIP through the web application: one pass parses the project, publishes a graph revision, and builds the embedding index, after which `/health` returns `ok`.
 
 To populate it from the command line instead:
 
@@ -70,7 +70,7 @@ uv run python scripts/ingestion/codebase_to_neo4j.py --java-root <path>/src/main
 uv run python scripts/ingestion/build_code_embeddings.py --rebuild-index
 ```
 
-The `index/` artifacts tracked in git are the recorded thesis retrieval generation. A workspace identity is derived from the absolute path of its source root, so those artifacts cannot match a graph built on another machine or from another checkout path; the backend detects the mismatch and asks for a rebuild rather than serving stale retrieval. Build your own index with the commands above, or by uploading a project.
+The `index/` artifacts tracked in git are the recorded thesis retrieval generation. A workspace identity is derived from the absolute path of its source root, so they cannot match a graph built on another machine or checkout path; the backend asks for a rebuild rather than serving stale retrieval.
 
 `make install` builds the required Eclipse JDT adapter, installs locked Python and frontend dependencies, and installs the pinned OPA binary into `.venv/bin`. CodeGraph does not download or substitute a Java parser at request time.
 
@@ -143,7 +143,7 @@ Repository-tracked evaluation artifacts report:
 
 The recorded `0.953` is **qualified evidence**: it was measured on the 454-case `multicat_full.json` sample, predates audit POLICY-C1's removal of a corpus fingerprint, and does not reproduce on the current baseline. Crypto (CWE-327) and hash (CWE-328) reach `1.000` in the current row by deciding on the algorithm declared in the analysed workspace's configuration, which means *the configured value is unsafe* rather than that a deployment is vulnerable. See [`docs/thesis_context.md`](./docs/thesis_context.md) and [`docs/architecture/2026-09-13-configuration-facts.md`](./docs/architecture/2026-09-13-configuration-facts.md) before citing either row.
 
-These values describe specific recorded runs, not guaranteed performance on arbitrary applications. Cite the artifact rather than this summary, following [`outputs/README.md`](./outputs/README.md): it records each artifact's provenance SHA, the tag pinning it, and the two cases that need care — the composed detection directory carries its provenance in the per-group runs, and only the 454-case detection and the explanation artifacts carry confidence intervals. See [`docs/benchmark_context.md`](./docs/benchmark_context.md) and [`docs/thesis_context.md`](./docs/thesis_context.md) for interpretation limits.
+These values describe specific recorded runs, not guaranteed performance on arbitrary applications. Cite the artifact rather than this summary; [`outputs/README.md`](./outputs/README.md) gives each artifact's provenance SHA, its tag, and where provenance and intervals are absent. See [`docs/benchmark_context.md`](./docs/benchmark_context.md) and [`docs/thesis_context.md`](./docs/thesis_context.md) for interpretation limits.
 
 ## Architecture
 
