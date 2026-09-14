@@ -103,18 +103,15 @@ export const StandardRulesCatalogView = ({
   // Filter rules by standard, search query, and compliance status
   const filteredRules = useMemo(() => {
     return allRulesWithStatus.filter((rule) => {
-      // 1. Standard filter
       if (selectedStandard !== "all") {
         if (rule.standardId !== selectedStandard && !rule.id.toLowerCase().includes(selectedStandard)) {
           return false;
         }
       }
 
-      // 2. Status filter
       if (statusFilter === "failing" && rule.isCompliant) return false;
       if (statusFilter === "compliant" && !rule.isCompliant) return false;
 
-      // 3. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matches =

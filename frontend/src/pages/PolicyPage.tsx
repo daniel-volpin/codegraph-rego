@@ -68,7 +68,6 @@ const PolicyPage = () => {
     }));
   };
 
-// Policy catalog + packs + eval queries
 
   const policyCatalogQuery = useQuery<PolicyCatalogResponse, Error>({
     queryKey: ["policyCatalog"],
@@ -121,7 +120,6 @@ const PolicyPage = () => {
     };
   }, [queryClient]);
 
-// Effects
 
   useEffect(() => {
     if (!evalQuery.data) return;
@@ -149,7 +147,6 @@ const PolicyPage = () => {
     toast.error(`Evaluation failed: ${evalQuery.error.message}`);
   }, [evalQuery.error, evalQuery.errorUpdatedAt, evalQuery.isError]);
 
-// Derived data
 
   const findings = useMemo(
     () => (evalQuery.data?.violations ?? []).map((v) => normalizeViolation(v)),
@@ -249,6 +246,7 @@ const PolicyPage = () => {
       moduleCount: visibleModules.length,
       fullSupportCount: filteredFindings.filter((f) => f.remediation.support_tier === "full").length,
       guardedSupportCount: filteredFindings.filter((f) => f.remediation.support_tier === "guarded").length,
+      manualCount: filteredFindings.filter((f) => f.remediation.support_tier === "manual").length,
     }),
     [data.length, filteredFindings, visibleModules.length],
   );
@@ -276,7 +274,6 @@ const PolicyPage = () => {
         ? "Evaluation completed successfully with zero findings for the selected scope."
         : "No findings match the current module filter.";
 
-// Table
 
   const columns = useMemo<ColumnDef<PolicyTableFeatures, ViolationGroupRow>[]>(
     () => [
@@ -436,7 +433,6 @@ const PolicyPage = () => {
     }
   };
 
-// Render
 
   return (
     <div className="space-y-4">
@@ -456,18 +452,25 @@ const PolicyPage = () => {
       </Card>
 
       <ControlsPanel
-        searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
-        moduleFilter={effectiveModuleFilter}
-        onModuleFilterChange={setModuleFilter}
-        availableModules={availableModules}
-        evalIsFetching={evalQuery.isFetching}
-        onEvalRefetch={() => evalQuery.refetch()}
-        policyCatalogIsLoading={policyCatalogQuery.isLoading}
-        onExportSarif={handleExportSarif}
-        isExportingSarif={isExportingSarif}
-        onImportSarif={handleImportSarifClick}
-        isImportingSarif={isImportingSarif}
+        search={{
+          searchQuery,
+          onSearchQueryChange: setSearchQuery,
+          moduleFilter: effectiveModuleFilter,
+          onModuleFilterChange: setModuleFilter,
+          availableModules,
+        }}
+        sarif={{
+          onExportSarif: handleExportSarif,
+          isExportingSarif,
+          onImportSarif: handleImportSarifClick,
+          isImportingSarif,
+          disabled: evalQuery.isFetching,
+        }}
+        scan={{
+          evalIsFetching: evalQuery.isFetching,
+          onEvalRefetch: () => evalQuery.refetch(),
+          policyCatalogIsLoading: policyCatalogQuery.isLoading,
+        }}
       />
 
       <EvaluationStatusCard

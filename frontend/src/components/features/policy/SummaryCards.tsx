@@ -1,5 +1,5 @@
 import { Card } from "../../ui/card";
-import { AlertCircle, Boxes, CheckCircle2, ShieldAlert, ShieldCheck } from "lucide-react";
+import { AlertCircle, Ban, Boxes, CheckCircle2, ShieldAlert, ShieldCheck } from "lucide-react";
 
 interface SummaryCardsProps {
   findingCount: number;
@@ -7,6 +7,7 @@ interface SummaryCardsProps {
   moduleCount: number;
   fullSupportCount: number;
   guardedSupportCount: number;
+  manualCount: number;
 }
 
 const SummaryCards = ({
@@ -15,6 +16,7 @@ const SummaryCards = ({
   moduleCount,
   fullSupportCount,
   guardedSupportCount,
+  manualCount,
 }: SummaryCardsProps) => (
   <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
     <Card className="p-3.5 shadow-2xs border-zinc-200/80 dark:border-zinc-800 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs">
@@ -52,12 +54,12 @@ const SummaryCards = ({
       </div>
       <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-amber-700 dark:text-amber-400">{guardedSupportCount}</p>
     </Card>
-    <Card className="p-3.5 shadow-2xs border-indigo-200/80 dark:border-indigo-900/60 bg-indigo-50/20 dark:bg-indigo-950/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs">
+    <Card className="p-3.5 shadow-2xs border-zinc-200/80 dark:border-zinc-800 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xs">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">Agent Fixes</p>
-        <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Manual only</p>
+        <Ban className="h-3.5 w-3.5 text-zinc-400" />
       </div>
-      <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-indigo-700 dark:text-indigo-400">{findingCount}</p>
+      <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{manualCount}</p>
     </Card>
   </div>
 );

@@ -4,53 +4,53 @@ import { Card } from "../../ui/card";
 
 const MODULE_FILTER_SELECT_ID = "policy-module-filter";
 
-interface ControlsPanelProps {
+export interface SearchAndFilterProps {
   searchQuery?: string;
   onSearchQueryChange?: (query: string) => void;
   moduleFilter: string;
   onModuleFilterChange: (filter: string) => void;
   availableModules: string[];
-  evalIsFetching: boolean;
-  onEvalRefetch: () => void;
-  policyCatalogIsLoading?: boolean;
+}
+
+export interface SarifActionsProps {
   onExportSarif?: () => void;
   isExportingSarif?: boolean;
   onImportSarif?: () => void;
   isImportingSarif?: boolean;
+  disabled?: boolean;
 }
 
-export const ControlsPanel = ({
-  searchQuery = "",
-  onSearchQueryChange,
-  moduleFilter,
-  onModuleFilterChange,
-  availableModules,
-  evalIsFetching,
-  onEvalRefetch,
-  policyCatalogIsLoading = false,
-  onExportSarif,
-  isExportingSarif = false,
-  onImportSarif,
-  isImportingSarif = false,
-}: ControlsPanelProps) => (
+export interface ScanTriggerProps {
+  evalIsFetching: boolean;
+  onEvalRefetch: () => void;
+  policyCatalogIsLoading?: boolean;
+}
+
+interface ControlsPanelProps {
+  search: SearchAndFilterProps;
+  sarif: SarifActionsProps;
+  scan: ScanTriggerProps;
+}
+
+export const ControlsPanel = ({ search, sarif, scan }: ControlsPanelProps) => (
   <Card className="p-3.5 shadow-xs border-slate-200/80 dark:border-zinc-800">
     <div className="flex flex-wrap items-center justify-between gap-2.5">
       {/* Left controls: Quick Search & Target Module Filter */}
       <div className="flex flex-wrap items-center gap-2">
-        {onSearchQueryChange && (
+        {search.onSearchQueryChange && (
           <div className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 dark:border-zinc-800 dark:bg-zinc-900/40 min-w-[210px]">
             <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => onSearchQueryChange(e.target.value)}
+              value={search.searchQuery ?? ""}
+              onChange={(e) => search.onSearchQueryChange?.(e.target.value)}
               placeholder="Filter by rule, method, or file…"
               className="w-full bg-transparent text-xs font-medium text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 focus:outline-hidden"
             />
-            {searchQuery && (
+            {search.searchQuery && (
               <button
                 type="button"
-                onClick={() => onSearchQueryChange("")}
+                onClick={() => search.onSearchQueryChange?.("")}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 text-xs"
                 title="Clear search"
               >
@@ -70,12 +70,12 @@ export const ControlsPanel = ({
           </label>
           <select
             id={MODULE_FILTER_SELECT_ID}
-            value={moduleFilter}
-            onChange={(event) => onModuleFilterChange(event.target.value)}
+            value={search.moduleFilter}
+            onChange={(event) => search.onModuleFilterChange(event.target.value)}
             className="bg-transparent text-xs font-medium text-slate-900 dark:text-zinc-100 focus:outline-hidden cursor-pointer max-w-[170px] truncate pr-1"
           >
             <option value="all">All scanned modules</option>
-            {availableModules.map((module) => (
+            {search.availableModules.map((module) => (
               <option key={module} value={module}>
                 {module}
               </option>
@@ -86,16 +86,16 @@ export const ControlsPanel = ({
 
       {/* Right controls: SARIF Actions & Policy Scan Trigger */}
       <div className="flex flex-wrap items-center gap-2">
-        {onImportSarif && (
+        {sarif.onImportSarif && (
           <Button
             variant="outline"
             data-testid="policy-sarif-import"
-            onClick={onImportSarif}
-            disabled={isImportingSarif || evalIsFetching}
+            onClick={sarif.onImportSarif}
+            disabled={sarif.isImportingSarif || sarif.disabled}
             title="Import external SAST report in standard OASIS SARIF v2.1.0 format"
             className="h-9 text-xs font-medium gap-1.5 border-slate-200 dark:border-zinc-800 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 whitespace-nowrap"
           >
-            {isImportingSarif ? (
+            {sarif.isImportingSarif ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
                 <span>Importing…</span>
@@ -108,16 +108,16 @@ export const ControlsPanel = ({
             )}
           </Button>
         )}
-        {onExportSarif && (
+        {sarif.onExportSarif && (
           <Button
             variant="outline"
             data-testid="policy-sarif-export"
-            onClick={onExportSarif}
-            disabled={isExportingSarif || evalIsFetching}
+            onClick={sarif.onExportSarif}
+            disabled={sarif.isExportingSarif || sarif.disabled}
             title="Export policy findings in standard OASIS SARIF v2.1.0 format"
             className="h-9 text-xs font-medium gap-1.5 border-slate-200 dark:border-zinc-800 shadow-2xs hover:bg-slate-100 dark:hover:bg-zinc-800 whitespace-nowrap"
           >
-            {isExportingSarif ? (
+            {sarif.isExportingSarif ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
                 <span>Exporting…</span>
@@ -132,12 +132,12 @@ export const ControlsPanel = ({
         )}
         <Button
           data-testid="policy-eval-run"
-          onClick={onEvalRefetch}
-          disabled={evalIsFetching || policyCatalogIsLoading}
+          onClick={scan.onEvalRefetch}
+          disabled={scan.evalIsFetching || scan.policyCatalogIsLoading}
           title="Evaluate full policy compliance rules across the active codebase."
           className="h-9 px-4 text-xs font-semibold gap-1.5 shadow-xs bg-indigo-600 hover:bg-indigo-700 text-white whitespace-nowrap"
         >
-          {evalIsFetching ? (
+          {scan.evalIsFetching ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               <span>Scanning…</span>
@@ -155,4 +155,3 @@ export const ControlsPanel = ({
 );
 
 export default ControlsPanel;
-
