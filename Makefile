@@ -1,4 +1,4 @@
-.PHONY: install java-parser-build backend-dev dev test policy-check policy-fmt opengrep-test docs-check docs-fmt lint format neo4j-up neo4j-down docker-up docker-down clean help
+.PHONY: install benchmark-corpus java-parser-build backend-dev dev test policy-check policy-fmt opengrep-test docs-check docs-fmt lint format neo4j-up neo4j-down docker-up docker-down clean help
 
 MVN ?= mvn
 
@@ -84,6 +84,14 @@ format: ## Format code (ruff for backend, prettier for frontend)
 	@uv run ruff format .
 	@echo "Formatting frontend..."
 	@cd frontend && npx prettier --write "src/**/*.{ts,tsx,css}"
+
+benchmark-corpus: ## Clone the OWASP Benchmark corpus into ./BenchmarkJava (gitignored)
+	@if [ -f BenchmarkJava/expectedresults-1.2.csv ]; then \
+		echo "OWASP Benchmark already present at ./BenchmarkJava"; \
+	else \
+		git clone --depth=1 https://github.com/OWASP-Benchmark/BenchmarkJava.git BenchmarkJava; \
+		echo "Cloned to ./BenchmarkJava. GPL-2.0; see THIRD_PARTY_NOTICES.md."; \
+	fi
 
 neo4j-up: ## Start the local Neo4j dependency only
 	@./scripts/dev_container.sh compose up -d neo4j
