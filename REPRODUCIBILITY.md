@@ -10,8 +10,8 @@ This file describes the evaluation workflow for the current source baseline. Pub
 - OPA `v1.20.2` on `PATH` (required for `make policy-check` and OPA policy evaluation)
 - OpenGrep `v1.30.0+` on `PATH` (required for the injection controls; without it those rules are skipped and detection recall drops silently)
 - JDK 21+ and Maven for the JDT adapter; the analyzed project's build may require its own configured Java release
-- local checkout of `BenchmarkJava` (as a sibling directory `../BenchmarkJava`, or
-  anywhere with `OWASP_BENCHMARK_ROOT` pointing at it)
+- local checkout of `BenchmarkJava`, from `make benchmark-corpus` (clones `./BenchmarkJava`,
+  which discovery finds automatically), as a sibling directory `../BenchmarkJava`, or anywhere with `OWASP_BENCHMARK_ROOT` pointing at it. `make benchmark-corpus` pins commit `36f30ff537a4b839103b10a44c06d86a247507f5`, the `corpus_git_sha` every artifact under `outputs/` records; upstream `master` has moved past it, so an unpinned clone would not be comparable. Override with `BENCHMARK_REF`.
 - LM Studio, OpenAI, or another OpenAI-compatible LLM endpoint for explanation/remediation runs
 
 ## 2. Environment
