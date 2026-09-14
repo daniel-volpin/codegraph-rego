@@ -85,12 +85,19 @@ format: ## Format code (ruff for backend, prettier for frontend)
 	@echo "Formatting frontend..."
 	@cd frontend && npx prettier --write "src/**/*.{ts,tsx,css}"
 
-benchmark-corpus: ## Clone the OWASP Benchmark corpus into ./BenchmarkJava (gitignored)
+# The commit every recorded corpus_git_sha in outputs/ refers to. Upstream master
+# has moved since; pinning keeps a rerun comparable to the published evidence.
+BENCHMARK_REF ?= 36f30ff537a4b839103b10a44c06d86a247507f5
+
+benchmark-corpus: ## Clone the pinned OWASP Benchmark corpus into ./BenchmarkJava (gitignored)
 	@if [ -f BenchmarkJava/expectedresults-1.2.csv ]; then \
-		echo "OWASP Benchmark already present at ./BenchmarkJava"; \
+		echo "OWASP Benchmark already present at ./BenchmarkJava ($$(git -C BenchmarkJava rev-parse --short HEAD 2>/dev/null || echo 'not a clone'))"; \
 	else \
-		git clone --depth=1 https://github.com/OWASP-Benchmark/BenchmarkJava.git BenchmarkJava; \
-		echo "Cloned to ./BenchmarkJava. GPL-2.0; see THIRD_PARTY_NOTICES.md."; \
+		git init -q BenchmarkJava && \
+		git -C BenchmarkJava remote add origin https://github.com/OWASP-Benchmark/BenchmarkJava.git && \
+		git -C BenchmarkJava fetch -q --depth=1 origin $(BENCHMARK_REF) && \
+		git -C BenchmarkJava checkout -q FETCH_HEAD && \
+		echo "Cloned ./BenchmarkJava at $(BENCHMARK_REF). GPL-2.0; see THIRD_PARTY_NOTICES.md."; \
 	fi
 
 neo4j-up: ## Start the local Neo4j dependency only

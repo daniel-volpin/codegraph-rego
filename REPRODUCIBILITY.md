@@ -10,8 +10,7 @@ This file describes the evaluation workflow for the current source baseline. Pub
 - OPA `v1.20.2` on `PATH` (required for `make policy-check` and OPA policy evaluation)
 - OpenGrep `v1.30.0+` on `PATH` (required for the injection controls; without it those rules are skipped and detection recall drops silently)
 - JDK 21+ and Maven for the JDT adapter; the analyzed project's build may require its own configured Java release
-- local checkout of `BenchmarkJava` (as a sibling directory `../BenchmarkJava`, or
-  anywhere with `OWASP_BENCHMARK_ROOT` pointing at it)
+- local checkout of `BenchmarkJava` from `make benchmark-corpus`, which clones `./BenchmarkJava` — the one location resolved without configuration. Point elsewhere with `OWASP_BENCHMARK_ROOT`. The target pins commit `36f30ff537a4b839103b10a44c06d86a247507f5`, the `corpus_git_sha` every artifact under `outputs/` records; upstream `master` has moved past it, so an unpinned clone would not be comparable. Override with `BENCHMARK_REF`.
 - LM Studio, OpenAI, or another OpenAI-compatible LLM endpoint for explanation/remediation runs
 
 ## 2. Environment
@@ -23,7 +22,7 @@ source .venv/bin/activate
 export NEO4J_URI=bolt://127.0.0.1:7687
 export NEO4J_USER=neo4j
 export NEO4J_PASS=your_password
-# Optional: only needed if BenchmarkJava is not a sibling of this repo.
+# Optional: only needed if the corpus is not at ./BenchmarkJava.
 # export OWASP_BENCHMARK_ROOT="$HOME/path/to/BenchmarkJava"
 
 export LLM_API_BASE=http://localhost:1234/v1
@@ -50,7 +49,7 @@ The operator-facing variables consumed by `codegraph.config.Settings`, the uploa
 | `NEO4J_URI` | `bolt://localhost:7687` | Neo4j Bolt endpoint. Required at runtime. |
 | `NEO4J_USER` | `neo4j` | Neo4j auth user. Required. |
 | `NEO4J_PASS` | _unset_ | Neo4j auth password. Required (no default). |
-| `OWASP_BENCHMARK_ROOT` | auto-discovered | Absolute path to the local `BenchmarkJava` checkout. Resolved automatically when the clone sits beside this repository (`../BenchmarkJava`), in it, or at `~/BenchmarkJava`; set it only for a non-standard location. |
+| `OWASP_BENCHMARK_ROOT` | `./BenchmarkJava` | Absolute path to the local `BenchmarkJava` checkout. `make benchmark-corpus` creates the default location; set this only to point somewhere else. |
 | `CODEGRAPH_HOST` | `127.0.0.1` | Bind host for the backend service. Loopback by default for safe local-only operation. |
 | `CODEGRAPH_OPA_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OPA eval subprocesses. |
 | `CODEGRAPH_OPENGREP_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OpenGrep taint subprocesses. |

@@ -41,14 +41,20 @@ def selection_config(tmp_path: Path) -> Path:
 
 
 class TestDiscovery:
-    def test_finds_a_sibling_checkout_when_unset(self, monkeypatch, fake_checkout: Path) -> None:
+    def test_finds_the_in_repo_checkout_when_unset(self, monkeypatch, fake_checkout: Path) -> None:
+        monkeypatch.delenv(benchmark._BENCHMARK_ROOT_VAR, raising=False)
+        monkeypatch.setattr(benchmark, "_PROJECT_ROOT", fake_checkout.parent)
+        assert benchmark.ensure_benchmark_root_env() == str(fake_checkout)
+
+    def test_a_sibling_checkout_is_no_longer_discovered(self, monkeypatch, fake_checkout: Path) -> None:
+        """One default location only: a sibling needs OWASP_BENCHMARK_ROOT."""
         monkeypatch.delenv(benchmark._BENCHMARK_ROOT_VAR, raising=False)
         monkeypatch.setattr(benchmark, "_PROJECT_ROOT", fake_checkout.parent / "codegraph")
-        assert benchmark.ensure_benchmark_root_env() == str(fake_checkout)
+        assert benchmark.ensure_benchmark_root_env() is None
 
     def test_explicit_configuration_wins_over_discovery(self, monkeypatch, fake_checkout: Path) -> None:
         monkeypatch.setenv(benchmark._BENCHMARK_ROOT_VAR, "/explicit/path")
-        monkeypatch.setattr(benchmark, "_PROJECT_ROOT", fake_checkout.parent / "codegraph")
+        monkeypatch.setattr(benchmark, "_PROJECT_ROOT", fake_checkout.parent)
         assert benchmark.ensure_benchmark_root_env() == "/explicit/path"
 
     def test_a_directory_without_ground_truth_is_not_the_corpus(self, monkeypatch, tmp_path: Path) -> None:
@@ -73,7 +79,7 @@ class TestFailureIsActionable:
         self, monkeypatch, fake_checkout: Path, selection_config: Path
     ) -> None:
         monkeypatch.delenv(benchmark._BENCHMARK_ROOT_VAR, raising=False)
-        monkeypatch.setattr(benchmark, "_PROJECT_ROOT", fake_checkout.parent / "codegraph")
+        monkeypatch.setattr(benchmark, "_PROJECT_ROOT", fake_checkout.parent)
         cfg = benchmark.load_selection_config(selection_config)
         assert cfg["benchmark_root"] == str(fake_checkout)
         assert "$" not in cfg["benchmark_root"]

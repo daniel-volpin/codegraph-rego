@@ -94,19 +94,15 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _discover_benchmark_root() -> Path | None:
-    """Locate a BenchmarkJava checkout in the conventional places.
+    """Return ./BenchmarkJava if it holds the corpus, else None.
 
-    The corpus is a separate clone, so requiring every user to export a path
-    makes the evaluation scripts fail for anyone who follows the README
-    literally. A checkout is identified by its ground-truth file rather than
-    by name, so an arbitrary directory is never mistaken for the corpus.
+    One default location, the one `make benchmark-corpus` creates, plus
+    OWASP_BENCHMARK_ROOT to point anywhere else. A checkout is identified by
+    its ground-truth file, so an empty or unrelated directory is not mistaken
+    for the corpus.
     """
-    candidates = (
-        _PROJECT_ROOT.parent / "BenchmarkJava",
-        _PROJECT_ROOT / "BenchmarkJava",
-        Path.home() / "BenchmarkJava",
-    )
-    return next((c for c in candidates if (c / _BENCHMARK_ROOT_MARKER).is_file()), None)
+    candidate = _PROJECT_ROOT / "BenchmarkJava"
+    return candidate if (candidate / _BENCHMARK_ROOT_MARKER).is_file() else None
 
 
 def ensure_benchmark_root_env() -> str | None:
@@ -130,9 +126,9 @@ def _expand_env_path(value: str | None) -> str | None:
     # a confusing "no such directory: ${VAR}/..." instead of a clear cause.
     if "$" in expanded:
         raise ValueError(
-            f"Could not resolve {value!r}: {_BENCHMARK_ROOT_VAR} is not set and no BenchmarkJava "
-            f"checkout was found next to the repository. Clone it as a sibling directory "
-            f"(../BenchmarkJava) or export {_BENCHMARK_ROOT_VAR}=/path/to/BenchmarkJava."
+            f"Could not resolve {value!r}: {_BENCHMARK_ROOT_VAR} is not set and ./BenchmarkJava "
+            f"does not hold the corpus. Run `make benchmark-corpus`, or export "
+            f"{_BENCHMARK_ROOT_VAR}=/path/to/BenchmarkJava."
         )
     return expanded
 

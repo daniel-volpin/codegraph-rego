@@ -170,4 +170,4 @@ frontend/yarn-error.log
 
 
 # OWASP Benchmark corpus, cloned by `make benchmark-corpus`. GPL-2.0: never commit it.
-/BenchmarkJava/
+/BenchmarkJava
