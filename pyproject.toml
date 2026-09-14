@@ -14,6 +14,7 @@ dependencies = [
     "aiofiles==25.1.0",
     "python-multipart==0.0.32",
     "sentence-transformers==6.0.1",
+    "torch>=2.2", # direct dep so the CPU-only source below actually applies; see [tool.uv.sources]
     "faiss-cpu==1.15.0",
     "numpy==2.5.3",
     "neo4j==6.3.0",
@@ -38,6 +39,18 @@ dev = [
     "pyyaml==6.0.3",
     "pytest-xdist>=3.8.0",
 ]
+
+[tool.uv.sources]
+# sentence-transformers pulls in torch. The default PyPI Linux wheel depends on
+# the full CUDA runtime (cuda-toolkit and its nvidia-* packages, several GB),
+# which this project never uses: embedding inference here is CPU-only and the
+# docker-compose services have no GPU passthrough.
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.ruff]
 line-length = 120
