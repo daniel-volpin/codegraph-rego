@@ -308,21 +308,38 @@ class IsolatedWorktreeEnvironment:
                 method_selector=baseline_snapshot.identity.selector,
                 expected_source_sha256=sha256_hex(candidate_bytes),
             )
+            # Re-verification splices the candidate method onto a "baseline" shell
+            # (build_candidate_overlay keeps everything outside the method range from
+            # that shell). Using the pristine original file as the shell would drop any
+            # import the agent added via add_import(), since that edit sits outside the
+            # method's byte range -- the spliced-in method would then reference a type
+            # JDT cannot resolve and binding fails with a spurious "not applicable"
+            # error. Using the current file's shell (with the original method body
+            # swapped back in) keeps the real imports for both the baseline and
+            # candidate checks, so only the method body itself differs between them.
+            baseline_shell_bytes = (
+                candidate_bytes[: candidate_snapshot.start_byte]
+                + self._target_original_bytes[baseline_snapshot.start_byte : baseline_snapshot.end_byte]
+                + candidate_bytes[candidate_snapshot.end_byte :]
+            )
             with tempfile.TemporaryDirectory(prefix="policy-verification-", dir=self.temp_dir) as temp:
                 verification_root = Path(temp)
                 baseline_path = verification_root / self.target_relative_path
                 baseline_path.parent.mkdir(parents=True, exist_ok=True)
-                baseline_path.write_bytes(self._target_original_bytes)
+                baseline_path.write_bytes(baseline_shell_bytes)
                 candidate_method = verification_root / ".candidate" / "candidate-method.java"
                 candidate_method.parent.mkdir(parents=True, exist_ok=True)
                 candidate_method.write_bytes(candidate_snapshot.method_bytes)
                 report = verify_candidate(
                     workspace_root=verification_root,
                     source=self.target_relative_path,
-                    method_selector=self.target_method_key,
+                    # A range-independent selector, not target_method_key: the shell's
+                    # byte offsets no longer match the pristine original's, since the
+                    # current file's import section can differ in length.
+                    method_selector=baseline_snapshot.identity.selector,
                     candidate=candidate_method.relative_to(verification_root),
                     rule_id=target_rule_id,
-                    expected_source_sha256=sha256_hex(self._target_original_bytes),
+                    expected_source_sha256=sha256_hex(baseline_shell_bytes),
                     work_dir=verification_root / "work",
                 )
             findings_raw = report.get("findings")

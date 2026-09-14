@@ -420,6 +420,68 @@ def test_policy_gate_compares_scratch_candidate_to_immutable_baseline(
     assert src.read_text(encoding="utf-8") == original
 
 
+def test_policy_gate_baseline_shell_carries_forward_new_imports(tmp_path: Path) -> None:
+    """A fix that needs a new import must not desync baseline/candidate re-verification.
+
+    add_import() edits the file outside the target method's byte range, so a
+    baseline reconstructed from the pristine original bytes would lack that
+    import while the candidate method references the newly-imported type --
+    a spurious mismatch, not a real difference in the method under test.
+    """
+    src = tmp_path / "src" / "demo" / "HashDemo.java"
+    src.parent.mkdir(parents=True)
+    original = (
+        "package demo;\n\n"
+        "class HashDemo {\n"
+        "    void use(String algorithm) {}\n"
+        "    void hash() throws java.security.NoSuchAlgorithmException {\n"
+        '        use("MD5");\n'
+        "    }\n"
+        "}\n"
+    )
+    src.write_text(original, encoding="utf-8")
+    snapshot = create_source_snapshot_from_bytes(
+        workspace_root=tmp_path,
+        source_path=src,
+        source_bytes=original.encode(),
+        method_selector="demo.HashDemo#hash()",
+        expected_source_sha256=sha256_hex(original),
+    )
+    method_key = f"workspace@revision:src/demo/HashDemo.java#{snapshot.identity.source_key}"
+    captured: dict[str, str] = {}
+
+    def fake_verify_candidate(**kwargs):
+        root = Path(kwargs["workspace_root"])
+        captured["baseline"] = (root / kwargs["source"]).read_text(encoding="utf-8")
+        captured["candidate"] = (root / kwargs["candidate"]).read_text(encoding="utf-8")
+        return {"status": "POLICY_PASS", "policy_status": "PASS", "findings": {"candidate": []}}
+
+    with IsolatedWorktreeEnvironment(tmp_path, target_method_key=method_key) as env:
+        assert env.apply_replacement(
+            "src/demo/HashDemo.java",
+            'use("MD5");',
+            'use(MessageDigest.getInstance("SHA-256").getAlgorithm());',
+        )
+        env.add_import("src/demo/HashDemo.java", "import java.security.MessageDigest;")
+        with patch(
+            "codegraph.remediation.agentic.environment.verify_candidate",
+            side_effect=fake_verify_candidate,
+        ):
+            passed, findings, remaining = env.evaluate_policy("ISO-A.10-WEAK-HASH")
+
+    assert passed is True
+    assert findings == []
+    assert remaining == []
+    # The baseline shell keeps the original (vulnerable) method body...
+    assert 'use("MD5");' in captured["baseline"]
+    # ...but must carry the new import forward from the current file, even
+    # though that edit sits outside the method's byte range. The candidate is
+    # just the replaced method fragment, so it never carries imports itself.
+    assert "import java.security.MessageDigest;" in captured["baseline"]
+    assert "MessageDigest.getInstance" in captured["candidate"]
+    assert src.read_text(encoding="utf-8") == original
+
+
 def test_agentic_safe_refusal(tmp_path: Path) -> None:
     src = tmp_path / "src" / "demo" / "SqlDemo.java"
     src.parent.mkdir(parents=True)
