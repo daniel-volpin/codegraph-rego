@@ -36,6 +36,7 @@ It is a master thesis research artifact evaluated primarily against [OWASP Bench
   install with `curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash`)
 - JDK 21+ and Maven
 - Docker Compose, or Podman with a compatible Compose provider
+- For benchmark evaluation only: the OWASP Benchmark corpus, via `make benchmark-corpus`
 
 ### Install and run
 

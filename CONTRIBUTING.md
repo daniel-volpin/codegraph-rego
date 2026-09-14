@@ -25,6 +25,8 @@ CodeGraph is a **benchmark-backed research artifact**. To preserve scientific re
 - OPA `v1.20.2` (installed into `.venv/bin` by `make install`)
 - JDK 21+ and Maven for the Eclipse JDT adapter and remediation build re-verification
 - Neo4j 5.x through a Docker- or Podman-compatible Compose runtime
+- For benchmark evaluation only: `make benchmark-corpus` clones the OWASP Benchmark
+  corpus into a gitignored `./BenchmarkJava`. It is GPL-2.0, so it is never committed; see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md). The test suite does not need it.
 
 ### Environment Preparation
 

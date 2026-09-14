@@ -1,7 +1,12 @@
+import os
 import unittest
+from unittest import mock
 
 from codegraph.evaluation.benchmark import load_selection_config
 from tests._support import PROJECT_ROOT
+
+# Layout only; test_benchmark_root_resolution.py owns resolution.
+_PLACEHOLDER_BENCHMARK_ROOT = "/nonexistent/BenchmarkJava"
 
 EXPANDED_BENCHMARK_CATEGORIES = {
     "crypto-md5",
@@ -16,6 +21,13 @@ EXPANDED_BENCHMARK_CATEGORIES = {
 
 
 class TestBenchmarkConfigLayout(unittest.TestCase):
+    def setUp(self) -> None:
+        patcher = mock.patch.dict(
+            os.environ, {"OWASP_BENCHMARK_ROOT": _PLACEHOLDER_BENCHMARK_ROOT}
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_canonical_benchmark_configs_parse(self) -> None:
         benchmark_dir = PROJECT_ROOT / "configs" / "benchmark"
         expected = {

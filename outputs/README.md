@@ -30,6 +30,12 @@ Tags are load-bearing here. This repository squash-merges, so a feature-branch c
 
 `thesis_final_remediation_v2/` is missing from the canonical-runs list in `docs/thesis_context.md`, while `docs/benchmark_context.md` still calls it the remediation baseline.
 
+## Recorded absolute paths
+
+Seventeen tracked artifacts record the absolute path of the machine that produced them, in `provenance.json` and in the `file_path` fields of their metrics. They are kept. A provenance record states where a run actually happened, and nine of these files are checksummed in `canonical_manifest.sha256`, so rewriting them to look tidy would break the manifest and edit the thesis record after the fact. This is the accepted answer to the machine-specific paths item in `docs/public_release_checklist.md`.
+
+Artifacts that are not evidence carry no such exemption: the demo SARIF fixtures were rewritten to workspace-relative URIs, which is both the format `codegraph/policy/sarif.py` emits and the only form the importer can resolve on another machine.
+
 ## Untracked
 
 `.gitignore` ignores `outputs/*` and re-includes tracked files by explicit negation, so these are absent from a clone — including each group's `case_outcomes.jsonl`, the per-case record behind the union any-rule Overall row.
