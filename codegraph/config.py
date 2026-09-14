@@ -112,7 +112,7 @@ class Settings(BaseSettings):
     llm_max_concurrent_requests: int = Field(
         1,
         ge=1,
-        le=8,
+        le=32,
         validation_alias=AliasChoices("LLM_MAX_CONCURRENT_REQUESTS", "llm_max_concurrent_requests"),
         description="Process-local cap on active provider SDK/client generation calls.",
     )
