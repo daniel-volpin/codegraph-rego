@@ -93,7 +93,7 @@ Schema v2 records repository- and corpus-relative paths where possible and other
 
 Cite the artifact directory **plus the SHA recorded in `provenance.json`** when referring to canonical numbers. v1 numbers are addressable via the `thesis-evidence-2026-05-31-source` git tag.
 
-A composed detection directory carries no `provenance.json` of its own. `compose_benchmark_eval.py` records `composed_from` in `metrics.json`, and each per-group directory it names carries the provenance; cite those. For `outputs/local_smoke/detection_composed_final/` the eight group runs all record SHA `6aa9026` with `dirty: true` (modified `policy/iso_27001_crypto.rego` and `run_benchmark_eval.py`, untracked `codegraph/ingestion/config_facts.py` and `compose_benchmark_eval.py`), so the current figure is reproducible by command but is not pinned to a clean commit.
+A composed detection directory carries no `provenance.json` of its own. `compose_benchmark_eval.py` records `composed_from` in `metrics.json`, and each per-group directory it names carries the provenance; cite those. For `outputs/2026-09-14-detection-full/detection_composed/` the eight group runs all record SHA `1dd1510` with `dirty: false`, a commit on `main`, so the figure is pinned to a clean named revision.
 
 Recorded SHAs are feature-branch commits and this repository squash-merges, so none of them is an ancestor of `main`. Each is therefore held by an annotated tag: `thesis-detection-v2-source` (`7ad90a2`, also the source of remediation v3), `thesis-explanation-v2-source` (`701d051`), `thesis-remediation-v4-source` (`80d0084`), and `thesis-detection-baseline-2026-09-13-source` (`6aa9026`). Without them, three were reachable from no ref and the fourth only from a feature branch, so none would have survived a fresh clone.
 
@@ -116,7 +116,7 @@ Canonical thesis runs:
 
   Crypto and hash reproduced bit-identically across all three rows, which pinned the harness and sample and confined the divergence to the taint-dependent controls. That no longer holds after configuration-backed detection: those two categories now decide on the algorithm declared in the workspace's properties files and reach `1.000` on both, so they are no longer the invariant control. The taint-dependent controls have taken that role, reproducing exactly across the configuration change. For external context, published OWASP Benchmark v1.2 figures put CodeQL near `0.744` F1 and Semgrep near `0.694`, so treat any result materially above that range as requiring construct-validity scrutiny rather than as a target.
 - detection, configuration-backed (current):
-  `outputs/local_smoke/detection_composed_final/`, full corpus of 2092 cases composed from eight per-group runs: precision `0.7966`, recall `0.9324`, F1 `0.8591` (`TP/FP/FN = 979/250/71`). Crypto (CWE-327) and hash (CWE-328) reach precision, recall and F1 of `1.000` (`130/0/0` and `129/0/0`); every other category reproduces its prior figures exactly, and false positives do not increase.
+  `outputs/2026-09-14-detection-full/detection_composed/`, full corpus of 2092 cases composed from eight per-group runs: precision `0.7966`, recall `0.9324`, F1 `0.8591` (`TP/FP/FN = 979/250/71`). Crypto (CWE-327) and hash (CWE-328) reach precision, recall and F1 of `1.000` (`130/0/0` and `129/0/0`); every other category reproduces its prior figures exactly, and false positives do not increase.
 
   All 73 crypto and hash false negatives in the preceding baseline selected their algorithm from a properties file rather than a literal, so they were unreachable by API or alias patterns. The in-source defaults mislead in both directions, and deciding on them would have produced 40 false negatives and 27 false positives at once. See `docs/architecture/2026-09-13-configuration-facts.md`.
 
@@ -125,6 +125,8 @@ Canonical thesis runs:
   These controls are detection-only. A remediation recheck cannot reproduce configuration evidence from a virtual candidate snapshot, so it refuses rather than reporting a candidate as fixed.
 - explanation v2: `outputs/thesis_final_explanation_full_v2/`,
   provenance SHA `701d051`, `Citation@TP=1.000` (`222/222`), `Citation@TP@NoContext=0.009` (`2/222`), `Citation@FP=1.000` (`9/9`), `Citation@FP@NoContext=0.000` (`0/9`).
+- remediation v2: `outputs/thesis_final_remediation_v2/`, the full per-case
+  evidence bundle: 25 case directories and `results.jsonl` alongside the metrics. It records the same outcome as v4, fully verified `1.00` (`25/25`), and carries no `provenance.json`, so v4 is the anchor to cite when a recorded commit is needed. All 181 files are protected by `outputs/canonical_manifest.sha256`.
 - remediation v3: `outputs/thesis_final_remediation_v3/`, provenance
   SHA `7ad90a2`, fully verified success rate `0.72` (`18/25`), attempted-only calibration Brier `0.094698` / ECE `0.083900`.
 - remediation v4: `outputs/thesis_final_remediation_v4/`, provenance

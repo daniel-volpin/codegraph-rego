@@ -58,19 +58,19 @@ outputs/*
 # Current detection baseline: the composed summary plus the per-group runs that
 # carry its provenance. Summary/provenance files only, per the policy above.
 # Outside the canonical_manifest tripwire, which globs outputs/thesis_final_*.
-!outputs/local_smoke/
-outputs/local_smoke/*
-!outputs/local_smoke/detection_composed_final/
-outputs/local_smoke/detection_composed_final/*
-!outputs/local_smoke/detection_composed_final/metrics.csv
-!outputs/local_smoke/detection_composed_final/metrics.json
-!outputs/local_smoke/detection_composed_final/table.md
-!outputs/local_smoke/group_*/
-outputs/local_smoke/group_*/*
-!outputs/local_smoke/group_*/metrics.csv
-!outputs/local_smoke/group_*/metrics.json
-!outputs/local_smoke/group_*/provenance.json
-!outputs/local_smoke/group_*/table.md
+!outputs/2026-09-14-detection-full/
+outputs/2026-09-14-detection-full/*
+!outputs/2026-09-14-detection-full/detection_composed/
+outputs/2026-09-14-detection-full/detection_composed/*
+!outputs/2026-09-14-detection-full/detection_composed/metrics.csv
+!outputs/2026-09-14-detection-full/detection_composed/metrics.json
+!outputs/2026-09-14-detection-full/detection_composed/table.md
+!outputs/2026-09-14-detection-full/group_*/
+outputs/2026-09-14-detection-full/group_*/*
+!outputs/2026-09-14-detection-full/group_*/metrics.csv
+!outputs/2026-09-14-detection-full/group_*/metrics.json
+!outputs/2026-09-14-detection-full/group_*/provenance.json
+!outputs/2026-09-14-detection-full/group_*/table.md
 
 # Checksum manifest protecting the canonical artifacts below from silent change.
 !outputs/canonical_manifest.sha256

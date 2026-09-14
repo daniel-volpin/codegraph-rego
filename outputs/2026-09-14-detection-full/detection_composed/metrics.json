@@ -1,13 +1,13 @@
 {
   "composed_from": [
-    "outputs/local_smoke/group_hash-md5",
-    "outputs/local_smoke/group_crypto-md5",
-    "outputs/local_smoke/group_rng-insecure",
-    "outputs/local_smoke/group_sql-injection",
-    "outputs/local_smoke/group_path-traversal",
-    "outputs/local_smoke/group_command-injection",
-    "outputs/local_smoke/group_ldap-injection",
-    "outputs/local_smoke/group_xpath-injection"
+    "outputs/2026-09-14-detection-full/group_command-injection",
+    "outputs/2026-09-14-detection-full/group_crypto-md5",
+    "outputs/2026-09-14-detection-full/group_hash-md5",
+    "outputs/2026-09-14-detection-full/group_ldap-injection",
+    "outputs/2026-09-14-detection-full/group_path-traversal",
+    "outputs/2026-09-14-detection-full/group_rng-insecure",
+    "outputs/2026-09-14-detection-full/group_sql-injection",
+    "outputs/2026-09-14-detection-full/group_xpath-injection"
   ],
   "total_cases": 2092,
   "metrics": {

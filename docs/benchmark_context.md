@@ -24,13 +24,13 @@ Remediation support tiers:
 ## Repo-Tracked Evidence
 
 - Detection figures are not restated here. `docs/thesis_context.md` owns the
-  thesis-final figure, its bootstrap intervals, and why it does not reproduce; `REPRODUCIBILITY.md` owns the current measured figure beside the command that produces it. Read those before citing a detection number. Artifacts: `outputs/thesis_final_detection_full_v2/` (qualified) and `outputs/local_smoke/detection_composed_final/` (current).
+  thesis-final figure, its bootstrap intervals, and why it does not reproduce; `REPRODUCIBILITY.md` owns the current measured figure beside the command that produces it. Read those before citing a detection number. Artifacts: `outputs/thesis_final_detection_full_v2/` (qualified) and `outputs/2026-09-14-detection-full/detection_composed/` (current).
 - Explanation: `outputs/thesis_final_explanation_full_v2/`
   - `Citation@TP (ctx)=1.000` (`222/222`)
   - `Citation@TP (no-ctx)=0.009` (`2/222`)
   - `Citation@FP (ctx)=1.000` (`9/9`)
   - `Citation@FP (no-ctx)=0.000` (`0/9`)
-- Remediation baseline: `outputs/thesis_final_remediation_v2/` (no `provenance.json`; cite the v4 anchor below when a recorded commit is needed)
+- Remediation per-case evidence: `outputs/thesis_final_remediation_v2/` (25 case directories and `results.jsonl`; no `provenance.json`, so cite the v4 anchor below when a recorded commit is needed)
   - `25/25` fully verified
   - `Brier=0.0057`, `ECE=0.0696` (per `remediation_metrics.json` / `confidence_calibration.json`; the prose block in that run's `summary.md` diverges and is not the canonical carrier)
 
