@@ -426,6 +426,61 @@ def _execute_apply_fix_inner(
         )
 
     diff = _unified_diff(replacement.original_method, replacement.updated_method, label=target_method)
+    attempt_count = min(max_attempts, max(1, len(replacement.attempt_errors) + 1))
+    compilation, verification, apply_successful, restore_failed = _compile_verify_and_apply(
+        service=service,
+        violation_id=violation_id,
+        method_key=method_key,
+        context=context,
+        resolved_path=resolved_path,
+        workspace_root=workspace_root,
+        source_relative_path=source_relative_path,
+        original_bytes=original_bytes,
+        expected_source_sha256=expected_source_sha256,
+        replacement=replacement,
+        mode=mode,
+        build_command=build_command,
+    )
+
+    return _finalize_apply_result(
+        mode=mode,
+        verification=verification,
+        compilation=compilation,
+        apply_successful=apply_successful,
+        restore_failed=restore_failed,
+        violation_id=violation_id,
+        context=context,
+        method_key=method_key,
+        target_method=target_method,
+        file_path=file_path,
+        attempt_count=attempt_count,
+        diff=diff,
+        replacement=replacement,
+    )
+
+
+def _compile_verify_and_apply(
+    *,
+    service: Any,
+    violation_id: str,
+    method_key: str,
+    context: dict[str, Any],
+    resolved_path: Path,
+    workspace_root: Path,
+    source_relative_path: Path,
+    original_bytes: bytes,
+    expected_source_sha256: str,
+    replacement: _ReplacementAttemptOutcome,
+    mode: str,
+    build_command: str | None,
+) -> tuple[CompilationResult, dict[str, Any], bool, bool]:
+    """Compile and verify the candidate in a scratch workspace, then — if the
+    mode and verification allow it — apply it to the live file and publish a
+    new graph revision, rolling the file and/or graph back if publication
+    fails partway through.
+
+    Returns (compilation, verification, apply_successful, restore_failed).
+    """
     compilation: CompilationResult = {
         "attempted": False,
         "success": False,
@@ -434,13 +489,10 @@ def _execute_apply_fix_inner(
     }
     verification: dict[str, Any] = {}
     apply_successful = False
-    attempt_count = min(max_attempts, max(1, len(replacement.attempt_errors) + 1))
     live_workspace_modified = False
     restore_failed = False
     graph_rollback_failed = False
     cleanup: dict[str, bool | None] = {"file_restored": None, "revision_published": None}
-    before_trace_raw = None
-    after_trace_raw = None
 
     try:
         tempdir = tempfile.TemporaryDirectory(prefix="candidate-", dir=_apply_work_root())
@@ -522,6 +574,26 @@ def _execute_apply_fix_inner(
         restore_failed = graph_rollback_failed or any(restored is False for restored in cleanup.values())
 
     verification["cleanup"] = cleanup
+    return compilation, verification, apply_successful, restore_failed
+
+
+def _finalize_apply_result(
+    *,
+    mode: str,
+    verification: dict[str, Any],
+    compilation: CompilationResult,
+    apply_successful: bool,
+    restore_failed: bool,
+    violation_id: str,
+    context: dict[str, Any],
+    method_key: str,
+    target_method: str,
+    file_path: str,
+    attempt_count: int,
+    diff: str,
+    replacement: _ReplacementAttemptOutcome,
+) -> ApplyFixResult:
+    """Assemble the final status, error message, and result envelope."""
     status = _final_status(
         mode=mode,
         verification=verification,
@@ -557,7 +629,7 @@ def _execute_apply_fix_inner(
         error=error_message,
         predicate_trace=_policy_state_trace(
             rule_id=str(context.get("rule_id")),
-            before_trace_raw=before_trace_raw,
-            after_trace_raw=after_trace_raw,
+            before_trace_raw=None,
+            after_trace_raw=None,
         ),
     )
