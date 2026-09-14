@@ -42,6 +42,9 @@ from codegraph.ingestion.persistence import (
     link_nested_classes_batch,
     publish_workspace_revision,
 )
+from codegraph.ingestion.persistence import (
+    deactivate_other_workspaces as _deactivate_other_workspaces_tx,
+)
 
 __all__ = [
     "GRAPH_SCHEMA_VERSION",
@@ -113,3 +116,11 @@ def ingest(
     if progress_callback:
         progress_callback("ingesting", "Ingestion complete.", 90.0)
     return publication
+
+
+def deactivate_other_workspaces(workspace_id: str) -> list[str]:
+    """Make ``workspace_id`` the only active workspace. Returns the ones dropped."""
+    with GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_pass)) as driver:
+        with driver.session() as session:
+            return session.execute_write(_deactivate_other_workspaces_tx, workspace_id)
+
