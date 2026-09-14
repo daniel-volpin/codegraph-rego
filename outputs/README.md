@@ -26,7 +26,7 @@ A composed directory is a merge, not a run, so nothing writes a `provenance.json
 
 Tags are load-bearing here. This repository squash-merges, so a feature-branch commit never becomes an ancestor of `main`; without these tags three SHAs were reachable from no ref and the fourth only from a prunable branch.
 
-`local_smoke/` sits outside the checksum tripwire, which globs `outputs/thesis_final_*`. It is tracked so the current figure has evidence in the repository, but it is not canonical and its provenance records a dirty tree. **Outstanding:** re-run the composed evaluation on a clean checkout into a dated directory.
+`local_smoke/` sits outside the checksum tripwire, which globs `outputs/thesis_final_*`. It was the detection baseline before the clean-tree rerun landed; `2026-09-14-detection-full/detection_composed/` is now the current detection figure, and `local_smoke/` is untracked and superseded (see the Untracked table below).
 
 `thesis_final_remediation_v2/` is the per-case evidence behind the remediation result: 25 case directories and `results.jsonl`, with the same `25/25` outcome v4 records. It is kept because all 181 files are checksummed in `canonical_manifest.sha256` and a dated audit record cites it, and it has no `provenance.json`, so v4 is the anchor to cite for a recorded commit.
 

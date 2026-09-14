@@ -55,6 +55,8 @@ The operator-facing variables consumed by `codegraph.config.Settings`, the uploa
 | `CODEGRAPH_OPENGREP_TIMEOUT` | `120.0` | Per-invocation timeout in seconds for OpenGrep taint subprocesses. |
 | `CODEGRAPH_OPENGREP_RULES_DIR` | `policy/opengrep` | Directory of auto-discovered OpenGrep taint rule files. |
 | `CODEGRAPH_DETECTION_ENGINES_ENABLED` | `true` | Master switch for non-OPA engines. Disabling drops the rules they own, so coverage falls. |
+| `UPLOAD_GIT_ALLOWED_HOSTS` | `github.com` | Hosts a repository may be cloned from via `POST /upload/git`. Analysed code is later compiled, so keep this narrow. |
+| `UPLOAD_GIT_TIMEOUT_SECONDS` | `300.0` | Deadline in seconds for a `POST /upload/git` clone. Must be greater than `0` and at most `1800`. |
 | `JAVA_PARSER_JAR` | `tools/java-parser/target/codegraph-java-parser.jar` | Explicit path to the Eclipse JDT parser fat jar. Build with `make java-parser-build`; the Python adapter never downloads or builds it at runtime. |
 | `JAVA_PARSER_TIMEOUT_SECONDS` | `30.0` | Per-request deadline for the fresh JVM parser process. |
 | `JAVA_PARSER_HEAP_MB` | `384` | Heap cap passed as `-Xmx` to each parser JVM. |

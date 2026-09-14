@@ -31,6 +31,7 @@ This document describes the HTTP API surface and the frontend integration patter
   - HTTP `200` when `neo4j`, `faiss_index`, `signature_map` are all true; else HTTP `503`.
   - Body fields: `status`, `startup_ready`, `neo4j`, `graph_generation`, `faiss_index`, `signature_map`, `embedding_model`, `opa: boolean`; `startup: HealthStartupStatus`; `details: object`.
   - `graph_generation` requires matching active graph and retrieval-artifact revisions, not merely a reachable Neo4j server. Startup validates resources without automatically ingesting or changing the graph.
+  - The startup verdict is computed once at process start and then trusted, except while it says not ready: a not-ready verdict is re-probed on every call (this also covers a CLI ingest or a manual index rebuild, not just an upload), so a successful upload flips `/health` to `200` without a process restart. A ready verdict is never re-probed; a failing re-probe keeps the previous stored answer rather than raising.
 - Frontend schema: `HealthCheckResponseSchema`.
 
 ### `POST /upload`
@@ -42,10 +43,22 @@ This document describes the HTTP API surface and the frontend integration patter
   - discovers all `src/main/java` roots in the uploaded workspace and ingests them in deterministic sorted order
   - allocates a per-request progress slot via `codegraph/common/progress.py:start_progress` and echoes its `request_id`
   - serializes workspace replacement, graph publication, embedding publication, and rollback within the backend process
+  - deactivates the previously active workspace before publishing the new one, so an upload replaces the active workspace instead of adding to it; policy evaluation reads every active workspace, so without this a new upload's findings would be mixed with the prior workspace's. Prior graph revisions stay immutable — only the `ActiveWorkspace` pointer moves.
 - Response:
   - HTTP `200`: `{ "status": string, "java_root": string|null, "java_roots": string[], "request_id": string|null }`
   - HTTP `4xx`/`5xx`: `{ "error": string, "request_id": string }`
 - Frontend schema: `UploadResponseSchema`.
+
+### `POST /upload/git`
+- Router: `api/routers/upload.py`
+- Request JSON: `{ "repo_url": string, "ref"?: string }`, and optional `X-Request-Id` (same purpose as `POST /upload`).
+- Behavior:
+  - shallow-clones (`--depth=1 --single-branch --no-tags`) into a staging directory, then reuses the same workspace-publication path as `POST /upload` (progress slot, workspace replacement, ingestion), so its response and status/SSE contract are identical
+  - `repo_url` must be `https://`, carry no embedded credentials, resolve to a host on the `UPLOAD_GIT_ALLOWED_HOSTS` allowlist (default `github.com`), and not resolve to a loopback, link-local, private, reserved, or unspecified address
+  - `ref`, if given, is rejected if it looks shell-significant (leading `-`, whitespace, or `\'"$;&|` \``)
+  - the clone is bounded by `UPLOAD_GIT_TIMEOUT_SECONDS` and the same extracted-size limit as a ZIP upload; the `.git` directory is stripped after cloning
+- Response: same shape as `POST /upload`.
+- Frontend schema: `UploadResponseSchema` (via `ingestFromGitUrl`).
 
 ### `GET /upload/status`
 - Router: `api/routers/upload.py`
@@ -201,6 +214,7 @@ This document describes the HTTP API surface and the frontend integration patter
 | Frontend function | Backend endpoint | Notes |
 |---|---|---|
 | `uploadZip` | `POST /upload` | Sends a preallocated `X-Request-Id`, allowing SSE/polling to subscribe while backend processing is running; the response echoes it |
+| `ingestFromGitUrl` | `POST /upload/git` | Same request-id/progress-subscription pattern as `uploadZip`; the server validates and clones the URL |
 | `fetchUploadStatus` | `GET /upload/status` | Polling fallback (5 s) when the SSE stream is unavailable |
 | `useUploadStatusStream` (hook) | `GET /upload/status/stream` | Push-based SSE; schema-validates every frame; falls back to polling on EventSource error |
 | `fetchHealth` | `GET /health` | 15 s polling; renders per-subsystem booleans |
