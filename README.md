@@ -30,7 +30,7 @@ It is a master thesis research artifact evaluated primarily against [OWASP Bench
 - macOS or Linux
 - [uv](https://docs.astral.sh/uv/) 0.12.13+
 - Python 3.14+ (the project pins 3.14.7)
-- Node.js 24 LTS and Yarn 1.22+
+- Node.js 24+ and Yarn 1.22+
 - OPA `v1.20.2` (installed into `.venv/bin` by `make install`)
 - OpenGrep `v1.30.0+` on `PATH` (intra-file taint analysis for the injection controls;
   install with `curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash`)

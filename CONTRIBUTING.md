@@ -1,14 +1,10 @@
 # Contributing to CodeGraph
 
-Thank you for your interest in contributing to CodeGraph! CodeGraph is a benchmark-backed JVM security and compliance framework for graph-based code understanding, ISO-aligned policy evaluation, grounded LLM explanations, and bounded remediation.
-
----
+CodeGraph is a benchmark-backed JVM security and compliance framework: graph-based code understanding, ISO-aligned policy evaluation, grounded LLM explanations, and bounded remediation.
 
 ## Code of Conduct
 
 All contributors are expected to uphold the [Contributor Covenant Code of Conduct](./CODE_OF_CONDUCT.md).
-
----
 
 ## Scientific & Architectural Boundaries
 
@@ -20,14 +16,12 @@ CodeGraph is a **benchmark-backed research artifact**. To preserve scientific re
 4. **Keep Architecture Layers Clean**: Keep HTTP routers thin (`api/routers/`) and business logic encapsulated under `codegraph/`.
 5. **Contract Alignment**: Avoid frontend/backend contract drift. When modifying API models in `api/models/validation.py`, update `frontend/src/lib/schemas.ts` (Zod schemas).
 
----
-
 ## Development Setup
 
 ### Prerequisites
 
 - Python 3.14+ (the project pins 3.14.7)
-- Node.js 24 LTS and Yarn 1.22+
+- Node.js 24+ and Yarn 1.22+
 - OPA `v1.20.2` (installed into `.venv/bin` by `make install`)
 - JDK 21+ and Maven for the Eclipse JDT adapter and remediation build re-verification
 - Neo4j 5.x through a Docker- or Podman-compatible Compose runtime
@@ -46,35 +40,20 @@ make install
 cp .env.example .env
 ```
 
----
-
 ## Local Validation Suite
 
 Before opening a pull request, run the full validation suite locally to ensure all quality gates pass:
 
 ```bash
-# 1. Python Linting Check
 uv run ruff check .
-
-# 2. Pytest Backend Test Suite
-CODEGRAPH_ENV_FILE=.env NEO4J_PASS=password uv run python -m pytest -q
-
-# 3. OPA Policy Check and Formatting Gate
+uv run python -m pytest -q
 PATH="$(pwd)/.venv/bin:$PATH" make policy-check
-
-# 4. Frontend Linting, Unit Tests, and Build
-cd frontend
-yarn lint
-yarn test
-yarn build
-yarn test:e2e
-cd ..
-
-# 5. Git Formatting Check
+(cd frontend && yarn lint && yarn test && yarn build)
+make docs-check
 git diff --check
 ```
 
----
+`yarn test:e2e` drives Playwright against a running stack, so it is not part of this list and CI does not run it. Use it when a change touches an end-to-end flow.
 
 ## Submitting Pull Requests
 
