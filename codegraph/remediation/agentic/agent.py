@@ -198,7 +198,6 @@ class AgenticRemediationService:
                 current_turn.tool_results = tool_results
                 turns.append(current_turn)
 
-                # Append assistant message with tool calls
                 messages.append(
                     {
                         "role": "assistant",
@@ -207,7 +206,6 @@ class AgenticRemediationService:
                     }
                 )
 
-                # Append tool result messages
                 for tr in tool_results:
                     messages.append(
                         {

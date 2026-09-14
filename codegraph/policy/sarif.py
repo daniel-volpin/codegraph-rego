@@ -43,12 +43,10 @@ def export_findings_to_sarif(
         end_line = finding.get("snippet_end_line") or finding.get("end_line") or start_line
         snippet_text = finding.get("code_snippet") or (finding.get("evidence") or {}).get("source_code")
 
-        # Make file_path workspace-relative if possible
         relative_uri = file_path
         if workspace_root and file_path.startswith(workspace_root):
             relative_uri = file_path[len(workspace_root) :].lstrip("/")
 
-        # Register rule definition if not yet present
         if rule_id not in rules_by_id:
             ctrl_meta = finding.get("control_metadata") or {}
             title = ctrl_meta.get("title") or rule_id
@@ -65,7 +63,6 @@ def export_findings_to_sarif(
                 },
             }
 
-        # Build SARIF result
         region: dict[str, Any] = {
             "startLine": max(1, int(start_line)),
             "endLine": max(1, int(end_line)),

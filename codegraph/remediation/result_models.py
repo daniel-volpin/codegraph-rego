@@ -104,45 +104,6 @@ def generation_error_result(
     }
 
 
-def partial_error_result(
-    *,
-    violation_id: str,
-    error: str,
-    target_method: str,
-    file_path: str,
-    rule_id: Any,
-    method_key: str | None = None,
-    updated_source_code: str | None = None,
-    diff: str | None = None,
-    compilation: CompilationResult | None = None,
-    generation: dict[str, Any] | None = None,
-    confidence: dict[str, Any] | None = None,
-    predicate_trace: dict[str, Any] | None = None,
-) -> ApplyFixResult:
-    result: ApplyFixResult = {
-        "status": "VERIFICATION_ERROR",
-        "error": error,
-        "violation_id": violation_id,
-        "target_method": target_method,
-        "file_path": file_path,
-        "rule_id": rule_id,
-        "method_key": method_key,
-    }
-    if updated_source_code is not None:
-        result["updated_source_code"] = updated_source_code
-    if diff is not None:
-        result["diff"] = diff
-    if compilation is not None:
-        result["compilation"] = compilation
-    if generation is not None:
-        result["generation"] = generation
-    if confidence is not None:
-        result["confidence"] = confidence
-    if predicate_trace is not None:
-        result["predicate_trace"] = predicate_trace
-    return result
-
-
 def apply_result(
     status: str,
     *,

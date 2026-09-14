@@ -23,6 +23,7 @@ from codegraph.remediation.attempts import (
 )
 from codegraph.remediation.capabilities import get_remediation_capability
 from codegraph.remediation.editing import unified_diff
+from codegraph.remediation.method_key_paths import parse_method_key_relative_path, resolve_workspace_root
 from codegraph.remediation.result_models import (
     ApplyFixResult,
     ApplyMetadata,
@@ -114,27 +115,18 @@ def _should_restore(mode: str, apply_successful: bool) -> bool:
 
 
 def _method_key_relative_path(method_key: str) -> Path:
-    try:
-        _, tail = method_key.split(":", 1)
-    except ValueError as exc:
-        raise ValueError("invalid_method_key") from exc
-    relative = tail.split("#file:", 1)[0] if "#file:" in tail else tail.split("#", 1)[0]
-    if not relative:
+    relative = parse_method_key_relative_path(method_key)
+    if relative is None:
         raise ValueError("invalid_method_key")
-    path = Path(relative)
-    if path.is_absolute() or ".." in path.parts:
-        raise ValueError("invalid_method_key")
-    return path
+    return relative
 
 
 def _workspace_root_for(resolved_path: Path, method_key: str) -> Path:
     relative = _method_key_relative_path(method_key)
-    resolved = resolved_path.resolve()
-    relative_parts = relative.parts
-    if len(resolved.parts) >= len(relative_parts) and resolved.parts[-len(relative_parts) :] == relative_parts:
-        root_parts = resolved.parts[: -len(relative_parts)]
-        return Path(*root_parts) if root_parts else Path("/")
-    raise ValueError("source_path_method_key_mismatch")
+    root = resolve_workspace_root(resolved_path, relative)
+    if root is None:
+        raise ValueError("source_path_method_key_mismatch")
+    return root
 
 
 def _apply_work_root() -> Path:

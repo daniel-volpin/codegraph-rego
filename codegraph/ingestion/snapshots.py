@@ -217,10 +217,6 @@ def _method_declaring_type(method: MethodDeclarationDTO) -> str:
     return method.declaring_type_qualified_name or method.declaring_type_source_key
 
 
-def _method_selector(method: MethodDeclarationDTO) -> str:
-    return _selector(_method_declaring_type(method), method.name, _method_parameters(method))
-
-
 def _select_method(parsed: ParsedJavaFileDTO, selector: _Selector) -> MethodDeclarationDTO:
     candidates = []
     for method in parsed.methods:

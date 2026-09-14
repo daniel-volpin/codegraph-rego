@@ -17,7 +17,7 @@ from api.routers.policy import router as policy_router
 from api.routers.remediation import router as remediation_router
 from api.routers.search import router as search_router
 from api.routers.upload import router as upload_router
-from codegraph.config import settings, validate_runtime_settings
+from codegraph.config import clear_settings_cache, settings, validate_runtime_settings
 from codegraph.db import close_shared_neo4j_driver, shared_neo4j_driver
 from codegraph.java.service import JavaParserProtocolError, parse_java_source
 from codegraph.search.hybrid import load_embedding_model, validate_retrieval_generation
@@ -49,7 +49,6 @@ def _configure_runtime() -> None:
         default_env = Path(__file__).resolve().parents[1] / ".env"
         if default_env.is_file():
             os.environ["CODEGRAPH_ENV_FILE"] = str(default_env)
-            from codegraph.config import clear_settings_cache
             clear_settings_cache()
     logging.basicConfig(
         level=logging.INFO,

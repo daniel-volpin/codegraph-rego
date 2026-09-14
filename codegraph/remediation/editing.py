@@ -69,13 +69,6 @@ def unified_diff(before: str, after: str, *, label: str = "method") -> str:
     return "\n".join(diff)
 
 
-def format_java_parse_error(exc: Exception) -> str:
-    detail = str(exc).strip()
-    if detail:
-        return f"{exc.__class__.__name__}: {detail}"
-    return exc.__class__.__name__
-
-
 def extract_target_method_identity(target_method: str | None) -> tuple[str | None, int | None]:
     raw = (target_method or "").strip()
     if not raw:

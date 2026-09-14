@@ -16,7 +16,7 @@ from neo4j import GraphDatabase
 
 from codegraph.config import settings
 from codegraph.policy.runtime.bundles import validate_graph_generation
-from codegraph.search.artifacts import sha256_file
+from codegraph.search.artifacts import canonical_graph_generation, sha256_file
 
 if TYPE_CHECKING:
     import numpy as np
@@ -147,31 +147,7 @@ def _publish_generation_manifest(
 
 
 def _canonical_graph_generation(value: dict[str, Any] | None) -> dict[str, Any]:
-    value = value or {}
-    return {
-        "workspace_revisions": int(value.get("workspace_revisions") or 0),
-        "method_count": int(value.get("method_count") or 0),
-        "indexable_method_count": int(value.get("indexable_method_count") or 0),
-        "schema_versions": sorted(str(item) for item in (value.get("schema_versions") or []) if item),
-        "parser_backends": sorted(str(item) for item in (value.get("parser_backends") or []) if item),
-        "active_revisions": sorted(
-            (
-                {
-                    "workspace_id": str(item.get("workspace_id") or ""),
-                    "revision_id": str(item.get("revision_id") or ""),
-                    "schema_version": str(item.get("schema_version") or ""),
-                    "parser_backend": str(item.get("parser_backend") or ""),
-                    "parser_version": str(item.get("parser_version") or ""),
-                    "adapter_version": str(item.get("adapter_version") or ""),
-                    "method_count": int(item.get("method_count") or 0),
-                    "indexable_method_count": int(item.get("indexable_method_count") or 0),
-                }
-                for item in (value.get("active_revisions") or [])
-                if isinstance(item, dict)
-            ),
-            key=lambda item: (item["workspace_id"], item["revision_id"]),
-        ),
-    }
+    return canonical_graph_generation(value)
 
 
 def _cache_vector_dim(cache_entries: EmbeddingCache) -> int | None:
@@ -318,7 +294,7 @@ def _encode_missing_vectors(
 
 
 def _build_faiss_index(vectors_np: np.ndarray, index_path: Path) -> int | None:
-    import faiss
+    import faiss  # noqa: PLC0415 - lazy-loads a heavy native/ML dependency
 
     if vectors_np.ndim != 2 or vectors_np.shape[0] == 0:
         return None
@@ -348,7 +324,7 @@ class EmbeddingService:
         4. Build a FAISS index for fast vector search and save it to disk.
         5. Save the mapping from FAISS index to method signatures as a JSON file.
         """
-        import numpy as np
+        import numpy as np  # noqa: PLC0415 - lazy-loads a heavy native/ML dependency
 
         if progress_callback:
             progress_callback("embedding", "Fetching methods from Neo4j…", 82.0)
@@ -374,7 +350,9 @@ class EmbeddingService:
 
         vectors_by_sig = dict(plan.vectors_by_sig)
         if plan.snippets_to_encode:
-            from sentence_transformers import SentenceTransformer
+            from sentence_transformers import (
+                SentenceTransformer,  # noqa: PLC0415 - lazy-loads a heavy native/ML dependency
+            )
 
             if progress_callback:
                 progress_callback("embedding", f"Encoding {len(plan.snippets_to_encode)} methods…", 86.0)

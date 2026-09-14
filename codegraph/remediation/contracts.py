@@ -190,22 +190,9 @@ AGENTIC_FIX_STRATEGIES: dict[str, dict[str, Any]] = {
     },
 }
 
-_DYNAMIC_FIX_STRATEGIES: dict[str, dict[str, Any]] = {}
-
-
-def register_fix_strategy(rule_id: str, strategy: dict[str, Any], *, agentic: bool = True) -> None:
-    """Dynamically register a custom remediation strategy for a policy rule."""
-    _DYNAMIC_FIX_STRATEGIES[rule_id] = strategy
-    if agentic:
-        AGENTIC_FIX_STRATEGIES[rule_id] = strategy
-    else:
-        FIX_STRATEGIES[rule_id] = strategy
-
 
 def get_fix_strategy(rule_id: str, *, agentic: bool = False) -> dict[str, Any]:
     """Retrieve the remediation guidance strategy for a rule, defaulting dynamically."""
-    if rule_id in _DYNAMIC_FIX_STRATEGIES:
-        return _DYNAMIC_FIX_STRATEGIES[rule_id]
     if agentic and rule_id in AGENTIC_FIX_STRATEGIES:
         return AGENTIC_FIX_STRATEGIES[rule_id]
     if rule_id in FIX_STRATEGIES:
