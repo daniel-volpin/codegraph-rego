@@ -39,7 +39,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python -c \"import urllib.request; res = urllib.request.urlopen('http://localhost:8000/health'); exit(0 if res.getcode() in [200, 503] else 1)\" || exit 1",
+          "python -c \"import http.client as c; conn = c.HTTPConnection('localhost', 8000, timeout=5); conn.request('GET', '/health'); exit(0 if conn.getresponse().status in (200, 503) else 1)\" || exit 1",
         ]
       interval: 10s
       timeout: 5s
