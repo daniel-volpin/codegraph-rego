@@ -17,6 +17,7 @@ from codegraph.java.fragments import (
     method_invocation_facts,
     parse_strict_method_fragment,
 )
+from codegraph.remediation.method_key_paths import parse_method_key_relative_path, resolve_workspace_root
 
 LOGGER = logging.getLogger(__name__)
 _POLICY_CACHE: dict[str, dict[str, Any]] = {}
@@ -172,27 +173,19 @@ def _extract_exact_method_source(
 
 
 def _method_key_relative_path(method_key: str) -> Path:
-    try:
-        _, tail = method_key.split(":", 1)
-    except ValueError as exc:
-        raise ContextSourceRefusalError("invalid_method_key", method_key=method_key) from exc
-    relative = tail.split("#file:", 1)[0] if "#file:" in tail else tail.split("#", 1)[0]
-    if not relative:
+    relative = parse_method_key_relative_path(method_key)
+    if relative is None:
         raise ContextSourceRefusalError("invalid_method_key", method_key=method_key)
-    path = Path(relative)
-    if path.is_absolute() or ".." in path.parts:
-        raise ContextSourceRefusalError("invalid_method_key", method_key=method_key)
-    return path
+    return relative
 
 
 def _workspace_root_for_method_key(resolved_path: Path, method_key: str) -> Path:
     relative = _method_key_relative_path(method_key)
     resolved = resolved_path.resolve()
-    relative_parts = relative.parts
-    if len(resolved.parts) >= len(relative_parts) and resolved.parts[-len(relative_parts) :] == relative_parts:
-        root_parts = resolved.parts[: -len(relative_parts)]
-        return Path(*root_parts) if root_parts else Path("/")
-    raise ContextSourceRefusalError("method_key_source_path_mismatch", method_key=method_key, file_path=resolved.as_posix())
+    root = resolve_workspace_root(resolved, relative)
+    if root is None:
+        raise ContextSourceRefusalError("method_key_source_path_mismatch", method_key=method_key, file_path=resolved.as_posix())
+    return root
 
 
 def _context_payload(

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from codegraph.policy.analysis.conditional import resolve_list_get_sequence
 from codegraph.policy.analysis.state import AssignmentStateAnalyzer
 from codegraph.policy.source_analysis_core import PATH_LDAP_UNTRUSTED_INPUT_PATTERNS, UNTRUSTED_INPUT_PATTERNS
 
@@ -206,30 +207,13 @@ class HelperCollectionResolver:
         return MAP_GET_ASSIGNMENT_RE.sub(_replace, source_code)
 
     def _replace_list_gets(self, source_code: str, assignment_analyzer: AssignmentStateAnalyzer, state) -> str:
-        items: dict[str, list[str]] = {}
-        for list_name, raw_value in LIST_ADD_RE.findall(source_code):
-            resolved = self._resolve_expr(raw_value.strip(), assignment_analyzer, state)
-            if resolved is not None:
-                items.setdefault(list_name, []).append(resolved)
-        for list_name, raw_index in LIST_REMOVE_RE.findall(source_code):
-            values = items.get(list_name)
-            if values is None:
-                continue
-            index = int(raw_index)
-            if 0 <= index < len(values):
-                values.pop(index)
-
-        def _replace(match: re.Match[str]) -> str:
-            target_var, list_name, raw_index = match.groups()
-            values = items.get(list_name)
-            if values is None:
-                return match.group(0)
-            index = int(raw_index)
-            if not (0 <= index < len(values)):
-                return match.group(0)
-            return f"{target_var} = {values[index]};"
-
-        return LIST_GET_ASSIGNMENT_RE.sub(_replace, source_code)
+        return resolve_list_get_sequence(
+            source_code,
+            LIST_ADD_RE,
+            LIST_REMOVE_RE,
+            LIST_GET_ASSIGNMENT_RE,
+            lambda expr: self._resolve_expr(expr, assignment_analyzer, state),
+        )
 
     @staticmethod
     def _resolve_expr(expr: str, assignment_analyzer: AssignmentStateAnalyzer, state) -> str | None:

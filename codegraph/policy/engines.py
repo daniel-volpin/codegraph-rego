@@ -60,11 +60,6 @@ _ENGINE_FACTORIES: Mapping[str, Callable[[], DetectionEngine]] = {
 _CACHE: dict[str, DetectionEngine] = {}
 
 
-def engine_names() -> frozenset[str]:
-    """Every registered non-OPA engine name."""
-    return frozenset(_ENGINE_FACTORIES)
-
-
 def known_evidence_sources() -> frozenset[str]:
     """Valid ``evidence_source`` values, including OPA."""
     return frozenset({"opa", *_ENGINE_FACTORIES})

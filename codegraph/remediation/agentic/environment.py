@@ -14,7 +14,9 @@ from typing import Any
 
 from codegraph.db import shared_neo4j_driver
 from codegraph.ingestion.snapshots import create_source_snapshot_from_bytes, sha256_hex
+from codegraph.java.service import parse_java_source
 from codegraph.remediation.agentic.contracts import AgentVerificationStatus
+from codegraph.remediation.method_key_paths import parse_method_key_relative_path
 from codegraph.remediation.scoped_verification import verify_candidate
 
 LOGGER = logging.getLogger(__name__)
@@ -39,17 +41,7 @@ class IsolatedWorktreeEnvironment:
 
     @staticmethod
     def _method_key_relative_path(method_key: str | None) -> Path | None:
-        if not method_key:
-            return None
-        try:
-            _, tail = method_key.split(":", 1)
-        except ValueError:
-            return None
-        relative = tail.split("#file:", 1)[0] if "#file:" in tail else tail.split("#", 1)[0]
-        path = Path(relative)
-        if not relative or path.is_absolute() or ".." in path.parts:
-            return None
-        return path
+        return parse_method_key_relative_path(method_key)
 
     def _setup_scratch_copy(self) -> None:
         if self.original_root.is_dir():
@@ -61,8 +53,7 @@ class IsolatedWorktreeEnvironment:
         else:
             self.scratch_root.mkdir(parents=True, exist_ok=True)
             shutil.copy2(self.original_root, self.scratch_root / self.original_root.name)
-        
-        # Record initial hashes
+
         for p in self.scratch_root.rglob("*"):
             if p.is_file():
                 rel = p.relative_to(self.scratch_root).as_posix()
@@ -215,7 +206,6 @@ class IsolatedWorktreeEnvironment:
             return False, "Compilation gate unavailable: no Java source files found."
         for p in java_files:
             try:
-                from codegraph.java.service import parse_java_source
                 rel = p.relative_to(self.scratch_root).as_posix()
                 res = parse_java_source(
                     p.read_bytes(),

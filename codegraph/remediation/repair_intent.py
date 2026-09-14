@@ -228,13 +228,11 @@ def plan_repair_intent(
     target_method = str(context.get("target_method") or "unknown")
     file_path = str(context.get("file_path") or "unknown")
 
-    # Build a minimal SourceSpan from available context.
     target = SourceSpan(
         file_path=file_path,
         method_signature=target_method,
     )
 
-    # Resolve capability if not provided.
     if capability is None:
         capability = get_remediation_capability(
             rule_id,
@@ -276,7 +274,6 @@ def plan_repair_intent(
             refusal=preflight,
         )
 
-    # Build transformation spec from FIX_STRATEGIES.
     strategy = FIX_STRATEGIES.get(rule_id) or {}
     transformation = TransformationSpec(
         objective=str(strategy.get("objective") or "").strip(),
@@ -284,10 +281,8 @@ def plan_repair_intent(
         non_goals=list(strategy.get("non_goals") or []),
     )
 
-    # Determine intent kind.
     kind = _RULE_INTENT_KIND.get(rule_id, RepairIntentKind.LITERAL_REPLACEMENT)
 
-    # Assemble invariants.
     invariants = list(_DEFAULT_INVARIANTS)
     if kind == RepairIntentKind.CONSTRUCTOR_REPLACEMENT:
         invariants.append(
@@ -297,7 +292,6 @@ def plan_repair_intent(
             )
         )
 
-    # Build typed operations.
     operations = _build_operations(rule_id, source_code)
 
     intent = RepairIntent(

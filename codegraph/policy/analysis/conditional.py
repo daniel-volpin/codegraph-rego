@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from codegraph.policy.analysis.boolean_eval import evaluate_constant_boolean
 
@@ -44,18 +45,26 @@ def resolve_collection_expr(
     return None
 
 
-def resolve_selected_list_gets(
+def resolve_list_get_sequence(
     source_code: str,
-    string_constants: dict[str, str],
-    tainted_vars: set[str],
+    add_re: re.Pattern[str],
+    remove_re: re.Pattern[str],
+    get_re: re.Pattern[str],
+    resolve: Callable[[str], str | None],
 ) -> str:
-    """Resolve deterministic List.add / List.remove / List.get sequences."""
+    """Resolve a deterministic Collection.add / .remove / .get(index) sequence.
+
+    Shared by two callers with different resolution strategies (literal/constant/
+    tainted-var lookup here, an AssignmentStateAnalyzer in helper_summaries.py) —
+    parameterized by regex set and resolver so the add-then-remove-then-substitute
+    algorithm exists once.
+    """
     items: dict[str, list[str]] = {}
-    for list_name, raw_value in LIST_ADD_VALUE_RE.findall(source_code):
-        resolved = resolve_collection_expr(raw_value.strip(), string_constants, tainted_vars)
+    for list_name, raw_value in add_re.findall(source_code):
+        resolved = resolve(raw_value.strip())
         if resolved is not None:
             items.setdefault(list_name, []).append(resolved)
-    for list_name, raw_index in LIST_REMOVE_INDEX_RE.findall(source_code):
+    for list_name, raw_index in remove_re.findall(source_code):
         values = items.get(list_name)
         if values is None:
             continue
@@ -73,7 +82,22 @@ def resolve_selected_list_gets(
             return match.group(0)
         return f"{target_var} = {values[index]};"
 
-    return LIST_GET_VALUE_RE.sub(_replace, source_code)
+    return get_re.sub(_replace, source_code)
+
+
+def resolve_selected_list_gets(
+    source_code: str,
+    string_constants: dict[str, str],
+    tainted_vars: set[str],
+) -> str:
+    """Resolve deterministic List.add / List.remove / List.get sequences."""
+    return resolve_list_get_sequence(
+        source_code,
+        LIST_ADD_VALUE_RE,
+        LIST_REMOVE_INDEX_RE,
+        LIST_GET_VALUE_RE,
+        lambda expr: resolve_collection_expr(expr, string_constants, tainted_vars),
+    )
 
 
 def resolve_selected_map_gets(

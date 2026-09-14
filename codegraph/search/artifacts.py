@@ -26,6 +26,35 @@ class ActiveEmbeddingGeneration:
     graph_generation: dict[str, Any] | None = None
 
 
+def canonical_graph_generation(value: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalise a graph-generation dict to a stable, order-independent shape."""
+    value = value or {}
+    return {
+        "workspace_revisions": int(value.get("workspace_revisions") or 0),
+        "method_count": int(value.get("method_count") or 0),
+        "indexable_method_count": int(value.get("indexable_method_count") or 0),
+        "schema_versions": sorted(str(item) for item in (value.get("schema_versions") or []) if item),
+        "parser_backends": sorted(str(item) for item in (value.get("parser_backends") or []) if item),
+        "active_revisions": sorted(
+            (
+                {
+                    "workspace_id": str(item.get("workspace_id") or ""),
+                    "revision_id": str(item.get("revision_id") or ""),
+                    "schema_version": str(item.get("schema_version") or ""),
+                    "parser_backend": str(item.get("parser_backend") or ""),
+                    "parser_version": str(item.get("parser_version") or ""),
+                    "adapter_version": str(item.get("adapter_version") or ""),
+                    "method_count": int(item.get("method_count") or 0),
+                    "indexable_method_count": int(item.get("indexable_method_count") or 0),
+                }
+                for item in (value.get("active_revisions") or [])
+                if isinstance(item, dict)
+            ),
+            key=lambda item: (item["workspace_id"], item["revision_id"]),
+        ),
+    }
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
