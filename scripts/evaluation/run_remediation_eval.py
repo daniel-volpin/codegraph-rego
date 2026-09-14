@@ -8,6 +8,8 @@ import argparse
 import logging
 import random
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from codegraph.evaluation.pipeline import (  # noqa: E402
+    collect_category_false_positive_violations,
     collect_category_violations,
     group_violations_by_testcase,
     ingest_and_evaluate_subset,
@@ -25,6 +28,8 @@ from codegraph.evaluation.pipeline import (  # noqa: E402
 from codegraph.evaluation.provenance import collect_provenance, write_provenance  # noqa: E402
 from codegraph.evaluation.remediation_runtime import (  # noqa: E402
     RemediationRuntime,
+    build_agentic_outcome_summary,
+    build_agentic_remediation_result,
     build_metrics_payload,
     build_remediation_result,
     build_skipped_result,
@@ -34,6 +39,111 @@ from codegraph.remediation.orchestration import apply_remediation  # noqa: E402
 from codegraph.telemetry import configure_telemetry, get_tracer, install_log_correlation  # noqa: E402
 
 LOGGER = logging.getLogger("codegraph.eval.remediation")
+
+
+def _rebase_method_key(method_key: str, prefix: str) -> str:
+    """Rebase both the leading path and the embedded #file: path onto work_root.
+
+    parse_method_selector's canonical_key is everything after the method_key's
+    first "#" (the #file:<path> segment onward), matched directly against the
+    freshly re-parsed method.source_key -- so #file:<path> must carry the same
+    prefix as the leading path, or the two diverge and selector matching fails.
+    """
+    head, tail = method_key.split(":", 1)
+    tail = tail.replace("#file:", f"#file:{prefix}/", 1)
+    return f"{head}:{prefix}/{tail}"
+
+
+def _rebase_for_agentic_workspace(violation: dict[str, Any], java_relative_root: str) -> dict[str, Any]:
+    """Rebase method_key/file_path onto work_root, where the staged pom.xml lives."""
+    rebased = dict(violation)
+    prefix = java_relative_root.rstrip("/")
+
+    method_key = violation.get("method_key")
+    if isinstance(method_key, str) and ":" in method_key:
+        rebased["method_key"] = _rebase_method_key(method_key, prefix)
+
+    evidence = violation.get("evidence")
+    if isinstance(evidence, dict):
+        evidence = dict(evidence)
+        evidence_method_key = evidence.get("method_key")
+        if isinstance(evidence_method_key, str) and ":" in evidence_method_key:
+            evidence["method_key"] = _rebase_method_key(evidence_method_key, prefix)
+        evidence_file_path = evidence.get("file_path")
+        if isinstance(evidence_file_path, str) and evidence_file_path:
+            evidence["file_path"] = f"{prefix}/{evidence_file_path}"
+        rebased["evidence"] = evidence
+
+    file_path = violation.get("file_path")
+    if isinstance(file_path, str) and file_path:
+        rebased["file_path"] = f"{prefix}/{file_path}"
+
+    return rebased
+
+
+def _process_case(
+    violation: dict[str, Any],
+    *,
+    args: argparse.Namespace,
+    context: Any,
+    workspace: Any,
+    runtime: RemediationRuntime,
+    tracer: Any,
+    lock: threading.Lock,
+) -> dict[str, Any]:
+    with tracer.start_as_current_span("benchmark.case") as case_span:
+        case_id, case_dir = runtime.prepare_case(violation)
+        violation_id = violation.get("violation_id")
+        evidence = violation.get("evidence") or {}
+        method_key = violation.get("method_key") or evidence.get("method_key")
+        target_method = violation.get("target_method")
+        file_path = evidence.get("file_path") or violation.get("file_path")
+        case_span.set_attribute("case_id", str(case_id or ""))
+        case_span.set_attribute("violation_id", str(violation_id or ""))
+        case_span.set_attribute("method_key", str(method_key or ""))
+        case_span.set_attribute("target_method", str(target_method or ""))
+        case_span.set_attribute("category", str(violation.get("category") or ""))
+        rule_id = violation.get("rule_id") or (violation.get("control_metadata") or {}).get("rule_id") or ""
+        case_span.set_attribute("rule_id", str(rule_id))
+
+        if not violation_id or not method_key or not file_path:
+            result = build_skipped_result(violation=violation, case_id=case_id, error="missing_violation_fields")
+            case_span.set_attribute("final_status", "SKIPPED")
+            with lock:
+                runtime.record_case(apply_result=result, result=result)
+            return result
+
+        if args.mode == "agentic":
+            from codegraph.remediation.orchestration import run_agentic_remediation
+            java_relative_root = context.selection_cfg["java_relative_root"]
+            agentic_violation = _rebase_for_agentic_workspace(violation, java_relative_root)
+            apply_result = run_agentic_remediation(
+                agentic_violation,
+                workspace_root=workspace.work_root,
+                max_turns=max(4, args.max_attempts * 3),
+            )
+            result = build_agentic_remediation_result(
+                violation=violation,
+                apply_result=apply_result,
+                case_id=case_id,
+                ground_truth_label=bool(violation.get("ground_truth_label", True)),
+            )
+        else:
+            apply_result = apply_remediation(
+                str(violation_id),
+                method_key=str(method_key),
+                file_path=str(file_path),
+                mode=args.mode,
+                max_attempts=args.max_attempts,
+                raw_capture_dir=case_dir.as_posix(),
+                build_command=args.build_command or context.selection_cfg.get("build_command"),
+            )
+            result = build_remediation_result(violation=violation, apply_result=apply_result, case_id=case_id)
+
+        case_span.set_attribute("final_status", str(apply_result.get("status") or ""))
+        with lock:
+            runtime.record_case(apply_result=apply_result, result=result)
+        return result
 
 
 def parse_args() -> argparse.Namespace:
@@ -98,6 +208,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Clear Neo4j before ingesting benchmark subset",
     )
+    parser.add_argument(
+        "--parallel",
+        type=int,
+        default=1,
+        help="Concurrent cases (agentic mode only; bounded by LLM_MAX_CONCURRENT_REQUESTS anyway; default: %(default)s)",
+    )
     return parser.parse_args()
 
 
@@ -137,6 +253,7 @@ def main() -> int:
             "sample_size": args.sample_size,
             "reset_neo4j": bool(args.reset_neo4j),
             "build_command": args.build_command or "",
+            "parallel": args.parallel,
         },
     )
     write_provenance(provenance, output_dir)
@@ -193,6 +310,14 @@ def main() -> int:
                     selection=context.selection,
                     violations_by_testcase=violations_by_testcase,
                 )
+                category_fp_violations_by_id: dict[str, list[dict[str, Any]]] = {}
+                if args.mode == "agentic":
+                    category_fp_violations_by_id = collect_category_false_positive_violations(
+                        selected_category_ids=context.selected_category_ids,
+                        categories_by_id=context.categories_by_id,
+                        selection=context.selection,
+                        violations_by_testcase=violations_by_testcase,
+                    )
                 candidates: list[dict[str, Any]] = []
                 for category_id in context.selected_category_ids:
                     spec = context.categories_by_id.get(category_id)
@@ -201,6 +326,12 @@ def main() -> int:
                     for violation in category_violations_by_id.get(category_id, []):
                         candidate = dict(violation)
                         candidate["category"] = spec.label
+                        candidate["ground_truth_label"] = True
+                        candidates.append(candidate)
+                    for violation in category_fp_violations_by_id.get(category_id, []):
+                        candidate = dict(violation)
+                        candidate["category"] = spec.label
+                        candidate["ground_truth_label"] = False
                         candidates.append(candidate)
                 if not candidates:
                     LOGGER.warning("No candidate violations found for remediation evaluation.")
@@ -213,60 +344,23 @@ def main() -> int:
 
                 results: list[dict[str, Any]] = []
                 runtime.begin(total_cases=len(candidates))
-                for violation in candidates:
-                    with tracer.start_as_current_span("benchmark.case") as case_span:
-                        case_id, case_dir = runtime.prepare_case(violation)
-                        violation_id = violation.get("violation_id")
-                        evidence = violation.get("evidence") or {}
-                        method_key = violation.get("method_key") or evidence.get("method_key")
-                        target_method = violation.get("target_method")
-                        file_path = evidence.get("file_path") or violation.get("file_path")
-                        case_span.set_attribute("case_id", str(case_id or ""))
-                        case_span.set_attribute("violation_id", str(violation_id or ""))
-                        case_span.set_attribute("method_key", str(method_key or ""))
-                        case_span.set_attribute("target_method", str(target_method or ""))
-                        case_span.set_attribute("category", str(violation.get("category") or ""))
-                        rule_id = (
-                            violation.get("rule_id") or (violation.get("control_metadata") or {}).get("rule_id") or ""
-                        )
-                        case_span.set_attribute("rule_id", str(rule_id))
-
-                        if not violation_id or not method_key or not file_path:
-                            result = build_skipped_result(
-                                violation=violation,
-                                case_id=case_id,
-                                error="missing_violation_fields",
-                            )
-                            case_span.set_attribute("final_status", "SKIPPED")
-                            results.append(result)
-                            runtime.record_case(apply_result=result, result=result)
-                            continue
-
-                        if args.mode == "agentic":
-                            from codegraph.remediation.orchestration import run_agentic_remediation
-                            apply_result = run_agentic_remediation(
-                                violation,
-                                workspace_root=workspace.java_root,
-                                max_turns=max(4, args.max_attempts * 3),
-                            )
-                        else:
-                            apply_result = apply_remediation(
-                                str(violation_id),
-                                method_key=str(method_key),
-                                file_path=str(file_path),
-                                mode=args.mode,
-                                max_attempts=args.max_attempts,
-                                raw_capture_dir=case_dir.as_posix(),
-                                build_command=args.build_command or context.selection_cfg.get("build_command"),
-                            )
-                        result = build_remediation_result(
-                            violation=violation,
-                            apply_result=apply_result,
-                            case_id=case_id,
-                        )
-                        case_span.set_attribute("final_status", str(apply_result.get("status") or ""))
-                        results.append(result)
-                        runtime.record_case(apply_result=apply_result, result=result)
+                lock = threading.Lock()
+                case_kwargs = {
+                    "args": args,
+                    "context": context,
+                    "workspace": workspace,
+                    "runtime": runtime,
+                    "tracer": tracer,
+                    "lock": lock,
+                }
+                if args.mode == "agentic" and args.parallel > 1:
+                    with ThreadPoolExecutor(max_workers=args.parallel) as pool:
+                        futures = [pool.submit(_process_case, violation, **case_kwargs) for violation in candidates]
+                        for future in futures:
+                            results.append(future.result())
+                else:
+                    for violation in candidates:
+                        results.append(_process_case(violation, **case_kwargs))
 
             metrics = build_metrics_payload(
                 benchmark_root=context.benchmark_root,
@@ -279,6 +373,8 @@ def main() -> int:
                 legacy_build_command_arg=args.build_command,
                 results=results,
             )
+            if args.mode == "agentic":
+                metrics["agentic_outcomes"] = build_agentic_outcome_summary(results)
             write_final_artifacts(output_dir, metrics, table_format=args.table_format)
             run_span.set_attribute("total_cases", len(results))
             run_span.set_attribute("final_status", "completed")
