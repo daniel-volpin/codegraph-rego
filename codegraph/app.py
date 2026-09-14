@@ -79,7 +79,8 @@ def _check_java_parser() -> None:
         raise JavaParserProtocolError("Java parser did not analyze the readiness fixture completely.")
 
 
-async def _preload_resources(application: FastAPI) -> None:
+def evaluate_startup_status(application: FastAPI) -> dict[str, Any]:
+    """Run the startup probes and store the verdict on the application."""
     startup_status = _default_startup_status()
     startup_status["phase"] = "running"
     application.state.startup_status = startup_status
@@ -106,6 +107,11 @@ async def _preload_resources(application: FastAPI) -> None:
         if not startup_status["ready"]:
             LOGGER.warning("Application startup completed in degraded mode: %s", startup_status["errors"])
         application.state.startup_status = startup_status
+    return startup_status
+
+
+async def _preload_resources(application: FastAPI) -> None:
+    evaluate_startup_status(application)
 
 
 @asynccontextmanager
@@ -173,6 +179,7 @@ def create_app() -> FastAPI:
     LOGGER.debug("Runtime Neo4j target: uri=%s user=%s", settings.neo4j_uri, settings.neo4j_user)
 
     application = FastAPI(lifespan=_lifespan)
+    application.state.refresh_startup_status = evaluate_startup_status
     application.state.startup_status = _default_startup_status()
 
     try:

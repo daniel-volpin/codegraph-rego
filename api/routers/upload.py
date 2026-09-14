@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import pathlib
 import shutil
@@ -25,9 +26,15 @@ from codegraph.common.workspace_lock import async_workspace_mutation_guard
 from codegraph.config import settings
 from codegraph.embedding.service import EmbeddingService
 from codegraph.ingestion.git_source import clone_repository
-from codegraph.ingestion.service import WorkspacePublication, ingest, rollback_workspace_revision
+from codegraph.ingestion.service import (
+    WorkspacePublication,
+    deactivate_other_workspaces,
+    ingest,
+    rollback_workspace_revision,
+)
 from codegraph.ingestion.utils import UploadValidationError, find_java_roots, safe_extract_zip
 
+LOGGER = logging.getLogger(__name__)
 router = APIRouter()
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 
@@ -213,6 +220,10 @@ async def _publish_staged_workspace(
             publication = await asyncio.to_thread(
                 _ingest_upload_workspace, upload_root, _final_java_roots(java_root_relatives),
             )
+            # This endpoint replaces the workspace, so nothing else stays active.
+            dropped = await asyncio.to_thread(deactivate_other_workspaces, publication.workspace_id)
+            if dropped:
+                LOGGER.info("Deactivated %d previously active workspace(s): %s", len(dropped), ", ".join(dropped))
             await asyncio.to_thread(_build_upload_embeddings)
         except Exception as exc:
             return await _handle_workspace_processing_error(

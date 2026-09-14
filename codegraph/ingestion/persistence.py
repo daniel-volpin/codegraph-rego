@@ -289,6 +289,29 @@ def link_method_field_use_batch(tx, relations: tuple[tuple[str, str], ...]) -> N
     )
 
 
+def deactivate_other_workspaces(tx, workspace_id: str) -> list[str]:
+    """Drop the active pointer of every workspace except ``workspace_id``.
+
+    Revisions and their nodes are immutable and stay in the graph; only the
+    ActiveWorkspace pointer is removed, so evaluation reads one workspace.
+    """
+    record = tx.run(
+        """
+        MATCH (aw:ActiveWorkspace)
+        WHERE aw.workspace_id <> $workspace_id
+        OPTIONAL MATCH (aw)-[link:ACTIVE_REVISION]->(:WorkspaceRevision)
+        WITH collect(DISTINCT aw.workspace_id) AS deactivated,
+             collect(DISTINCT aw) AS pointers,
+             collect(link) AS links
+        FOREACH (l IN links | DELETE l)
+        FOREACH (p IN pointers | DELETE p)
+        RETURN deactivated
+        """,
+        workspace_id=workspace_id,
+    ).single()
+    return list(record["deactivated"]) if record and record.get("deactivated") else []
+
+
 def publish_workspace_revision(tx, structure: ExtractedCodeStructure) -> WorkspacePublication:
     record = tx.run(
         """

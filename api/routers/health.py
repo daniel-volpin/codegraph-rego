@@ -68,6 +68,29 @@ def _opa_probe() -> tuple[bool, str | None]:
     return False, "opa version probe returned missing version metadata"
 
 
+def _current_startup_state(request: Request) -> dict[str, Any]:
+    """Startup verdict, re-probed while it reports not ready.
+
+    The verdict is taken once at boot, so an ingest or index rebuild would
+    otherwise leave a now-healthy process reporting degraded until restart.
+    """
+    state = getattr(request.app.state, "startup_status", None) or {
+        "ready": False,
+        "phase": "pending",
+        "checks": {},
+        "errors": {"startup": "startup status unavailable"},
+    }
+    if state.get("ready"):
+        return state
+    refresh = getattr(request.app.state, "refresh_startup_status", None)
+    if refresh is None:
+        return state
+    try:
+        return refresh(request.app) or state
+    except Exception:  # pragma: no cover - readiness must never raise
+        return state
+
+
 def _compute_readiness(request: Request) -> tuple[dict[str, Any], int]:
     """Deep readiness probe: actually exercises every dependency.
 
@@ -75,12 +98,7 @@ def _compute_readiness(request: Request) -> tuple[dict[str, Any], int]:
     ``/readyz`` and the legacy alias share one source of truth. Never raises;
     failures degrade to ``status_code=503`` with structured details.
     """
-    startup_state = getattr(request.app.state, "startup_status", None) or {
-        "ready": False,
-        "phase": "pending",
-        "checks": {},
-        "errors": {"startup": "startup status unavailable"},
-    }
+    startup_state = _current_startup_state(request)
     checks: dict[str, Any] = {
         "status": "degraded",
         "startup_ready": bool(startup_state.get("ready")),

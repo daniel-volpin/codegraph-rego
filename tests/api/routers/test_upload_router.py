@@ -64,6 +64,9 @@ def _workspace_case() -> Iterator[Path]:
 class TestUploadRouter(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.rollback = self.enterContext(patch("api.routers.upload.rollback_workspace_revision"))
+        self.deactivate = self.enterContext(
+            patch("api.routers.upload.deactivate_other_workspaces", return_value=[])
+        )
 
     @patch("api.routers.upload.EmbeddingService.build_embeddings")
     @patch("api.routers.upload.ingest")
