@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from codegraph.benchmark_registry import evidence_source_for_rule_id
 from codegraph.ingestion.snapshots import (
     AmbiguousMethodError,
     MethodIdentity,
@@ -19,6 +20,7 @@ from codegraph.ingestion.snapshots import (
     create_source_snapshot,
     sha256_hex,
 )
+from codegraph.policy.engines import DetectionEngine, get_engine
 from codegraph.policy.runtime import opa as opa_runtime
 from codegraph.policy.runtime.bundles import build_evidence_bundle_from_source
 from codegraph.remediation.candidate import InvalidCandidateError, build_candidate_overlay
@@ -252,6 +254,107 @@ def _identity_dict(identity: MethodIdentity) -> dict[str, Any]:
     }
 
 
+def _verify_candidate_via_engine(
+    engine: DetectionEngine,
+    *,
+    workspace: Path,
+    source_path: Path,
+    candidate_path: Path,
+    method_selector: str,
+    rule_id: str,
+    expected_source_sha256: str,
+) -> dict[str, Any]:
+    """Re-check *rule_id* through its owning non-OPA engine (e.g. OpenGrep).
+
+    Mirrors the OPA branch's baseline/candidate/status contract exactly, so
+    callers cannot tell which engine produced a given report.
+    """
+    try:
+        baseline = create_source_snapshot(
+            workspace_root=workspace,
+            source_path=source_path,
+            method_selector=method_selector,
+            expected_source_sha256=expected_source_sha256,
+        )
+    except StaleSourceError:
+        return _status(status="STALE_CANDIDATE", rule_id=rule_id, stale_reasons=["source_sha256_mismatch"])
+    except AmbiguousMethodError as exc:
+        return _status("AMBIGUOUS_METHOD", rule_id=rule_id, error=str(exc))
+    except UnsupportedSourceError as exc:
+        return _status("UNSUPPORTED_SOURCE", rule_id=rule_id, error=str(exc))
+    except (SnapshotError, OSError) as exc:
+        return _status("INPUT_ERROR", rule_id=rule_id, error=str(exc))
+
+    if rule_id not in engine.discover_rule_ids():
+        return _status("NOT_EVALUATED", rule_id=rule_id, error="unknown_rule_id")
+
+    try:
+        candidate_bytes = candidate_path.read_bytes()
+    except OSError as exc:
+        return _status("INPUT_ERROR", rule_id=rule_id, error=str(exc))
+    try:
+        overlay = build_candidate_overlay(baseline, candidate_bytes)
+    except InvalidCandidateError as exc:
+        return _status("INVALID_CANDIDATE", rule_id=rule_id, error=str(exc))
+
+    try:
+        baseline_findings = engine.verify_candidate(
+            rule_id=rule_id,
+            candidate_file_source=baseline.full_file_bytes.decode("utf-8"),
+            source_file_name=source_path.name,
+        )
+        candidate_findings = engine.verify_candidate(
+            rule_id=rule_id,
+            candidate_file_source=overlay.candidate_file_bytes.decode("utf-8"),
+            source_file_name=source_path.name,
+        )
+    except RuntimeError as exc:
+        return _status("ENGINE_ERROR", rule_id=rule_id, policy_status="ERROR", error=str(exc))
+
+    if rule_id not in _ids(baseline_findings):
+        return _status(
+            "NOT_EVALUATED",
+            rule_id=rule_id,
+            error="baseline_target_rule_not_detected",
+            extra={"engine": {"name": engine.name}, "findings": {"baseline": baseline_findings, "candidate": candidate_findings}},
+        )
+
+    summary = build_verification_summary(rule_id, baseline_findings, candidate_findings)
+    target_rule_status = summary["target_rule_status"]
+    new_rule_ids = sorted(_ids(candidate_findings) - _ids(baseline_findings))
+    status = "POLICY_PASS" if target_rule_status == "PASS" and not new_rule_ids else "POLICY_FAIL"
+    return _status(
+        status,
+        rule_id=rule_id,
+        policy_status="PASS" if status == "POLICY_PASS" else "FAIL",
+        extra={
+            "target_rule_status": target_rule_status,
+            "baseline": {
+                "source_sha256": baseline.file_sha256,
+                "method_sha256": baseline.method_sha256,
+                "identity": _identity_dict(baseline.identity),
+            },
+            "candidate": {
+                "source_sha256": overlay.candidate_file_sha256,
+                "method_sha256": overlay.candidate_method_sha256,
+                "identity": _identity_dict(overlay.candidate_snapshot.identity),
+            },
+            "engine": {"name": engine.name},
+            "findings": {"baseline": baseline_findings, "candidate": candidate_findings},
+            "rule_delta": {
+                "removed": sorted(_ids(baseline_findings) - _ids(candidate_findings)),
+                "added": new_rule_ids,
+                "unchanged": sorted(_ids(baseline_findings) & _ids(candidate_findings)),
+            },
+            "policy_summary": {
+                "target_rule_status": target_rule_status,
+                "new_violations": summary["new_violations"],
+                "remaining_baseline_violations": summary["remaining_violations"],
+            },
+        },
+    )
+
+
 def verify_candidate(
     *,
     workspace_root: str | Path,
@@ -270,6 +373,19 @@ def verify_candidate(
         candidate_path = _resolve_candidate(workspace, candidate)
     except (SnapshotError, FileNotFoundError, OSError) as exc:
         return _status("INPUT_ERROR", rule_id=rule_id, error=str(exc))
+
+    engine = get_engine(evidence_source_for_rule_id(rule_id))
+    if engine is not None:
+        return _verify_candidate_via_engine(
+            engine,
+            workspace=workspace,
+            source_path=source_path,
+            candidate_path=candidate_path,
+            method_selector=method_selector,
+            rule_id=rule_id,
+            expected_source_sha256=expected_source_sha256,
+        )
+
     scratch = Path(work_dir) if work_dir else Path.cwd() / "build" / "scoped-verification-work"
     try:
         scratch.mkdir(parents=True, exist_ok=True)
