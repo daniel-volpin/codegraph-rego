@@ -11,7 +11,7 @@ import aiofiles
 from fastapi import APIRouter, File, Header, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from api.models.validation import UploadResponse, UploadStatusResponse
+from api.models.validation import GitIngestRequest, UploadResponse, UploadStatusResponse
 from codegraph.common.progress import (
     complete_progress,
     error_progress,
@@ -23,6 +23,7 @@ from codegraph.common.progress import (
 from codegraph.common.workspace_lock import async_workspace_mutation_guard
 from codegraph.config import settings
 from codegraph.embedding.service import EmbeddingService
+from codegraph.ingestion.git_source import clone_repository
 from codegraph.ingestion.service import WorkspacePublication, ingest, rollback_workspace_revision
 from codegraph.ingestion.utils import UploadValidationError, find_java_roots, safe_extract_zip
 
@@ -193,27 +194,9 @@ async def _handle_workspace_processing_error(
     return _error_response(f"Processing failed: {exc}", request_id, 500)
 
 
-@router.post("/upload", response_model=UploadResponse)
-async def upload_zip(
-    file: UploadFile = File(...),
-    request_id_header: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+async def _publish_staged_workspace(
+    staging_dir: str, java_root_relatives: list[str], request_id: str,
 ):
-    # request_id is echoed on every response so the caller can poll
-    # GET /upload/status?request_id=<id> for its own upload's progress.
-    request_id = start_progress(
-        "upload",
-        "Validating upload…",
-        2.0,
-        request_id=request_id_header.strip() if request_id_header and request_id_header.strip() else None,
-    )
-    if not file.filename or not file.filename.endswith(".zip"):
-        return _error_response("Only zip files allowed", request_id, 400)
-
-    prepared = await _prepare_staged_upload(file, request_id)
-    if isinstance(prepared, JSONResponse):
-        return prepared
-
-    staging_dir, java_root_relatives = prepared
     backup_dir = None
     publication = None
     update_progress("upload", "Waiting for workspace publication slot…", 19.0)
@@ -245,6 +228,66 @@ async def upload_zip(
         java_roots=final_java_roots,
         request_id=request_id,
     )
+
+
+@router.post("/upload", response_model=UploadResponse)
+async def upload_zip(
+    file: UploadFile = File(...),
+    request_id_header: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+):
+    # request_id is echoed on every response so the caller can poll
+    # GET /upload/status?request_id=<id> for its own upload's progress.
+    request_id = start_progress(
+        "upload",
+        "Validating upload…",
+        2.0,
+        request_id=request_id_header.strip() if request_id_header and request_id_header.strip() else None,
+    )
+    if not file.filename or not file.filename.endswith(".zip"):
+        return _error_response("Only zip files allowed", request_id, 400)
+
+    prepared = await _prepare_staged_upload(file, request_id)
+    if isinstance(prepared, JSONResponse):
+        return prepared
+
+    staging_dir, java_root_relatives = prepared
+    return await _publish_staged_workspace(staging_dir, java_root_relatives, request_id)
+
+
+def _clone_into_staging(repo_url: str, ref: str | None) -> tuple[str, list[str]]:
+    staging_dir = _unique_workspace_dir(".clone_staging_")
+    try:
+        clone_repository(repo_url, staging_dir, ref=ref)
+        java_roots = find_java_roots(staging_dir)
+        if not java_roots:
+            raise UploadValidationError("No src/main/java root found in the repository.")
+        return staging_dir, [os.path.relpath(root, staging_dir) for root in java_roots]
+    except Exception:
+        _cleanup_dir(staging_dir)
+        raise
+
+
+@router.post("/upload/git", response_model=UploadResponse)
+async def upload_from_git(
+    payload: GitIngestRequest,
+    request_id_header: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+):
+    request_id = start_progress(
+        "upload",
+        "Validating repository URL…",
+        2.0,
+        request_id=request_id_header.strip() if request_id_header and request_id_header.strip() else None,
+    )
+    try:
+        update_progress("upload", "Cloning repository…", 5.0)
+        staging_dir, java_root_relatives = await asyncio.to_thread(
+            _clone_into_staging, payload.repo_url, payload.ref,
+        )
+    except UploadValidationError as exc:
+        return _error_response(str(exc), request_id, 400)
+    except Exception as exc:
+        return _error_response(f"Failed to clone repository: {exc}", request_id, 500)
+    return await _publish_staged_workspace(staging_dir, java_root_relatives, request_id)
 
 
 @router.get("/upload/status", response_model=UploadStatusResponse)

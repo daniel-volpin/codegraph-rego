@@ -337,17 +337,40 @@ public final class Main {
             }
         }
 
+        // A dependency that is not on the classpath cannot be resolved, whether it
+        // surfaces as a missing type, method, field or import. Match problem ids
+        // first: they are stable and locale-independent, unlike the messages.
+        private static final Set<Integer> SYMBOL_PROBLEM_IDS = Set.of(
+            IProblem.UndefinedType,
+            IProblem.UndefinedMethod,
+            IProblem.UndefinedField,
+            IProblem.UndefinedName,
+            IProblem.UndefinedConstructor,
+            IProblem.ImportNotFound,
+            IProblem.IsClassPathCorrect,
+            IProblem.HierarchyHasProblems,
+            IProblem.MissingTypeInMethod,
+            IProblem.MissingTypeInConstructor,
+            IProblem.AbstractMethodMustBeImplemented,
+            IProblem.MethodMustOverrideOrImplement
+        );
+
         private boolean isSymbolProblem(IProblem problem) {
+            if (!request.resolveBindings) {
+                return false;
+            }
+            if (SYMBOL_PROBLEM_IDS.contains(problem.getID())) {
+                return true;
+            }
             String message = problem.getMessage() == null ? "" : problem.getMessage().toLowerCase(Locale.ROOT);
-            return request.resolveBindings && (
-                message.contains("cannot be resolved") ||
-                message.contains("is not a type") ||
-                message.contains("refers to the missing type") ||
-                message.contains("missing type") ||
-                message.contains("the hierarchy of the type") ||
-                message.contains("must override or implement") ||
-                message.contains("supertype method")
-            );
+            return message.contains("cannot be resolved")
+                || message.contains("is not a type")
+                || message.contains("refers to the missing type")
+                || message.contains("missing type")
+                || message.contains("the hierarchy of the type")
+                || message.contains("must override or implement")
+                || message.contains("supertype method")
+                || message.contains("is undefined for the type");
         }
 
         private List<ImportDto> collectImports() {

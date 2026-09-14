@@ -60,6 +60,18 @@ class Settings(BaseSettings):
         ge=1.0,
         description="Maximum allowed ZIP compression ratio per member",
     )
+    upload_git_allowed_hosts: list[str] = Field(
+        default_factory=lambda: ["github.com"],
+        validation_alias=AliasChoices("UPLOAD_GIT_ALLOWED_HOSTS", "upload_git_allowed_hosts"),
+        description="Hosts a repository may be cloned from. Analysed code is later compiled, so keep this narrow.",
+    )
+    upload_git_timeout_seconds: float = Field(
+        300.0,
+        gt=0.0,
+        le=1800.0,
+        validation_alias=AliasChoices("UPLOAD_GIT_TIMEOUT_SECONDS", "upload_git_timeout_seconds"),
+        description="Deadline for a repository clone.",
+    )
     neo4j_uri: str = Field(
         "bolt://localhost:7687",
         validation_alias=AliasChoices("NEO4J_URI", "neo4j_uri"),
