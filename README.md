@@ -60,6 +60,20 @@ Open:
 - Backend API: <http://127.0.0.1:8000>
 - Health check: <http://127.0.0.1:8000/health>
 
+### Run everything in containers
+
+`make dev` runs the backend and frontend directly on the host, against a containerized Neo4j. To run all three services in containers instead (Docker Compose, or Podman with a compatible Compose provider):
+
+```bash
+make docker-up
+```
+
+This builds and starts `neo4j`, `backend`, and `frontend` with the same ports as above; both application containers hot-reload from your working tree. Stop them with:
+
+```bash
+make docker-down
+```
+
 ### First run
 
 A fresh checkout has no analysed code, so `/health` reports `degraded` with HTTP 503 until you load a project. This is expected. Upload a ZIP through the web application: one pass parses the project, publishes a graph revision, and builds the embedding index, after which `/health` returns `ok`.

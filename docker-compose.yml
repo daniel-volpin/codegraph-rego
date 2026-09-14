@@ -48,6 +48,7 @@ services:
     volumes:
       - .:/app # Hot reload
       - /app/.venv # Don't overwrite venv
+      - /app/tools/java-parser/target # Don't shadow the built JDT parser jar
 
   frontend:
     build:
