@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import pathlib
 import shutil
 import uuid
 import zipfile
@@ -68,6 +69,8 @@ def _swap_workspace(staging_dir: str) -> str | None:
         if backup_dir is not None:
             os.replace(backup_dir, target_dir)
         raise
+    # uploaded_code/.gitkeep is tracked; the swap would otherwise delete it.
+    pathlib.Path(target_dir, ".gitkeep").touch(exist_ok=True)
     return backup_dir
 
 

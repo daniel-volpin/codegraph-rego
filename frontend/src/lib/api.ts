@@ -177,6 +177,29 @@ export async function uploadZip(
   return parseApiResponse(response, UploadResponseSchema);
 }
 
+export async function ingestFromGitUrl(
+  repoUrl: string,
+  ref?: string,
+  signal?: AbortSignal,
+  requestId?: string,
+): Promise<UploadResponse> {
+  if (isDemoMode()) {
+    return DEMO_UPLOAD_RESPONSE;
+  }
+
+  const response = await fetch(`${getRuntimeApiBase()}/upload/git`, {
+    method: "POST",
+    headers: {
+      ...defaultHeaders,
+      ...(requestId ? { "X-Request-Id": requestId } : {}),
+    },
+    body: JSON.stringify({ repo_url: repoUrl, ref: ref?.trim() ? ref.trim() : null }),
+    signal,
+  });
+
+  return parseApiResponse(response, UploadResponseSchema);
+}
+
 export async function searchCode(query: string, signal?: AbortSignal): Promise<SearchResponse> {
   if (isDemoMode()) {
     const q = query.toLowerCase();
