@@ -35,6 +35,12 @@ RUN set -eux; \
 COPY pyproject.toml uv.lock ./
 
 # Install locked runtime dependencies without re-resolving the project.
+# requirements.txt export drops uv.lock's custom index routing (pyproject.toml's
+# [tool.uv.sources]/[[tool.uv.index]] pin torch to the CPU-only wheel index), so
+# uv pip install needs that index passed explicitly to resolve the pinned
+# torch==...+cpu hash. unsafe-best-match lets other packages still resolve from
+# PyPI when the pytorch index happens to also carry their name; every package
+# here is still hash-pinned, so this can't silently substitute a different file.
 RUN uv export \
       --frozen \
       --no-dev \
@@ -42,7 +48,7 @@ RUN uv export \
       --no-emit-project \
       --format requirements.txt \
       --output-file requirements.lock && \
-    uv pip install --system -r requirements.lock && \
+    uv pip install --system --index-strategy unsafe-best-match --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.lock && \
     rm requirements.lock
 
 # Copy only the backend application surface needed at runtime.
