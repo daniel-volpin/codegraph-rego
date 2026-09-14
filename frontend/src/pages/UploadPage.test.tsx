@@ -6,6 +6,7 @@ import { renderWithProviders } from "../test/render";
 
 vi.mock("../lib/api", () => ({
   uploadZip: vi.fn(),
+  ingestFromGitUrl: vi.fn(),
   fetchUploadStatus: vi.fn().mockResolvedValue({
     phase: "idle",
     message: "",
@@ -84,5 +85,39 @@ describe("UploadPage", () => {
 
     expect(await screen.findByText(/app\.zip/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /upload & ingest/i })).toBeEnabled();
+  });
+
+  it("offers a Git URL source and sends the entered URL", async () => {
+    const { ingestFromGitUrl } = await import("../lib/api");
+    vi.mocked(ingestFromGitUrl).mockResolvedValue({
+      status: "Codebase processed!",
+      java_root: "/workspace/src/main/java",
+    });
+
+    renderWithProviders(<UploadPage />);
+    await userEvent.click(screen.getByTestId("source-mode-git"));
+    await userEvent.type(
+      screen.getByTestId("repo-url-input"),
+      "https://github.com/owner/repo",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /process|upload|ingest/i }));
+
+    expect(vi.mocked(ingestFromGitUrl)).toHaveBeenCalledWith(
+      "https://github.com/owner/repo",
+      undefined,
+      undefined,
+      expect.any(String),
+    );
+  });
+
+  it("does not submit an empty repository URL", async () => {
+    const { ingestFromGitUrl } = await import("../lib/api");
+    vi.mocked(ingestFromGitUrl).mockClear();
+
+    renderWithProviders(<UploadPage />);
+    await userEvent.click(screen.getByTestId("source-mode-git"));
+    await userEvent.click(screen.getByRole("button", { name: /process|upload|ingest/i }));
+
+    expect(vi.mocked(ingestFromGitUrl)).not.toHaveBeenCalled();
   });
 });

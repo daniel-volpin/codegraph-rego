@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileArchive, UploadCloud, CheckCircle2, AlertCircle, Copy, FolderGit2, ShieldAlert } from "lucide-react";
-import { fetchUploadStatus, uploadZip } from "../lib/api";
+import { fetchUploadStatus, ingestFromGitUrl, uploadZip } from "../lib/api";
 import type { UploadResponse, UploadStatus } from "../lib/types";
 import { useClearActivity, useUpsertActivity } from "../store/activity";
 import { useResetAllPolicyArtifacts } from "../hooks/usePolicyArtifacts";
@@ -34,6 +34,8 @@ const UploadPage = () => {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const refetchStatusRef = useRef<(() => void) | null>(null);
+  const [sourceMode, setSourceMode] = useState<"zip" | "git">("zip");
+  const [repoUrl, setRepoUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragActive, setDragActive] = useState(false);
   const [result, setResult] = useState<UploadResponse | null>(null);
@@ -43,28 +45,41 @@ const UploadPage = () => {
   const clearActivity = useClearActivity();
   const resetPolicyArtifacts = useResetAllPolicyArtifacts();
 
+  const handleIngestSuccess = (data: UploadResponse) => {
+    setResult(data);
+    if (data.error || data.status === "error") {
+      toast.error(`Upload failed: ${data.error ?? "Unknown error."}`);
+      return;
+    }
+    toast.success("Upload complete! Embeddings rebuilt.");
+    void persistLastUpload(data);
+    queryClient.removeQueries({ queryKey: ["policyEvaluation:last"] });
+    resetPolicyArtifacts();
+    void clearPersistedPolicyEvaluations();
+  };
+
+  const handleIngestError = (error: Error) => {
+    setResult({ status: "error", error: error.message });
+    toast.error(`Upload failed: ${error.message}`);
+  };
+
+  const handleIngestSettled = () => {
+    refetchStatusRef.current?.();
+  };
+
   const uploadMutation = useMutation({
     mutationFn: ({ file, requestId }: { file: File; requestId: string }) => uploadZip(file, undefined, requestId),
-    onSuccess: (data) => {
-      setResult(data);
-      if (data.error || data.status === "error") {
-        toast.error(`Upload failed: ${data.error ?? "Unknown error."}`);
-        return;
-      }
-      toast.success("Upload complete! Embeddings rebuilt.");
-      void persistLastUpload(data);
-      queryClient.removeQueries({ queryKey: ["policyEvaluation:last"] });
-      resetPolicyArtifacts();
-      void clearPersistedPolicyEvaluations();
-    },
-    onError: (error: Error) => {
-      const payload: UploadResponse = { status: "error", error: error.message };
-      setResult(payload);
-      toast.error(`Upload failed: ${error.message}`);
-    },
-    onSettled: () => {
-      refetchStatusRef.current?.();
-    },
+    onSuccess: handleIngestSuccess,
+    onError: handleIngestError,
+    onSettled: handleIngestSettled,
+  });
+
+  const gitMutation = useMutation({
+    mutationFn: ({ url, requestId }: { url: string; requestId: string }) =>
+      ingestFromGitUrl(url, undefined, undefined, requestId),
+    onSuccess: handleIngestSuccess,
+    onError: handleIngestError,
+    onSettled: handleIngestSettled,
   });
 
   const trackedRequestId = activeRequestId ?? result?.request_id ?? null;
@@ -76,7 +91,8 @@ const UploadPage = () => {
     refetchInterval: (query) => {
       const nextStatus = query.state.data as UploadStatus | undefined;
       const activeStatus = nextStatus ?? localStatus;
-      const shouldTrack = uploadMutation.isPending || Boolean(activeStatus && !activeStatus.complete);
+      const shouldTrack =
+        uploadMutation.isPending || gitMutation.isPending || Boolean(activeStatus && !activeStatus.complete);
       if (!shouldTrack) return false;
       return streamConnected ? false : 5000;
     },
@@ -150,8 +166,34 @@ const UploadPage = () => {
     setSelectedFile(file);
   };
 
+  const handleGitSubmit = () => {
+    const url = repoUrl.trim();
+    if (!url) {
+      const feedback: UploadResponse = { status: "error", error: "Enter a repository URL." };
+      setResult(feedback);
+      toast.error(feedback.error ?? "Enter a repository URL.");
+      return;
+    }
+    const requestId = crypto.randomUUID().replace(/-/g, "");
+    setActiveRequestId(requestId);
+    setResult(null);
+    setLocalStatus({
+      phase: "upload",
+      message: `Cloning ${url}…`,
+      progress: 0,
+      complete: false,
+      error: null,
+      updated_at: new Date().toISOString(),
+    });
+    gitMutation.mutate({ url, requestId });
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (sourceMode === "git") {
+      handleGitSubmit();
+      return;
+    }
     const file = selectedFile;
     if (!file) {
       const feedback: UploadResponse = {
@@ -181,7 +223,8 @@ const UploadPage = () => {
   };
 
   const progressValue = status ? Math.min(Math.max(status.progress, 0), 100) : 0;
-  const isProcessing = uploadMutation.isPending || (status ? !status.complete : false);
+  const isProcessing =
+    uploadMutation.isPending || gitMutation.isPending || (status ? !status.complete : false);
   const detectedRoots = result?.java_roots?.length ? result.java_roots : result?.java_root ? [result.java_root] : [];
   const detectedModules = uniqueSortedModuleLabels(detectedRoots);
 
@@ -210,6 +253,48 @@ const UploadPage = () => {
         </div>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+          <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="tablist" aria-label="Source">
+            {(["zip", "git"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={sourceMode === mode}
+                data-testid={`source-mode-${mode}`}
+                disabled={isProcessing}
+                onClick={() => setSourceMode(mode)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
+                  sourceMode === mode
+                    ? "bg-white text-slate-900 shadow-2xs ring-1 ring-slate-200"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {mode === "zip" ? "Upload ZIP" : "From Git URL"}
+              </button>
+            ))}
+          </div>
+
+          {sourceMode === "git" ? (
+            <div className="space-y-2">
+              <label htmlFor="repo-url" className="block text-sm font-medium text-slate-900">
+                Public repository URL
+              </label>
+              <input
+                id="repo-url"
+                data-testid="repo-url-input"
+                type="url"
+                inputMode="url"
+                placeholder="https://github.com/owner/repository"
+                value={repoUrl}
+                disabled={isProcessing}
+                onChange={(event) => setRepoUrl(event.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-2xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50"
+              />
+              <p className="text-xs text-slate-600">
+                Public HTTPS repositories only, cloned at depth 1. The server rejects hosts outside its allowlist.
+              </p>
+            </div>
+          ) : (
           <label
             data-testid="upload-dropzone"
             className={`group relative flex min-h-72 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center transition-all ${
@@ -253,6 +338,7 @@ const UploadPage = () => {
               </Badge>
             )}
           </label>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <p className="text-xs text-slate-500">
@@ -260,11 +346,11 @@ const UploadPage = () => {
             </p>
             <Button
               type="submit"
-              disabled={isProcessing || !selectedFile}
+              disabled={isProcessing || (sourceMode === "zip" ? !selectedFile : !repoUrl.trim())}
               className="min-w-40 shadow-xs"
             >
               <UploadCloud aria-hidden="true" className="mr-1.5 h-4 w-4" />
-              {isProcessing ? "Ingesting Codebase..." : "Upload & Ingest"}
+              {isProcessing ? "Ingesting Codebase..." : sourceMode === "zip" ? "Upload & Ingest" : "Clone & Ingest"}
             </Button>
           </div>
         </form>

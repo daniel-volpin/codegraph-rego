@@ -102,6 +102,12 @@ class PolicyEvaluateWithLLMRequest(BaseModel):
     rule_ids: list[str] | None = None
 
 
+class GitIngestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repo_url: str = Field(min_length=1, max_length=2048)
+    ref: str | None = Field(default=None, max_length=255)
+
+
 class PolicyExplainOneRequest(BaseModel):
     violation: dict
     include_graph_context: bool = True
