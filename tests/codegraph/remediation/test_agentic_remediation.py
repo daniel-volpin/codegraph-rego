@@ -60,12 +60,11 @@ def test_isolated_worktree_environment_sandboxes_edits(tmp_path: Path) -> None:
             "String sql = \"SELECT * FROM users WHERE id = ?\";",
         )
         assert ok is True
-        env.add_import("src/demo/SqlDemo.java", "import java.sql.PreparedStatement;")
 
         modified = env.get_modified_files()
         assert modified == ["src/demo/SqlDemo.java"]
         diff = env.compute_unified_diff()
-        assert "+import java.sql.PreparedStatement;" in diff
+        assert "+        String sql = \"SELECT * FROM users WHERE id = ?\";" in diff
 
     # Verify original file is 100% untouched
     assert src.read_text(encoding="utf-8") == SAMPLE_JAVA
@@ -92,23 +91,13 @@ def test_agentic_multi_turn_remediation_sql_injection(tmp_path: Path, monkeypatc
         turn_counter += 1
 
         if turn_counter == 1:
-            # Turn 1: Add import and edit file
+            # Turn 1: Edit file; import handling is covered by focused source-editor tests.
             return {
                 "choices": [
                     {
                         "message": {
-                            "content": "I will add the PreparedStatement import and refactor the method to use parameter binding.",
+                            "content": "I will refactor the method to use parameter binding.",
                             "tool_calls": [
-                                {
-                                    "id": "call_1",
-                                    "function": {
-                                        "name": "add_import",
-                                        "arguments": json.dumps({
-                                            "relative_path": "src/demo/SqlDemo.java",
-                                            "import_statement": "import java.sql.PreparedStatement;",
-                                        }),
-                                    },
-                                },
                                 {
                                     "id": "call_2",
                                     "function": {
@@ -420,8 +409,8 @@ def test_policy_gate_compares_scratch_candidate_to_immutable_baseline(
     assert src.read_text(encoding="utf-8") == original
 
 
-def test_policy_gate_baseline_shell_carries_forward_new_imports(tmp_path: Path) -> None:
-    """A fix that adds an import via add_import() must not desync re-verification."""
+def test_policy_gate_baseline_shell_carries_forward_external_import_edits(tmp_path: Path) -> None:
+    """An import edit outside the target method must be present in candidate-local re-verification."""
     src = tmp_path / "src" / "demo" / "HashDemo.java"
     src.parent.mkdir(parents=True)
     original = (
@@ -456,7 +445,11 @@ def test_policy_gate_baseline_shell_carries_forward_new_imports(tmp_path: Path) 
             'use("MD5");',
             'use(MessageDigest.getInstance("SHA-256").getAlgorithm());',
         )
-        env.add_import("src/demo/HashDemo.java", "import java.security.MessageDigest;")
+        current = env.read_file("src/demo/HashDemo.java")
+        env.write_file(
+            "src/demo/HashDemo.java",
+            current.replace("class HashDemo", "import java.security.MessageDigest;\n\nclass HashDemo", 1),
+        )
         with patch(
             "codegraph.remediation.agentic.environment.verify_candidate",
             side_effect=fake_verify_candidate,
