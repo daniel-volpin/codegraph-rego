@@ -12,7 +12,6 @@
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <jdt.version>3.47.0</jdt.version>
-    <eclipse.text.version>3.14.800</eclipse.text.version>
     <gson.version>2.14.0</gson.version>
   </properties>
 
@@ -25,7 +24,7 @@
     <dependency>
       <groupId>org.eclipse.platform</groupId>
       <artifactId>org.eclipse.text</artifactId>
-      <version>${eclipse.text.version}</version>
+      <version>3.14.600</version>
     </dependency>
     <dependency>
       <groupId>com.google.code.gson</groupId>
@@ -69,7 +68,7 @@
               </filters>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>io.github.codegraph.javaparser.Main</mainClass>
+                  <mainClass>io.github.codegraph.javaparser.AdapterMain</mainClass>
                 </transformer>
               </transformers>
             </configuration>
