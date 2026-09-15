@@ -36,6 +36,8 @@ __all__ = [
     "_calibration_block",
     "_collect_calibration_points",
     "_safe_float",
+    "build_agentic_outcome_summary",
+    "build_agentic_remediation_result",
     "build_case_id",
     "build_confidence_calibration",
     "build_metrics_payload",
@@ -159,6 +161,91 @@ def build_remediation_result(
         "confidence": confidence,
         "confidence_score": confidence_score,
         "confidence_band": confidence_band,
+    }
+
+
+def build_agentic_remediation_result(
+    *,
+    violation: Mapping[str, Any],
+    apply_result: Mapping[str, Any],
+    case_id: str,
+    ground_truth_label: bool,
+) -> dict[str, Any]:
+    verification = apply_result.get("verification") or {}
+    status = apply_result.get("status")
+    build_pass = verification.get("compile_passed")
+    policy_fixed = status == "SUCCESS" and bool(verification.get("policy_passed"))
+    replacement_applied = bool(apply_result.get("modified_files"))
+    outcome_correct = (ground_truth_label and status == "SUCCESS") or (
+        not ground_truth_label and status == "REFUSED"
+    )
+    evidence = violation.get("evidence") or {}
+    return {
+        "case_id": case_id,
+        "artifact_dir": f"cases/{case_id}",
+        "violation_id": violation.get("violation_id"),
+        "target_method": violation.get("target_method"),
+        "file_path": evidence.get("file_path") or violation.get("file_path"),
+        "status": status,
+        "error": apply_result.get("reason") if status in {"ERROR", "MAX_TURNS_EXCEEDED"} else None,
+        "patch_applied": replacement_applied,
+        "policy_pass": policy_fixed,
+        "build_pass": build_pass,
+        "category": violation.get("category"),
+        "ground_truth_label": ground_truth_label,
+        "verification": verification,
+        "compilation": {"attempted": build_pass is not None, "success": build_pass},
+        "diff": apply_result.get("diff"),
+        "reason": apply_result.get("reason"),
+        "iterations": apply_result.get("iterations"),
+        "errors": None,
+        "attempt_count": apply_result.get("iterations"),
+        "raw_capture_files": [],
+        "structured_valid": False,
+        "replacement_applied": replacement_applied,
+        "build_attempted": build_pass is not None,
+        "build_success": build_pass is True,
+        "policy_fixed": policy_fixed,
+        "fully_verified": policy_fixed and build_pass is True,
+        "outcome_correct": outcome_correct,
+        "confidence": None,
+        "confidence_score": None,
+        "confidence_band": None,
+    }
+
+
+def build_agentic_outcome_summary(results: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    items = list(results)
+    correct_fix = correct_abstain = missed_fix = false_fix = inconclusive = 0
+    for item in items:
+        label = item.get("ground_truth_label")
+        status = item.get("status")
+        if label is True:
+            if status == "SUCCESS":
+                correct_fix += 1
+            elif status == "REFUSED":
+                missed_fix += 1
+            else:
+                inconclusive += 1
+        elif label is False:
+            if status == "REFUSED":
+                correct_abstain += 1
+            elif status == "SUCCESS":
+                false_fix += 1
+            else:
+                inconclusive += 1
+        else:
+            inconclusive += 1
+    total = len(items)
+    correct = correct_fix + correct_abstain
+    return {
+        "total": total,
+        "correct_fix": correct_fix,
+        "correct_abstain": correct_abstain,
+        "missed_fix": missed_fix,
+        "false_fix": false_fix,
+        "inconclusive_error_or_timeout": inconclusive,
+        "correct_outcome_rate": round(correct / total, 4) if total else 0.0,
     }
 
 

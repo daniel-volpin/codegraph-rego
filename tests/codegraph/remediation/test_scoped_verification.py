@@ -9,9 +9,19 @@ from pathlib import Path
 import pytest
 
 from codegraph.ingestion.snapshots import sha256_hex
+from codegraph.policy.engines import DetectionEngine
 from codegraph.remediation.scoped_verification import verify_candidate
 
 OPA_AVAILABLE = shutil.which("opa") is not None
+
+
+def _fake_engine(verify_candidate_fn):
+    return DetectionEngine(
+        name="opengrep",
+        discover_rule_ids=lambda: {"ISO-A.8-CMD-INJECTION"},
+        evaluate=lambda **_kwargs: [],
+        verify_candidate=verify_candidate_fn,
+    )
 
 
 def _write_case(root: Path, source: str, candidate: str) -> tuple[Path, Path]:
@@ -55,6 +65,78 @@ def test_invalid_policy_catalog_returns_structured_error(monkeypatch, tmp_path) 
     assert result["status"] == "OPA_ERROR"
     assert result["error"] == "policy_catalog_invalid"
     assert source.read_text(encoding="utf-8") == BASE_SOURCE
+
+
+def test_scoped_verification_routes_opengrep_rule_to_its_engine_and_passes(monkeypatch, tmp_path) -> None:
+    from codegraph.remediation import scoped_verification
+
+    source, candidate = _write_case(tmp_path, BASE_SOURCE, "public void hash() {}")
+
+    def scripted(*, rule_id, candidate_file_source, source_file_name):
+        if "MD5" in candidate_file_source:
+            return [{"violation_id": rule_id, "rule_id": rule_id, "reason": "tainted"}]
+        return []
+
+    monkeypatch.setattr(scoped_verification, "get_engine", lambda _name: _fake_engine(scripted))
+    monkeypatch.setattr(scoped_verification, "evidence_source_for_rule_id", lambda _rule_id: "opengrep")
+
+    result = verify_candidate(
+        workspace_root=tmp_path,
+        source=source,
+        method_selector="demo.Crypto#hash()",
+        candidate=candidate,
+        rule_id="ISO-A.8-CMD-INJECTION",
+        expected_source_sha256=sha256_hex(source.read_bytes()),
+        work_dir=tmp_path / "work",
+    )
+    assert result["status"] == "POLICY_PASS"
+    assert result["policy_status"] == "PASS"
+    assert result["engine"]["name"] == "opengrep"
+
+
+def test_scoped_verification_opengrep_baseline_not_detected_fails_closed(monkeypatch, tmp_path) -> None:
+    from codegraph.remediation import scoped_verification
+
+    source, candidate = _write_case(tmp_path, BASE_SOURCE, "public void hash() {}")
+
+    monkeypatch.setattr(scoped_verification, "get_engine", lambda _name: _fake_engine(lambda **_kwargs: []))
+    monkeypatch.setattr(scoped_verification, "evidence_source_for_rule_id", lambda _rule_id: "opengrep")
+
+    result = verify_candidate(
+        workspace_root=tmp_path,
+        source=source,
+        method_selector="demo.Crypto#hash()",
+        candidate=candidate,
+        rule_id="ISO-A.8-CMD-INJECTION",
+        expected_source_sha256=sha256_hex(source.read_bytes()),
+        work_dir=tmp_path / "work",
+    )
+    assert result["status"] == "NOT_EVALUATED"
+    assert result["error"] == "baseline_target_rule_not_detected"
+
+
+def test_scoped_verification_opengrep_engine_error_fails_closed(monkeypatch, tmp_path) -> None:
+    from codegraph.remediation import scoped_verification
+
+    source, candidate = _write_case(tmp_path, BASE_SOURCE, "public void hash() {}")
+
+    def raises(**_kwargs):
+        raise RuntimeError("opengrep_unavailable")
+
+    monkeypatch.setattr(scoped_verification, "get_engine", lambda _name: _fake_engine(raises))
+    monkeypatch.setattr(scoped_verification, "evidence_source_for_rule_id", lambda _rule_id: "opengrep")
+
+    result = verify_candidate(
+        workspace_root=tmp_path,
+        source=source,
+        method_selector="demo.Crypto#hash()",
+        candidate=candidate,
+        rule_id="ISO-A.8-CMD-INJECTION",
+        expected_source_sha256=sha256_hex(source.read_bytes()),
+        work_dir=tmp_path / "work",
+    )
+    assert result["status"] == "ENGINE_ERROR"
+    assert result["policy_status"] == "ERROR"
 
 
 @pytest.mark.skipif(not OPA_AVAILABLE, reason="opa binary not found on PATH")

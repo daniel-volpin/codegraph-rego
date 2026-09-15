@@ -46,7 +46,7 @@ class TestConfigSettings(unittest.TestCase):
             Settings(_env_file=None, llm_max_concurrent_requests=0)
 
         with self.assertRaises(ValidationError):
-            Settings(_env_file=None, llm_max_concurrent_requests=9)
+            Settings(_env_file=None, llm_max_concurrent_requests=33)
 
         with self.assertRaises(ValidationError):
             Settings(_env_file=None, llm_max_pending_requests=-1)

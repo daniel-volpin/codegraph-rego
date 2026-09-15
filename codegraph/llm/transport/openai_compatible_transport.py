@@ -390,6 +390,12 @@ def _generate_with_chat_completions(
     if request.tools:
         choices = getattr(response, "choices", None) or []
         msg = choices[0].message if choices else None
+        if choices and not getattr(msg, "tool_calls", None) and not getattr(msg, "content", None):
+            logger.info(
+                "empty_response finish_reason=%s message=%s",
+                getattr(choices[0], "finish_reason", None),
+                msg,
+            )
         tool_calls = []
         for tc in getattr(msg, "tool_calls", None) or []:
             tool_calls.append(

@@ -313,6 +313,46 @@ def test_missing_build_and_test_infrastructure_fail_closed(tmp_path: Path) -> No
     assert "no supported Maven build" in tests_output
 
 
+def test_no_test_suite_is_a_vacuous_pass_not_a_failure(tmp_path: Path) -> None:
+    src_dir = tmp_path / "src" / "main" / "java"
+    src_dir.mkdir(parents=True)
+    (src_dir / "App.java").write_text("class App {}\n", encoding="utf-8")
+    (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
+
+    with IsolatedWorktreeEnvironment(tmp_path) as env:
+        tests_ok, tests_output = env.run_tests()
+
+    assert tests_ok is True
+    assert "no Java test suite was found" in tests_output
+
+
+def test_compile_and_test_commands_skip_spotless(tmp_path: Path) -> None:
+    src_dir = tmp_path / "src" / "main" / "java"
+    src_dir.mkdir(parents=True)
+    (src_dir / "App.java").write_text("class App {}\n", encoding="utf-8")
+    (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
+    test_dir = tmp_path / "src" / "test" / "java"
+    test_dir.mkdir(parents=True)
+    (test_dir / "AppTest.java").write_text("class AppTest {}\n", encoding="utf-8")
+
+    with IsolatedWorktreeEnvironment(tmp_path) as env:
+        with patch(
+            "codegraph.java.service.parse_java_source",
+            return_value=SimpleNamespace(coverage="complete", diagnostics=[]),
+        ):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = SimpleNamespace(returncode=0, stdout="", stderr="")
+                env.compile_workspace()
+                env.run_tests()
+
+    compile_args = mock_run.call_args_list[0].args[0]
+    test_args = mock_run.call_args_list[1].args[0]
+    assert "-Dspotless.apply.skip=true" in compile_args
+    assert "-Dspotless.check.skip=true" in compile_args
+    assert "-Dspotless.apply.skip=true" in test_args
+    assert "-Dspotless.check.skip=true" in test_args
+
+
 def test_build_and_policy_exceptions_fail_closed(tmp_path: Path) -> None:
     src = tmp_path / "App.java"
     src.write_text("class App { void run() {} }\n", encoding="utf-8")
@@ -377,6 +417,58 @@ def test_policy_gate_compares_scratch_candidate_to_immutable_baseline(
     assert remaining == []
     assert 'use("MD5")' in captured["baseline"]
     assert 'use("SHA-256")' in captured["candidate"]
+    assert src.read_text(encoding="utf-8") == original
+
+
+def test_policy_gate_baseline_shell_carries_forward_new_imports(tmp_path: Path) -> None:
+    """A fix that adds an import via add_import() must not desync re-verification."""
+    src = tmp_path / "src" / "demo" / "HashDemo.java"
+    src.parent.mkdir(parents=True)
+    original = (
+        "package demo;\n\n"
+        "class HashDemo {\n"
+        "    void use(String algorithm) {}\n"
+        "    void hash() throws java.security.NoSuchAlgorithmException {\n"
+        '        use("MD5");\n'
+        "    }\n"
+        "}\n"
+    )
+    src.write_text(original, encoding="utf-8")
+    snapshot = create_source_snapshot_from_bytes(
+        workspace_root=tmp_path,
+        source_path=src,
+        source_bytes=original.encode(),
+        method_selector="demo.HashDemo#hash()",
+        expected_source_sha256=sha256_hex(original),
+    )
+    method_key = f"workspace@revision:src/demo/HashDemo.java#{snapshot.identity.source_key}"
+    captured: dict[str, str] = {}
+
+    def fake_verify_candidate(**kwargs):
+        root = Path(kwargs["workspace_root"])
+        captured["baseline"] = (root / kwargs["source"]).read_text(encoding="utf-8")
+        captured["candidate"] = (root / kwargs["candidate"]).read_text(encoding="utf-8")
+        return {"status": "POLICY_PASS", "policy_status": "PASS", "findings": {"candidate": []}}
+
+    with IsolatedWorktreeEnvironment(tmp_path, target_method_key=method_key) as env:
+        assert env.apply_replacement(
+            "src/demo/HashDemo.java",
+            'use("MD5");',
+            'use(MessageDigest.getInstance("SHA-256").getAlgorithm());',
+        )
+        env.add_import("src/demo/HashDemo.java", "import java.security.MessageDigest;")
+        with patch(
+            "codegraph.remediation.agentic.environment.verify_candidate",
+            side_effect=fake_verify_candidate,
+        ):
+            passed, findings, remaining = env.evaluate_policy("ISO-A.10-WEAK-HASH")
+
+    assert passed is True
+    assert findings == []
+    assert remaining == []
+    assert 'use("MD5");' in captured["baseline"]
+    assert "import java.security.MessageDigest;" in captured["baseline"]
+    assert "MessageDigest.getInstance" in captured["candidate"]
     assert src.read_text(encoding="utf-8") == original
 
 

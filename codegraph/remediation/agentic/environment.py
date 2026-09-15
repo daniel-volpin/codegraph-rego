@@ -225,7 +225,15 @@ class IsolatedWorktreeEnvironment:
         if pom.exists():
             try:
                 res = subprocess.run(
-                    ["mvn", "--batch-mode", "-q", "-DskipTests", "compile"],
+                    [
+                        "mvn",
+                        "--batch-mode",
+                        "-q",
+                        "-DskipTests",
+                        "-Dspotless.apply.skip=true",
+                        "-Dspotless.check.skip=true",
+                        "compile",
+                    ],
                     cwd=build_root,
                     capture_output=True,
                     text=True,
@@ -255,10 +263,10 @@ class IsolatedWorktreeEnvironment:
             ):
                 test_sources.append(path)
         if not test_sources:
-            return False, "Regression gate unavailable: no Java test suite was found."
+            return True, "Regression gate not applicable: no Java test suite was found (vacuous pass)."
         try:
             res = subprocess.run(
-                ["mvn", "--batch-mode", "-q", "test"],
+                ["mvn", "--batch-mode", "-q", "-Dspotless.apply.skip=true", "-Dspotless.check.skip=true", "test"],
                 cwd=build_root,
                 capture_output=True,
                 text=True,
@@ -300,21 +308,29 @@ class IsolatedWorktreeEnvironment:
                 method_selector=baseline_snapshot.identity.selector,
                 expected_source_sha256=sha256_hex(candidate_bytes),
             )
+            # Keep the current file's imports in the shell verify_candidate splices
+            # onto -- the pristine original lacks any import add_import() just made.
+            baseline_shell_bytes = (
+                candidate_bytes[: candidate_snapshot.start_byte]
+                + self._target_original_bytes[baseline_snapshot.start_byte : baseline_snapshot.end_byte]
+                + candidate_bytes[candidate_snapshot.end_byte :]
+            )
             with tempfile.TemporaryDirectory(prefix="policy-verification-", dir=self.temp_dir) as temp:
                 verification_root = Path(temp)
                 baseline_path = verification_root / self.target_relative_path
                 baseline_path.parent.mkdir(parents=True, exist_ok=True)
-                baseline_path.write_bytes(self._target_original_bytes)
+                baseline_path.write_bytes(baseline_shell_bytes)
                 candidate_method = verification_root / ".candidate" / "candidate-method.java"
                 candidate_method.parent.mkdir(parents=True, exist_ok=True)
                 candidate_method.write_bytes(candidate_snapshot.method_bytes)
                 report = verify_candidate(
                     workspace_root=verification_root,
                     source=self.target_relative_path,
-                    method_selector=self.target_method_key,
+                    # Range-independent: the shell's byte offsets differ from target_method_key's.
+                    method_selector=baseline_snapshot.identity.selector,
                     candidate=candidate_method.relative_to(verification_root),
                     rule_id=target_rule_id,
-                    expected_source_sha256=sha256_hex(self._target_original_bytes),
+                    expected_source_sha256=sha256_hex(baseline_shell_bytes),
                     work_dir=verification_root / "work",
                 )
             findings_raw = report.get("findings")

@@ -112,7 +112,7 @@ class Settings(BaseSettings):
     llm_max_concurrent_requests: int = Field(
         1,
         ge=1,
-        le=8,
+        le=32,
         validation_alias=AliasChoices("LLM_MAX_CONCURRENT_REQUESTS", "llm_max_concurrent_requests"),
         description="Process-local cap on active provider SDK/client generation calls.",
     )
@@ -167,10 +167,10 @@ class Settings(BaseSettings):
         description="Maximum tokens to generate for explanation calls.",
     )
     llm_max_tokens_remediation: int | None = Field(
-        1024,
+        4096,
         gt=0,
         validation_alias=AliasChoices("LLM_MAX_TOKENS_REMEDIATION", "llm_max_tokens_remediation"),
-        description="Maximum tokens to generate for remediation calls.",
+        description="Maximum tokens to generate for remediation calls, including any reasoning content.",
     )
     llm_model_ttl_seconds: int | None = Field(
         None,
