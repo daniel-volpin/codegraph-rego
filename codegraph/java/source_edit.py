@@ -22,7 +22,7 @@ from codegraph.java.service import (
 )
 
 REQUEST_SCHEMA_VERSION = "codegraph-java-edit-request/v1"
-EDITOR_MAIN_CLASS = "io.github.codegraph.javaparser.SourceEditMain"
+SOURCE_EDIT_COMMAND = "source-edit"
 
 
 def ensure_java_import(
@@ -34,7 +34,7 @@ def ensure_java_import(
     on_demand: bool = False,
     language_level: str | None = None,
 ) -> JavaSourceEditDTO:
-    """Ensure one Java import through the authoritative JDT source editor."""
+    """Ensure one Java import through the authoritative JDT adapter."""
     settings = get_settings()
     source = _validate_source_bytes(source_bytes, settings.java_parser_max_source_bytes)
     safe_relative_path = _validate_relative_path(relative_path)
@@ -72,9 +72,9 @@ def ensure_java_import(
         java,
         f"-Xmx{settings.java_parser_heap_mb}m",
         "-XX:ActiveProcessorCount=1",
-        "-cp",
+        "-jar",
         str(jar),
-        EDITOR_MAIN_CLASS,
+        SOURCE_EDIT_COMMAND,
     ]
     try:
         with _java_parser_gate.acquire(
