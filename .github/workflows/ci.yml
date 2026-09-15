@@ -156,7 +156,7 @@ jobs:
           - name: "policy-java"
             paths: "tests/codegraph/policy tests/codegraph/java"
           - name: "remediation-runtime"
-            paths: "tests/codegraph/remediation/test_apply_fix.py tests/codegraph/remediation/test_agentic_remediation.py tests/codegraph/remediation/test_orchestration_*.py tests/codegraph/remediation/test_scoped_verification.py tests/codegraph/remediation/test_verification.py tests/codegraph/remediation/test_remediation_flow.py"
+            paths: "tests/codegraph/remediation/test_apply_fix.py tests/codegraph/remediation/test_agentic_remediation.py tests/codegraph/remediation/test_agentic_environment_imports.py tests/codegraph/remediation/test_orchestration_*.py tests/codegraph/remediation/test_scoped_verification.py tests/codegraph/remediation/test_verification.py tests/codegraph/remediation/test_remediation_flow.py"
           - name: "remediation-units"
             paths: "tests/codegraph/remediation/test_repair_intent.py tests/codegraph/remediation/test_generation_parsing.py tests/codegraph/remediation/test_comparison.py tests/codegraph/remediation/test_candidate_overlay.py tests/codegraph/remediation/test_patch_compiler*.py tests/codegraph/remediation/test_file_format_preservation.py tests/codegraph/remediation/test_remediation_confidence.py tests/codegraph/remediation/test_ranking.py tests/codegraph/remediation/test_remediation_editing.py tests/codegraph/remediation/test_dossier.py tests/codegraph/remediation/test_attempts_unit.py tests/codegraph/remediation/test_jdt_remediation_cutover.py"
           - name: "ingestion-eval-llm"
@@ -258,15 +258,14 @@ jobs:
         with:
           node-version: "24.21.0"
           cache: "yarn"
-          cache-dependency-path: frontend/yarn.lock
 
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Run frontend lint
+      - name: Lint frontend
         run: yarn lint
 
-      - name: Run frontend unit tests
+      - name: Test frontend
         run: yarn test
 
       - name: Build frontend
@@ -275,14 +274,8 @@ jobs:
   ci-success:
     name: CI success
     if: always()
-    needs:
-      - changes
-      - policy-lint
-      - java-parser
-      - backend-tests
-      - frontend
+    needs: [changes, policy-lint, java-parser, backend-tests, frontend]
     runs-on: ubuntu-latest
-    timeout-minutes: 2
     steps:
       - name: Verify required jobs
         env:
@@ -292,14 +285,8 @@ jobs:
           BACKEND_RESULT: ${{ needs.backend-tests.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
         run: |
-          if [ "$CHANGES_RESULT" != "success" ]; then
-            echo "changes job finished with: $CHANGES_RESULT" >&2
-            exit 1
-          fi
-
-          for result in "$POLICY_RESULT" "$JAVA_RESULT" "$BACKEND_RESULT" "$FRONTEND_RESULT"; do
-            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
-              echo "required CI job finished with: $result" >&2
-              exit 1
-            fi
-          done
+          test "${CHANGES_RESULT}" = "success"
+          test "${POLICY_RESULT}" = "success" -o "${POLICY_RESULT}" = "skipped"
+          test "${JAVA_RESULT}" = "success" -o "${JAVA_RESULT}" = "skipped"
+          test "${BACKEND_RESULT}" = "success" -o "${BACKEND_RESULT}" = "skipped"
+          test "${FRONTEND_RESULT}" = "success" -o "${FRONTEND_RESULT}" = "skipped"
