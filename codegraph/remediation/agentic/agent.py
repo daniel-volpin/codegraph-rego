@@ -118,7 +118,7 @@ def _build_initial_user_prompt(finding: dict[str, Any]) -> str:
     prompt_parts.append(
         "\nAction Plan:\n"
         "1. Call `read_file` with the File Path above to read the full context.\n"
-        "2. Call `edit_file` (and `add_import` if needed) to apply the minimal, secure refactoring.\n"
+        "2. Call `edit_file` (and `ensure_import` if needed) to apply the minimal, secure refactoring.\n"
         "3. Call `run_verification` to check compilation, tests, and policy re-evaluation.\n"
         "4. Call `finish_remediation` once verification passes."
     )
@@ -195,7 +195,7 @@ class AgenticRemediationService:
                 if not tool_calls:
                     LOGGER.info("no_tool_call content=%s", content[:300])
                     messages.append({"role": "assistant", "content": content})
-                    followup = "Please execute a tool call (edit_file, add_import, run_verification, or finish_remediation) to proceed."
+                    followup = "Please execute a tool call (edit_file, ensure_import, run_verification, or finish_remediation) to proceed."
                     messages.append({"role": "user", "content": followup})
                     turns.append(current_turn)
                     continue
