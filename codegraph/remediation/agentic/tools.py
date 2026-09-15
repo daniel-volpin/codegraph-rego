@@ -56,21 +56,26 @@ AGENT_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "add_import",
-            "description": "Add an import statement to a Java file cleanly below package declaration.",
+            "name": "ensure_import",
+            "description": "Ensure one Java type or static-member import through the JDT AST source editor. Provide semantic intent, not Java import syntax.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "relative_path": {
                         "type": "string",
-                        "description": "Relative path to the Java file.",
+                        "description": "Relative path to the Java source file.",
                     },
-                    "import_statement": {
+                    "kind": {
                         "type": "string",
-                        "description": "Full import statement (e.g. 'import java.sql.PreparedStatement;' or 'java.sql.PreparedStatement').",
+                        "enum": ["type", "static_member"],
+                        "description": "Import kind: a Java type or one static member.",
+                    },
+                    "qualified_name": {
+                        "type": "string",
+                        "description": "Qualified type name (e.g. java.sql.PreparedStatement) or qualified static member (e.g. java.util.Collections.emptyList). Do not include import syntax or wildcards.",
                     },
                 },
-                "required": ["relative_path", "import_statement"],
+                "required": ["relative_path", "kind", "qualified_name"],
             },
         },
     },
@@ -128,7 +133,7 @@ AGENT_TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "run_verification",
-            "description": "Trigger the 3-gate verification pipeline on the current workspace: compilation, regression tests, and OPA policy evaluation.",
+            "description": "Trigger the 3-gate verification pipeline on the current workspace: compilation, regression tests, and owning policy/detection-engine re-evaluation.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -231,25 +236,46 @@ class AgentToolExecutor:
                         output=f"Successfully applied edit to {rel}",
                         success=True,
                     )
-                else:
-                    LOGGER.info("edit_file no_match rel=%s old_str=%s", rel, old_str[:200])
-                    return AgentToolResult(
-                        call_id=tool_call.call_id,
-                        name=name,
-                        output=f"Failed to find exact match for old_str in {rel}. Re-read the file to check line content and whitespace.",
-                        success=False,
-                        error="no_match",
-                    )
-
-            elif name == "add_import":
-                rel = args.get("relative_path", "")
-                stmt = args.get("import_statement", "")
-                ok = self.env.add_import(rel, stmt)
+                LOGGER.info("edit_file no_match rel=%s old_str=%s", rel, old_str[:200])
                 return AgentToolResult(
                     call_id=tool_call.call_id,
                     name=name,
-                    output=f"Successfully ensured import '{stmt}' in {rel}",
-                    success=True,
+                    output=f"Failed to find exact match for old_str in {rel}. Re-read the file to check line content and whitespace.",
+                    success=False,
+                    error="no_match",
+                )
+
+            elif name == "ensure_import":
+                rel = args.get("relative_path", "")
+                kind = args.get("kind", "")
+                qualified_name = args.get("qualified_name", "")
+                if kind not in {"type", "static_member"}:
+                    return AgentToolResult(
+                        call_id=tool_call.call_id,
+                        name=name,
+                        output="kind must be 'type' or 'static_member'",
+                        success=False,
+                        error="invalid_import_kind",
+                    )
+                result = self.env.ensure_import(
+                    rel,
+                    qualified_name,
+                    is_static=kind == "static_member",
+                    on_demand=False,
+                )
+                summary = {
+                    "status": result.status,
+                    "kind": kind,
+                    "qualified_name": result.qualified_name,
+                    "reason": result.reason,
+                    "errors": result.errors,
+                }
+                return AgentToolResult(
+                    call_id=tool_call.call_id,
+                    name=name,
+                    output=json.dumps(summary, indent=2),
+                    success=result.status != "REJECTED",
+                    error=result.reason if result.status == "REJECTED" else None,
                 )
 
             elif name == "run_verification":
@@ -279,14 +305,13 @@ class AgentToolExecutor:
                 reason = args.get("reason", "")
                 return AgentToolResult(call_id=tool_call.call_id, name=name, output=reason, success=True)
 
-            else:
-                return AgentToolResult(
-                    call_id=tool_call.call_id,
-                    name=name,
-                    output=f"Unknown tool: {name}",
-                    success=False,
-                    error="unknown_tool",
-                )
+            return AgentToolResult(
+                call_id=tool_call.call_id,
+                name=name,
+                output=f"Unknown tool: {name}",
+                success=False,
+                error="unknown_tool",
+            )
         except Exception as exc:
             return AgentToolResult(
                 call_id=tool_call.call_id,

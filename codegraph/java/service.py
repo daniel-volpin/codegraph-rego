@@ -17,10 +17,13 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from codegraph.config import Settings, get_settings
+from codegraph.java.edit_models import JavaSourceEditDTO
 from codegraph.java.models import ParsedJavaFileDTO
 
 REQUEST_SCHEMA_VERSION = "codegraph-java-request/v1"
 RESPONSE_SCHEMA_VERSION = "codegraph-java/v1"
+EDIT_REQUEST_SCHEMA_VERSION = "codegraph-java-edit-request/v1"
+SOURCE_EDIT_COMMAND = "source-edit"
 EXPECTED_BACKEND = "eclipse-jdt"
 JDT_BACKEND_VERSION = "3.47.0"
 ADAPTER_VERSION = "0.1.0"
@@ -100,6 +103,8 @@ _java_parser_gate = _JavaParserAdmissionGate()
 
 
 class JavaParserService:
+    """Single Python boundary for all JDT adapter operations."""
+
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
@@ -115,9 +120,7 @@ class JavaParserService:
     ) -> ParsedJavaFileDTO:
         source = self._validate_source_bytes(source_bytes)
         safe_relative_path = self._validate_relative_path(relative_path)
-        level = self._settings.java_parser_language_level if language_level is None else language_level
-        if level not in {str(value) for value in range(8, 26)}:
-            raise JavaParserInputError("language_level must be a Java release from 8 through 25.")
+        level = self._resolve_language_level(language_level)
         if not isinstance(resolve_bindings, bool):
             raise JavaParserInputError("resolve_bindings must be a boolean.")
         request = self._build_request(
@@ -128,17 +131,7 @@ class JavaParserService:
             resolve_bindings=resolve_bindings,
             language_level=level,
         )
-        request_bytes = (json.dumps(request, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")
-
-        with _java_parser_gate.acquire(
-            max_active=self._settings.java_parser_max_concurrent_requests,
-            queue_timeout_seconds=self._settings.java_parser_queue_timeout_seconds,
-        ):
-            stdout, stderr, return_code = self._invoke_parser(request_bytes)
-
-        if return_code != 0:
-            excerpt = _stderr_excerpt(stderr)
-            raise JavaParserUnavailableError(f"Java parser exited with exit code {return_code}. stderr: {excerpt}")
+        stdout = self._invoke_adapter(self._encode_request(request))
 
         parsed = self._validate_response(stdout, source, safe_relative_path)
         if parsed.provenance.language_level != level:
@@ -146,6 +139,63 @@ class JavaParserService:
         if parsed.provenance.resolution_enabled != resolve_bindings:
             raise JavaParserProtocolError("Java parser resolution_enabled did not match the request.")
         return parsed
+
+    def ensure_import(
+        self,
+        source_bytes: bytes,
+        *,
+        relative_path: str,
+        qualified_name: str,
+        is_static: bool = False,
+        on_demand: bool = False,
+        language_level: str | None = None,
+    ) -> JavaSourceEditDTO:
+        """Ensure one import through the same bounded JDT process boundary used for parsing."""
+        source = self._validate_source_bytes(source_bytes)
+        safe_relative_path = self._validate_relative_path(relative_path)
+        level = self._resolve_language_level(language_level)
+        if not isinstance(qualified_name, str) or not qualified_name:
+            raise JavaParserInputError("qualified_name must be a non-empty string.")
+        if not isinstance(is_static, bool) or not isinstance(on_demand, bool):
+            raise JavaParserInputError("is_static and on_demand must be booleans.")
+
+        request = {
+            "schema_version": EDIT_REQUEST_SCHEMA_VERSION,
+            "operation": "ensure_import",
+            "relative_path": safe_relative_path,
+            "source_base64": base64.b64encode(source).decode("ascii"),
+            "language_level": level,
+            "qualified_name": qualified_name,
+            "is_static": is_static,
+            "on_demand": on_demand,
+        }
+        stdout = self._invoke_adapter(self._encode_request(request), command=(SOURCE_EDIT_COMMAND,))
+
+        try:
+            result = JavaSourceEditDTO.model_validate_json(stdout)
+        except ValidationError as exc:
+            issues = "; ".join(
+                f"{'.'.join(map(str, issue['loc'])) or '<root>'}: {issue['type']}"
+                for issue in exc.errors(include_input=False, include_context=False)[:5]
+            )
+            raise JavaParserProtocolError(f"Java source editor returned invalid JSON: {issues}") from exc
+
+        expected_before = hashlib.sha256(source).hexdigest()
+        if result.relative_path != safe_relative_path:
+            raise JavaParserProtocolError("Java source editor relative_path did not match the request.")
+        if result.qualified_name != qualified_name:
+            raise JavaParserProtocolError("Java source editor qualified_name did not match the request.")
+        if result.is_static != is_static or result.on_demand != on_demand:
+            raise JavaParserProtocolError("Java source editor import flags did not match the request.")
+        if result.source_sha256_before != expected_before:
+            raise JavaParserProtocolError("Java source editor source_sha256_before did not match the request bytes.")
+        return result
+
+    def _resolve_language_level(self, language_level: str | None) -> str:
+        level = self._settings.java_parser_language_level if language_level is None else language_level
+        if level not in {str(value) for value in range(8, 26)}:
+            raise JavaParserInputError("language_level must be a Java release from 8 through 25.")
+        return level
 
     def _validate_source_bytes(self, source_bytes: bytes) -> bytes:
         if not isinstance(source_bytes, bytes):
@@ -162,8 +212,8 @@ class JavaParserService:
         return source_bytes
 
     def _validate_relative_path(self, relative_path: str) -> str:
-        if "\x00" in relative_path:
-            raise JavaParserInputError("relative_path must not contain NUL bytes.")
+        if not isinstance(relative_path, str) or "\x00" in relative_path:
+            raise JavaParserInputError("relative_path must be a string without NUL bytes.")
         path = Path(relative_path)
         if path.is_absolute() or ".." in path.parts or relative_path in {"", "."}:
             raise JavaParserInputError("relative_path must be a non-absolute path without '..' segments.")
@@ -209,7 +259,25 @@ class JavaParserService:
             resolved.append(path.resolve())
         return tuple(resolved)
 
-    def _invoke_parser(self, request_bytes: bytes) -> tuple[bytes, bytes, int]:
+    @staticmethod
+    def _encode_request(request: dict[str, Any]) -> bytes:
+        return (json.dumps(request, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")
+
+    def _invoke_adapter(self, request_bytes: bytes, *, command: tuple[str, ...] = ()) -> bytes:
+        with _java_parser_gate.acquire(
+            max_active=self._settings.java_parser_max_concurrent_requests,
+            queue_timeout_seconds=self._settings.java_parser_queue_timeout_seconds,
+        ):
+            stdout, stderr, return_code = self._invoke_process(request_bytes, command=command)
+
+        if return_code != 0:
+            excerpt = _stderr_excerpt(stderr)
+            raise JavaParserUnavailableError(
+                f"Java JDT adapter exited with exit code {return_code}. stderr: {excerpt}"
+            )
+        return stdout
+
+    def _invoke_process(self, request_bytes: bytes, *, command: tuple[str, ...]) -> tuple[bytes, bytes, int]:
         jar = Path(self._settings.java_parser_jar)
         if not jar.is_file():
             raise JavaParserUnavailableError(
@@ -219,18 +287,19 @@ class JavaParserService:
 
         java = shutil.which("java")
         if java is None:
-            raise JavaParserUnavailableError("Java parser requires a 'java' executable on PATH.")
+            raise JavaParserUnavailableError("Java JDT adapter requires a 'java' executable on PATH.")
 
-        command = [
+        process_command = [
             java,
             f"-Xmx{self._settings.java_parser_heap_mb}m",
             "-XX:ActiveProcessorCount=1",
             "-jar",
             str(jar),
+            *command,
         ]
         try:
             process = subprocess.Popen(
-                command,
+                process_command,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -239,7 +308,7 @@ class JavaParserService:
                 bufsize=0,
             )
         except OSError as exc:
-            raise JavaParserUnavailableError(f"Failed to start Java parser subprocess: {exc}") from exc
+            raise JavaParserUnavailableError(f"Failed to start Java JDT adapter subprocess: {exc}") from exc
 
         try:
             return _collect_process_output(
@@ -310,6 +379,25 @@ def parse_java_source(
         source_roots=source_roots,
         classpath=classpath,
         resolve_bindings=resolve_bindings,
+        language_level=language_level,
+    )
+
+
+def ensure_java_import(
+    source_bytes: bytes,
+    *,
+    relative_path: str,
+    qualified_name: str,
+    is_static: bool = False,
+    on_demand: bool = False,
+    language_level: str | None = None,
+) -> JavaSourceEditDTO:
+    return JavaParserService(get_settings()).ensure_import(
+        source_bytes,
+        relative_path=relative_path,
+        qualified_name=qualified_name,
+        is_static=is_static,
+        on_demand=on_demand,
         language_level=language_level,
     )
 

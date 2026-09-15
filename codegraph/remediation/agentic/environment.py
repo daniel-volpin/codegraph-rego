@@ -14,7 +14,8 @@ from typing import Any
 
 from codegraph.db import shared_neo4j_driver
 from codegraph.ingestion.snapshots import create_source_snapshot_from_bytes, sha256_hex
-from codegraph.java.service import parse_java_source
+from codegraph.java.edit_models import JavaSourceEditDTO
+from codegraph.java.service import ensure_java_import, parse_java_source
 from codegraph.remediation.agentic.contracts import AgentVerificationStatus
 from codegraph.remediation.method_key_paths import parse_method_key_relative_path
 from codegraph.remediation.scoped_verification import verify_candidate
@@ -159,38 +160,31 @@ class IsolatedWorktreeEnvironment:
         target.write_text(updated, encoding="utf-8")
         return True
 
-    def add_import(self, relative_path: str, import_statement: str) -> bool:
-        """Add an import statement below the package declaration or at top of file."""
+    def ensure_import(
+        self,
+        relative_path: str,
+        qualified_name: str,
+        *,
+        is_static: bool = False,
+        on_demand: bool = False,
+    ) -> JavaSourceEditDTO:
+        """Ensure a Java import through the authoritative JDT source editor."""
         target = self.resolve_path(relative_path)
         if not target.is_file():
             raise FileNotFoundError(f"File not found: {relative_path}")
-        text = target.read_text(encoding="utf-8")
-        stmt = import_statement.strip().rstrip(";")
-        if not re.match(r"^import\s+", stmt):
-            stmt = f"import {stmt}"
-        stmt += ";"
-        if stmt in text:
-            return True  # Already present
-
-        lines = text.splitlines(keepends=True)
-        pkg_idx = -1
-        last_import_idx = -1
-        for idx, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped.startswith("package "):
-                pkg_idx = idx
-            elif stripped.startswith("import "):
-                last_import_idx = idx
-
-        if last_import_idx >= 0:
-            lines.insert(last_import_idx + 1, f"{stmt}\n")
-        elif pkg_idx >= 0:
-            lines.insert(pkg_idx + 1, f"\n{stmt}\n")
-        else:
-            lines.insert(0, f"{stmt}\n")
-
-        target.write_text("".join(lines), encoding="utf-8")
-        return True
+        if target.suffix != ".java":
+            raise ValueError(f"Java import edits require a .java file: {relative_path}")
+        canonical_relative_path = target.relative_to(self.scratch_root).as_posix()
+        result = ensure_java_import(
+            target.read_bytes(),
+            relative_path=canonical_relative_path,
+            qualified_name=qualified_name,
+            is_static=is_static,
+            on_demand=on_demand,
+        )
+        if result.status == "APPLIED":
+            target.write_bytes(result.source_bytes)
+        return result
 
     def _find_build_root(self) -> Path:
         """Find the Maven pom.xml root in the workspace or subdirectories."""
@@ -312,7 +306,7 @@ class IsolatedWorktreeEnvironment:
                 expected_source_sha256=sha256_hex(candidate_bytes),
             )
             # Keep the current file's imports in the shell verify_candidate splices
-            # onto -- the pristine original lacks any import add_import() just made.
+            # onto -- the pristine original lacks any import ensure_import() just made.
             baseline_shell_bytes = (
                 candidate_bytes[: candidate_snapshot.start_byte]
                 + self._target_original_bytes[baseline_snapshot.start_byte : baseline_snapshot.end_byte]
