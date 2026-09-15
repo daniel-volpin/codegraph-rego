@@ -1,66 +1,45 @@
-# Contributing to CodeGraph
+# Contributing
 
-CodeGraph is a benchmark-backed JVM security and compliance framework: graph-based code understanding, ISO-aligned policy evaluation, grounded LLM explanations, and bounded remediation.
+CodeGraph is a Java security and compliance research project. Contributions should preserve reproducibility, evidence provenance, and the repository's fail-closed analysis/remediation contracts.
 
-## Code of Conduct
+Read [`AGENTS.md`](./AGENTS.md) before making substantive changes. It is the canonical engineering guide for architecture invariants, policy ownership, remediation safety, and validation expectations.
 
-All contributors are expected to uphold the [Contributor Covenant Code of Conduct](./CODE_OF_CONDUCT.md).
-
-## Scientific & Architectural Boundaries
-
-CodeGraph is a **benchmark-backed research artifact**. To preserve scientific reproducibility and thesis evaluation validity:
-
-1. **Protect Canonical Evidence**: Do not modify or overwrite tracked evidence outputs under `outputs/thesis_final_*` or `outputs/canonical_manifest.sha256`.
-2. **Protect Benchmark Mappings**: Do not silently alter control mappings or testcase selections in `configs/benchmark/`.
-3. **Protect Policy & Remediation Semantics**: Do not change Rego policy logic in `policy/` or confidence gating/disposition contracts in `codegraph/remediation/` without explicit rationale and updated tests.
-4. **Keep Architecture Layers Clean**: Keep HTTP routers thin (`api/routers/`) and business logic encapsulated under `codegraph/`.
-5. **Contract Alignment**: Avoid frontend/backend contract drift. When modifying API models in `api/models/validation.py`, update `frontend/src/lib/schemas.ts` (Zod schemas).
-
-## Development Setup
-
-### Prerequisites
-
-- Python 3.14+ (the project pins 3.14.7)
-- Node.js 24+ and Yarn 1.22+
-- OPA `v1.20.2` (installed into `.venv/bin` by `make install`)
-- JDK 21+ and Maven for the Eclipse JDT adapter and remediation build re-verification
-- Neo4j 5.x through a Docker- or Podman-compatible Compose runtime
-- For benchmark evaluation only: `make benchmark-corpus` clones the OWASP Benchmark
-  corpus into a gitignored `./BenchmarkJava`. It is GPL-2.0, so it is never committed; see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md). The test suite does not need it.
-
-### Environment Preparation
+## Setup
 
 ```bash
-# Clone repository
 git clone https://github.com/daniel-volpin/codegraph-rego.git
 cd codegraph-rego
-
-# Install Python and frontend dependencies
 make install
-
-# Copy environment template
 cp .env.example .env
 ```
 
-## Local Validation Suite
+See [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md) for runtime requirements and evaluation setup.
 
-Before opening a pull request, run the full validation suite locally to ensure all quality gates pass:
+## Pull Requests
+
+- Use a focused feature branch; do not make substantial changes directly on `main`.
+- Keep the change scoped to one goal and preserve unrelated work.
+- Add or update tests for changed behavior.
+- Keep backend DTOs and `frontend/src/lib/schemas.ts` aligned.
+- Do not silently change benchmark mappings, engine ownership, remediation tiers, or canonical evidence.
+- Do not overwrite versioned research artifacts for an incidental rerun.
+- Use clear commit messages such as `feat:`, `fix:`, `docs:`, `test:`, or `chore:`.
+
+## Validation
+
+Run the gates relevant to the change:
 
 ```bash
 uv run ruff check .
 uv run python -m pytest -q
 PATH="$(pwd)/.venv/bin:$PATH" make policy-check
-(cd frontend && yarn lint && yarn test && yarn build)
+make opengrep-test
 make docs-check
-git diff --check
+(cd frontend && yarn lint && yarn test && yarn build)
 ```
 
-`yarn test:e2e` drives Playwright against a running stack, so it is not part of this list and CI does not run it. Use it when a change touches an end-to-end flow.
+Java-adapter changes also require `make java-parser-build`. Benchmark-sensitive changes require the focused evaluation commands in [`REPRODUCIBILITY.md`](./REPRODUCIBILITY.md).
 
-## Submitting Pull Requests
+If a required external prerequisite is unavailable, state that clearly in the pull request instead of substituting a weaker check and calling it equivalent.
 
-- **Small & Focused**: Keep pull requests atomic and focused on a single maintainability, fix, or enhancement goal.
-- **Include Tests**: Add regression or unit tests for any bug fix or clean-up.
-- **Clear Commit Messages**: Use clear conventional commit prefixes (e.g., `feat:`, `fix:`, `docs:`, `chore:`, `test:`).
-
-Release versioning and publication requirements are documented in [`docs/release_policy.md`](./docs/release_policy.md).
+All contributors are expected to follow [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md). Security issues should be reported privately as described in [`SECURITY.md`](./SECURITY.md).
