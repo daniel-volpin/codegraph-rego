@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from codegraph.remediation.agentic.contracts import AgentToolCall, AgentToolResult
 from codegraph.remediation.agentic.environment import IsolatedWorktreeEnvironment
+
+LOGGER = logging.getLogger(__name__)
 
 AGENT_TOOL_DEFINITIONS = [
     {
@@ -153,7 +156,7 @@ AGENT_TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "refuse_remediation",
-            "description": "Refuse automatic remediation if a safe, semantically sound fix cannot be determined without human design decisions.",
+            "description": "Refuse to change code, either because the finding is already safe (likely false positive) or because a safe fix needs a human design decision.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -179,6 +182,7 @@ class AgentToolExecutor:
     def execute(self, tool_call: AgentToolCall) -> AgentToolResult:
         name = tool_call.name
         args = tool_call.arguments
+        LOGGER.info("tool_call name=%s args=%s", name, json.dumps(args)[:200])
         try:
             if name == "read_file":
                 rel = args.get("relative_path", "")
@@ -228,6 +232,7 @@ class AgentToolExecutor:
                         success=True,
                     )
                 else:
+                    LOGGER.info("edit_file no_match rel=%s old_str=%s", rel, old_str[:200])
                     return AgentToolResult(
                         call_id=tool_call.call_id,
                         name=name,

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Merge per-category agentic remediation runs into one combined report.
-
-Each case belongs to exactly one category, so merging is a plain
-concatenation of every group's results.jsonl -- unlike detection-eval
-composition, there is no cross-category rule-firing overlap to reconcile.
-"""
+"""Merge per-category agentic remediation runs into one combined report."""
 
 from __future__ import annotations
 

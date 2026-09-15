@@ -167,10 +167,10 @@ class Settings(BaseSettings):
         description="Maximum tokens to generate for explanation calls.",
     )
     llm_max_tokens_remediation: int | None = Field(
-        1024,
+        4096,
         gt=0,
         validation_alias=AliasChoices("LLM_MAX_TOKENS_REMEDIATION", "llm_max_tokens_remediation"),
-        description="Maximum tokens to generate for remediation calls.",
+        description="Maximum tokens to generate for remediation calls, including any reasoning content.",
     )
     llm_model_ttl_seconds: int | None = Field(
         None,

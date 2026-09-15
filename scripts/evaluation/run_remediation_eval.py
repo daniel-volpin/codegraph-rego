@@ -42,13 +42,7 @@ LOGGER = logging.getLogger("codegraph.eval.remediation")
 
 
 def _rebase_method_key(method_key: str, prefix: str) -> str:
-    """Rebase both the leading path and the embedded #file: path onto work_root.
-
-    parse_method_selector's canonical_key is everything after the method_key's
-    first "#" (the #file:<path> segment onward), matched directly against the
-    freshly re-parsed method.source_key -- so #file:<path> must carry the same
-    prefix as the leading path, or the two diverge and selector matching fails.
-    """
+    """Rebase both the leading path and the embedded #file: path onto work_root."""
     head, tail = method_key.split(":", 1)
     tail = tail.replace("#file:", f"#file:{prefix}/", 1)
     return f"{head}:{prefix}/{tail}"

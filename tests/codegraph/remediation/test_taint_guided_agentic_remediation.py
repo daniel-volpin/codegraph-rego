@@ -151,7 +151,7 @@ class TestTaintGuidedAgenticRemediation(unittest.TestCase):
 
             turn_iter = iter(turns_responses)
 
-            def mock_client(messages, tools, model):
+            def mock_client(messages, tools, model, **kwargs):
                 return next(turn_iter)
 
             verification = AgentVerificationStatus(

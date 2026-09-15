@@ -25,19 +25,39 @@ from codegraph.remediation.contracts import get_fix_strategy
 LOGGER = logging.getLogger(__name__)
 
 SYSTEM_PROMPT_TEMPLATE = """You are an expert autonomous security and software engineering agent.
-Your objective is to remediate a verified security violation in a Java codebase by refactoring source code.
+Your objective is to assess a flagged security finding in a Java codebase and, if it is a genuine
+vulnerability, remediate it at its root cause. A finding is an automated policy match, not a
+confirmed exploit.
 
 Rules & Invariants:
-1. Make precise, surgical edits to remediate the vulnerability at its root cause without breaking existing functionality.
-2. You can read files, edit code across multiple files, and add imports as needed.
-3. Every fix MUST satisfy 3 independent gates:
+1. First check whether the flagged input actually reaches the sink unprotected. Most findings are
+   genuine; edit only when the evidence supports that. If it is already validated, escaped, or
+   otherwise neutralized, call 'refuse_remediation' explaining why it is already safe.
+2. Make precise, surgical edits to remediate the vulnerability at its root cause without breaking existing functionality.
+3. You can read files, edit code across multiple files, and add imports as needed.
+4. Every fix MUST satisfy 3 independent gates:
    - Compilation Gate: JDT / javac must compile with 0 errors.
    - Regression Gate: Project test suite must pass 100%.
    - Policy Gate: The targeted OPA security rule must be fully satisfied (0 violations).
-4. When you have applied changes, call 'run_verification' to check all 3 gates.
-5. If verification reports compiler errors or test failures, read the diagnostics and iteratively fix them.
-6. When all 3 gates pass, call 'finish_remediation' with a clear explanation.
-7. If the vulnerability fundamentally cannot be safely automated without external policy or human architectural decisions, call 'refuse_remediation'.
+5. When you have applied changes, call 'run_verification' to check all 3 gates.
+6. If verification reports compiler errors or test failures, read the diagnostics and iteratively fix them.
+7. When all 3 gates pass, call 'finish_remediation' with a clear explanation.
+8. If the vulnerability fundamentally cannot be safely automated without external policy or human architectural decisions, call 'refuse_remediation'.
+9. The Policy Gate flags any untrusted value reaching an argument of the sink call. Clear it either
+   by restructuring the code so no untrusted value reaches the sink's arguments at all (e.g. binding
+   it through a callback/variable the sink resolves separately), or by routing the value through a
+   sanitizer call before it reaches the sink. A hand-written check or custom escaping logic is not
+   something the Policy Gate can recognize as clearing taint.
+10. Spend at most 1-2 tool calls searching for an existing sanitizer convention in this codebase
+    (e.g. a search_code call). If you don't find one immediately, use your own knowledge of standard
+    security libraries for this language and proceed to edit -- do not keep searching. Make your
+    first edit_file call within the first 3 turns.
+11. After 'run_verification' reports the Policy Gate still failing on an edit that looks correct,
+    reconsider whether your change actually removed the untrusted value from the sink's arguments,
+    rather than repeating the same shape of edit.
+12. Decide and act on your first pass through the evidence. Do not re-derive the same taint analysis
+    more than once -- if you notice yourself repeating a prior conclusion, stop and call a tool with
+    your current best judgment instead of reconsidering again.
 """
 
 
@@ -161,6 +181,7 @@ class AgenticRemediationService:
                         messages,
                         tools=AGENT_TOOL_DEFINITIONS,
                         model=model or settings.llm_model,
+                        max_tokens=settings.llm_max_tokens_remediation,
                     )
                 except Exception as exc:
                     LOGGER.error("LLM client call failed in agent turn: %s", exc)
@@ -172,7 +193,7 @@ class AgenticRemediationService:
                 current_turn = AgentTurn(role="assistant", content=content, tool_calls=tool_calls)
 
                 if not tool_calls:
-                    # Model provided text without tool calls; prompt it to take action or conclude
+                    LOGGER.info("no_tool_call content=%s", content[:300])
                     messages.append({"role": "assistant", "content": content})
                     followup = "Please execute a tool call (edit_file, add_import, run_verification, or finish_remediation) to proceed."
                     messages.append({"role": "user", "content": followup})

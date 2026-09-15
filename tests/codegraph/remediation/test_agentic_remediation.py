@@ -421,13 +421,7 @@ def test_policy_gate_compares_scratch_candidate_to_immutable_baseline(
 
 
 def test_policy_gate_baseline_shell_carries_forward_new_imports(tmp_path: Path) -> None:
-    """A fix that needs a new import must not desync baseline/candidate re-verification.
-
-    add_import() edits the file outside the target method's byte range, so a
-    baseline reconstructed from the pristine original bytes would lack that
-    import while the candidate method references the newly-imported type --
-    a spurious mismatch, not a real difference in the method under test.
-    """
+    """A fix that adds an import via add_import() must not desync re-verification."""
     src = tmp_path / "src" / "demo" / "HashDemo.java"
     src.parent.mkdir(parents=True)
     original = (
@@ -472,11 +466,7 @@ def test_policy_gate_baseline_shell_carries_forward_new_imports(tmp_path: Path) 
     assert passed is True
     assert findings == []
     assert remaining == []
-    # The baseline shell keeps the original (vulnerable) method body...
     assert 'use("MD5");' in captured["baseline"]
-    # ...but must carry the new import forward from the current file, even
-    # though that edit sits outside the method's byte range. The candidate is
-    # just the replaced method fragment, so it never carries imports itself.
     assert "import java.security.MessageDigest;" in captured["baseline"]
     assert "MessageDigest.getInstance" in captured["candidate"]
     assert src.read_text(encoding="utf-8") == original
