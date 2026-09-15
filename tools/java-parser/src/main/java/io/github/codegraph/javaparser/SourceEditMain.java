@@ -24,6 +24,7 @@ import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.compiler.IProblem;
 import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.ASTParser;
+import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.ImportDeclaration;
 import org.eclipse.jdt.core.dom.rewrite.ASTRewrite;
@@ -88,6 +89,11 @@ public final class SourceEditMain {
             }
         }
 
+        Response structuralConflict = structuralConflict(request, original);
+        if (structuralConflict != null) {
+            return structuralConflict;
+        }
+
         ImportDeclaration importNode;
         try {
             importNode = original.getAST().newImportDeclaration();
@@ -136,6 +142,48 @@ public final class SourceEditMain {
                     "rewrite_failed",
                     List.of(ex.getClass().getSimpleName() + ": " + safe(ex.getMessage())));
         }
+    }
+
+    private static Response structuralConflict(Request request, CompilationUnit unit) {
+        if (request.isStatic || request.onDemand) {
+            return null;
+        }
+        String requestedSimpleName = simpleName(request.qualifiedName);
+        for (Object item : unit.imports()) {
+            ImportDeclaration existing = (ImportDeclaration) item;
+            if (!existing.isStatic()
+                    && !existing.isOnDemand()
+                    && simpleName(existing.getName().getFullyQualifiedName()).equals(requestedSimpleName)
+                    && !existing.getName().getFullyQualifiedName().equals(request.qualifiedName)) {
+                return response(
+                        request,
+                        "REJECTED",
+                        request.sourceBytes,
+                        "simple_name_conflict",
+                        List.of(
+                                "Simple name '"
+                                        + requestedSimpleName
+                                        + "' is already imported from "
+                                        + existing.getName().getFullyQualifiedName()));
+            }
+        }
+        for (Object item : unit.types()) {
+            if (item instanceof AbstractTypeDeclaration type
+                    && type.getName().getIdentifier().equals(requestedSimpleName)) {
+                return response(
+                        request,
+                        "REJECTED",
+                        request.sourceBytes,
+                        "declared_type_conflict",
+                        List.of("Compilation unit already declares type '" + requestedSimpleName + "'."));
+            }
+        }
+        return null;
+    }
+
+    private static String simpleName(String qualifiedName) {
+        int separator = qualifiedName.lastIndexOf('.');
+        return separator < 0 ? qualifiedName : qualifiedName.substring(separator + 1);
     }
 
     private static CompilationUnit parse(String source, String relativePath, String languageLevel) {
@@ -227,9 +275,17 @@ public final class SourceEditMain {
         if (request.relativePath == null || request.relativePath.isBlank()) {
             fatal("relative_path is required");
         }
-        Path relativePath = Path.of(request.relativePath).normalize();
-        if (relativePath.isAbsolute() || relativePath.startsWith("..")) {
+        if (request.relativePath.indexOf('\0') >= 0) {
+            fatal("relative_path must not contain NUL bytes");
+        }
+        Path relativePath = Path.of(request.relativePath);
+        if (relativePath.isAbsolute() || request.relativePath.equals(".")) {
             fatal("relative_path must be a non-absolute path without '..' segments");
+        }
+        for (Path segment : relativePath) {
+            if (segment.toString().equals("..")) {
+                fatal("relative_path must be a non-absolute path without '..' segments");
+            }
         }
         if (request.sourceBase64 == null) {
             fatal("source_base64 is required");
