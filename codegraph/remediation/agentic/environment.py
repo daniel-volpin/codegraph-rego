@@ -15,8 +15,7 @@ from typing import Any
 from codegraph.db import shared_neo4j_driver
 from codegraph.ingestion.snapshots import create_source_snapshot_from_bytes, sha256_hex
 from codegraph.java.edit_models import JavaSourceEditDTO
-from codegraph.java.service import parse_java_source
-from codegraph.java.source_edit import ensure_java_import
+from codegraph.java.service import ensure_java_import, parse_java_source
 from codegraph.remediation.agentic.contracts import AgentVerificationStatus
 from codegraph.remediation.method_key_paths import parse_method_key_relative_path
 from codegraph.remediation.scoped_verification import verify_candidate
