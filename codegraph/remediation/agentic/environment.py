@@ -165,10 +165,13 @@ class IsolatedWorktreeEnvironment:
         if not target.is_file():
             raise FileNotFoundError(f"File not found: {relative_path}")
         text = target.read_text(encoding="utf-8")
-        stmt = import_statement.strip().rstrip(";") + ";"
+        stmt = import_statement.strip().rstrip(";")
+        if not re.match(r"^import\s+", stmt):
+            stmt = f"import {stmt}"
+        stmt += ";"
         if stmt in text:
             return True  # Already present
-        
+
         lines = text.splitlines(keepends=True)
         pkg_idx = -1
         last_import_idx = -1
