@@ -3,18 +3,28 @@
 import base64
 import hashlib
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from codegraph.java.edit_models import JavaSourceEditDTO
 from codegraph.remediation.agentic import IsolatedWorktreeEnvironment
+from codegraph.remediation.agentic.contracts import AgentToolCall
+from codegraph.remediation.agentic.tools import AgentToolExecutor
 
 
-def _edit_result(source: bytes, *, status: str, reason: str = "import_added") -> JavaSourceEditDTO:
+def _edit_result(
+    source: bytes,
+    *,
+    status: str,
+    reason: str = "import_added",
+    qualified_name: str = "java.util.List",
+    is_static: bool = False,
+) -> JavaSourceEditDTO:
     before = b"package demo;\n\npublic class Example {}\n"
     return JavaSourceEditDTO(
         status=status,
         relative_path="src/demo/Example.java",
-        qualified_name="java.util.List",
+        qualified_name=qualified_name,
+        is_static=is_static,
         source_sha256_before=hashlib.sha256(before).hexdigest(),
         source_sha256_after=hashlib.sha256(source).hexdigest(),
         source_byte_length=len(source),
@@ -65,3 +75,61 @@ def test_ensure_import_rejection_never_mutates_scratch_source(tmp_path: Path) ->
     assert result.status == "REJECTED"
     assert scratch.encode() == original
     assert src.read_bytes() == original
+
+
+def test_agent_tool_ensure_import_maps_semantic_kinds() -> None:
+    cases = (
+        ("type", "java.util.List", False),
+        ("static_member", "java.util.Collections.emptyList", True),
+    )
+
+    for kind, qualified_name, is_static in cases:
+        env = Mock()
+        rewritten = f"import {'static ' if is_static else ''}{qualified_name};\nclass Example {{}}\n".encode()
+        env.ensure_import.return_value = _edit_result(
+            rewritten,
+            status="APPLIED",
+            qualified_name=qualified_name,
+            is_static=is_static,
+        )
+        executor = AgentToolExecutor(env, target_rule_id="TEST-RULE")
+        result = executor.execute(
+            AgentToolCall(
+                call_id=f"call-{kind}",
+                name="ensure_import",
+                arguments={
+                    "relative_path": "src/demo/Example.java",
+                    "kind": kind,
+                    "qualified_name": qualified_name,
+                },
+            )
+        )
+
+        assert result.success is True
+        env.ensure_import.assert_called_once_with(
+            "src/demo/Example.java",
+            qualified_name,
+            is_static=is_static,
+            on_demand=False,
+        )
+
+
+def test_agent_tool_ensure_import_rejects_unsupported_kind() -> None:
+    env = Mock()
+    executor = AgentToolExecutor(env, target_rule_id="TEST-RULE")
+
+    result = executor.execute(
+        AgentToolCall(
+            call_id="call-wildcard",
+            name="ensure_import",
+            arguments={
+                "relative_path": "src/demo/Example.java",
+                "kind": "wildcard",
+                "qualified_name": "java.util",
+            },
+        )
+    )
+
+    assert result.success is False
+    assert result.error == "invalid_import_kind"
+    env.ensure_import.assert_not_called()
