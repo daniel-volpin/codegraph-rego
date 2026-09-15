@@ -1,72 +1,41 @@
 # Benchmark Context
 
-## What This Is
+OWASP Benchmark is CodeGraph's primary quantitative evaluation surface. `configs/benchmark/policy_registry.json` is the source of truth for category mappings, detection-engine ownership, and remediation tiers.
 
-CodeGraph is a benchmark-backed JVM security/compliance framework. The primary proof surface is OWASP Benchmark; realistic apps are secondary workflow case studies only.
+## Evaluated Categories
 
-## Current Benchmark Scope
+| CWE | Category | Rule | Remediation |
+| --- | --- | --- | --- |
+| CWE-22 | Path Traversal | `ISO-A.8-PATH-TRAVERSAL` | guarded |
+| CWE-78 | Command Injection | `ISO-A.8-CMD-INJECTION` | guarded |
+| CWE-89 | SQL Injection | `ISO-A.8-SQL-INJECTION` | guarded |
+| CWE-90 | LDAP Injection | `ISO-A.8-LDAP-INJECTION` | guarded |
+| CWE-327 | Weak Cryptography | `ISO-A.10-WEAK-CRYPTO` | guarded |
+| CWE-328 | Weak Hash | `ISO-A.10-WEAK-HASH` | full |
+| CWE-330 | Weak Randomness | `ISO-A.10-WEAK-RANDOM` | full |
+| CWE-643 | XPath Injection | `ISO-A.8-XPATH-INJECTION` | guarded |
 
-- `CWE-22` -> `ISO-A.8-PATH-TRAVERSAL`
-- `CWE-78` -> `ISO-A.8-CMD-INJECTION`
-- `CWE-89` -> `ISO-A.8-SQL-INJECTION`
-- `CWE-90` -> `ISO-A.8-LDAP-INJECTION`
-- `CWE-327` -> `ISO-A.10-WEAK-CRYPTO`
-- `CWE-328` -> `ISO-A.10-WEAK-HASH`
-- `CWE-330` -> `ISO-A.10-WEAK-RANDOM`
-- `CWE-643` -> `ISO-A.8-XPATH-INJECTION`
+Access-control (`ISO-A.9.4.1`) and event-logging (`ISO-A.12.4.1`) controls are also registered with guarded remediation but are not part of the eight-category OWASP Benchmark detection table above.
 
-Remediation support tiers:
+`full` means a bounded automatic fix path is supported for the registered category. `guarded` means remediation may attempt a candidate but must refuse whenever evidence or a required verification gate is unavailable.
 
-- `full`: weak hash, weak random
-- `guarded`: weak crypto
-- `manual`: injection families plus access-control/logging rules
+## Detection Engines
 
-## Repo-Tracked Evidence
+The five injection rules declare `evidence_source: opengrep` and use OpenGrep intra-file dataflow taint analysis. The remaining registered rules use OPA/Rego over graph/configuration evidence. Engine ownership is part of the policy contract; re-evaluation must use the registered engine rather than silently substituting another detector.
 
-- Detection figures are not restated here. `docs/thesis_context.md` owns the
-  thesis-final figure, its bootstrap intervals, and why it does not reproduce; `REPRODUCIBILITY.md` owns the current measured figure beside the command that produces it. Read those before citing a detection number. Artifacts: `outputs/thesis_final_detection_full_v2/` (qualified) and `outputs/2026-09-14-detection-full/detection_composed/` (current).
-- Explanation: `outputs/thesis_final_explanation_full_v2/`
-  - `Citation@TP (ctx)=1.000` (`222/222`)
-  - `Citation@TP (no-ctx)=0.009` (`2/222`)
-  - `Citation@FP (ctx)=1.000` (`9/9`)
-  - `Citation@FP (no-ctx)=0.000` (`0/9`)
-- Remediation per-case evidence: `outputs/thesis_final_remediation_v2/` (25 case directories and `results.jsonl`; no `provenance.json`, so cite the v4 anchor below when a recorded commit is needed)
-  - `25/25` fully verified
-  - `Brier=0.0057`, `ECE=0.0696` (per `remediation_metrics.json` / `confidence_calibration.json`; the prose block in that run's `summary.md` diverges and is not the canonical carrier)
+## Evidence
 
-## Follow-Up Evidence
+- Current full-corpus detection: `outputs/2026-09-14-detection-full/`
+- Historical thesis detection: `outputs/thesis_final_detection_full_v2/` — qualified evidence; see `docs/thesis_context.md`
+- Historical explanation evaluation: `outputs/thesis_final_explanation_full_v2/`
+- Historical remediation evidence: `outputs/thesis_final_remediation_v4/` with per-case evidence retained in `outputs/thesis_final_remediation_v2/`
 
-- Provenance-backed remediation rerun: `outputs/thesis_final_remediation_v3/`
-  - `18/25 = 0.72`
-- Strongest provenance-backed remediation anchor: `outputs/thesis_final_remediation_v4/`
-  - `25/25 = 1.00`
-  - `Brier=0.0057`, `ECE=0.0696`
+Exact commands and the current detection figure belong in [`../REPRODUCIBILITY.md`](../REPRODUCIBILITY.md). Artifact provenance belongs in [`../outputs/README.md`](../outputs/README.md). Historical thesis claims and limitations belong in [`thesis_context.md`](./thesis_context.md).
 
-If a minimum remediation threshold of `70%` is required, use:
+## Claim Limits
 
-- primary anchor: `25/25` remediation v4 artifact
-- fallback anchor: `18/25` remediation v3 artifact
-
-## Run And Citation Guidance
-
-- Prefer canonical configs under `configs/benchmark/`.
-- Use `REPRODUCIBILITY.md` for exact commands and environment setup.
-- Cite output files under `outputs/`, not prose summaries.
-- Distinguish:
-  - thesis baseline artifacts
-  - provenance-backed follow-up reruns
-  - historical reference runs
-
-## Current Bounded Risks
-
-- Detection still has concentrated precision noise in command/path/SQL families.
-- Weak crypto remains guarded and can legitimately produce `NO_FIX`.
-- Remediation is still model-sensitive even with the bounded structured contract.
-- Real-world apps validate workflow breadth more than remediation coverage.
-
-## What Not To Overclaim
-
-- Do not describe benchmark-focused heuristics as full taint analysis.
-- Do not describe remediation as open-ended production autonomous repair.
-- Do not treat sample-app behavior as the primary scientific evidence surface.
-- Treat `Citation@FP (no-ctx)=0.000` as the expected ablation floor, not a failure.
+- Benchmark results describe the recorded corpus, configuration, source revision, and enabled engines; they are not guaranteed performance on arbitrary applications.
+- Configuration-backed crypto/hash findings mean the analysed workspace declares an unsafe value, not that every deployment uses that value.
+- OpenGrep taint analysis is intra-file, not a full cross-project or interprocedural whole-program taint engine.
+- Bounded remediation evidence does not establish open-ended autonomous repair capability.
+- Real-world sample applications are workflow case studies, not substitutes for the benchmark evidence surface.
