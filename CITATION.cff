@@ -9,4 +9,4 @@ repository-code: "https://github.com/daniel-volpin/codegraph-rego"
 license: MIT
 version: 0.6.0
 date-released: 2026-09-11
-abstract: "Benchmark-backed JVM security and compliance framework built around OWASP Benchmark, Neo4j, OPA/Rego, structured explanation, and bounded remediation."
+abstract: "Benchmark-backed Java security and compliance research system using Eclipse JDT, Neo4j, OPA/Rego, OpenGrep, evidence-grounded explanations, and bounded remediation."
