@@ -255,8 +255,8 @@ public final class SourceEditMain {
     private static String decodeUtf8(byte[] sourceBytes) {
         try {
             return StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingAction.REPORT)
-                    .onUnmappableCharacter(CodingAction.REPORT)
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
                     .decode(ByteBuffer.wrap(sourceBytes))
                     .toString();
         } catch (CharacterCodingException ex) {
