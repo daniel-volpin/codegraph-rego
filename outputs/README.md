@@ -1,51 +1,43 @@
-# Evaluation artifacts
+# Evaluation Artifacts
 
-Index of evaluation evidence: what each directory holds, whether it is tracked, and which commit its provenance names.
+`outputs/` contains versioned research evidence plus ignored local run output. This file is an index, not a second metrics report. Current commands live in [`../REPRODUCIBILITY.md`](../REPRODUCIBILITY.md); historical claim limits live in [`../docs/thesis_context.md`](../docs/thesis_context.md).
 
-Figures live elsewhere. `docs/thesis_context.md` owns the qualified historical detection figure and its caveat; `REPRODUCIBILITY.md` owns the current measured figure beside the command that produces it. Link to those instead of copying numbers here.
+## Versioned Evidence
 
-## Naming
-
-New runs use `outputs/<YYYY-MM-DD>-<eval>-<scope>/`, for example `outputs/2026-09-13-detection-full/`.
-
-The existing `thesis_final_*` and `_vN` names stay. `canonical_manifest.sha256` pins them by path, each `provenance.json` records its own `output_dir`, and the dated records under `docs/` and the thesis prose cite them.
-
-## Tracked artifacts
-
-| Directory | Holds | Status | Provenance SHA | Pinned by |
-| --- | --- | --- | --- | --- |
-| `thesis_final_detection_full_v2/` | detection metrics on the 454-case `multicat_full.json` sample | qualified; does not reproduce | `7ad90a2` | `thesis-detection-v2-source` |
-| `thesis_final_explanation_full_v2/` | citation-grounding rates, with and without context | canonical | `701d051` | `thesis-explanation-v2-source` |
-| `thesis_final_remediation_v2/` | 181 files: per-case JSON plus 25 `.patch` files | superseded; no `provenance.json` | none recorded | — |
-| `thesis_final_remediation_v3/` | verified-success rate and confidence calibration | superseded by v4 | `7ad90a2` | `thesis-detection-v2-source` |
-| `thesis_final_remediation_v4/` | verified-success rate and confidence calibration | canonical | `80d0084` | `thesis-remediation-v4-source` |
-| `2026-09-14-detection-full/detection_composed/` | current detection baseline, merged from the eight `group_*` runs | current; summary files only | none of its own | see `composed_from` |
-| `2026-09-14-detection-full/group_*/` | the eight per-group runs it merges | current; summary and provenance only | `1dd1510`, clean tree | ancestor of `main`, no tag needed |
-
-A composed directory is a merge, not a run, so nothing writes a `provenance.json` into it: `compose_benchmark_eval.py` records `composed_from` in `metrics.json`, and the per-group directories it names carry the provenance.
-
-Tags are load-bearing here. This repository squash-merges, so a feature-branch commit never becomes an ancestor of `main`; without these tags three SHAs were reachable from no ref and the fourth only from a prunable branch.
-
-`local_smoke/` sits outside the checksum tripwire, which globs `outputs/thesis_final_*`. It was the detection baseline before the clean-tree rerun landed; `2026-09-14-detection-full/detection_composed/` is now the current detection figure, and `local_smoke/` is untracked and superseded (see the Untracked table below).
-
-`thesis_final_remediation_v2/` is the per-case evidence behind the remediation result: 25 case directories and `results.jsonl`, with the same `25/25` outcome v4 records. It is kept because all 181 files are checksummed in `canonical_manifest.sha256` and a dated audit record cites it, and it has no `provenance.json`, so v4 is the anchor to cite for a recorded commit.
-
-## Recorded absolute paths
-
-Seventeen tracked artifacts record the absolute path of the machine that produced them, in `provenance.json` and in the `file_path` fields of their metrics. They are kept. A provenance record states where a run actually happened, and nine of these files are checksummed in `canonical_manifest.sha256`, so rewriting them to look tidy would break the manifest and edit the thesis record after the fact. This is the accepted answer to the machine-specific paths item in `docs/public_release_checklist.md`.
-
-Artifacts that are not evidence carry no such exemption: the demo SARIF fixtures were rewritten to workspace-relative URIs, which is both the format `codegraph/policy/sarif.py` emits and the only form the importer can resolve on another machine.
-
-## Untracked
-
-`.gitignore` ignores `outputs/*` and re-includes tracked files by explicit negation, so these are absent from a clone — including each group's `case_outcomes.jsonl`, the per-case record behind the union any-rule Overall row, and the superseded `local_smoke/` run.
-
-| Directory | Holds | Note |
+| Directory | Purpose | Provenance |
 | --- | --- | --- |
-| `local_smoke/` | the superseded detection baseline, provenance `6aa9026` with `dirty: true` | replaced by `2026-09-14-detection-full/` |
-| `branch_baseline_recovery/` | local comparison runs | disposable |
-| `test_policy_ui_reviews/` | UI review store fixtures | disposable |
+| `thesis_final_detection_full_v2/` | historical 454-case detection experiment; qualified evidence | SHA `7ad90a2`, tag `thesis-detection-v2-source` |
+| `thesis_final_explanation_full_v2/` | explanation citation-grounding experiment | SHA `701d051`, tag `thesis-explanation-v2-source` |
+| `thesis_final_remediation_v2/` | per-case evidence for the recorded 25-case remediation experiment | no `provenance.json`; use v4 as the revision anchor |
+| `thesis_final_remediation_v3/` | intermediate provenance-backed remediation run | SHA `7ad90a2` |
+| `thesis_final_remediation_v4/` | strongest provenance-backed recorded remediation run | SHA `80d0084`, tag `thesis-remediation-v4-source` |
+| `2026-09-14-detection-full/group_*/` | eight clean source runs for the current full-corpus detection baseline | SHA `1dd1510`, clean tree |
+| `2026-09-14-detection-full/detection_composed/` | composed current detection summary | source runs named by `composed_from` in `metrics.json` |
 
-## Changing an artifact
+A composed detection directory is a merge, not an evaluation run, so it does not create its own `provenance.json`. Cite the source group runs it names.
 
-`outputs/canonical_manifest.sha256` and `tests/test_canonical_artifacts.py` protect everything under `outputs/thesis_final_*`. A deliberate regeneration updates the manifest with `scripts/evaluation/generate_canonical_manifest.py` in the same commit. `docs/architecture/artifact-policy.md` defines which artifact classes belong in git.
+Historical artifacts may contain absolute paths from the machine that produced them. Do not rewrite those records for cosmetic portability; provenance is evidence of the actual run. New provenance generation normalizes repository/corpus paths where possible.
+
+## Canonical Protection
+
+`outputs/canonical_manifest.sha256` and `tests/test_canonical_artifacts.py` protect the canonical `thesis_final_*` evidence. An intentional regeneration must update the artifacts and manifest together with:
+
+```bash
+uv run python scripts/evaluation/generate_canonical_manifest.py
+```
+
+Do not update the manifest for incidental local reruns.
+
+## Local Output
+
+`.gitignore` ignores ordinary `outputs/*` runs unless they are intentionally re-included as research evidence. Use `outputs/local_smoke/` for disposable smoke runs. Local comparison, UI-review, and ad-hoc evaluation directories are not part of the evidence contract.
+
+## Naming New Runs
+
+Prefer:
+
+```text
+outputs/<YYYY-MM-DD>-<evaluation>-<scope>/
+```
+
+A run that is proposed as new versioned evidence must have clear provenance, a documented claim it supports, and an explicit reason to be committed rather than regenerated locally. See [`../docs/architecture/artifact-policy.md`](../docs/architecture/artifact-policy.md).
