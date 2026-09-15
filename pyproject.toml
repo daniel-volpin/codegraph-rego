@@ -1,7 +1,7 @@
 [project]
 name = "codegraph"
 version = "0.6.0"
-description = "Benchmark-backed JVM security and compliance framework with graph-structured evidence"
+description = "Benchmark-backed Java security and compliance research system with graph-structured evidence"
 readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "MIT" }
