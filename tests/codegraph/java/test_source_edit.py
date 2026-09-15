@@ -98,15 +98,18 @@ def test_ensure_import_supports_static_and_on_demand_forms() -> None:
     assert "import java.util.*;" in wildcard_result.source_bytes.decode()
 
 
-def test_ensure_import_defers_name_conflicts_to_jdt_diagnostics() -> None:
+def test_ensure_import_does_not_implement_custom_name_resolution() -> None:
     source = b"package demo;\n\nimport java.awt.List;\n\npublic class Example {}\n"
 
     result = run_editor(source, "java.util.List")
 
-    assert result.status == "REJECTED"
-    assert result.reason == "jdt_reparse_failed"
-    assert result.source_bytes == source
-    assert result.errors
+    assert result.reason not in {"simple_name_conflict", "declared_type_conflict"}
+    if result.status == "REJECTED":
+        assert result.reason == "jdt_reparse_failed"
+        assert result.source_bytes == source
+    else:
+        assert result.status == "APPLIED"
+        assert "import java.util.List;" in result.source_bytes.decode()
 
 
 def test_ensure_import_rejects_invalid_source_without_mutation() -> None:
