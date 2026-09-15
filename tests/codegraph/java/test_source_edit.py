@@ -10,7 +10,6 @@ from codegraph.java.edit_models import JavaSourceEditDTO
 
 ROOT = Path(__file__).resolve().parents[3]
 JAR = settings.java_parser_jar
-EDITOR_MAIN = "io.github.codegraph.javaparser.SourceEditMain"
 
 
 @pytest.fixture(autouse=True)
@@ -42,9 +41,9 @@ def run_editor(
             "java",
             "-XX:ActiveProcessorCount=1",
             "-Xmx768m",
-            "-cp",
+            "-jar",
             str(JAR),
-            EDITOR_MAIN,
+            "source-edit",
         ],
         input=json.dumps(request),
         text=True,
@@ -99,12 +98,13 @@ def test_ensure_import_supports_static_and_on_demand_forms() -> None:
     assert "import java.util.*;" in wildcard_result.source_bytes.decode()
 
 
-def test_ensure_import_rejects_conflicting_single_type_import() -> None:
+def test_ensure_import_defers_name_conflicts_to_jdt_diagnostics() -> None:
     source = b"package demo;\n\nimport java.awt.List;\n\npublic class Example {}\n"
 
     result = run_editor(source, "java.util.List")
 
     assert result.status == "REJECTED"
+    assert result.reason == "jdt_reparse_failed"
     assert result.source_bytes == source
     assert result.errors
 
