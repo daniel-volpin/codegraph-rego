@@ -1,29 +1,19 @@
 # Repository Layout
 
-This repository keeps two explicit backend boundaries:
+| Path | Responsibility |
+| --- | --- |
+| `app.py` | ASGI development entrypoint |
+| `api/` | thin FastAPI routers and HTTP models |
+| `codegraph/` | ingestion, graph, search, policy, LLM, remediation, and evaluation domain logic |
+| `tools/java-parser/` | bounded Eclipse JDT Java analysis adapter |
+| `policy/` | OPA/Rego policies, OpenGrep rules, and policy catalog |
+| `configs/benchmark/` | benchmark selections and policy/category registry |
+| `frontend/` | React + TypeScript client |
+| `scripts/` | operational ingestion, policy, search, and evaluation commands |
+| `tests/` | backend, policy, adapter, integration, and evidence-contract tests |
+| `outputs/` | intentionally versioned research evidence plus ignored local runs |
+| `docs/` | current architecture, contract, benchmark, and research-evidence guidance |
 
-- `api/` contains the FastAPI HTTP surface: routers plus request/response DTOs.
-- `codegraph/` contains domain logic: ingestion, policy evaluation, search, LLM integration, remediation, and evaluation orchestration.
+The primary backend boundary is deliberate: `api/` adapts HTTP and `codegraph/` owns behavior. Evaluation and maintenance CLIs belong under `scripts/` rather than the repository root.
 
-The root folder is intentionally clean and focused. It contains only the application entrypoint and core project metadata:
-
-- `app.py` for `uvicorn app:app`
-- repository metadata such as `README.md`, `REPRODUCIBILITY.md`, `pyproject.toml`, and `Makefile`
-
-Evaluation runners and CLI operational utilities live under `scripts/`:
-
-- `scripts/evaluation/` for benchmark evaluation runners (`run_*_eval.py`, `compose_benchmark_eval.py`) and reporting tooling
-- `scripts/ingestion/` for graph and embedding preparation helpers
-- `scripts/search/` for CLI search helpers
-- `scripts/policy/` for policy CLI helpers
-
-This split is intentional:
-
-- reviewers can quickly identify the stable application entrypoint
-- HTTP concerns stay separate from domain orchestration
-- evaluation scripts remain centralized under `scripts/evaluation/`
-
-Repository compatibility rules:
-
-- keep `app.py` at the root
-- place evaluation scripts under `scripts/evaluation/`
+Generated retrieval state under `index/` and uploaded workspaces under `uploaded_code/` are local runtime artifacts, not source architecture.
