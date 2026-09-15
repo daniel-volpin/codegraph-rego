@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
   <title id="title">CodeGraph</title>
-  <desc id="description">Benchmark-backed JVM security and compliance analysis</desc>
+  <desc id="description">Benchmark-backed Java security and compliance analysis</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#07111f"/>
@@ -27,7 +27,7 @@
   </g>
   <text x="490" y="270" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="96" font-weight="700">CodeGraph</text>
   <rect x="493" y="306" width="610" height="8" rx="4" fill="url(#accent)"/>
-  <text x="490" y="375" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="34">Benchmark-backed JVM security</text>
+  <text x="490" y="375" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="34">Benchmark-backed Java security</text>
   <text x="490" y="420" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="34">and compliance analysis</text>
-  <text x="490" y="490" fill="#7dd3fc" font-family="Arial, Helvetica, sans-serif" font-size="25">Neo4j  |  OPA/Rego  |  Grounded explanations  |  Bounded remediation</text>
+  <text x="490" y="490" fill="#7dd3fc" font-family="Arial, Helvetica, sans-serif" font-size="25">Eclipse JDT  |  Neo4j  |  OPA/Rego + OpenGrep  |  Bounded remediation</text>
 </svg>
