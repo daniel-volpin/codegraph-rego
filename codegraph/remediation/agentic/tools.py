@@ -57,7 +57,7 @@ AGENT_TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "ensure_import",
-            "description": "Ensure a Java import through the JDT AST source editor. Provide semantic import fields, not Java import syntax.",
+            "description": "Ensure one Java type or static-member import through the JDT AST source editor. Provide semantic intent, not Java import syntax.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -65,20 +65,17 @@ AGENT_TOOL_DEFINITIONS = [
                         "type": "string",
                         "description": "Relative path to the Java source file.",
                     },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["type", "static_member"],
+                        "description": "Import kind: a Java type or one static member.",
+                    },
                     "qualified_name": {
                         "type": "string",
-                        "description": "Qualified import name without the 'import' keyword, semicolon, or trailing '.*' (e.g. java.sql.PreparedStatement).",
-                    },
-                    "is_static": {
-                        "type": "boolean",
-                        "description": "Whether this is a static import. Defaults to false.",
-                    },
-                    "on_demand": {
-                        "type": "boolean",
-                        "description": "Whether this is an on-demand import. Defaults to false; when true, qualified_name omits the trailing '.*'.",
+                        "description": "Qualified type name (e.g. java.sql.PreparedStatement) or qualified static member (e.g. java.util.Collections.emptyList). Do not include import syntax or wildcards.",
                     },
                 },
-                "required": ["relative_path", "qualified_name"],
+                "required": ["relative_path", "kind", "qualified_name"],
             },
         },
     },
@@ -136,7 +133,7 @@ AGENT_TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "run_verification",
-            "description": "Trigger the 3-gate verification pipeline on the current workspace: compilation, regression tests, and OPA policy evaluation.",
+            "description": "Trigger the 3-gate verification pipeline on the current workspace: compilation, regression tests, and owning policy/detection-engine re-evaluation.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -239,32 +236,37 @@ class AgentToolExecutor:
                         output=f"Successfully applied edit to {rel}",
                         success=True,
                     )
-                else:
-                    LOGGER.info("edit_file no_match rel=%s old_str=%s", rel, old_str[:200])
-                    return AgentToolResult(
-                        call_id=tool_call.call_id,
-                        name=name,
-                        output=f"Failed to find exact match for old_str in {rel}. Re-read the file to check line content and whitespace.",
-                        success=False,
-                        error="no_match",
-                    )
+                LOGGER.info("edit_file no_match rel=%s old_str=%s", rel, old_str[:200])
+                return AgentToolResult(
+                    call_id=tool_call.call_id,
+                    name=name,
+                    output=f"Failed to find exact match for old_str in {rel}. Re-read the file to check line content and whitespace.",
+                    success=False,
+                    error="no_match",
+                )
 
             elif name == "ensure_import":
                 rel = args.get("relative_path", "")
+                kind = args.get("kind", "")
                 qualified_name = args.get("qualified_name", "")
-                is_static = args.get("is_static", False)
-                on_demand = args.get("on_demand", False)
+                if kind not in {"type", "static_member"}:
+                    return AgentToolResult(
+                        call_id=tool_call.call_id,
+                        name=name,
+                        output="kind must be 'type' or 'static_member'",
+                        success=False,
+                        error="invalid_import_kind",
+                    )
                 result = self.env.ensure_import(
                     rel,
                     qualified_name,
-                    is_static=is_static,
-                    on_demand=on_demand,
+                    is_static=kind == "static_member",
+                    on_demand=False,
                 )
                 summary = {
                     "status": result.status,
+                    "kind": kind,
                     "qualified_name": result.qualified_name,
-                    "is_static": result.is_static,
-                    "on_demand": result.on_demand,
                     "reason": result.reason,
                     "errors": result.errors,
                 }
@@ -303,14 +305,13 @@ class AgentToolExecutor:
                 reason = args.get("reason", "")
                 return AgentToolResult(call_id=tool_call.call_id, name=name, output=reason, success=True)
 
-            else:
-                return AgentToolResult(
-                    call_id=tool_call.call_id,
-                    name=name,
-                    output=f"Unknown tool: {name}",
-                    success=False,
-                    error="unknown_tool",
-                )
+            return AgentToolResult(
+                call_id=tool_call.call_id,
+                name=name,
+                output=f"Unknown tool: {name}",
+                success=False,
+                error="unknown_tool",
+            )
         except Exception as exc:
             return AgentToolResult(
                 call_id=tool_call.call_id,
