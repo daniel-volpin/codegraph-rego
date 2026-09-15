@@ -56,21 +56,29 @@ AGENT_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "add_import",
-            "description": "Add an import statement to a Java file cleanly below package declaration.",
+            "name": "ensure_import",
+            "description": "Ensure a Java import through the JDT AST source editor. Provide semantic import fields, not Java import syntax.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "relative_path": {
                         "type": "string",
-                        "description": "Relative path to the Java file.",
+                        "description": "Relative path to the Java source file.",
                     },
-                    "import_statement": {
+                    "qualified_name": {
                         "type": "string",
-                        "description": "Full import statement (e.g. 'import java.sql.PreparedStatement;' or 'java.sql.PreparedStatement').",
+                        "description": "Qualified import name without the 'import' keyword, semicolon, or trailing '.*' (e.g. java.sql.PreparedStatement).",
+                    },
+                    "is_static": {
+                        "type": "boolean",
+                        "description": "Whether this is a static import. Defaults to false.",
+                    },
+                    "on_demand": {
+                        "type": "boolean",
+                        "description": "Whether this is an on-demand import. Defaults to false; when true, qualified_name omits the trailing '.*'.",
                     },
                 },
-                "required": ["relative_path", "import_statement"],
+                "required": ["relative_path", "qualified_name"],
             },
         },
     },
@@ -241,15 +249,31 @@ class AgentToolExecutor:
                         error="no_match",
                     )
 
-            elif name == "add_import":
+            elif name == "ensure_import":
                 rel = args.get("relative_path", "")
-                stmt = args.get("import_statement", "")
-                ok = self.env.add_import(rel, stmt)
+                qualified_name = args.get("qualified_name", "")
+                is_static = args.get("is_static", False)
+                on_demand = args.get("on_demand", False)
+                result = self.env.ensure_import(
+                    rel,
+                    qualified_name,
+                    is_static=is_static,
+                    on_demand=on_demand,
+                )
+                summary = {
+                    "status": result.status,
+                    "qualified_name": result.qualified_name,
+                    "is_static": result.is_static,
+                    "on_demand": result.on_demand,
+                    "reason": result.reason,
+                    "errors": result.errors,
+                }
                 return AgentToolResult(
                     call_id=tool_call.call_id,
                     name=name,
-                    output=f"Successfully ensured import '{stmt}' in {rel}",
-                    success=True,
+                    output=json.dumps(summary, indent=2),
+                    success=result.status != "REJECTED",
+                    error=result.reason if result.status == "REJECTED" else None,
                 )
 
             elif name == "run_verification":
