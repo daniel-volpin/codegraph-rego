@@ -16,8 +16,6 @@ from codegraph.search.artifacts import (
 )
 
 if TYPE_CHECKING:
-    import faiss
-    import numpy as np
     from sentence_transformers import SentenceTransformer
 
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")

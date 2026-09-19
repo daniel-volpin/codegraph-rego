@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 from codegraph.search.artifacts import canonical_graph_generation, sha256_file
 
 if TYPE_CHECKING:
-    import faiss
     import numpy as np
     from sentence_transformers import SentenceTransformer
 
