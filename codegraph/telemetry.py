@@ -52,11 +52,14 @@ import os
 from pathlib import Path
 
 from opentelemetry import metrics, trace
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SpanExportResult
 
 _initialized = False
 
@@ -107,27 +110,24 @@ def install_log_correlation() -> None:
 
 
 class _FileSpanExporter:
-    """Minimal span exporter that appends one JSON line per span to a file.
-
-    Not a full ``SpanExporter`` subclass — wraps ``ConsoleSpanExporter`` and
-    redirects its output to a file handle opened once at construction time.
-    Using ConsoleSpanExporter's ``out`` parameter avoids re-implementing
-    ``span.to_json()`` serialisation.
-    """
+    """Standard JSON-Lines (NDJSON) span exporter (1 line = 1 valid JSON span)."""
 
     def __init__(self, path: str) -> None:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         self._fh = p.open("a", encoding="utf-8")
-        # ConsoleSpanExporter accepts an ``out`` file-like; reuse its serialisation.
-        self._inner = ConsoleSpanExporter(out=self._fh)
 
-    # Mirror the SpanExporter interface used by BatchSpanProcessor.
-    def export(self, spans):  # type: ignore[override]
-        return self._inner.export(spans)
+    def export(self, spans):
+        for span in spans:
+            try:
+                line = span.to_json(indent=None)
+                self._fh.write(line + "\n")
+            except Exception:
+                pass
+        self._fh.flush()
+        return SpanExportResult.SUCCESS
 
     def shutdown(self) -> None:
-        self._inner.shutdown()
         self._fh.flush()
         self._fh.close()
 
@@ -140,7 +140,7 @@ class _FileSpanExporter:
 
 
 def configure_telemetry(service_name: str = "codegraph") -> None:
-    """Initialise the OTel SDK.  Safe to call multiple times — only runs once."""
+    """Initialise the OTel SDK with native OTLP and OpenInference support."""
     global _initialized
     if _initialized:
         return
@@ -148,18 +148,15 @@ def configure_telemetry(service_name: str = "codegraph") -> None:
         _initialized = True
         return
 
-    provider = TracerProvider()
+    effective_service = os.environ.get("OTEL_SERVICE_NAME", service_name)
+    resource = Resource.create({SERVICE_NAME: effective_service, "framework": "codegraph"})
+    provider = TracerProvider(resource=resource)
 
     otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
     trace_file = os.environ.get("OTEL_TRACE_FILE")
 
     if otlp_endpoint:
-        try:
-            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter  # noqa: PLC0415
-
-            exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
-        except ImportError:
-            exporter = ConsoleSpanExporter()  # type: ignore[assignment]
+        exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
     elif trace_file:
         exporter = _FileSpanExporter(trace_file)  # type: ignore[assignment]
     else:
@@ -189,12 +186,8 @@ def _configure_metrics(otlp_endpoint: str | None) -> None:
     readers = []
     if otlp_endpoint:
         try:
-            from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (  # noqa: PLC0415
-                OTLPMetricExporter,
-            )
-
-            readers.append(PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True)))
-        except ImportError:
+            readers.append(PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=otlp_endpoint)))
+        except Exception:
             logging.getLogger(__name__).debug("OTLP metric exporter unavailable; usage metrics stay in-process")
     elif os.environ.get("OTEL_METRICS_CONSOLE", "").lower() in ("1", "true", "yes"):
         readers.append(PeriodicExportingMetricReader(ConsoleMetricExporter()))
