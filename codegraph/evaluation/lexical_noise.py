@@ -40,13 +40,9 @@ class LexicalNoiseCase:
 
     def __post_init__(self) -> None:
         if self.fp_source not in VALID_FP_SOURCES:
-            raise ValueError(
-                f"case {self.case_id}: fp_source '{self.fp_source}' not in {sorted(VALID_FP_SOURCES)}"
-            )
+            raise ValueError(f"case {self.case_id}: fp_source '{self.fp_source}' not in {sorted(VALID_FP_SOURCES)}")
         if self.expected not in VALID_EXPECTATIONS:
-            raise ValueError(
-                f"case {self.case_id}: expected '{self.expected}' not in {sorted(VALID_EXPECTATIONS)}"
-            )
+            raise ValueError(f"case {self.case_id}: expected '{self.expected}' not in {sorted(VALID_EXPECTATIONS)}")
         if not self.target_violation_ids:
             raise ValueError(f"case {self.case_id}: target_violation_ids must be non-empty")
 

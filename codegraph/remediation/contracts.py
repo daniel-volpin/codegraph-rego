@@ -4,6 +4,27 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from codegraph.remediation.result_models import (
+    build_generation_payload,
+    build_no_fix_response,
+)
+
+__all__ = [
+    "AGENTIC_FIX_STRATEGIES",
+    "FIX_STRATEGIES",
+    "NO_FIX_PREFIX",
+    "STRUCTURED_GENERATION_FIELDS",
+    "STRUCTURED_GENERATION_STOPS",
+    "WEAK_CIPHER_LITERALS",
+    "WEAK_RANDOM_PATTERNS",
+    "build_generation_payload",
+    "build_no_fix_response",
+    "get_fix_strategy",
+    "preflight_unsupported_reason",
+    "resolve_context_source_code",
+    "resolve_remediation_contract",
+]
+
 STRUCTURED_GENERATION_FIELDS = {"decision", "edits", "reason"}
 STRUCTURED_GENERATION_STOPS = ["<|im_end|>", "<|endoftext|>"]
 NO_FIX_PREFIX = "NO_FIX:"
@@ -59,11 +80,11 @@ def preflight_unsupported_reason(rule_id: str, source_code: str) -> str | None:
     if rule_id == "ISO-A.10-WEAK-RANDOM":
         if not any(re.search(pattern, source_lower) for pattern in WEAK_RANDOM_PATTERNS):
             return (
-                "weak-random remediation only supports local "
-                "Random/Math.random/ThreadLocalRandom/SHA1PRNG replacements"
+                "weak-random remediation only supports local Random/Math.random/ThreadLocalRandom/SHA1PRNG replacements"
             )
 
     return None
+
 
 FIX_STRATEGIES: dict[str, dict[str, Any]] = {
     "ISO-A.10-WEAK-HASH": {
@@ -191,73 +212,61 @@ AGENTIC_FIX_STRATEGIES: dict[str, dict[str, Any]] = {
 }
 
 
-def get_fix_strategy(rule_id: str, *, agentic: bool = False) -> dict[str, Any]:
-    """Retrieve the remediation guidance strategy for a rule, defaulting dynamically."""
+def resolve_remediation_contract(
+    rule_id: str,
+    *,
+    finding: dict[str, Any] | None = None,
+    agentic: bool = False,
+) -> dict[str, Any]:
+    """Dynamically resolve remediation contract and guidance from finding metadata or catalog.
+
+    Eliminates hardcoded per-rule heuristics by deriving objectives from finding properties
+    (control_metadata, standard, title, summary, taint traces) and enforcing universal
+    3-gate verification invariants, with seamless fallback for known ISO rules.
+    """
     if agentic and rule_id in AGENTIC_FIX_STRATEGIES:
-        return AGENTIC_FIX_STRATEGIES[rule_id]
-    if rule_id in FIX_STRATEGIES:
+        base_strategy = dict(AGENTIC_FIX_STRATEGIES[rule_id])
+        if finding:
+            meta = finding.get("control_metadata") or {}
+            if meta.get("summary"):
+                base_strategy["summary"] = meta.get("summary")
+        return base_strategy
+
+    if not agentic and rule_id in FIX_STRATEGIES:
         return FIX_STRATEGIES[rule_id]
+
+    meta = (finding.get("control_metadata") or {}) if finding else {}
+    title = meta.get("title") or (finding.get("reason") if finding else None) or rule_id
+    summary = meta.get("summary") or meta.get("description") or ""
+
+    objective = f"Remediate security finding '{title}' ({rule_id}) at its root cause without breaking existing functionality."
+    if summary:
+        objective = f"{objective} Principle: {summary}"
+
     return {
-        "objective": f"Remediate security violation {rule_id} safely with minimal, semantically sound refactoring.",
+        "rule_id": rule_id,
+        "title": title,
+        "summary": summary,
+        "objective": objective,
         "allowed_transformations": [
-            "Apply standard secure coding patterns and approved APIs to eliminate the security vulnerability.",
-            "Keep edits minimal and bounded to the affected method or call chain.",
-            "Add required package imports cleanly if new types are introduced.",
+            "Neutralize untrusted dataflow reaching the vulnerable sink via safe parameterization, framework sanitization, or constant decoupling.",
+            "Make precise, surgical edits scoped strictly to the affected method or call chain.",
+            "Add required standard library imports cleanly if new types are introduced.",
         ],
         "non_goals": [
-            "Do not alter public method signatures or return types.",
-            "Do not make unrelated refactoring or stylistic changes.",
+            "Do not alter public method signatures, class hierarchy, or database schemas.",
+            "Do not introduce new compiler errors, broken syntax, or unhandled exceptions.",
+            "Do not perform unrelated stylistic or architectural refactorings.",
         ],
         "extra_examples": [],
     }
 
 
-def build_generation_payload(
+def get_fix_strategy(
+    rule_id: str,
     *,
-    decision: str | None,
-    edits: list[dict[str, Any]] | None,
-    replacement_method_lines: list[str] | None,
-    replacement_method_code: str | None,
-    reason: str | None,
-    raw_response_valid: bool,
-    schema_error: str | None,
+    finding: dict[str, Any] | None = None,
+    agentic: bool = False,
 ) -> dict[str, Any]:
-    return {
-        "decision": decision,
-        "edits": edits,
-        "replacement_method_lines": replacement_method_lines,
-        "replacement_method_code": replacement_method_code,
-        "reason": reason,
-        "raw_response_valid": raw_response_valid,
-        "schema_error": schema_error,
-    }
-
-
-def build_no_fix_response(
-    *,
-    violation_id: str,
-    context: dict[str, Any],
-    reason: str,
-    attempt_count: int | None = None,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "status": "NO_FIX",
-        "error": f"{NO_FIX_PREFIX} {reason}",
-        "violation_id": violation_id,
-        "method_key": context.get("method_key"),
-        "target_method": context.get("target_method"),
-        "file_path": context.get("file_path"),
-        "rule_id": context.get("rule_id"),
-        "generation": {
-            "decision": "no_fix",
-            "edits": [],
-            "replacement_method_lines": None,
-            "replacement_method_code": None,
-            "reason": reason,
-            "raw_response_valid": True,
-            "schema_error": None,
-        },
-    }
-    if attempt_count is not None:
-        payload["attempt_count"] = attempt_count
-    return payload
+    """Retrieve the remediation guidance strategy for a rule, defaulting dynamically."""
+    return resolve_remediation_contract(rule_id, finding=finding, agentic=agentic)

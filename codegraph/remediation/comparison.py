@@ -25,8 +25,6 @@ from codegraph.remediation.repair_intent import (
 LOGGER = logging.getLogger(__name__)
 
 
-
-
 class ComparisonLabel(StrEnum):
     """Outcome-oriented classification of a deterministic-vs-LLM comparison."""
 
@@ -37,8 +35,6 @@ class ComparisonLabel(StrEnum):
     BOTH_FAILED = "both_failed"
     DETERMINISTIC_REFUSED_LLM_PRODUCED = "deterministic_refused_llm_produced"
     LLM_REFUSED_DETERMINISTIC_PRODUCED = "llm_refused_deterministic_produced"
-
-
 
 
 class CandidateOutcome(BaseModel):
@@ -75,8 +71,6 @@ class ComparisonSummary(BaseModel):
     per_rule: dict[str, dict[str, int]] = Field(default_factory=dict)
 
 
-
-
 def classify_comparison(
     det: CandidateOutcome,
     llm: CandidateOutcome,
@@ -96,8 +90,6 @@ def classify_comparison(
     if det.refused and llm.refused:
         return ComparisonLabel.BOTH_REFUSED
     return ComparisonLabel.BOTH_FAILED
-
-
 
 
 def build_deterministic_outcome(
@@ -196,8 +188,6 @@ def build_llm_outcome(apply_result: dict[str, Any]) -> CandidateOutcome:
     )
 
 
-
-
 def compare_remediation(
     violation_context: dict[str, Any],
     det_outcome: CandidateOutcome,
@@ -214,8 +204,6 @@ def compare_remediation(
         deterministic=det_outcome,
         llm=llm_outcome,
     )
-
-
 
 
 def build_comparison_summary(
@@ -269,8 +257,6 @@ def render_comparison_summary_markdown(summary: ComparisonSummary) -> str:
 
     lines.append("")
     return "\n".join(lines)
-
-
 
 
 def _edits_to_diff_snippet(edits: list[dict[str, Any]]) -> str:

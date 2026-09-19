@@ -1,233 +1,52 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from codegraph.policy.analysis.conditional import resolve_list_get_sequence
 from codegraph.policy.analysis.state import AssignmentStateAnalyzer
-from codegraph.policy.source_analysis_core import PATH_LDAP_UNTRUSTED_INPUT_PATTERNS, UNTRUSTED_INPUT_PATTERNS
-
-CALL_ASSIGNMENT_WITH_ARGS_RE = re.compile(
-    r"(?:final\s+)?(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>]*\(\)|[A-Za-z_][A-Za-z0-9_$.<>]*)\s*\.\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*\(([^;]*?)\)\s*;",
-    re.DOTALL,
+from codegraph.policy.helper_method_analyzer import HelperMethodAnalyzer, HelperReturnSummary
+from codegraph.policy.helper_summary_patterns import (
+    ARRAY_ASSIGNMENT_RE,
+    CALL_ASSIGNMENT_WITH_ARGS_RE,
+    COMMAND_ASSIGNMENT_TEMPLATE,
+    COMMAND_EXEC_ENV_ARG_VAR_RE,
+    COMMAND_EXEC_FIRST_ARG_VAR_RE,
+    COMMAND_LIST_USAGE_RE,
+    COMMAND_USAGE_TEMPLATE,
+    FILTER_ASSIGNMENT_TEMPLATE,
+    LIST_ADD_RE,
+    PATH_ASSIGNMENT_TEMPLATE,
+    PATH_DIRECT_USAGE_TEMPLATE,
+    SQL_ASSIGNMENT_TEMPLATE,
+    SQL_USAGE_TEMPLATE,
+    STRING_LITERAL_FULL_RE,
+    XPATH_ASSIGNMENT_TEMPLATE,
+    XPATH_USAGE_TEMPLATE,
 )
-METHOD_DECL_RE = re.compile(
-    r"(?:public|protected|private)?\s*(?:static\s+)?(?:final\s+)?[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+[A-Za-z_][A-Za-z0-9_]*\s*\(([^)]*)\)",
-    re.DOTALL,
-)
-RETURN_RE = re.compile(r"return\s+([^;]+);", re.DOTALL)
-MAP_PUT_LITERAL_RE = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.put\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)', re.DOTALL)
-MAP_GET_LITERAL_RE = re.compile(r'(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*"([^"]+)"\s*\)', re.DOTALL)
-MAP_PUT_VALUE_RE = re.compile(
-    r'([A-Za-z_][A-Za-z0-9_]*)\.put\(\s*"([^"]+)"\s*,\s*([^;]+?)\s*\)\s*;',
-    re.DOTALL,
-)
-MAP_GET_ASSIGNMENT_RE = re.compile(
-    r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*"([^"]+)"\s*\)\s*;',
-    re.DOTALL,
-)
-LIST_ADD_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.add\(\s*([^;]+?)\s*\)\s*;", re.DOTALL)
-LIST_REMOVE_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\.remove\(\s*(\d+)\s*\)\s*;", re.DOTALL)
-LIST_GET_ASSIGNMENT_RE = re.compile(
-    r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:\([^)]+\)\s*)?([A-Za-z_][A-Za-z0-9_]*)\.get\(\s*(\d+)\s*\)\s*;",
-    re.DOTALL,
-)
-ARRAY_ASSIGNMENT_RE = re.compile(
-    r"(?:[A-Za-z_][A-Za-z0-9_$.<>\[\]]+\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:new\s+[A-Za-z_][A-Za-z0-9_$.<>\[\]]*\[\]\s*)?\{(.*?)\}\s*;",
-    re.DOTALL,
-)
-FILTER_ASSIGNMENT_TEMPLATE = r"\bfilter\w*\s*=\s*[^;]*\b%s\b"
-PATH_ASSIGNMENT_TEMPLATE = r"\b(?:file|path|uri)\w*\s*=\s*[^;]*\b%s\b"
-PATH_DIRECT_USAGE_TEMPLATE = (
-    r"(?:new\s+java\.io\.(?:File|FileInputStream|FileOutputStream|FileReader)\s*\([^;]*\b%s\b"
-    r"|Paths\s*\.\s*get\s*\([^;]*\b%s\b"
-    r"|new\s+java\.net\.URI\s*\([^;]*\b%s\b)"
-)
-XPATH_ASSIGNMENT_TEMPLATE = r"\b(?:expr|expression|query|xpath)\w*\s*=\s*[^;]*\b%s\b"
-XPATH_USAGE_TEMPLATE = r"(?:\.evaluate\s*\(\s*[^,;)]*\b%s\b|\.compile\s*\(\s*[^;)]*\b%s\b)"
-SQL_ASSIGNMENT_TEMPLATE = r"\bsql\w*\s*=\s*[^;]*\b%s\b"
-SQL_USAGE_TEMPLATE = (
-    r"(?:prepareStatement\s*\(\s*[^,;)]*\b%s\b"
-    r"|prepareCall\s*\(\s*[^,;)]*\b%s\b"
-    r"|execute(?:Query|Update)?\s*\(\s*[^,;)]*\b%s\b"
-    r"|JDBCtemplate\s*\.\s*(?:execute|query|queryForMap|queryForObject|queryForRowSet|queryForList|update|batchUpdate)\s*\(\s*[^,;)]*\b%s\b)"
-)
-COMMAND_ASSIGNMENT_TEMPLATE = r"\b(?:cmd|command)\w*\s*=\s*[^;]*\b%s\b"
-COMMAND_USAGE_TEMPLATE = (
-    r"(?:\.exec\s*\(\s*[^,;)]*\b%s\b|\.command\s*\([^;)]*\b%s\b|new\s+ProcessBuilder\s*\([^;)]*\b%s\b)"
-)
-COMMAND_LIST_USAGE_RE = re.compile(
-    r"(?:new\s+ProcessBuilder\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)|\.command\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\))",
-    re.IGNORECASE,
-)
-COMMAND_EXEC_FIRST_ARG_VAR_RE = re.compile(r"\.exec\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))", re.IGNORECASE)
-COMMAND_EXEC_ENV_ARG_VAR_RE = re.compile(
-    r"\.exec\s*\(\s*[^,]+,\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,|\))",
-    re.IGNORECASE,
-)
-STRING_LITERAL_FULL_RE = re.compile(r'^"([^"\\]*(?:\\.[^"\\]*)*)"$', re.DOTALL)
+from codegraph.policy.source_analysis_core import PATH_LDAP_UNTRUSTED_INPUT_PATTERNS
 
-
-@dataclass(frozen=True)
-class HelperReturnSummary:
-    returns_constant_string: bool
-    propagates_tainted_input: bool
-
-
-class HelperMethodAnalyzer:
-    def __init__(self) -> None:
-        self._assignment_analyzer = AssignmentStateAnalyzer(UNTRUSTED_INPUT_PATTERNS)
-        self._collection_resolver = HelperCollectionResolver()
-
-    def summarize(self, source_code: str) -> HelperReturnSummary:
-        if not source_code:
-            return HelperReturnSummary(returns_constant_string=False, propagates_tainted_input=False)
-        initial_tainted = self._parameter_names(source_code)
-        resolved_source = self._collection_resolver.resolve(
-            source_code,
-            assignment_analyzer=self._assignment_analyzer,
-            initial_tainted_vars=initial_tainted,
-        )
-        state = self._assignment_analyzer.analyze(resolved_source, initial_tainted_vars=initial_tainted)
-        map_constants = self._map_string_constants(source_code)
-        returns_constant = False
-        propagates_taint = False
-        for match in RETURN_RE.finditer(resolved_source):
-            expr = match.group(1).strip()
-            if expr in state.string_constants:
-                returns_constant = True
-            elif expr.startswith('"') and expr.endswith('"'):
-                returns_constant = True
-            elif expr in state.tainted_vars:
-                propagates_taint = True
-            else:
-                map_match = MAP_GET_LITERAL_RE.search(expr)
-                if (
-                    map_match
-                    and map_match.group(1) in map_constants
-                    and map_match.group(2) in map_constants[map_match.group(1)]
-                ):
-                    returns_constant = True
-                elif self._assigned_from_safe_call(expr, resolved_source, state):
-                    returns_constant = True
-                elif self._assigned_from_tainted_call(expr, resolved_source, state):
-                    propagates_taint = True
-                elif self._assignment_analyzer.referenced_variables(expr) & state.tainted_vars:
-                    propagates_taint = True
-        return HelperReturnSummary(
-            returns_constant_string=returns_constant,
-            propagates_tainted_input=propagates_taint,
-        )
-
-    def _assigned_from_safe_call(self, expr: str, source_code: str, state) -> bool:
-        for assigned_var, _method_name, raw_args in CALL_ASSIGNMENT_WITH_ARGS_RE.findall(source_code):
-            if assigned_var != expr:
-                continue
-            arg_refs = self._assignment_analyzer.referenced_variables(raw_args)
-            if arg_refs & state.tainted_vars:
-                continue
-            if STRING_LITERAL_FULL_RE.match(raw_args.strip()):
-                return True
-            if arg_refs and arg_refs <= set(state.string_constants):
-                return True
-        return False
-
-    def _assigned_from_tainted_call(self, expr: str, source_code: str, state) -> bool:
-        for assigned_var, _method_name, raw_args in CALL_ASSIGNMENT_WITH_ARGS_RE.findall(source_code):
-            if assigned_var != expr:
-                continue
-            if any(pattern.search(raw_args) for pattern in UNTRUSTED_INPUT_PATTERNS):
-                return True
-            if self._assignment_analyzer.referenced_variables(raw_args) & state.tainted_vars:
-                return True
-        return False
-
-    @staticmethod
-    def _parameter_names(source_code: str) -> set[str]:
-        match = METHOD_DECL_RE.search(source_code)
-        if not match:
-            return set()
-        names: set[str] = set()
-        for raw_param in match.group(1).split(","):
-            param = raw_param.strip()
-            if not param:
-                continue
-            parts = param.split()
-            if len(parts) < 2:
-                continue
-            type_name = " ".join(parts[:-1])
-            name = parts[-1]
-            if "HttpServletRequest" in type_name or "HttpServletResponse" in type_name:
-                continue
-            names.add(name)
-        return names
-
-    @staticmethod
-    def _map_string_constants(source_code: str) -> dict[str, dict[str, str]]:
-        values: dict[str, dict[str, str]] = {}
-        for map_name, key, value in MAP_PUT_LITERAL_RE.findall(source_code):
-            values.setdefault(map_name, {})[key] = value
-        return values
-
-
-class HelperCollectionResolver:
-    def resolve(
-        self,
-        source_code: str,
-        *,
-        assignment_analyzer: AssignmentStateAnalyzer,
-        initial_tainted_vars: set[str],
-    ) -> str:
-        resolved = source_code
-        for _ in range(3):
-            state = assignment_analyzer.analyze(resolved, initial_tainted_vars=initial_tainted_vars)
-            updated = self._replace_map_gets(resolved, assignment_analyzer, state)
-            updated = self._replace_list_gets(updated, assignment_analyzer, state)
-            if updated == resolved:
-                return updated
-            resolved = updated
-        return resolved
-
-    def _replace_map_gets(self, source_code: str, assignment_analyzer: AssignmentStateAnalyzer, state) -> str:
-        entries: dict[str, dict[str, str]] = {}
-        for map_name, key, raw_value in MAP_PUT_VALUE_RE.findall(source_code):
-            resolved = self._resolve_expr(raw_value.strip(), assignment_analyzer, state)
-            if resolved is not None:
-                entries.setdefault(map_name, {})[key] = resolved
-
-        def _replace(match: re.Match[str]) -> str:
-            target_var, map_name, key = match.groups()
-            resolved = entries.get(map_name, {}).get(key)
-            if resolved is None:
-                return match.group(0)
-            return f"{target_var} = {resolved};"
-
-        return MAP_GET_ASSIGNMENT_RE.sub(_replace, source_code)
-
-    def _replace_list_gets(self, source_code: str, assignment_analyzer: AssignmentStateAnalyzer, state) -> str:
-        return resolve_list_get_sequence(
-            source_code,
-            LIST_ADD_RE,
-            LIST_REMOVE_RE,
-            LIST_GET_ASSIGNMENT_RE,
-            lambda expr: self._resolve_expr(expr, assignment_analyzer, state),
-        )
-
-    @staticmethod
-    def _resolve_expr(expr: str, assignment_analyzer: AssignmentStateAnalyzer, state) -> str | None:
-        literal_match = STRING_LITERAL_FULL_RE.match(expr)
-        if literal_match:
-            return expr
-        if expr in state.string_constants:
-            return f'"{state.string_constants[expr]}"'
-        if expr in state.tainted_vars:
-            return expr
-        referenced = assignment_analyzer.referenced_variables(expr)
-        if referenced and referenced <= state.tainted_vars:
-            return expr
-        return None
+__all__ = [
+    "ARRAY_ASSIGNMENT_RE",
+    "CALL_ASSIGNMENT_WITH_ARGS_RE",
+    "COMMAND_ASSIGNMENT_TEMPLATE",
+    "COMMAND_EXEC_ENV_ARG_VAR_RE",
+    "COMMAND_EXEC_FIRST_ARG_VAR_RE",
+    "COMMAND_LIST_USAGE_RE",
+    "COMMAND_USAGE_TEMPLATE",
+    "DirectCallSummaryBuilder",
+    "FILTER_ASSIGNMENT_TEMPLATE",
+    "HelperMethodAnalyzer",
+    "HelperReturnSummary",
+    "LIST_ADD_RE",
+    "PATH_ASSIGNMENT_TEMPLATE",
+    "PATH_DIRECT_USAGE_TEMPLATE",
+    "SQL_ASSIGNMENT_TEMPLATE",
+    "SQL_USAGE_TEMPLATE",
+    "STRING_LITERAL_FULL_RE",
+    "XPATH_ASSIGNMENT_TEMPLATE",
+    "XPATH_USAGE_TEMPLATE",
+]
 
 
 class DirectCallSummaryBuilder:

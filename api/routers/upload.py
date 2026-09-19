@@ -1,31 +1,49 @@
 import asyncio
-import json
 import logging
 import os
-import pathlib
-import shutil
-import uuid
 import zipfile
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-import aiofiles
 from fastapi import APIRouter, File, Header, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from api.models.validation import GitIngestRequest, UploadResponse, UploadStatusResponse
+from api.routers.upload_staging import (
+    cleanup_dir as _cleanup_dir,
+)
+from api.routers.upload_staging import (
+    clone_into_staging as _clone_into_staging,
+)
+from api.routers.upload_staging import (
+    extract_zip_sync as _extract_zip_sync,
+)
+from api.routers.upload_staging import (
+    final_java_roots as _final_java_roots,
+)
+from api.routers.upload_staging import (
+    restore_workspace as _restore_workspace,
+)
+from api.routers.upload_staging import (
+    stage_upload_archive as _stage_upload_archive,
+)
+from api.routers.upload_staging import (
+    stream_upload_to_disk as _stream_upload_to_disk,
+)
+from api.routers.upload_staging import (
+    swap_workspace as _swap_workspace,
+)
+from api.routers.upload_stream import upload_status_event_stream
 from codegraph.common.progress import (
     complete_progress,
     error_progress,
     get_progress,
-    register_state_change_listener,
     start_progress,
     update_progress,
 )
 from codegraph.common.workspace_lock import async_workspace_mutation_guard
 from codegraph.config import settings
 from codegraph.embedding.service import EmbeddingService
-from codegraph.ingestion.git_source import clone_repository
 from codegraph.ingestion.service import (
     WorkspacePublication,
     deactivate_other_workspaces,
@@ -36,82 +54,14 @@ from codegraph.ingestion.utils import UploadValidationError, find_java_roots, sa
 
 LOGGER = logging.getLogger(__name__)
 router = APIRouter()
-UPLOAD_CHUNK_SIZE = 1024 * 1024
 
-
-def _workspace_parent_dir() -> str:
-    parent_dir = os.path.dirname(os.path.abspath(settings.upload_dir))
-    os.makedirs(parent_dir, exist_ok=True)
-    return parent_dir
-
-
-def _unique_workspace_dir(prefix: str) -> str:
-    parent_dir = _workspace_parent_dir()
-    for _ in range(10):
-        path = os.path.join(parent_dir, f"{prefix}{uuid.uuid4().hex}")
-        try:
-            os.mkdir(path)
-            return path
-        except FileExistsError:
-            continue
-    raise RuntimeError(f"Unable to allocate workspace directory with prefix {prefix!r}")
-
-
-def _stage_upload_archive(file_name: str) -> tuple[str, str]:
-    staging_dir = _unique_workspace_dir(".upload_staging_")
-    zip_path = os.path.join(staging_dir, file_name)
-    return staging_dir, zip_path
-
-
-def _swap_workspace(staging_dir: str) -> str | None:
-    target_dir = os.path.abspath(settings.upload_dir)
-    parent_dir = _workspace_parent_dir()
-    backup_dir = None
-    if os.path.exists(target_dir):
-        backup_dir = os.path.join(parent_dir, f".upload_backup_{uuid.uuid4().hex}")
-        os.replace(target_dir, backup_dir)
-    try:
-        os.replace(staging_dir, target_dir)
-    except OSError:
-        if backup_dir is not None:
-            os.replace(backup_dir, target_dir)
-        raise
-    # uploaded_code/.gitkeep is tracked; the swap would otherwise delete it.
-    pathlib.Path(target_dir, ".gitkeep").touch(exist_ok=True)
-    return backup_dir
-
-
-def _restore_workspace(backup_dir: str | None) -> None:
-    target_dir = os.path.abspath(settings.upload_dir)
-    if os.path.exists(target_dir):
-        shutil.rmtree(target_dir)
-    if backup_dir and os.path.exists(backup_dir):
-        os.replace(backup_dir, target_dir)
-
-
-def _cleanup_dir(path: str | None) -> None:
-    if path and os.path.exists(path):
-        shutil.rmtree(path)
+_SSE_HEARTBEAT_INTERVAL_S = 5.0
+_SSE_TERMINAL_GRACE_S = 0.5
 
 
 def _error_response(message: str, request_id: str, status_code: int) -> JSONResponse:
     error_progress(message)
     return JSONResponse(content={"error": message, "request_id": request_id}, status_code=status_code)
-
-
-async def _stream_upload_to_disk(file: UploadFile, zip_path: str) -> None:
-    total_bytes = 0
-    async with aiofiles.open(zip_path, "wb") as handle:
-        while True:
-            chunk = await file.read(UPLOAD_CHUNK_SIZE)
-            if not chunk:
-                break
-            total_bytes += len(chunk)
-            if total_bytes > settings.upload_max_archive_size_bytes:
-                raise UploadValidationError(
-                    f"Uploaded archive exceeds size limit ({total_bytes} > {settings.upload_max_archive_size_bytes})"
-                )
-            await handle.write(chunk)
 
 
 def _ingest_upload_workspace(upload_root: str, java_roots: list[str]) -> WorkspacePublication:
@@ -122,16 +72,16 @@ def _build_upload_embeddings() -> None:
     EmbeddingService.build_embeddings(progress_callback=update_progress)
 
 
-def _extract_zip_sync(zip_path: str, staging_dir: str) -> None:
-    with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        safe_extract_zip(
-            zip_ref,
-            staging_dir,
-            max_file_size=settings.upload_max_member_size_bytes,
-            max_total_size=settings.upload_max_extracted_size_bytes,
-            max_entries=settings.upload_max_archive_entries,
-            max_compression_ratio=settings.upload_max_compression_ratio,
-        )
+def _extract_zip_helper(zip_path: str, staging_dir: str) -> None:
+    _extract_zip_sync(
+        zip_path,
+        staging_dir,
+        max_file_size=settings.upload_max_member_size_bytes,
+        max_total_size=settings.upload_max_extracted_size_bytes,
+        max_entries=settings.upload_max_archive_entries,
+        max_compression_ratio=settings.upload_max_compression_ratio,
+        extract_fn=safe_extract_zip,
+    )
 
 
 async def _prepare_staged_upload(file: UploadFile, request_id: str) -> tuple[str, list[str]] | JSONResponse:
@@ -139,10 +89,10 @@ async def _prepare_staged_upload(file: UploadFile, request_id: str) -> tuple[str
     zip_path: str | None = None
     try:
         update_progress("upload", "Saving archive…", 5.0)
-        staging_dir, zip_path = _stage_upload_archive("code.zip")
-        await _stream_upload_to_disk(file, zip_path)
+        staging_dir, zip_path = _stage_upload_archive("code.zip", settings.upload_dir)
+        await _stream_upload_to_disk(file, zip_path, settings.upload_max_archive_size_bytes)
         update_progress("upload", "Extracting archive…", 12.0)
-        await asyncio.to_thread(_extract_zip_sync, zip_path, staging_dir)
+        await asyncio.to_thread(_extract_zip_helper, zip_path, staging_dir)
         if os.path.exists(zip_path):
             os.remove(zip_path)
 
@@ -163,17 +113,12 @@ async def _prepare_staged_upload(file: UploadFile, request_id: str) -> tuple[str
         return _error_response(f"Failed to prepare upload: {exc}", request_id, 500)
 
 
-def _final_java_roots(java_root_relatives: list[str]) -> list[str]:
-    upload_root = os.path.abspath(settings.upload_dir)
-    return [os.path.join(upload_root, relative) for relative in java_root_relatives]
-
-
 async def _restore_previous_workspace(
     backup_dir: str | None, *, publication: WorkspacePublication | None = None,
 ) -> Exception | None:
     try:
         update_progress("upload", "Restoring previous workspace…", 21.0)
-        await asyncio.to_thread(_restore_workspace, backup_dir)
+        await asyncio.to_thread(_restore_workspace, backup_dir, settings.upload_dir)
         if publication is not None:
             await asyncio.to_thread(rollback_workspace_revision, publication)
         return None
@@ -213,14 +158,13 @@ async def _publish_staged_workspace(
     async with async_workspace_mutation_guard():
         try:
             update_progress("upload", "Replacing workspace…", 19.0)
-            backup_dir = await asyncio.to_thread(_swap_workspace, staging_dir)
+            backup_dir = await asyncio.to_thread(_swap_workspace, staging_dir, settings.upload_dir)
             staging_dir = None
             update_progress("upload", "Publishing uploaded graph revision…", 20.0)
             upload_root = os.path.abspath(settings.upload_dir)
             publication = await asyncio.to_thread(
-                _ingest_upload_workspace, upload_root, _final_java_roots(java_root_relatives),
+                _ingest_upload_workspace, upload_root, _final_java_roots(java_root_relatives, settings.upload_dir),
             )
-            # This endpoint replaces the workspace, so nothing else stays active.
             dropped = await asyncio.to_thread(deactivate_other_workspaces, publication.workspace_id)
             if dropped:
                 LOGGER.info("Deactivated %d previously active workspace(s): %s", len(dropped), ", ".join(dropped))
@@ -235,11 +179,11 @@ async def _publish_staged_workspace(
             )
     await asyncio.to_thread(_cleanup_dir, backup_dir)
     complete_progress("Codebase processed!")
-    final_java_roots = _final_java_roots(java_root_relatives)
+    final_roots = _final_java_roots(java_root_relatives, settings.upload_dir)
     return UploadResponse(
         status="Codebase processed!",
-        java_root=final_java_roots[0],
-        java_roots=final_java_roots,
+        java_root=final_roots[0],
+        java_roots=final_roots,
         request_id=request_id,
     )
 
@@ -249,8 +193,6 @@ async def upload_zip(
     file: UploadFile = File(...),
     request_id_header: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ):
-    # request_id is echoed on every response so the caller can poll
-    # GET /upload/status?request_id=<id> for its own upload's progress.
     request_id = start_progress(
         "upload",
         "Validating upload…",
@@ -268,19 +210,6 @@ async def upload_zip(
     return await _publish_staged_workspace(staging_dir, java_root_relatives, request_id)
 
 
-def _clone_into_staging(repo_url: str, ref: str | None) -> tuple[str, list[str]]:
-    staging_dir = _unique_workspace_dir(".clone_staging_")
-    try:
-        clone_repository(repo_url, staging_dir, ref=ref)
-        java_roots = find_java_roots(staging_dir)
-        if not java_roots:
-            raise UploadValidationError("No src/main/java root found in the repository.")
-        return staging_dir, [os.path.relpath(root, staging_dir) for root in java_roots]
-    except Exception:
-        _cleanup_dir(staging_dir)
-        raise
-
-
 @router.post("/upload/git", response_model=UploadResponse)
 async def upload_from_git(
     payload: GitIngestRequest,
@@ -295,7 +224,7 @@ async def upload_from_git(
     try:
         update_progress("upload", "Cloning repository…", 5.0)
         staging_dir, java_root_relatives = await asyncio.to_thread(
-            _clone_into_staging, payload.repo_url, payload.ref,
+            _clone_into_staging, payload.repo_url, payload.ref, settings.upload_dir,
         )
     except UploadValidationError as exc:
         return _error_response(str(exc), request_id, 400)
@@ -317,81 +246,14 @@ async def upload_status(
     return UploadStatusResponse(**get_progress(request_id=request_id))
 
 
-# Tunables for the SSE stream. Held at module scope so tests can patch them
-# to keep test runs fast without changing prod cadence.
-_SSE_HEARTBEAT_INTERVAL_S = 5.0  # max gap between any bytes on the wire
-_SSE_TERMINAL_GRACE_S = 0.5  # let the last event flush before closing
-
-
-async def _upload_status_event_stream(
-    request: Request,
-    request_id: str | None,
-) -> AsyncIterator[bytes]:
-    """Yield SSE bytes until the underlying job completes or the client disconnects.
-
-    Push-driven: the loop sleeps on an ``asyncio.Event`` that the progress
-    module sets whenever a state mutation matching our ``request_id``
-    occurs. The wake is scheduled across the thread boundary via
-    ``loop.call_soon_threadsafe`` because progress writers run on worker
-    threads (``asyncio.to_thread`` → sync ingestion callbacks).
-
-    A heartbeat timeout (``_SSE_HEARTBEAT_INTERVAL_S``) doubles as the
-    interval at which we re-poll ``request.is_disconnected()`` so a worker
-    is never held more than that long after the client closes the tab.
-
-    When ``complete`` flips to True, sends a final ``event: complete`` and
-    returns. The whole stream runs inside the auto-instrumented FastAPI
-    span so the upload's traceparent (if propagated by the client) chains
-    the stream request to the originating ``POST /upload`` span.
-    """
-    loop = asyncio.get_running_loop()
-    state_changed = asyncio.Event()
-
-    def _on_state_change(changed_rid: str | None) -> None:
-        # request_id=None means "tail the latest job"; accept every event.
-        # An explicit request_id only wakes on matching mutations.
-        if request_id is None or changed_rid == request_id:
-            try:
-                loop.call_soon_threadsafe(state_changed.set)
-            except RuntimeError:
-                # Loop is closing; the finally-block in the consumer will
-                # unregister us shortly. Drop the wake.
-                pass
-
-    unregister = register_state_change_listener(_on_state_change)
-    last_payload: str | None = None
-    try:
-        while True:
-            if await request.is_disconnected():
-                return
-            # Clear the flag BEFORE reading state. If a writer fires
-            # set() between get_progress() and a later clear(), the signal
-            # would be lost and the next wait() would sleep until the
-            # heartbeat. Clearing first means any subsequent set() — from
-            # a writer that races our read — is preserved for the wait()
-            # below and we wake immediately on the next iteration.
-            state_changed.clear()
-            state = get_progress(request_id=request_id)
-            payload = json.dumps(state, separators=(",", ":"))
-            if payload != last_payload:
-                yield f"event: status\ndata: {payload}\n\n".encode()
-                last_payload = payload
-            if state.get("complete"):
-                yield f"event: complete\ndata: {payload}\n\n".encode()
-                # Brief grace so client buffers flush before the stream closes.
-                await asyncio.sleep(_SSE_TERMINAL_GRACE_S)
-                return
-            # Wait for either: a state change wake, or the heartbeat timeout
-            # (at which point we'll loop, re-check disconnect, and emit a
-            # keepalive comment if nothing changed).
-            try:
-                await asyncio.wait_for(state_changed.wait(), timeout=_SSE_HEARTBEAT_INTERVAL_S)
-            except TimeoutError:
-                # SSE comment lines are ignored by EventSource but defeat
-                # proxy idle timeouts; cheaper than re-emitting status.
-                yield b": heartbeat\n\n"
-    finally:
-        unregister()
+async def _upload_status_event_stream(request: Request, request_id: str | None) -> AsyncIterator[bytes]:
+    async for chunk in upload_status_event_stream(
+        request,
+        request_id,
+        heartbeat_interval_provider=lambda: _SSE_HEARTBEAT_INTERVAL_S,
+        terminal_grace_provider=lambda: _SSE_TERMINAL_GRACE_S,
+    ):
+        yield chunk
 
 
 @router.get("/upload/status/stream")
@@ -405,18 +267,13 @@ async def upload_status_stream(
         ),
     ),
 ):
-    """Server-Sent Events stream of upload progress.
-
-    Browser fallback is automatic: the client (``useUploadStatusStream``)
-    falls back to bounded polling on EventSource error.
-    """
     return StreamingResponse(
         _upload_status_event_stream(request, request_id),
         media_type="text/event-stream",
         headers={
-            # SSE proxies / nginx buffering breaks the streaming semantics.
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
     )
+

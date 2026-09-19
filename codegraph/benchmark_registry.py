@@ -1,97 +1,58 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-from codegraph.policy.runtime.contracts import EVIDENCE_FIELD_ALIAS_MAP
+from codegraph.benchmark_registry_models import (
+    BenchmarkCategorySpec,
+    PolicyRegistry,
+    PolicyRuleSpec,
+    RegistryTier,
+)
+from codegraph.benchmark_registry_validation import (
+    first_duplicate as _first_duplicate,
+)
+from codegraph.benchmark_registry_validation import (
+    validate_engine_rule as _validate_engine_rule,
+)
+from codegraph.benchmark_registry_validation import (
+    validate_registry as _validate_registry,
+)
+from codegraph.benchmark_registry_validation import (
+    validate_rule as _validate_rule,
+)
+from codegraph.benchmark_registry_validation import (
+    validate_rule_module as _validate_rule_module,
+)
 
-RegistryTier = Literal["full", "guarded", "manual"]
+__all__ = [
+    "BenchmarkCategorySpec",
+    "DEFAULT_POLICY_REGISTRY_PATH",
+    "PROJECT_ROOT",
+    "PolicyRegistry",
+    "PolicyRuleSpec",
+    "RegistryTier",
+    "_first_duplicate",
+    "_validate_engine_rule",
+    "_validate_registry",
+    "_validate_rule",
+    "_validate_rule_module",
+    "benchmark_category_payloads",
+    "evidence_source_for_rule_id",
+    "framework_demo_category_ids",
+    "framework_demo_rule_ids",
+    "iso_rules_payload_from_registry",
+    "load_policy_registry",
+    "policy_catalog_entries_from_registry",
+    "policy_catalog_payload_from_registry",
+    "remediation_tier_by_rule_id",
+    "supported_remediation_rule_ids",
+]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_POLICY_REGISTRY_PATH = PROJECT_ROOT / "configs" / "benchmark" / "policy_registry.json"
-
-
-@dataclass(frozen=True)
-class PolicyRuleSpec:
-    id: str
-    control: str
-    title: str
-    reference: str
-    summary: str
-    evidence_fields: tuple[str, ...]
-    standard: str
-    iso_rule_id: str
-    subject: str
-    action: str
-    object: str
-    conditions: tuple[str, ...]
-    description: str
-    alias_ids: tuple[str, ...] = ()
-    evidence_source: str = "opa"
-    rego_module: str = ""
-    rego_rule: str = ""
-    opengrep_rules_dir: str = ""
-
-    def as_catalog_entry(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "id": self.id,
-            "control": self.control,
-            "title": self.title,
-            "reference": self.reference,
-            "summary": self.summary,
-            "evidence_source": self.evidence_source,
-            "evidence_fields": list(self.evidence_fields),
-        }
-        if self.evidence_source == "opa":
-            payload["rego_module"] = self.rego_module
-            payload["rego_rule"] = self.rego_rule
-        elif self.opengrep_rules_dir:
-            payload["opengrep_rules_dir"] = self.opengrep_rules_dir
-        if self.alias_ids:
-            payload["alias_ids"] = list(self.alias_ids)
-        return payload
-
-    def as_iso_rule_entry(self) -> dict[str, Any]:
-        return {
-            "standard": self.standard,
-            "id": self.iso_rule_id,
-            "subject": self.subject,
-            "action": self.action,
-            "object": self.object,
-            "conditions": list(self.conditions),
-            "description": self.description,
-        }
-
-
-@dataclass(frozen=True)
-class BenchmarkCategorySpec:
-    category_id: str
-    label: str
-    cwes: tuple[str, ...]
-    rego_rule_ids: tuple[str, ...]
-    control_ids: tuple[str, ...]
-    remediation_tier: RegistryTier
-    framework_demo: bool
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "category_id": self.category_id,
-            "label": self.label,
-            "cwes": list(self.cwes),
-            "rego_rule_ids": list(self.rego_rule_ids),
-            "control_ids": list(self.control_ids),
-            "remediation_tier": self.remediation_tier,
-            "framework_demo": self.framework_demo,
-        }
-
-
-@dataclass(frozen=True)
-class PolicyRegistry:
-    rules: tuple[PolicyRuleSpec, ...]
-    categories: tuple[BenchmarkCategorySpec, ...]
 
 
 def _read_registry(path: Path) -> dict[str, Any]:
@@ -169,101 +130,6 @@ def _parse_categories(entries: Any) -> tuple[BenchmarkCategorySpec, ...]:
     return tuple(_parse_category_entry(entry) for entry in entries)
 
 
-def _first_duplicate(values: list[str]) -> str | None:
-    seen: set[str] = set()
-    for value in values:
-        if not value:
-            continue
-        if value in seen:
-            return value
-        seen.add(value)
-    return None
-
-
-def _validate_rule_module(rule: PolicyRuleSpec) -> None:
-    rego_module_path = (PROJECT_ROOT / rule.rego_module).resolve()
-    if rego_module_path.suffix != ".rego":
-        raise ValueError(f"Policy registry rule {rule.id} must reference a .rego module: {rule.rego_module}")
-    if PROJECT_ROOT.resolve() not in rego_module_path.parents:
-        raise ValueError(f"Policy registry rule {rule.id} references a module outside the repository.")
-    if not rego_module_path.is_file():
-        raise ValueError(f"Policy registry rule {rule.id} references a missing module: {rule.rego_module}")
-
-
-def _validate_engine_rule(rule: PolicyRuleSpec, engine_name: str) -> None:
-    """A rule must exist in the rule set of the engine it names.
-
-    Without this a typo, or a rule declared before its definition is written,
-    silently never fires.
-    """
-    # Local import: keeps the registry loader free of engine dependencies for
-    # the common (opa-only) case.
-    from codegraph.policy.engines import get_engine  # noqa: PLC0415
-
-    engine = get_engine(engine_name)
-    if engine is None:
-        raise ValueError(f"Policy registry rule {rule.id} has unknown evidence_source: {engine_name}")
-    if rule.id not in engine.discover_rule_ids():
-        raise ValueError(
-            f"Policy registry rule {rule.id} declares evidence_source={engine.name} but no rule with that id "
-            f"was found in that engine's rule set."
-        )
-
-
-def _validate_rule(rule: PolicyRuleSpec, *, rule_ids: set[str], alias_ids: set[str], iso_rule_ids: set[str]) -> None:
-    if not rule.id:
-        raise ValueError("Policy registry rules must include a non-empty id.")
-    if not rule.iso_rule_id:
-        raise ValueError(f"Policy registry rule {rule.id} must include a non-empty ISO rule id.")
-    if rule.iso_rule_id in iso_rule_ids:
-        raise ValueError(f"Policy registry contains duplicate ISO rule id: {rule.iso_rule_id}")
-    iso_rule_ids.add(rule.iso_rule_id)
-    if rule.evidence_source == "opa":
-        _validate_rule_module(rule)
-    else:
-        _validate_engine_rule(rule, rule.evidence_source)
-
-    for evidence_field in rule.evidence_fields:
-        if evidence_field not in EVIDENCE_FIELD_ALIAS_MAP:
-            raise ValueError(f"Policy registry rule {rule.id} references an unknown evidence field: {evidence_field}")
-
-    for alias in rule.alias_ids:
-        if alias in rule_ids:
-            raise ValueError(f"Policy registry alias {alias} collides with a rule id.")
-        if alias in alias_ids:
-            raise ValueError(f"Policy registry contains duplicate alias id: {alias}")
-        alias_ids.add(alias)
-
-
-def _validate_registry(registry: PolicyRegistry) -> PolicyRegistry:
-    all_rule_ids = [rule.id for rule in registry.rules]
-    duplicate_rule_id = _first_duplicate(all_rule_ids)
-    if duplicate_rule_id:
-        raise ValueError(f"Policy registry contains duplicate rule id: {duplicate_rule_id}")
-
-    rule_ids = set(all_rule_ids)
-    alias_ids: set[str] = set()
-    iso_rule_ids: set[str] = set()
-    category_ids: set[str] = set()
-
-    for rule in registry.rules:
-        _validate_rule(rule, rule_ids=rule_ids, alias_ids=alias_ids, iso_rule_ids=iso_rule_ids)
-
-    for category in registry.categories:
-        if not category.category_id:
-            raise ValueError("Policy registry categories must include a non-empty category id.")
-        if category.category_id in category_ids:
-            raise ValueError(f"Policy registry contains duplicate category id: {category.category_id}")
-        category_ids.add(category.category_id)
-
-    missing = sorted(
-        rule_id for category in registry.categories for rule_id in category.rego_rule_ids if rule_id not in rule_ids
-    )
-    if missing:
-        raise ValueError(f"Policy registry categories reference unknown rule ids: {missing}")
-    return registry
-
-
 @lru_cache(maxsize=4)
 def load_policy_registry(path: str | None = None) -> PolicyRegistry:
     registry_path = Path(path).resolve() if path else DEFAULT_POLICY_REGISTRY_PATH.resolve()
@@ -272,7 +138,7 @@ def load_policy_registry(path: str | None = None) -> PolicyRegistry:
         rules=_parse_rules(payload.get("rules")),
         categories=_parse_categories(payload.get("categories")),
     )
-    return _validate_registry(registry)
+    return _validate_registry(registry, PROJECT_ROOT)
 
 
 def benchmark_category_payloads(path: str | None = None) -> list[dict[str, Any]]:
@@ -310,12 +176,6 @@ def supported_remediation_rule_ids(path: str | None = None) -> list[str]:
 
 
 def evidence_source_for_rule_id(rule_id: str | None, path: str | None = None) -> str | None:
-    """Return which detection engine owns *rule_id*, or None if unknown.
-
-    Callers that must re-verify a finding use this to route the recheck to the
-    engine that produced it; routing to the wrong engine silently finds nothing
-    and would read as "fixed".
-    """
     if not rule_id:
         return None
     wanted = str(rule_id).strip()

@@ -19,17 +19,19 @@ SUPPORTED_RULE_RATIONALES = {
     "ISO-A.9.4.1": "Access-control remediation adds Spring Security access control annotations and authentication guard checks.",
     "ISO-A.12.4.1": "Logging and monitoring remediation inserts structured security audit events using standard logging frameworks.",
 }
-SAFE_REFUSAL_RULE_IDS = frozenset({
-    "ISO-A.10-WEAK-RANDOM",
-    "ISO-A.10-WEAK-CRYPTO",
-    "ISO-A.8-SQL-INJECTION",
-    "ISO-A.8-PATH-TRAVERSAL",
-    "ISO-A.8-CMD-INJECTION",
-    "ISO-A.8-LDAP-INJECTION",
-    "ISO-A.8-XPATH-INJECTION",
-    "ISO-A.9.4.1",
-    "ISO-A.12.4.1",
-})
+SAFE_REFUSAL_RULE_IDS = frozenset(
+    {
+        "ISO-A.10-WEAK-RANDOM",
+        "ISO-A.10-WEAK-CRYPTO",
+        "ISO-A.8-SQL-INJECTION",
+        "ISO-A.8-PATH-TRAVERSAL",
+        "ISO-A.8-CMD-INJECTION",
+        "ISO-A.8-LDAP-INJECTION",
+        "ISO-A.8-XPATH-INJECTION",
+        "ISO-A.9.4.1",
+        "ISO-A.12.4.1",
+    }
+)
 
 
 # The default matrix derives from the benchmark policy registry on disk, so it

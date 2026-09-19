@@ -142,3 +142,54 @@ def apply_result(
     if predicate_trace is not None:
         result["predicate_trace"] = predicate_trace
     return result
+
+
+def build_generation_payload(
+    *,
+    decision: str | None,
+    edits: list[dict[str, Any]] | None,
+    replacement_method_lines: list[str] | None,
+    replacement_method_code: str | None,
+    reason: str | None,
+    raw_response_valid: bool,
+    schema_error: str | None,
+) -> dict[str, Any]:
+    return {
+        "decision": decision,
+        "edits": edits,
+        "replacement_method_lines": replacement_method_lines,
+        "replacement_method_code": replacement_method_code,
+        "reason": reason,
+        "raw_response_valid": raw_response_valid,
+        "schema_error": schema_error,
+    }
+
+
+def build_no_fix_response(
+    *,
+    violation_id: str,
+    context: dict[str, Any],
+    reason: str,
+    attempt_count: int | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": "NO_FIX",
+        "error": f"NO_FIX: {reason}",
+        "violation_id": violation_id,
+        "method_key": context.get("method_key"),
+        "target_method": context.get("target_method"),
+        "file_path": context.get("file_path"),
+        "rule_id": context.get("rule_id"),
+        "generation": {
+            "decision": "no_fix",
+            "edits": [],
+            "replacement_method_lines": None,
+            "replacement_method_code": None,
+            "reason": reason,
+            "raw_response_valid": True,
+            "schema_error": None,
+        },
+    }
+    if attempt_count is not None:
+        payload["attempt_count"] = attempt_count
+    return payload

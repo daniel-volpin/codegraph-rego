@@ -7,15 +7,61 @@ import logging
 import shutil
 from typing import Any
 
-from codegraph.common.concurrency import bounded_futures
-from codegraph.config import settings
 from codegraph.db import shared_neo4j_driver
-from codegraph.policy.engines import dedupe_violations, evaluate_all
+from codegraph.policy.integration_collector import (
+    allowed_rule_ids as _allowed_rule_ids,
+)
+from codegraph.policy.integration_collector import (
+    bundle_failure as _bundle_failure,
+)
+from codegraph.policy.integration_collector import (
+    collect_engine_violations as _collect_engine_violations,
+)
+from codegraph.policy.integration_collector import (
+    collect_violation_responses as _collect_violation_responses,
+)
+from codegraph.policy.integration_collector import (
+    evaluate_bundles_concurrently as _evaluate_bundles_concurrently,
+)
+from codegraph.policy.integration_collector import (
+    include_limit_metadata as _include_limit_metadata,
+)
+from codegraph.policy.integration_collector import (
+    is_allowed_rule as _is_allowed_rule,
+)
+from codegraph.policy.integration_collector import (
+    max_per_rule_reached as _max_per_rule_reached,
+)
+from codegraph.policy.integration_collector import (
+    max_total_reached as _max_total_reached,
+)
 from codegraph.policy.runtime import bundles as runtime_bundles
 from codegraph.policy.runtime import catalog as runtime_catalog
 from codegraph.policy.runtime import opa as runtime_opa
 
 LOGGER = logging.getLogger(__name__)
+
+__all__ = [
+    "PolicyEvaluator",
+    "_allowed_rule_ids",
+    "_bundle_failure",
+    "_collect_engine_violations",
+    "_collect_violation_responses",
+    "_evaluate_bundles_concurrently",
+    "_include_limit_metadata",
+    "_is_allowed_rule",
+    "_max_per_rule_reached",
+    "_max_total_reached",
+    "build_evidence_bundle",
+    "build_policy_input",
+    "evaluate_bundle",
+    "evaluate_policies",
+    "get_policy_catalog_entries",
+    "get_policy_catalog_payload",
+    "load_iso_rules",
+    "load_policy_catalog",
+    "normalize_violation_payload",
+]
 
 
 def load_policy_catalog() -> dict[str, dict[str, Any]]:
@@ -58,139 +104,6 @@ def build_evidence_bundle(
     )
 
 
-def _allowed_rule_ids(rule_ids: list[str] | None) -> set[str]:
-    return {str(rule_id).strip() for rule_id in (rule_ids or []) if str(rule_id).strip()}
-
-
-def _include_limit_metadata(
-    *,
-    max_bundles: int | None,
-    max_total_violations: int | None,
-    max_per_violation_id: int | None,
-    rule_ids: list[str] | None,
-) -> bool:
-    return any(value is not None for value in (max_bundles, max_total_violations, max_per_violation_id, rule_ids))
-
-
-def _bundle_failure(bundle: dict[str, Any], exc: RuntimeError) -> dict[str, Any]:
-    return {
-        "target_method": bundle.get("target_method"),
-        "file_path": bundle.get("file_path"),
-        "error": str(exc),
-    }
-
-
-def _evaluate_bundles_concurrently(bundles: list[dict[str, Any]]) -> tuple[list[Any], list[dict[str, Any]]]:
-    opa_results: list[Any] = [None] * len(bundles)
-    failed_bundles: list[dict[str, Any]] = []
-
-    for idx, future in bounded_futures(runtime_opa.evaluate_bundle, bundles, max_workers=settings.policy_workers):
-        bundle = bundles[idx]
-        try:
-            opa_results[idx] = future.result()
-        except RuntimeError as exc:
-            failed_bundles.append(_bundle_failure(bundle, exc))
-            LOGGER.warning("OPA evaluation failed for bundle %s: %s", bundle.get("target_method"), exc)
-
-    failed_bundles.sort(key=lambda failure: (str(failure["file_path"]), str(failure["target_method"])))
-    return opa_results, failed_bundles
-
-
-def _max_per_rule_reached(
-    violation_id: Any,
-    violation_counts_by_id: dict[str, int],
-    max_per_violation_id: int | None,
-) -> bool:
-    if violation_id is None:
-        return False
-    if not isinstance(max_per_violation_id, int) or max_per_violation_id <= 0:
-        return False
-    return violation_counts_by_id.get(str(violation_id), 0) >= max_per_violation_id
-
-
-def _is_allowed_rule(violation_id: Any, allowed_rule_ids: set[str]) -> bool:
-    return not allowed_rule_ids or str(violation_id or "").strip() in allowed_rule_ids
-
-
-def _max_total_reached(total: int, max_total_violations: int | None) -> bool:
-    return isinstance(max_total_violations, int) and max_total_violations > 0 and total >= max_total_violations
-
-
-def _collect_violation_responses(
-    *,
-    bundles: list[dict[str, Any]],
-    opa_results: list[Any],
-    catalog: dict[str, Any],
-    allowed_rule_ids: set[str],
-    max_per_violation_id: int | None,
-    max_total_violations: int | None,
-) -> tuple[list[dict[str, Any]], dict[str, int], int, int]:
-    violations: list[dict[str, Any]] = []
-    violation_counts_by_id: dict[str, int] = {}
-    omitted_findings = 0
-    excluded_findings = 0
-
-    for bundle, opa_result in zip(bundles, opa_results):
-        for violation in opa_result or []:
-            normalized = normalize_violation_payload(violation)
-            if normalized is None:
-                continue
-
-            violation_id = normalized.get("violation_id")
-            if not _is_allowed_rule(violation_id, allowed_rule_ids):
-                excluded_findings += 1
-                continue
-            if _max_per_rule_reached(
-                violation_id, violation_counts_by_id, max_per_violation_id
-            ) or _max_total_reached(len(violations), max_total_violations):
-                omitted_findings += 1
-                continue
-
-            control_meta = runtime_catalog.resolve_catalog_entry(violation_id, catalog)
-            violations.append(runtime_opa.build_violation_response(normalized, bundle, control_meta))
-            if violation_id is not None:
-                key = str(violation_id)
-                violation_counts_by_id[key] = violation_counts_by_id.get(key, 0) + 1
-    return violations, violation_counts_by_id, omitted_findings, excluded_findings
-
-
-def _collect_engine_violations(
-    *,
-    allowed_rule_ids: set[str],
-    violation_counts_by_id: dict[str, int],
-    workspace_root: str | None,
-) -> list[dict[str, Any]]:
-    """Merge findings from every registered non-OPA detection engine.
-
-    Adding an engine or a rule requires no change here: engines come from
-    `codegraph.policy.engines` and each discovers its own rules.
-    """
-
-    def _log(engine_name: str, exc: Exception) -> None:
-        LOGGER.error(
-            "%s-backed policy evaluation failed; continuing without its findings.",
-            engine_name,
-            exc_info=exc,
-        )
-
-    engine_violations = evaluate_all(
-        workspace_root=workspace_root,
-        neo4j_driver=shared_neo4j_driver(),
-        on_error=_log,
-    )
-
-    accepted: list[dict[str, Any]] = []
-    for violation in dedupe_violations(engine_violations):
-        violation_id = violation.get("violation_id")
-        if not _is_allowed_rule(violation_id, allowed_rule_ids):
-            continue
-        accepted.append(violation)
-        if violation_id is not None:
-            key = str(violation_id)
-            violation_counts_by_id[key] = violation_counts_by_id.get(key, 0) + 1
-    return accepted
-
-
 def evaluate_policies(
     *,
     max_bundles: int | None = None,
@@ -208,10 +121,6 @@ def evaluate_policies(
     try:
         policy_input = build_policy_input(max_bundles=max_bundles, workspace_root=workspace_root)
     except ValueError as exc:
-        # Raised when a method's recorded source is unreadable: the file is gone
-        # (a temporary analysed workspace) or its bytes no longer match the
-        # recorded hash. Both are expected states, and both must fail closed
-        # rather than evaluate a subset, which would understate findings.
         return {
             "error": f"policy_evidence_unavailable: {exc}",
             "hint": (
@@ -236,13 +145,13 @@ def evaluate_policies(
         bundles=bundles,
         opa_results=opa_results,
         catalog=catalog,
-        allowed_rule_ids=allowed_rule_ids,
+        allowed_rules=allowed_rule_ids,
         max_per_violation_id=max_per_violation_id,
         max_total_violations=max_total_violations,
     )
     violations.extend(
         _collect_engine_violations(
-            allowed_rule_ids=allowed_rule_ids,
+            allowed_rules=allowed_rule_ids,
             violation_counts_by_id=violation_counts_by_id,
             workspace_root=workspace_root,
         )
@@ -293,16 +202,10 @@ def evaluate_policies(
 
 
 def evaluate_bundle(bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    """
-    Public wrapper to evaluate a single method bundle with OPA. This reuses the
-    same query and policy directory as the main evaluation path, but accepts an
-    in-memory bundle (e.g., for virtual remediation previews).
-    """
     return runtime_opa.evaluate_bundle(bundle)
 
 
 def normalize_violation_payload(payload: Any) -> dict[str, Any] | None:
-    """Public helper to coerce OPA outputs into a dict or return None."""
     return runtime_opa.normalize_violation_payload(payload, LOGGER)
 
 
@@ -355,7 +258,6 @@ class PolicyEvaluator:
         }
 
     def trace(self, method_key: str, *, source_path_override: str | None = None) -> dict[str, Any]:
-        """Shadow trace path: evaluates the bundle via package root to extract intermediate predicate definitions."""
         snapshot = runtime_bundles.fetch_method_snapshot(shared_neo4j_driver(), method_key)
         if not snapshot:
             return {}
