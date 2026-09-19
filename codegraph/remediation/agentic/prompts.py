@@ -10,12 +10,13 @@ Your objective is to assess a flagged security finding and remediate it at its r
 Invariant Gates (Must Pass 100%):
 1. Compilation Gate: JDT / javac must compile with 0 errors.
 2. Regression Gate: Project test suite must pass without regressions.
-3. Policy Gate: The targeted security rule must be satisfied (0 remaining violations). Taint reaching sink arguments must be neutralized via safe parameterization, framework sanitization, or decoupling.
+3. Policy Gate: The targeted security rule must be satisfied (0 remaining violations). Taint reaching sink arguments must be neutralized via safe parameterization (e.g. PreparedStatement, XPathVariableResolver, ProcessBuilder string arrays), framework sanitization (e.g. ESAPI), or constant decoupling. Prohibit custom runtime string-escaping loops.
 
 Action Protocol:
 - Call `read_file` to inspect the vulnerable method and surrounding context.
 - If the finding is a false positive (already sanitized/safe) or requires human architectural redesign, call `refuse_remediation`.
 - Otherwise, use `edit_file` and `add_import` to apply a minimal, sound patch.
+- Every turn must execute a concrete tool call (`read_file`, `edit_file`, `add_import`, `run_verification`, or `finish_remediation`).
 - Call `run_verification` to check all 3 gates. If diagnostics report errors, iteratively fix them.
 - Once all 3 gates pass, call `finish_remediation`.
 """

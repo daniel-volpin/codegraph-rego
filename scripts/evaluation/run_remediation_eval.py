@@ -65,12 +65,14 @@ def _rebase_for_agentic_workspace(violation: dict[str, Any], java_relative_root:
             evidence["method_key"] = _rebase_method_key(evidence_method_key, prefix)
         evidence_file_path = evidence.get("file_path")
         if isinstance(evidence_file_path, str) and evidence_file_path:
-            evidence["file_path"] = f"{prefix}/{evidence_file_path}"
+            clean = evidence_file_path.split(f"/{prefix}/", 1)[-1].lstrip("/") if f"/{prefix}/" in evidence_file_path else evidence_file_path
+            evidence["file_path"] = f"{prefix}/{clean}" if not clean.startswith(prefix) else clean
         rebased["evidence"] = evidence
 
     file_path = violation.get("file_path")
     if isinstance(file_path, str) and file_path:
-        rebased["file_path"] = f"{prefix}/{file_path}"
+        clean = file_path.split(f"/{prefix}/", 1)[-1].lstrip("/") if f"/{prefix}/" in file_path else file_path
+        rebased["file_path"] = f"{prefix}/{clean}" if not clean.startswith(prefix) else clean
 
     return rebased
 
@@ -114,7 +116,7 @@ def _process_case(
             apply_result = run_agentic_remediation(
                 agentic_violation,
                 workspace_root=workspace.work_root,
-                max_turns=max(4, args.max_attempts * 3),
+                max_turns=args.max_turns or max(4, args.max_attempts * 3),
             )
             result = build_agentic_remediation_result(
                 violation=violation,
@@ -199,6 +201,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=2,
         help="Maximum remediation attempts per violation (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--max-turns",
+        type=int,
+        default=10,
+        help="Maximum agentic turns per violation in agentic mode (default: %(default)s)",
     )
     parser.add_argument(
         "--mode",
