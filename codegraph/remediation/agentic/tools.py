@@ -69,6 +69,16 @@ class AgentToolExecutor:
                         success=True,
                     )
 
+                elif name == "inspect_class_api":
+                    class_name = args.get("class_name", "")
+                    api_info = self.env.inspect_class_api(class_name)
+                    res = AgentToolResult(
+                        call_id=tool_call.call_id,
+                        name=name,
+                        output=json.dumps(api_info, indent=2),
+                        success="error" not in api_info,
+                    )
+
                 elif name == "edit_file":
                     rel = args.get("relative_path", "")
                     old_str = args.get("old_str", "")

@@ -66,3 +66,70 @@ def search_graph_callers_callees(symbol_name: str) -> dict[str, Any]:
             return {"matches": records}
     except Exception as exc:
         return {"error": f"Graph query unavailable: {exc}"}
+
+
+def inspect_workspace_class_api(scratch_root: Path, class_name: str) -> dict[str, Any]:
+    """Inspect public methods, constructors, and fields of a class in the workspace."""
+    clean_name = class_name.split(".")[-1]
+    matching_files: list[Path] = []
+    for rel in find_workspace_files(scratch_root, f"**/{clean_name}.java"):
+        p = scratch_root / rel
+        if p.is_file():
+            matching_files.append(p)
+
+    if not matching_files:
+        # Fallback to search for class declaration across java files
+        class_pattern = re.compile(rf"\bclass\s+{re.escape(clean_name)}\b")
+        for rel in find_workspace_files(scratch_root, "**/*.java"):
+            p = scratch_root / rel
+            try:
+                if class_pattern.search(p.read_text(encoding="utf-8", errors="ignore")):
+                    matching_files.append(p)
+                    break
+            except Exception:
+                continue
+
+    if not matching_files:
+        return {"error": f"Class '{class_name}' not found in workspace."}
+
+    target_file = matching_files[0]
+    rel_path = target_file.relative_to(scratch_root).as_posix()
+    content = target_file.read_text(encoding="utf-8", errors="ignore")
+
+    method_sig_pattern = re.compile(
+        r"^\s*(public|protected)\s+(?:static\s+)?(?:final\s+)?([\w<>\[\],\s]+?)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+[\w,\s]+)?\s*[{;]",
+        re.MULTILINE,
+    )
+    escaped_name = re.escape(clean_name)
+    constructor_pattern = re.compile(
+        r"^\s*(public|protected)\s+" + escaped_name + r"\s*\(([^)]*)\)\s*(?:throws\s+[\w,\s]+)?\s*[{;]",
+        re.MULTILINE,
+    )
+    field_pattern = re.compile(
+        r"^\s*(public|protected)\s+(?:static\s+)?(?:final\s+)?([\w<>\[\],\s]+?)\s+(\w+)\s*(?:=[^;]+)?;",
+        re.MULTILINE,
+    )
+
+    methods = []
+    for m in method_sig_pattern.finditer(content):
+        vis, ret_type, m_name, params = m.groups()
+        methods.append(f"{vis} {ret_type.strip()} {m_name}({params.strip()})")
+
+    constructors = []
+    for c in constructor_pattern.finditer(content):
+        vis, params = c.groups()
+        constructors.append(f"{vis} {clean_name}({params.strip()})")
+
+    fields = []
+    for f in field_pattern.finditer(content):
+        vis, f_type, f_name = f.groups()
+        fields.append(f"{vis} {f_type.strip()} {f_name}")
+
+    return {
+        "class_name": clean_name,
+        "file_path": rel_path,
+        "constructors": constructors[:10],
+        "methods": methods[:30],
+        "fields": fields[:10],
+    }
+

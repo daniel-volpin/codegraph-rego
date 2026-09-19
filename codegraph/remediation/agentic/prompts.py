@@ -89,7 +89,7 @@ def build_initial_user_prompt(
             demo = exemplars[0]
             prompt_parts.append(
                 f"\nVerified Exemplar Refactoring for `{rule_id}`:\n"
-                f"```diff\n{demo.diff}\n```"
+                f"```diff\n{demo.sanitized_diff()}\n```"
             )
 
     prompt_parts.append(

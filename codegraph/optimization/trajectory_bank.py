@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,14 @@ class TrajectoryBankEntry:
     tool_sequence: list[str]
     verification_summary: str
     timestamp: str
+
+    def sanitized_diff(self) -> str:
+        """Sanitize diff to remove benchmark-specific artifacts and local file paths."""
+        text = self.diff
+        text = re.sub(r"--- a/.*?\.java", "--- a/App.java", text)
+        text = re.sub(r"\+\+\+ b/.*?\.java", "+++ b/App.java", text)
+        text = re.sub(r"\bBenchmarkTest\d+\b", "App", text)
+        return text
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -101,6 +110,6 @@ class TrajectoryBank:
         for idx, ex in enumerate(exemplars, 1):
             lines.append(f"\nExample {idx} ({ex.rule_id}):")
             lines.append(f"Target Method: {ex.target_method}")
-            lines.append(f"Verified Patch:\n```diff\n{ex.diff}\n```")
+            lines.append(f"Verified Patch:\n```diff\n{ex.sanitized_diff()}\n```")
             lines.append(f"Verification: {ex.verification_summary}")
         return "\n".join(lines)

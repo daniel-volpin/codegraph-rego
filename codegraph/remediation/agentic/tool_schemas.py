@@ -119,6 +119,23 @@ AGENT_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "inspect_class_api",
+            "description": "Inspect public methods, constructors, and fields of a class or helper in the workspace by class name (e.g. 'DatabaseHelper' or 'SecurityConfig').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "class_name": {
+                        "type": "string",
+                        "description": "Short or fully qualified class name to inspect.",
+                    }
+                },
+                "required": ["class_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "run_verification",
             "description": "Trigger the 3-gate verification pipeline on the current workspace: compilation, regression tests, and OPA policy evaluation.",
             "parameters": {

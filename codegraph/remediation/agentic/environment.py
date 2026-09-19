@@ -21,6 +21,7 @@ from codegraph.remediation.agentic.workspace_search import (
     IGNORED_DIRS,
     IGNORED_EXTENSIONS,
     find_workspace_files,
+    inspect_workspace_class_api,
     search_graph_callers_callees,
     search_workspace_code,
 )
@@ -114,6 +115,9 @@ class IsolatedWorktreeEnvironment:
 
     def search_graph_context(self, symbol_name: str) -> dict[str, Any]:
         return search_graph_callers_callees(symbol_name)
+
+    def inspect_class_api(self, class_name: str) -> dict[str, Any]:
+        return inspect_workspace_class_api(self.scratch_root, class_name)
 
     def write_file(self, relative_path: str, content: str) -> None:
         target = self.resolve_path(relative_path)
