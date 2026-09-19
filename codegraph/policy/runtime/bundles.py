@@ -17,6 +17,7 @@ from codegraph.ingestion.config_facts import (
     resolve_properties,
 )
 from codegraph.policy.runtime.bundles_helpers import (
+    _build_helper_summaries,
     _config_context,
     _extract_method_source,
     _graph_context,
@@ -90,7 +91,6 @@ def build_evidence_bundle_from_source(
         graph_context = _graph_context(method_snapshot)
         config_context = _config_context(method_snapshot, resolved_config)
         analysis_flags = analyze_policy_indicators(source_code_active)
-        from codegraph.policy.runtime.bundles_helpers import _build_helper_summaries
         helper_summaries = _build_helper_summaries(
             source_code_active=source_code_active,
             method_snapshot=method_snapshot,

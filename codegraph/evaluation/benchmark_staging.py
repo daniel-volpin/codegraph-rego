@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from codegraph.evaluation import benchmark as benchmark_mod
 from codegraph.evaluation.benchmark_models import (
     GroundTruthRecord,
     IncompleteCorpusError,
@@ -26,7 +27,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _discover_benchmark_root() -> Path | None:
-    from codegraph.evaluation import benchmark as benchmark_mod
     project_root = getattr(benchmark_mod, "_PROJECT_ROOT", _PROJECT_ROOT)
     candidate = project_root / "BenchmarkJava"
     return candidate if (candidate / _BENCHMARK_ROOT_MARKER).is_file() else None

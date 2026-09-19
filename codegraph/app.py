@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.routers.health import router as health_router
@@ -182,8 +183,6 @@ def create_app() -> FastAPI:
     application.state.startup_status = _default_startup_status()
 
     try:
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor  # noqa: PLC0415
-
         FastAPIInstrumentor().instrument_app(application)
     except Exception:
         pass

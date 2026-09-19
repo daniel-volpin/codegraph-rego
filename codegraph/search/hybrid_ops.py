@@ -16,11 +16,13 @@ from codegraph.search.artifacts import (
 )
 
 if TYPE_CHECKING:
+    import faiss
+    import numpy as np
     from sentence_transformers import SentenceTransformer
 
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-_MODEL: SentenceTransformer | None = None
+_MODEL: Any | None = None
 _MODEL_NAME: str | None = None
 _MODEL_LOCK = threading.Lock()
 
@@ -87,9 +89,9 @@ def load_embedding_model(model_name: str | None = None) -> SentenceTransformer:
 
     with _MODEL_LOCK:
         if _MODEL is None or _MODEL_NAME != model_name:
-            from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+            import sentence_transformers  # noqa: PLC0415
 
-            _MODEL = SentenceTransformer(model_name)
+            _MODEL = sentence_transformers.SentenceTransformer(model_name)
             _MODEL_NAME = model_name
         return _MODEL
 

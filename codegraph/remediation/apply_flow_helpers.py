@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
+import tempfile as _default_tempfile
 from pathlib import Path
 from typing import Any
 
+from codegraph.common.workspace_lock import workspace_mutation_guard
 from codegraph.embedding.service import EmbeddingService
 from codegraph.ingestion.service import WorkspacePublication, ingest
+from codegraph.ingestion.snapshots import SnapshotError, StaleSourceError, create_source_snapshot_from_bytes
 from codegraph.remediation.editing import unified_diff
 from codegraph.remediation.method_key_paths import parse_method_key_relative_path, resolve_workspace_root
 from codegraph.remediation.result_models import CompilationResult
@@ -158,8 +161,6 @@ def _prepare_and_snapshot_source(
         return ("error", "VERIFICATION_ERROR", str(exc))
     original_bytes = resolved_path.read_bytes()
     try:
-        from codegraph.ingestion.snapshots import SnapshotError, StaleSourceError, create_source_snapshot_from_bytes
-
         baseline_snapshot = create_source_snapshot_from_bytes(
             workspace_root=workspace_root,
             source_path=resolved_path,
@@ -194,10 +195,7 @@ def compile_verify_and_apply_candidate(
     build_embeddings_fn: Any,
     tempfile_mod: Any = None,
 ) -> tuple[CompilationResult, dict[str, Any], bool, bool]:
-    import tempfile as _default_tempfile
     tf = tempfile_mod or _default_tempfile
-
-    from codegraph.common.workspace_lock import workspace_mutation_guard
 
     compilation: CompilationResult = {
         "attempted": False,

@@ -16,38 +16,21 @@ from neo4j import GraphDatabase
 from codegraph.config import settings
 from codegraph.embedding.service_helpers import (
     EmbeddingCache,
-)
-from codegraph.embedding.service_helpers import (
     MethodSnippet as _MethodSnippet,
-)
-from codegraph.embedding.service_helpers import (
     build_faiss_index as _build_faiss_index,
-)
-from codegraph.embedding.service_helpers import (
     canonical_graph_generation_helper as _canonical_graph_generation,
-)
-from codegraph.embedding.service_helpers import (
     encode_missing_vectors as _encode_missing_vectors,
-)
-from codegraph.embedding.service_helpers import (
     load_embedding_cache as _load_embedding_cache,
-)
-from codegraph.embedding.service_helpers import (
     persist_embedding_cache as _persist_embedding_cache,
-)
-from codegraph.embedding.service_helpers import (
     plan_embedding_work as _plan_embedding_work,
-)
-from codegraph.embedding.service_helpers import (
     publish_generation_manifest as _publish_generation_manifest,
-)
-from codegraph.embedding.service_helpers import (
     write_json as _write_json,
 )
 from codegraph.policy.runtime.bundles import validate_graph_generation
 
 if TYPE_CHECKING:
-    pass
+    import numpy as np
+    from sentence_transformers import SentenceTransformer
 
 CONTEXT_LINES_BEFORE = 5
 CONTEXT_LINES_AFTER = 20
@@ -161,8 +144,6 @@ class EmbeddingService:
         4. Build a FAISS index for fast vector search and save it to disk.
         5. Save the mapping from FAISS index to method signatures as a JSON file.
         """
-        import numpy as np  # noqa: PLC0415 - lazy-loads a heavy native/ML dependency
-
         if progress_callback:
             progress_callback("embedding", "Fetching methods from Neo4j…", 82.0)
         graph_generation = _fetch_active_graph_generation()
@@ -187,16 +168,15 @@ class EmbeddingService:
 
         vectors_by_sig = dict(plan.vectors_by_sig)
         if plan.snippets_to_encode:
-            from sentence_transformers import (
-                SentenceTransformer,  # noqa: PLC0415 - lazy-loads a heavy native/ML dependency
-            )
-
             if progress_callback:
                 progress_callback("embedding", f"Encoding {len(plan.snippets_to_encode)} methods…", 86.0)
-            model = SentenceTransformer(settings.embedding_model_name)
+            import sentence_transformers  # noqa: PLC0415
+            model = sentence_transformers.SentenceTransformer(settings.embedding_model_name)
             vectors_by_sig.update(_encode_missing_vectors(model, plan, cache_entries))
         elif progress_callback:
             progress_callback("embedding", "All embeddings reused from cache.", 86.0)
+
+        import numpy as np  # noqa: PLC0415
 
         vectors_list = [vectors_by_sig[sig] for sig in signatures if sig in vectors_by_sig]
         vectors_np = np.asarray(vectors_list, dtype="float32")

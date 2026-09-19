@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from codegraph.benchmark_registry import load_policy_registry
 from codegraph.evaluation.lexical_noise_report_models import (
     METHODS,
     DetectionResult,
@@ -20,8 +21,6 @@ from codegraph.evaluation.lexical_noise_report_models import (
 def _build_cwe_to_iso_map() -> dict[str, str]:
     mapping: dict[str, str] = {}
     try:
-        from codegraph.benchmark_registry import load_policy_registry
-
         for cat in load_policy_registry().categories:
             if not cat.framework_demo:
                 continue

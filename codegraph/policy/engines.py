@@ -18,6 +18,7 @@ from typing import Any, Protocol
 from neo4j import Driver
 
 from codegraph.config import settings
+from codegraph.policy import opengrep_bridge
 
 
 class RuleIdDiscovery(Protocol):
@@ -41,8 +42,6 @@ class DetectionEngine:
 
 
 def _opengrep_engine() -> DetectionEngine:
-    from codegraph.policy import opengrep_bridge  # noqa: PLC0415 - avoids an import cycle
-
     return DetectionEngine(
         name="opengrep",
         discover_rule_ids=opengrep_bridge.discover_rule_ids,
