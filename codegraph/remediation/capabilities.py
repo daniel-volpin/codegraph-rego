@@ -34,6 +34,21 @@ SAFE_REFUSAL_RULE_IDS = frozenset(
 )
 
 
+def _build_rule_rationale(rule_id: str, default_rationale: str | None = None) -> str:
+    if rule_id in SUPPORTED_RULE_RATIONALES:
+        return SUPPORTED_RULE_RATIONALES[rule_id]
+    try:
+        registry = load_policy_registry()
+        for rule in registry.rules:
+            if rule.id == rule_id or rule_id in rule.alias_ids:
+                if rule.summary:
+                    return f"{rule.title}: {rule.summary}"
+                return f"Automatic remediation for {rule.title} ({rule.id})."
+    except Exception:
+        pass
+    return default_rationale or "Automatic remediation is enabled for this supported rule."
+
+
 # The default matrix derives from the benchmark policy registry on disk, so it
 # is loaded lazily: importing this module (which policy runtime code does on
 # every violation response) must not perform file I/O or fail on a missing
@@ -41,22 +56,24 @@ SAFE_REFUSAL_RULE_IDS = frozenset(
 @lru_cache(maxsize=1)
 def default_remediation_rule_matrix() -> dict[str, dict[str, Any]]:
     matrix: dict[str, dict[str, Any]] = {}
-    for category in load_policy_registry().categories:
-        if category.remediation_tier not in {"full", "guarded"}:
-            continue
-        for rule_id in category.rego_rule_ids:
-            matrix[rule_id] = {
-                "support_tier": category.remediation_tier,
-                "reason_code": "supported_rule_for_auto_fix",
-                "strategy": "llm_method_replacement",
-                "preview_available": True,
-                "verify_available": True,
-                "safe_refusal_possible": rule_id in SAFE_REFUSAL_RULE_IDS,
-                "rationale": SUPPORTED_RULE_RATIONALES.get(
-                    rule_id,
-                    "Automatic remediation is enabled for this supported rule.",
-                ),
-            }
+    try:
+        registry = load_policy_registry()
+        for category in registry.categories:
+            if category.remediation_tier not in {"full", "guarded"}:
+                continue
+            for rule_id in category.rego_rule_ids:
+                safe_refusal = rule_id in SAFE_REFUSAL_RULE_IDS or category.remediation_tier in {"guarded", "manual"}
+                matrix[rule_id] = {
+                    "support_tier": category.remediation_tier,
+                    "reason_code": "supported_rule_for_auto_fix",
+                    "strategy": "llm_method_replacement",
+                    "preview_available": True,
+                    "verify_available": True,
+                    "safe_refusal_possible": safe_refusal,
+                    "rationale": _build_rule_rationale(rule_id),
+                }
+    except Exception:
+        pass
     return matrix
 
 

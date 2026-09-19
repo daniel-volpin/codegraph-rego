@@ -16,16 +16,36 @@ from codegraph.evaluation.lexical_noise_report_models import (
     PairedComparison,
 )
 
-CWE_TO_ISO: dict[str, str] = {
-    "22": "ISO-A.8-PATH-TRAVERSAL",
-    "78": "ISO-A.8-CMD-INJECTION",
-    "89": "ISO-A.8-SQL-INJECTION",
-    "90": "ISO-A.8-LDAP-INJECTION",
-    "327": "ISO-A.10-WEAK-CRYPTO",
-    "328": "ISO-A.10-WEAK-HASH",
-    "330": "ISO-A.10-WEAK-RANDOM",
-    "643": "ISO-A.8-XPATH-INJECTION",
-}
+
+def _build_cwe_to_iso_map() -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    try:
+        from codegraph.benchmark_registry import load_policy_registry
+
+        for cat in load_policy_registry().categories:
+            if not cat.framework_demo:
+                continue
+            for cwe_str in cat.cwes:
+                cwe_num = str(cwe_str).upper().replace("CWE-", "").strip()
+                if cat.rego_rule_ids:
+                    mapping[cwe_num] = cat.rego_rule_ids[0]
+    except Exception:
+        pass
+    if not mapping:
+        mapping = {
+            "22": "ISO-A.8-PATH-TRAVERSAL",
+            "78": "ISO-A.8-CMD-INJECTION",
+            "89": "ISO-A.8-SQL-INJECTION",
+            "90": "ISO-A.8-LDAP-INJECTION",
+            "327": "ISO-A.10-WEAK-CRYPTO",
+            "328": "ISO-A.10-WEAK-HASH",
+            "330": "ISO-A.10-WEAK-RANDOM",
+            "643": "ISO-A.8-XPATH-INJECTION",
+        }
+    return mapping
+
+
+CWE_TO_ISO: dict[str, str] = _build_cwe_to_iso_map()
 SUPPORTED_CWES: frozenset[str] = frozenset(CWE_TO_ISO.keys())
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
