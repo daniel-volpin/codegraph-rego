@@ -15,15 +15,13 @@ ATTEMPTED_REMEDIATION_STATUSES: Sequence[str] = (
     "VERIFICATION_ERROR",
 )
 
-FULLY_VERIFIED_LABEL_DEFINITION = (
-    "fully_verified := policy_fixed is true and build_success is true"
-)
+FULLY_VERIFIED_LABEL_DEFINITION = "fully_verified := policy_fixed is true and build_success is true"
 
 
 def _safe_float(value: Any) -> float | None:
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     if number < 0.0 or number > 1.0:
         return None

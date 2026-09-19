@@ -51,7 +51,8 @@ def build_candidate_overlay(
         candidate_fragment.method.name != baseline.identity.name
         or tuple(param.type.source or param.type.qualified_name or "" for param in candidate_fragment.method.parameters)
         != tuple(param.selector_text for param in baseline.identity.parameters)
-        or (candidate_fragment.method.kind in {"constructor", "compact_constructor"}) != baseline.identity.is_constructor
+        or (candidate_fragment.method.kind in {"constructor", "compact_constructor"})
+        != baseline.identity.is_constructor
     ):
         raise InvalidCandidateError("candidate_identity_mismatch")
     normalized_method_bytes = _method_bytes_with_baseline_newline(candidate_fragment, baseline)

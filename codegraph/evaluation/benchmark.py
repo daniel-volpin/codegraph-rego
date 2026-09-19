@@ -1,136 +1,69 @@
 from __future__ import annotations
 
-import csv
 import json
 import logging
-import os
 import random
-import re
-import shutil
-import xml.etree.ElementTree as ET
-from collections.abc import Iterable
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from codegraph.evaluation.benchmark_models import (
+    CategorySpec,
+    CoverageStats,
+    GroundTruthRecord,
+    IncompleteCorpusError,
+    SelectionResult,
+    _first_value,
+    _normalize_cwe,
+    _normalize_key,
+    _parse_truth,
+    extract_testcase_id,
+)
+from codegraph.evaluation.benchmark_staging import (
+    _BENCHMARK_ROOT_VAR,
+    _discover_benchmark_root,
+    _expand_env_path,
+    _load_ground_truth_csv,
+    _load_ground_truth_xml,
+    ensure_benchmark_root_env,
+    find_ground_truth_file,
+    inspect_ground_truth_schema,
+    load_ground_truth,
+    stage_benchmark_subset,
+    validate_staged_corpus,
+)
+
 LOGGER = logging.getLogger(__name__)
 
-
-@dataclass
-class CategorySpec:
-    id: str
-    label: str
-    cwes: list[str]
-    rego_rules: list[str]
-    iso_controls: list[str] = field(default_factory=list)
-    remediation_tier: str = "manual"
-    framework_demo: bool = False
-
-
-@dataclass
-class GroundTruthRecord:
-    testcase_id: str
-    cwe: str
-    label: bool
-    category: str | None = None
-
-
-@dataclass(frozen=True)
-class CoverageStats:
-    available_cases: int
-    selected_cases: int
-    sampled: bool
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "available_cases": int(self.available_cases),
-            "selected_cases": int(self.selected_cases),
-            "sampled": bool(self.sampled),
-        }
-
-
-def _normalize_cwe(value: str | None) -> str:
-    if not value:
-        return ""
-    text = str(value).strip().upper()
-    if text.isdigit():
-        return f"CWE-{text}"
-    if text.startswith("CWE-"):
-        return text
-    if "CWE" in text:
-        parts = re.findall(r"CWE-?\d+", text)
-        if parts:
-            return parts[0].replace("CWE", "CWE-").replace("--", "-")
-    return text
-
-
-def _normalize_key(key: str) -> str:
-    return key.strip().lstrip("#").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
-
-
-def _first_value(row: dict[str, Any], keys: Iterable[str]) -> str | None:
-    for key in keys:
-        if key in row and row[key] is not None:
-            value = str(row[key]).strip()
-            if value:
-                return value
-    return None
-
-
-def _parse_truth(value: str | None) -> bool | None:
-    if value is None:
-        return None
-    lowered = value.strip().lower()
-    if lowered in {"true", "1", "yes", "y", "vulnerable"}:
-        return True
-    if lowered in {"false", "0", "no", "n", "clean"}:
-        return False
-    return None
-
-
-_BENCHMARK_ROOT_VAR = "OWASP_BENCHMARK_ROOT"
-_BENCHMARK_ROOT_MARKER = "expectedresults-1.2.csv"
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-
-def _discover_benchmark_root() -> Path | None:
-    """Return ./BenchmarkJava if it holds the corpus, else None.
-
-    One default location, the one `make benchmark-corpus` creates, plus
-    OWASP_BENCHMARK_ROOT to point anywhere else. A checkout is identified by
-    its ground-truth file, so an empty or unrelated directory is not mistaken
-    for the corpus.
-    """
-    candidate = _PROJECT_ROOT / "BenchmarkJava"
-    return candidate if (candidate / _BENCHMARK_ROOT_MARKER).is_file() else None
-
-
-def ensure_benchmark_root_env() -> str | None:
-    """Populate the benchmark-root variable from a discovered checkout if unset."""
-    configured = os.environ.get(_BENCHMARK_ROOT_VAR)
-    if configured:
-        return configured
-    discovered = _discover_benchmark_root()
-    if discovered is None:
-        return None
-    LOGGER.info("Using discovered OWASP Benchmark checkout at %s", discovered)
-    os.environ[_BENCHMARK_ROOT_VAR] = str(discovered)
-    return str(discovered)
-
-
-def _expand_env_path(value: str | None) -> str | None:
-    if value is None:
-        return None
-    expanded = os.path.expandvars(value)
-    # expandvars leaves an unset variable literal, which would surface later as
-    # a confusing "no such directory: ${VAR}/..." instead of a clear cause.
-    if "$" in expanded:
-        raise ValueError(
-            f"Could not resolve {value!r}: {_BENCHMARK_ROOT_VAR} is not set and ./BenchmarkJava "
-            f"does not hold the corpus. Run `make benchmark-corpus`, or export "
-            f"{_BENCHMARK_ROOT_VAR}=/path/to/BenchmarkJava."
-        )
-    return expanded
+__all__ = [
+    "CategorySpec",
+    "CoverageStats",
+    "GroundTruthRecord",
+    "IncompleteCorpusError",
+    "SelectionResult",
+    "_BENCHMARK_ROOT_VAR",
+    "_PROJECT_ROOT",
+    "_discover_benchmark_root",
+    "_expand_env_path",
+    "_first_value",
+    "_load_ground_truth_csv",
+    "_load_ground_truth_xml",
+    "_normalize_cwe",
+    "_normalize_key",
+    "_parse_truth",
+    "coverage_report",
+    "ensure_benchmark_root_env",
+    "extract_testcase_id",
+    "find_ground_truth_file",
+    "inspect_ground_truth_schema",
+    "load_ground_truth",
+    "load_mapping_config",
+    "load_selection_config",
+    "select_testcases",
+    "stage_benchmark_subset",
+    "validate_staged_corpus",
+]
 
 
 def load_mapping_config(path: Path) -> list[CategorySpec]:
@@ -180,123 +113,11 @@ def load_selection_config(path: Path) -> dict[str, Any]:
         "ground_truth_path": _expand_env_path(payload.get("ground_truth_path")),
         "categories": payload.get("categories") or [],
         "testcase_ids": payload.get("testcase_ids") or [],
-        # Missing/null/0 means "no sampling limit".
         "max_cases_per_category": max_cases,
         "seed": payload.get("seed", 7),
         "debug_fn_analysis": bool(payload.get("debug_fn_analysis", False)),
         "build_command": payload.get("build_command"),
     }
-
-
-def find_ground_truth_file(benchmark_root: Path, override: str | None) -> Path:
-    if override:
-        path = Path(override)
-        if not path.is_file():
-            raise FileNotFoundError(f"Ground truth file not found: {override}")
-        return path
-    candidates = [
-        "benchmarkdata.csv",
-        "benchmarkdata.xml",
-        "BenchmarkData.xml",
-        "Benchmark.xml",
-    ]
-    for name in candidates:
-        for candidate in benchmark_root.rglob(name):
-            return candidate
-    for candidate in benchmark_root.rglob("expectedresults*.csv"):
-        return candidate
-    raise FileNotFoundError("Could not locate benchmark ground truth (benchmarkdata.csv/xml or expectedresults*.csv).")
-
-
-def inspect_ground_truth_schema(path: Path) -> dict[str, Any]:
-    if not path.is_file():
-        raise FileNotFoundError(f"Ground truth file not found: {path}")
-    if path.suffix.lower() == ".csv":
-        with path.open("r", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            return {
-                "format": "csv",
-                "fieldnames": reader.fieldnames or [],
-                "normalized_fieldnames": [_normalize_key(name) for name in (reader.fieldnames or [])],
-            }
-    tree = ET.parse(path)
-    root = tree.getroot()
-    attributes = []
-    for elem in root.iter():
-        if elem.tag.lower().endswith("testcase"):
-            attributes = list(elem.attrib.keys())
-            break
-    return {
-        "format": "xml",
-        "root_tag": root.tag,
-        "testcase_attributes": attributes,
-    }
-
-
-def load_ground_truth(benchmark_root: Path, ground_truth_path: str | None) -> list[GroundTruthRecord]:
-    truth_path = find_ground_truth_file(benchmark_root, ground_truth_path)
-    if truth_path.suffix.lower() == ".csv":
-        return _load_ground_truth_csv(truth_path)
-    return _load_ground_truth_xml(truth_path)
-
-
-def _load_ground_truth_csv(path: Path) -> list[GroundTruthRecord]:
-    records: list[GroundTruthRecord] = []
-    with path.open("r", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            normalized = {_normalize_key(key): value for key, value in row.items()}
-            testcase_id = _first_value(
-                normalized,
-                ["testcase", "testcaseid", "testname", "testcasename", "name"],
-            )
-            cwe = _first_value(normalized, ["cwe", "cweid"])
-            truth_raw = _first_value(
-                normalized,
-                ["truefalse", "realvulnerability", "vulnerable", "isvulnerable"],
-            )
-            label = _parse_truth(truth_raw)
-            if not testcase_id or label is None:
-                continue
-            records.append(
-                GroundTruthRecord(
-                    testcase_id=testcase_id,
-                    cwe=_normalize_cwe(cwe),
-                    label=label,
-                    category=_first_value(normalized, ["category"]),
-                )
-            )
-    return records
-
-
-def _load_ground_truth_xml(path: Path) -> list[GroundTruthRecord]:
-    records: list[GroundTruthRecord] = []
-    tree = ET.parse(path)
-    root = tree.getroot()
-    for elem in root.iter():
-        if not elem.tag.lower().endswith("testcase"):
-            continue
-        testcase_id = elem.attrib.get("name") or elem.attrib.get("testcase") or elem.attrib.get("id")
-        truth_raw = elem.attrib.get("truefalse") or elem.attrib.get("vulnerable")
-        label = _parse_truth(truth_raw)
-        if not testcase_id or label is None:
-            continue
-        records.append(
-            GroundTruthRecord(
-                testcase_id=testcase_id,
-                cwe=_normalize_cwe(elem.attrib.get("cwe")),
-                label=label,
-                category=elem.attrib.get("category"),
-            )
-        )
-    return records
-
-
-@dataclass
-class SelectionResult:
-    selected_by_category: dict[str, list[GroundTruthRecord]]
-    selected_testcase_ids: list[str]
-    coverage_by_category: dict[str, CoverageStats] = field(default_factory=dict)
 
 
 def select_testcases(
@@ -345,7 +166,6 @@ def select_testcases(
 
 
 def coverage_report(selection: SelectionResult, selected_category_ids: list[str]) -> dict[str, dict[str, Any]]:
-    """Return JSON-serializable coverage stats for the selected category ids."""
     report: dict[str, dict[str, Any]] = {}
     for category_id in selected_category_ids:
         stats = selection.coverage_by_category.get(category_id)
@@ -353,92 +173,3 @@ def coverage_report(selection: SelectionResult, selected_category_ids: list[str]
             continue
         report[category_id] = stats.as_dict()
     return report
-
-
-class IncompleteCorpusError(RuntimeError):
-    """Requested testcases are missing from the staged corpus (thesis mode)."""
-
-
-def validate_staged_corpus(
-    requested_ids: Iterable[str],
-    staged: dict[str, Path],
-    *,
-    require_complete: bool,
-) -> list[str]:
-    """Return missing testcase IDs; raise ``IncompleteCorpusError`` when complete is required."""
-    requested = list(requested_ids)
-    missing = sorted(set(requested) - set(staged))
-    if require_complete and missing:
-        raise IncompleteCorpusError(
-            f"Incomplete benchmark corpus: {len(missing)} of {len(requested)} requested "
-            f"testcases are not staged (e.g. {', '.join(missing[:10])}). Refusing to report "
-            "thesis metrics from a partial checkout. Verify OWASP_BENCHMARK_ROOT, or rerun "
-            "without --require-complete-corpus for a non-thesis exploratory run."
-        )
-    return missing
-
-
-def stage_benchmark_subset(
-    benchmark_root: Path,
-    java_relative_root: str,
-    testcase_ids: Iterable[str],
-    dest_root: Path,
-) -> dict[str, Path]:
-    source_root = benchmark_root / java_relative_root
-    dest_java_root = dest_root / java_relative_root
-    dest_java_root.mkdir(parents=True, exist_ok=True)
-    staged: dict[str, Path] = {}
-    missing: list[str] = []
-
-    scaffold_entries = [
-        "pom.xml",
-        "build.gradle",
-        "build.gradle.kts",
-        "settings.gradle",
-        "settings.gradle.kts",
-        "mvnw",
-        "mvnw.cmd",
-        "gradlew",
-        "gradlew.bat",
-        ".mvn",
-        "gradle",
-        "DevStyleHtml.prefs",
-        "DevStyleXml.prefs",
-        "src/main/resources",
-        "src/main/java/org/owasp/benchmark/helpers",
-        "src/main/java/org/owasp/benchmark/service",
-    ]
-
-    for relative in scaffold_entries:
-        src = benchmark_root / relative
-        if not src.exists():
-            continue
-        dest = dest_root / relative
-        if src.is_dir():
-            shutil.copytree(src, dest, dirs_exist_ok=True)
-        else:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
-
-    for testcase_id in testcase_ids:
-        matches = list(source_root.rglob(f"{testcase_id}.java"))
-        if not matches:
-            missing.append(testcase_id)
-            continue
-        src_path = matches[0]
-        rel_path = src_path.relative_to(source_root)
-        dest_path = dest_java_root / rel_path
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src_path, dest_path)
-        staged[testcase_id] = dest_path
-
-    if missing:
-        LOGGER.warning("Missing %d testcase files: %s", len(missing), ", ".join(missing[:5]))
-    return staged
-
-
-def extract_testcase_id(value: str | None) -> str | None:
-    if not value:
-        return None
-    match = re.search(r"(BenchmarkTest\d+)", value)
-    return match.group(1) if match else None

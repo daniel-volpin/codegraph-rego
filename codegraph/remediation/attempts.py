@@ -150,7 +150,9 @@ def run_replacement_attempts(
             updated_source_lines = llm_output.get("replacement_method_lines")
             outcome.raw_output = llm_output.get("raw_output")
             outcome.generation_payload = llm_output.get("generation")
-            attempt_span.set_attribute("schema_valid", bool((outcome.generation_payload or {}).get("raw_response_valid")))
+            attempt_span.set_attribute(
+                "schema_valid", bool((outcome.generation_payload or {}).get("raw_response_valid"))
+            )
             attempt_span.set_attribute("decision", str(llm_output.get("decision") or ""))
             attempt_span.set_attribute("edits_count", len(llm_output.get("edits") or []))
 
@@ -181,7 +183,11 @@ def run_replacement_attempts(
             attempt_span.set_attribute("confidence_score", float(outcome.confidence.get("score") or -1.0))
             attempt_span.set_attribute("confidence_band", str(outcome.confidence.get("band") or ""))
 
-            if mode == "apply" and settings.remediation_confidence_gate_enabled and outcome.confidence.get("band") != "apply":
+            if (
+                mode == "apply"
+                and settings.remediation_confidence_gate_enabled
+                and outcome.confidence.get("band") != "apply"
+            ):
                 outcome.terminal_result = confidence_gate_result(
                     service=service,
                     violation_id=violation_id,

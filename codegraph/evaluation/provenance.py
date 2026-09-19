@@ -57,7 +57,9 @@ def _git_info(repo: Path = _PROJECT_ROOT) -> dict[str, Any]:
     info: dict[str, Any] = {}
     sha = _safe_run(["git", "rev-parse", "HEAD"], cwd=repo)
     info["sha"] = sha.get("stdout") if sha.get("returncode") == 0 else None
-    info["sha_error"] = sha.get("error") or sha.get("stderr") if "stdout" not in sha or sha.get("returncode") != 0 else None
+    info["sha_error"] = (
+        sha.get("error") or sha.get("stderr") if "stdout" not in sha or sha.get("returncode") != 0 else None
+    )
 
     branch = _safe_run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo)
     info["branch"] = branch.get("stdout") if branch.get("returncode") == 0 else None
@@ -136,7 +138,7 @@ def _portable_path(
             continue
         try:
             return resolved_path.relative_to(candidate_root.resolve(strict=False)).as_posix()
-        except (OSError, ValueError):
+        except OSError, ValueError:
             continue
 
     return path_obj.name or None

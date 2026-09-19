@@ -5,15 +5,16 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from codegraph.common.workspace_lock import workspace_mutation_guard
 from codegraph.embedding.service import EmbeddingService
 from codegraph.ingestion.service import WorkspacePublication, ingest, rollback_workspace_revision
-from codegraph.ingestion.snapshots import (
-    SnapshotError,
-    StaleSourceError,
-    create_source_snapshot_from_bytes,
+from codegraph.remediation.apply_flow_finalize import finalize_apply_result as _finalize_apply_result
+from codegraph.remediation.apply_flow_helpers import (
+    _method_key_relative_path,
+    _prepare_and_snapshot_source,
+    _unified_diff,
+    _workspace_root_for,
+    compile_verify_and_apply_candidate,
 )
-from codegraph.policy.trace import PolicyStateTrace, filter_predicate_trace, project_trace_profile
 from codegraph.remediation.attempts import (
     ReplacementAttemptOutcome,
     capture_retry_raw_output,
@@ -22,18 +23,24 @@ from codegraph.remediation.attempts import (
     run_replacement_attempts,
 )
 from codegraph.remediation.capabilities import get_remediation_capability
-from codegraph.remediation.editing import unified_diff
-from codegraph.remediation.method_key_paths import parse_method_key_relative_path, resolve_workspace_root
 from codegraph.remediation.result_models import (
     ApplyFixResult,
-    ApplyMetadata,
     CompilationResult,
-    apply_result,
     early_error_result,
     generation_error_result,
 )
 from codegraph.remediation.scoped_verification import verify_candidate
 from codegraph.telemetry import get_tracer
+
+__all__ = [
+    "execute_apply_fix",
+    "ingest",
+    "rollback_workspace_revision",
+    "tempfile",
+    "verify_candidate",
+    "_build_search_embeddings",
+    "_workspace_root_for",
+]
 
 LOGGER = logging.getLogger(__name__)
 _tracer = get_tracer("codegraph.remediation.apply_flow")
@@ -45,146 +52,12 @@ _confidence_gate_result = confidence_gate_result
 _run_replacement_attempts = run_replacement_attempts
 
 
-def _unified_diff(before: str, after: str, *, label: str = "method") -> str:
-    return unified_diff(before, after, label=label)
-
-
-def _build_passed(compilation: CompilationResult) -> bool:
-    return bool(compilation.get("attempted")) and bool(compilation.get("success"))
-
-
-def _verification_passed(verification: dict[str, Any]) -> bool:
-    return verification.get("status") == "POLICY_PASS"
-
-
-def _can_commit_apply(mode: str, verification: dict[str, Any], compilation: CompilationResult) -> bool:
-    return mode == "apply" and _verification_passed(verification) and _build_passed(compilation)
-
-
-def _final_status(
-    *,
-    mode: str,
-    verification: dict[str, Any],
-    compilation: CompilationResult,
-    apply_successful: bool,
-    restore_failed: bool,
-) -> str:
-    if restore_failed:
-        return "VERIFICATION_ERROR"
-    if verification.get("error"):
-        return "VERIFICATION_ERROR"
-    if not _build_passed(compilation):
-        if compilation.get("attempted"):
-            return "BUILD_ERROR"
-        return "VERIFICATION_ERROR"
-    if not _verification_passed(verification):
-        return "VERIFICATION_ERROR"
-    if mode == "apply" and not apply_successful:
-        return "VERIFICATION_ERROR"
-    return "OK"
-
-
-def _final_error(status: str, verification: dict[str, Any], *, restore_failed: bool) -> str | None:
-    if status == "OK":
-        return None
-    if restore_failed:
-        primary_error = verification.get("error")
-        rollback_error = "Rollback failed: workspace may be left in candidate state"
-        return f"{primary_error}; {rollback_error}" if primary_error else rollback_error
-    return verification.get("error") or "Apply verification failed"
-
-
-def _restore_file(
-    resolved_path: Path,
-    original_bytes: bytes,
-    expected_current_bytes: bytes | None,
-) -> bool:
-    try:
-        if expected_current_bytes is not None and resolved_path.read_bytes() != expected_current_bytes:
-            LOGGER.warning("Refusing to restore %s because it changed after remediation wrote the candidate.", resolved_path)
-            return False
-        resolved_path.write_bytes(original_bytes)
-        return True
-    except OSError as exc:  # pragma: no cover - filesystem guard
-        LOGGER.warning("Failed to restore original content for %s: %s", resolved_path, exc)
-        return False
-
-
-def _should_restore(mode: str, apply_successful: bool) -> bool:
-    return mode != "apply" or not apply_successful
-
-
-def _method_key_relative_path(method_key: str) -> Path:
-    relative = parse_method_key_relative_path(method_key)
-    if relative is None:
-        raise ValueError("invalid_method_key")
-    return relative
-
-
-def _workspace_root_for(resolved_path: Path, method_key: str) -> Path:
-    relative = _method_key_relative_path(method_key)
-    root = resolve_workspace_root(resolved_path, relative)
-    if root is None:
-        raise ValueError("source_path_method_key_mismatch")
-    return root
-
-
-def _apply_work_root() -> Path:
-    root = Path.cwd() / "build" / "remediation-apply-work"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
-
-
 def _publish_workspace_revision(workspace_root: Path) -> WorkspacePublication:
     return ingest(workspace_root.as_posix(), progress_callback=None, source_roots=None)
 
 
 def _build_search_embeddings() -> None:
     EmbeddingService.build_embeddings(progress_callback=None)
-
-
-def _required_evidence_source_sha256(context: dict[str, Any]) -> str:
-    evidence_raw = context.get("evidence")
-    evidence: dict[str, Any] = evidence_raw if isinstance(evidence_raw, dict) else {}
-    value = evidence.get("source_sha256")
-    if not isinstance(value, str) or not value:
-        raise ValueError("evidence.source_sha256 is required")
-    return value
-
-
-def _stale_verification(rule_id: str) -> dict[str, Any]:
-    return {
-        "status": "STALE_CANDIDATE",
-        "policy_status": "NOT_EVALUATED",
-        "build_status": "NOT_EVALUATED",
-        "target_rule_status": "UNKNOWN",
-        "rule_id": rule_id,
-        "stale_reasons": ["source_sha256_mismatch"],
-        "error": "source changed during remediation",
-    }
-
-
-def _policy_state_trace(
-    *,
-    rule_id: str,
-    before_trace_raw: dict[str, Any] | None,
-    after_trace_raw: dict[str, Any] | None,
-) -> dict[str, Any]:
-    before_filtered = filter_predicate_trace(before_trace_raw)
-    after_filtered = filter_predicate_trace(after_trace_raw)
-    trace_obj = PolicyStateTrace(
-        package_path="data.iso27001",
-        rule_id=rule_id,
-        trace_source="package_root_eval",
-        before_trace_raw=before_trace_raw,
-        after_trace_raw=after_trace_raw,
-        before_trace_filtered=before_filtered,
-        after_trace_filtered=after_filtered,
-        before_trace_normalized=project_trace_profile(rule_id, before_filtered),
-        after_trace_normalized=project_trace_profile(rule_id, after_filtered),
-        trace_fields_used=list(before_trace_raw.keys() if before_trace_raw else []),
-    )
-    return trace_obj.model_dump()
 
 
 def execute_apply_fix(
@@ -241,28 +114,17 @@ def _execute_apply_fix_inner(
 ) -> ApplyFixResult:
     max_attempts = max(1, max_attempts)
     if not method_key:
-        return early_error_result(
-            "INVALID",
-            violation_id=violation_id,
-            error="method_key is required",
-        )
+        return early_error_result("INVALID", violation_id=violation_id, error="method_key is required")
     try:
         source_relative_path = _method_key_relative_path(method_key)
     except ValueError as exc:
         return early_error_result(
-            "INVALID",
-            violation_id=violation_id,
-            error=str(exc),
-            method_key=method_key,
-            file_path=file_path,
+            "INVALID", violation_id=violation_id, error=str(exc), method_key=method_key, file_path=file_path
         )
     context = service.get_violation_context(violation_id, method_key=method_key, file_path=file_path)
     if context is None:
         return early_error_result(
-            "NOT_FOUND",
-            violation_id=violation_id,
-            error=f"Violation {violation_id} not found",
-            method_key=method_key,
+            "NOT_FOUND", violation_id=violation_id, error=f"Violation {violation_id} not found", method_key=method_key
         )
 
     rule_id = context.get("rule_id")
@@ -294,10 +156,7 @@ def _execute_apply_fix_inner(
     preflight_reason = service._preflight_fixability_reason(context)
     if preflight_reason:
         response = service._build_no_fix_response(
-            violation_id=violation_id,
-            context=context,
-            reason=preflight_reason,
-            attempt_count=0,
+            violation_id=violation_id, context=context, reason=preflight_reason, attempt_count=0
         )
         response["confidence"] = service._build_confidence(
             context=context,
@@ -308,71 +167,19 @@ def _execute_apply_fix_inner(
         )
         return response
 
-    resolved_path = service._resolve_file_path(file_path)
-    if resolved_path is None:
+    prep = _prepare_and_snapshot_source(service, file_path, method_key, context)
+    if prep[0] == "error":
+        _, err_status, err_msg = prep
         return early_error_result(
-            "VERIFICATION_ERROR",
+            err_status,
             violation_id=violation_id,
-            error=f"Could not resolve file path: {file_path}",
+            error=err_msg,
             rule_id=context.get("rule_id"),
             method_key=method_key,
             target_method=target_method,
             file_path=file_path,
         )
-
-    try:
-        workspace_root = _workspace_root_for(resolved_path, method_key)
-    except ValueError as exc:
-        return early_error_result(
-            "INVALID",
-            violation_id=violation_id,
-            error=str(exc),
-            rule_id=context.get("rule_id"),
-            method_key=method_key,
-            target_method=target_method,
-            file_path=file_path,
-        )
-    try:
-        expected_source_sha256 = _required_evidence_source_sha256(context)
-    except ValueError as exc:
-        return early_error_result(
-            "VERIFICATION_ERROR",
-            violation_id=violation_id,
-            error=str(exc),
-            rule_id=context.get("rule_id"),
-            method_key=method_key,
-            target_method=target_method,
-            file_path=file_path,
-        )
-    original_bytes = resolved_path.read_bytes()
-    try:
-        baseline_snapshot = create_source_snapshot_from_bytes(
-            workspace_root=workspace_root,
-            source_path=resolved_path,
-            source_bytes=original_bytes,
-            method_selector=method_key,
-            expected_source_sha256=expected_source_sha256,
-        )
-    except StaleSourceError:
-        return early_error_result(
-            "VERIFICATION_ERROR",
-            violation_id=violation_id,
-            error="stale_source_hash",
-            rule_id=context.get("rule_id"),
-            method_key=method_key,
-            target_method=target_method,
-            file_path=file_path,
-        )
-    except SnapshotError as exc:
-        return early_error_result(
-            "VERIFICATION_ERROR",
-            violation_id=violation_id,
-            error=str(exc),
-            rule_id=context.get("rule_id"),
-            method_key=method_key,
-            target_method=target_method,
-            file_path=file_path,
-        )
+    resolved_path, workspace_root, original_bytes, expected_source_sha256, baseline_snapshot = prep
     context["prompt_context"] = prompt_context
 
     replacement = _run_replacement_attempts(
@@ -466,162 +273,22 @@ def _compile_verify_and_apply(
     mode: str,
     build_command: str | None,
 ) -> tuple[CompilationResult, dict[str, Any], bool, bool]:
-    """Compile and verify the candidate in a scratch workspace, then — if the
-    mode and verification allow it — apply it to the live file and publish a
-    new graph revision, rolling the file and/or graph back if publication
-    fails partway through.
-
-    Returns (compilation, verification, apply_successful, restore_failed).
-    """
-    compilation: CompilationResult = {
-        "attempted": False,
-        "success": False,
-        "output_snippet": None,
-        "skipped_reason": "No build system detected",
-    }
-    verification: dict[str, Any] = {}
-    apply_successful = False
-    live_workspace_modified = False
-    restore_failed = False
-    graph_rollback_failed = False
-    cleanup: dict[str, bool | None] = {"file_restored": None, "revision_published": None}
-
-    try:
-        tempdir = tempfile.TemporaryDirectory(prefix="candidate-", dir=_apply_work_root())
-        tmp = Path(tempdir.__enter__())
-        try:
-            _temp_root, temp_file_path, temp_build_root = service._prepare_temp_workspace(tmp, resolved_path)
-            temp_file_path.parent.mkdir(parents=True, exist_ok=True)
-            temp_file_path.write_bytes(replacement.candidate_file_bytes)
-            compilation = service._compile_project(temp_build_root, build_command=build_command)
-
-            verification_workspace = tmp / "verification-workspace"
-            verification_source = verification_workspace / source_relative_path
-            verification_source.parent.mkdir(parents=True, exist_ok=True)
-            verification_source.write_bytes(original_bytes)
-            candidate_method_rel = Path(".candidate") / "candidate-method.java"
-            candidate_method_path = verification_workspace / candidate_method_rel
-            candidate_method_path.parent.mkdir(parents=True, exist_ok=True)
-            candidate_method_path.write_bytes(replacement.candidate_method_bytes)
-            verification = verify_candidate(
-                workspace_root=verification_workspace,
-                source=source_relative_path,
-                method_selector=method_key,
-                candidate=candidate_method_rel,
-                rule_id=str(context.get("rule_id")),
-                expected_source_sha256=expected_source_sha256,
-                work_dir=tmp / "verify",
-            )
-        finally:
-            tempdir.__exit__(None, None, None)
-
-        apply_successful = _can_commit_apply(mode, verification, compilation)
-        if apply_successful:
-            with workspace_mutation_guard():
-                if resolved_path.read_bytes() != original_bytes:
-                    verification = _stale_verification(str(context.get("rule_id")))
-                    apply_successful = False
-                else:
-                    publication: WorkspacePublication | None = None
-                    live_workspace_modified = True
-                    resolved_path.write_bytes(replacement.candidate_file_bytes)
-                    try:
-                        publication = _publish_workspace_revision(workspace_root)
-                        cleanup["revision_published"] = True
-                        _build_search_embeddings()
-                    except Exception as publication_exc:
-                        rollback_error: Exception | None = None
-                        if publication is not None:
-                            try:
-                                rollback_workspace_revision(publication)
-                            except Exception as exc:  # pragma: no cover - defensive recovery guard
-                                rollback_error = exc
-                                graph_rollback_failed = True
-                        cleanup["file_restored"] = _restore_file(
-                            resolved_path,
-                            original_bytes,
-                            replacement.candidate_file_bytes,
-                        )
-                        live_workspace_modified = False
-                        if rollback_error is not None:
-                            raise RuntimeError(
-                                f"{publication_exc}; graph rollback failed: {rollback_error}"
-                            ) from publication_exc
-                        raise
-    except Exception as exc:  # pragma: no cover - runtime guard
-        _err = {"err": str(exc), "err_type": type(exc).__name__, "violation_id": violation_id}
-        if LOGGER.isEnabledFor(logging.DEBUG):
-            LOGGER.exception("Apply remediation failed", extra=_err)
-        else:
-            LOGGER.error("Apply remediation failed", extra=_err)
-        apply_successful = False
-        verification = {**verification, "error": str(exc)}
-    finally:
-        if live_workspace_modified and _should_restore(mode, apply_successful):
-            cleanup["file_restored"] = _restore_file(
-                resolved_path,
-                original_bytes,
-                replacement.candidate_file_bytes,
-            )
-        restore_failed = graph_rollback_failed or any(restored is False for restored in cleanup.values())
-
-    verification["cleanup"] = cleanup
-    return compilation, verification, apply_successful, restore_failed
-
-
-def _finalize_apply_result(
-    *,
-    mode: str,
-    verification: dict[str, Any],
-    compilation: CompilationResult,
-    apply_successful: bool,
-    restore_failed: bool,
-    violation_id: str,
-    context: dict[str, Any],
-    method_key: str,
-    target_method: str,
-    file_path: str,
-    attempt_count: int,
-    diff: str,
-    replacement: _ReplacementAttemptOutcome,
-) -> ApplyFixResult:
-    """Assemble the final status, error message, and result envelope."""
-    status = _final_status(
-        mode=mode,
-        verification=verification,
-        compilation=compilation,
-        apply_successful=apply_successful,
-        restore_failed=restore_failed,
-    )
-    error_message = _final_error(status, verification, restore_failed=restore_failed)
-
-    metadata: ApplyMetadata = {
-        "violation_id": violation_id,
-        "rule_id": context.get("rule_id"),
-        "method_key": method_key,
-        "target_method": target_method,
-        "file_path": file_path,
-        "attempt_count": attempt_count,
-        "mode": mode,
-    }
-    return apply_result(
-        status,
+    return compile_verify_and_apply_candidate(
+        service=service,
         violation_id=violation_id,
-        rule_id=context.get("rule_id"),
         method_key=method_key,
-        target_method=target_method,
-        file_path=file_path,
-        updated_source_code=replacement.updated_method,
-        diff=diff,
-        verification=verification,
-        compilation=compilation,
-        metadata=metadata,
-        generation=replacement.generation_payload,
-        confidence=replacement.confidence,
-        error=error_message,
-        predicate_trace=_policy_state_trace(
-            rule_id=str(context.get("rule_id")),
-            before_trace_raw=None,
-            after_trace_raw=None,
-        ),
+        context=context,
+        resolved_path=resolved_path,
+        workspace_root=workspace_root,
+        source_relative_path=source_relative_path,
+        original_bytes=original_bytes,
+        expected_source_sha256=expected_source_sha256,
+        replacement=replacement,
+        mode=mode,
+        build_command=build_command,
+        verify_candidate_fn=verify_candidate,
+        ingest_fn=ingest,
+        rollback_fn=rollback_workspace_revision,
+        build_embeddings_fn=_build_search_embeddings,
+        tempfile_mod=tempfile,
     )

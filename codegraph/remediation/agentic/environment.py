@@ -5,25 +5,38 @@ from __future__ import annotations
 import difflib
 import hashlib
 import logging
-import re
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
 
-from codegraph.db import shared_neo4j_driver
-from codegraph.ingestion.snapshots import create_source_snapshot_from_bytes, sha256_hex
-from codegraph.java.service import parse_java_source
 from codegraph.remediation.agentic.contracts import AgentVerificationStatus
+from codegraph.remediation.agentic.gate_runners import (
+    compile_scratch_workspace,
+    evaluate_scratch_policy,
+    find_build_root,
+    run_scratch_tests,
+)
+from codegraph.remediation.agentic.workspace_search import (
+    IGNORED_DIRS,
+    IGNORED_EXTENSIONS,
+    find_workspace_files,
+    search_graph_callers_callees,
+    search_workspace_code,
+)
 from codegraph.remediation.method_key_paths import parse_method_key_relative_path
 from codegraph.remediation.scoped_verification import verify_candidate
+
+__all__ = ["IsolatedWorktreeEnvironment", "verify_candidate"]
 
 LOGGER = logging.getLogger(__name__)
 
 
 class IsolatedWorktreeEnvironment:
     """Manages an isolated scratch workspace for autonomous agent edits and verification."""
+
+    IGNORED_DIRS = IGNORED_DIRS
+    IGNORED_EXTENSIONS = IGNORED_EXTENSIONS
 
     def __init__(self, workspace_root: str | Path, *, target_method_key: str | None = None) -> None:
         self.original_root = Path(workspace_root).resolve()
@@ -35,9 +48,13 @@ class IsolatedWorktreeEnvironment:
         self._target_original_bytes: bytes | None = None
         self._setup_scratch_copy()
         if self.target_relative_path is not None:
-            target = self.scratch_root / self.target_relative_path
-            if target.is_file():
-                self._target_original_bytes = target.read_bytes()
+            try:
+                target = self.resolve_path(str(self.target_relative_path))
+                if target.is_file():
+                    self.target_relative_path = target.relative_to(self.scratch_root)
+                    self._target_original_bytes = target.read_bytes()
+            except Exception:
+                pass
 
     @staticmethod
     def _method_key_relative_path(method_key: str | None) -> Path | None:
@@ -48,7 +65,9 @@ class IsolatedWorktreeEnvironment:
             shutil.copytree(
                 self.original_root,
                 self.scratch_root,
-                ignore=shutil.ignore_patterns(".git", "__pycache__", ".pytest_cache", "target", "node_modules", ".venv"),
+                ignore=shutil.ignore_patterns(
+                    ".git", "__pycache__", ".pytest_cache", "target", "node_modules", ".venv"
+                ),
             )
         else:
             self.scratch_root.mkdir(parents=True, exist_ok=True)
@@ -71,7 +90,6 @@ class IsolatedWorktreeEnvironment:
             if sub_target.is_file() and str(sub_target).startswith(str(self.scratch_root)):
                 return sub_target
 
-        # Search matching suffix or filename in scratch workspace
         p = Path(clean)
         candidates = list(self.scratch_root.rglob(p.name))
         for cand in candidates:
@@ -89,59 +107,13 @@ class IsolatedWorktreeEnvironment:
         return target.read_text(encoding="utf-8")
 
     def find_files(self, pattern: str = "**/*") -> list[str]:
-        """Find matching files in the scratch workspace."""
-        matches: list[str] = []
-        for p in self.scratch_root.glob(pattern):
-            if p.is_file():
-                if any(part in self.IGNORED_DIRS for part in p.relative_to(self.scratch_root).parts):
-                    continue
-                if p.suffix.lower() in self.IGNORED_EXTENSIONS:
-                    continue
-                matches.append(p.relative_to(self.scratch_root).as_posix())
-        return sorted(matches)
+        return find_workspace_files(self.scratch_root, pattern)
 
     def search_code(self, pattern: str, max_results: int = 20) -> list[dict[str, Any]]:
-        """Search text/regex patterns across workspace source files."""
-        results: list[dict[str, Any]] = []
-        regex = re.compile(pattern, re.IGNORECASE)
-        for rel in self.find_files("**/*"):
-            p = self.scratch_root / rel
-            try:
-                text = p.read_text(encoding="utf-8")
-                for line_idx, line in enumerate(text.splitlines(), start=1):
-                    if regex.search(line):
-                        results.append({"file": rel, "line": line_idx, "content": line.strip()})
-                        if len(results) >= max_results:
-                            return results
-            except Exception:
-                continue
-        return results
+        return search_workspace_code(self.scratch_root, pattern, max_results=max_results)
 
     def search_graph_context(self, symbol_name: str) -> dict[str, Any]:
-        """Search graph callers and callees for a method or type from Neo4j."""
-        try:
-            driver = shared_neo4j_driver()
-            with driver.session() as session:
-                records = session.run(
-                    """
-                    MATCH (m:Method)
-                    WHERE m.name = $name OR m.signature CONTAINS $name OR m.method_key CONTAINS $name
-                    OPTIONAL MATCH (caller:Method)-[:CALLS]->(m)
-                    OPTIONAL MATCH (m)-[:CALLS]->(callee:Method)
-                    OPTIONAL MATCH (m)-[:USES]->(f:Field)
-                    RETURN m.signature AS signature,
-                           m.method_key AS method_key,
-                           m.file_path AS file_path,
-                           collect(DISTINCT caller.signature) AS callers,
-                           collect(DISTINCT callee.signature) AS callees,
-                           collect(DISTINCT f.name) AS uses_fields
-                    LIMIT 5
-                    """,
-                    {"name": symbol_name},
-                ).data()
-                return {"matches": records}
-        except Exception as exc:
-            return {"error": f"Graph query unavailable: {exc}"}
+        return search_graph_callers_callees(symbol_name)
 
     def write_file(self, relative_path: str, content: str) -> None:
         target = self.resolve_path(relative_path)
@@ -153,22 +125,33 @@ class IsolatedWorktreeEnvironment:
         if not target.is_file():
             raise FileNotFoundError(f"File not found: {relative_path}")
         text = target.read_text(encoding="utf-8")
-        if old_str not in text:
-            return False
-        updated = text.replace(old_str, new_str, 1)
-        target.write_text(updated, encoding="utf-8")
-        return True
+        if old_str in text:
+            updated = text.replace(old_str, new_str, 1)
+            target.write_text(updated, encoding="utf-8")
+            return True
+
+        has_crlf = "\r\n" in text
+        text_lf = text.replace("\r\n", "\n")
+        old_lf = old_str.replace("\r\n", "\n")
+        new_lf = new_str.replace("\r\n", "\n")
+        if old_lf in text_lf:
+            updated_lf = text_lf.replace(old_lf, new_lf, 1)
+            updated = updated_lf.replace("\n", "\r\n") if has_crlf else updated_lf
+            target.write_text(updated, encoding="utf-8")
+            return True
+        return False
 
     def add_import(self, relative_path: str, import_statement: str) -> bool:
-        """Add an import statement below the package declaration or at top of file."""
         target = self.resolve_path(relative_path)
         if not target.is_file():
             raise FileNotFoundError(f"File not found: {relative_path}")
         text = target.read_text(encoding="utf-8")
-        stmt = import_statement.strip().rstrip(";") + ";"
+        raw_stmt = import_statement.strip().rstrip(";")
+        if not raw_stmt.startswith("import "):
+            raw_stmt = f"import {raw_stmt}"
+        stmt = f"{raw_stmt};"
         if stmt in text:
-            return True  # Already present
-        
+            return True
         lines = text.splitlines(keepends=True)
         pkg_idx = -1
         last_import_idx = -1
@@ -190,174 +173,26 @@ class IsolatedWorktreeEnvironment:
         return True
 
     def _find_build_root(self) -> Path:
-        """Find the Maven pom.xml root in the workspace or subdirectories."""
-        if (self.scratch_root / "pom.xml").exists():
-            return self.scratch_root
-        poms = sorted(self.scratch_root.rglob("pom.xml"), key=lambda p: len(p.parts))
-        if poms:
-            return poms[0].parent
-        return self.scratch_root
+        return find_build_root(self.scratch_root)
 
     def compile_workspace(self, timeout: int = 60) -> tuple[bool, str]:
-        """Compile Java sources in the scratch workspace using JDT parser and Maven."""
-        # 1. Authoritative JDT AST and Syntax Verification on modified Java files
-        java_files = [p for p in self.scratch_root.rglob("*.java") if p.is_file()]
-        if not java_files:
-            return False, "Compilation gate unavailable: no Java source files found."
-        for p in java_files:
-            try:
-                rel = p.relative_to(self.scratch_root).as_posix()
-                res = parse_java_source(
-                    p.read_bytes(),
-                    relative_path=rel,
-                    resolve_bindings=False,
-                )
-                errors = [d.message for d in res.diagnostics if d.severity == "error"]
-                if res.coverage != "complete" or errors:
-                    detail = "; ".join(errors) or f"parser coverage was {res.coverage!r}"
-                    return False, f"JDT verification failed in {p.name}: {detail}"
-            except Exception as exc:
-                return False, f"JDT Parser Error in {p.name}: {exc}"
-
-        # 2. If Maven build configuration exists, attempt build
-        build_root = self._find_build_root()
-        pom = build_root / "pom.xml"
-        if pom.exists():
-            try:
-                res = subprocess.run(
-                    [
-                        "mvn",
-                        "--batch-mode",
-                        "-q",
-                        "-DskipTests",
-                        "-Dspotless.apply.skip=true",
-                        "-Dspotless.check.skip=true",
-                        "compile",
-                    ],
-                    cwd=build_root,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                )
-                if res.returncode == 0:
-                    return True, "Maven build succeeded (0 errors)."
-                output = (res.stdout + "\n" + res.stderr).strip()
-                return False, output or f"Maven compile failed with exit code {res.returncode}."
-            except Exception as exc:
-                return False, f"Maven compile unavailable: {exc}"
-
-        return False, "Compilation gate unavailable: no supported Maven build was found."
+        return compile_scratch_workspace(self.scratch_root, timeout=timeout)
 
     def run_tests(self, timeout: int = 60) -> tuple[bool, str]:
-        """Run project tests in the scratch workspace to ensure no behavioral regression."""
-        build_root = self._find_build_root()
-        pom = build_root / "pom.xml"
-        if not pom.exists():
-            return False, "Regression gate unavailable: no supported Maven build was found."
-        test_sources = []
-        for path in build_root.rglob("*.java"):
-            relative_parts = path.relative_to(build_root).parts
-            if any(
-                relative_parts[index : index + 3] == ("src", "test", "java")
-                for index in range(len(relative_parts) - 2)
-            ):
-                test_sources.append(path)
-        if not test_sources:
-            return True, "Regression gate not applicable: no Java test suite was found (vacuous pass)."
-        try:
-            res = subprocess.run(
-                ["mvn", "--batch-mode", "-q", "-Dspotless.apply.skip=true", "-Dspotless.check.skip=true", "test"],
-                cwd=build_root,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-            out = (res.stdout + "\n" + res.stderr).strip()
-            if res.returncode == 0 and "No tests to run" not in out:
-                return True, "Tests passed (0 regressions)."
-            return False, out or f"Maven tests failed with exit code {res.returncode}."
-        except Exception as exc:
-            return False, f"Test execution unavailable: {exc}"
-
-    IGNORED_DIRS = {"classes", "target", "build", "bin", ".git", "__pycache__", ".venv", "node_modules"}
-    IGNORED_EXTENSIONS = {".class", ".jar", ".zip", ".tar", ".gz", ".pyc", ".png", ".jpg", ".index"}
+        return run_scratch_tests(self.scratch_root, timeout=timeout)
 
     def evaluate_policy(self, target_rule_id: str | None = None) -> tuple[bool, list[dict[str, Any]], list[str]]:
-        """Evaluate the target method candidate with the isolated OPA verifier."""
-        if not target_rule_id or not self.target_method_key or self.target_relative_path is None:
-            return False, [{"error": "policy_target_unavailable"}], [target_rule_id] if target_rule_id else []
-        if self._target_original_bytes is None:
-            return False, [{"error": "policy_baseline_source_unavailable"}], [target_rule_id]
-
-        candidate_path = self.scratch_root / self.target_relative_path
-        if not candidate_path.is_file():
-            return False, [{"error": "policy_candidate_source_unavailable"}], [target_rule_id]
-        try:
-            candidate_bytes = candidate_path.read_bytes()
-            baseline_snapshot = create_source_snapshot_from_bytes(
-                workspace_root=self.scratch_root,
-                source_path=candidate_path,
-                source_bytes=self._target_original_bytes,
-                method_selector=self.target_method_key,
-                expected_source_sha256=sha256_hex(self._target_original_bytes),
-            )
-            candidate_snapshot = create_source_snapshot_from_bytes(
-                workspace_root=self.scratch_root,
-                source_path=candidate_path,
-                source_bytes=candidate_bytes,
-                method_selector=baseline_snapshot.identity.selector,
-                expected_source_sha256=sha256_hex(candidate_bytes),
-            )
-            # Keep the current file's imports in the shell verify_candidate splices
-            # onto -- the pristine original lacks any import add_import() just made.
-            baseline_shell_bytes = (
-                candidate_bytes[: candidate_snapshot.start_byte]
-                + self._target_original_bytes[baseline_snapshot.start_byte : baseline_snapshot.end_byte]
-                + candidate_bytes[candidate_snapshot.end_byte :]
-            )
-            with tempfile.TemporaryDirectory(prefix="policy-verification-", dir=self.temp_dir) as temp:
-                verification_root = Path(temp)
-                baseline_path = verification_root / self.target_relative_path
-                baseline_path.parent.mkdir(parents=True, exist_ok=True)
-                baseline_path.write_bytes(baseline_shell_bytes)
-                candidate_method = verification_root / ".candidate" / "candidate-method.java"
-                candidate_method.parent.mkdir(parents=True, exist_ok=True)
-                candidate_method.write_bytes(candidate_snapshot.method_bytes)
-                report = verify_candidate(
-                    workspace_root=verification_root,
-                    source=self.target_relative_path,
-                    # Range-independent: the shell's byte offsets differ from target_method_key's.
-                    method_selector=baseline_snapshot.identity.selector,
-                    candidate=candidate_method.relative_to(verification_root),
-                    rule_id=target_rule_id,
-                    expected_source_sha256=sha256_hex(baseline_shell_bytes),
-                    work_dir=verification_root / "work",
-                )
-            findings_raw = report.get("findings")
-            findings: dict[str, Any] = findings_raw if isinstance(findings_raw, dict) else {}
-            candidate_findings_raw = findings.get("candidate")
-            candidate_findings: list[dict[str, Any]] = (
-                [dict(finding) for finding in candidate_findings_raw if isinstance(finding, dict)]
-                if isinstance(candidate_findings_raw, list)
-                else []
-            )
-            violation_ids = [
-                str(finding.get("violation_id"))
-                for finding in candidate_findings
-                if isinstance(finding, dict) and finding.get("violation_id")
-            ]
-            passed = bool(report.get("status") == "POLICY_PASS" and report.get("policy_status") == "PASS")
-            if not passed and target_rule_id not in violation_ids:
-                violation_ids.append(target_rule_id)
-            if not passed and not candidate_findings:
-                candidate_findings = [{"error": report.get("error") or report.get("status") or "policy_failed"}]
-            return passed, candidate_findings, violation_ids
-        except Exception as exc:
-            LOGGER.warning("Candidate-local policy evaluation failed: %s", exc)
-            return False, [{"error": str(exc)}], [target_rule_id]
+        return evaluate_scratch_policy(
+            scratch_root=self.scratch_root,
+            temp_dir=self.temp_dir,
+            target_method_key=self.target_method_key,
+            target_relative_path=self.target_relative_path,
+            target_original_bytes=self._target_original_bytes,
+            target_rule_id=target_rule_id,
+            verify_candidate_fn=verify_candidate,
+        )
 
     def run_full_verification(self, target_rule_id: str) -> AgentVerificationStatus:
-        """Run all 3 invariant gates: Compile + Test Regression + Policy Check."""
         comp_ok, comp_out = self.compile_workspace()
         if not comp_ok:
             return AgentVerificationStatus(

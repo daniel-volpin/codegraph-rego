@@ -17,8 +17,6 @@ from codegraph.remediation.comparison import CandidateOutcome
 LOGGER = logging.getLogger(__name__)
 
 
-
-
 class CandidateScore(BaseModel):
     """Score breakdown for a single candidate."""
 
@@ -51,8 +49,6 @@ class RankingSummary(BaseModel):
     total_cases: int
     recommended_counts: dict[str, int] = Field(default_factory=dict)
     per_rule: dict[str, dict[str, int]] = Field(default_factory=dict)
-
-
 
 
 def score_candidate(outcome: CandidateOutcome) -> CandidateScore:
@@ -96,8 +92,6 @@ def score_candidate(outcome: CandidateOutcome) -> CandidateScore:
     )
 
 
-
-
 def rank_candidates(
     violation_id: str,
     rule_id: str,
@@ -134,8 +128,6 @@ def rank_candidates(
         recommended_source=best.score.source,
         reason=f"Highest score ({best.score.total_score}): {best.score.explanation}",
     )
-
-
 
 
 def build_ranking_summary(results: list[RankingResult]) -> RankingSummary:

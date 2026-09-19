@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 
 from codegraph.policy.analysis.boolean_eval import (
     eval_boolean_ast,
@@ -26,20 +25,32 @@ from codegraph.policy.analysis.conditional import (
     resolve_selected_switch_body,
 )
 from codegraph.policy.analysis.primitives import SourceSanitizer
+from codegraph.policy.analysis.state_helpers import (
+    IF_ASSIGNMENT_RE,
+    SIMPLE_ASSIGNMENT_RE,
+    VAR_REF_RE,
+    AssignmentState,
+    _apply_unresolved_if_else_taint_join,
+    _apply_unresolved_if_taint_join,
+    _clear_var_state,
+    _conditional_assignment_spans,
+    _mark_tainted,
+    _propagate_taint_from_assignments,
+    _referenced_variables,
+    _set_int_constant,
+    _set_string_constant,
+    _simulate_assignment_flow,
+)
 
-SIMPLE_ASSIGNMENT_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+);", re.DOTALL)
 INT_LITERAL_FULL_RE = re.compile(r"^-?\d+$")
 CHAR_AT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\.charAt\((\d+)\)$")
 TOP_LEVEL_TERNARY_RE = re.compile(r"^(?P<condition>.+?)\?(?P<when_true>.+?):(?P<when_false>.+)$", re.DOTALL)
-IF_ASSIGNMENT_RE = re.compile(
-    r"if\s*\((?P<condition>[^{};]*?)\)\s*(?P<body>\{[^{}]*?[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;[^{}]*?\}|[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^;]+;)",
-    re.DOTALL,
-)
-VAR_REF_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\b")
 
 __all__ = [
+    "CHAR_AT_RE",
     "IF_ASSIGNMENT_RE",
     "IF_ELSE_ASSIGNMENT_RE",
+    "INT_LITERAL_FULL_RE",
     "LIST_ADD_VALUE_RE",
     "LIST_GET_VALUE_RE",
     "LIST_REMOVE_INDEX_RE",
@@ -48,16 +59,12 @@ __all__ = [
     "SIMPLE_ASSIGNMENT_RE",
     "STRING_LITERAL_FULL_RE",
     "SWITCH_BLOCK_RE",
+    "TOP_LEVEL_TERNARY_RE",
+    "VAR_REF_RE",
     "AssignmentState",
     "AssignmentStateAnalyzer",
     "ConditionalAssignmentResolver",
 ]
-
-
-@dataclass(frozen=True)
-class AssignmentState:
-    tainted_vars: set[str]
-    string_constants: dict[str, str]
 
 
 class AssignmentStateAnalyzer:
@@ -158,7 +165,6 @@ class AssignmentStateAnalyzer:
         tainted_before_join = set(tainted_vars)
         joined_taint_cutoffs: dict[str, int] = {}
 
-        # For unresolved branches, keep taint if either side may assign tainted input.
         self._apply_unresolved_if_else_taint_join(
             source_code,
             tainted_vars=tainted_vars,
@@ -166,6 +172,8 @@ class AssignmentStateAnalyzer:
             int_constants=int_constants,
             char_constants=char_constants,
             joined_taint_cutoffs=joined_taint_cutoffs,
+            evaluate_constant_boolean_fn=self._evaluate_constant_boolean,
+            taint_patterns=self._taint_patterns,
         )
         self._apply_unresolved_if_taint_join(
             source_code,
@@ -174,12 +182,15 @@ class AssignmentStateAnalyzer:
             int_constants=int_constants,
             char_constants=char_constants,
             joined_taint_cutoffs=joined_taint_cutoffs,
+            evaluate_constant_boolean_fn=self._evaluate_constant_boolean,
+            taint_patterns=self._taint_patterns,
         )
         if tainted_vars != tainted_before_join:
             self._propagate_taint_from_assignments(
                 source_code,
                 tainted_vars,
                 joined_taint_cutoffs=joined_taint_cutoffs,
+                taint_patterns=self._taint_patterns,
             )
 
         collapsed_maps = resolve_selected_map_gets(source_code, string_constants, tainted_vars)
@@ -196,238 +207,20 @@ class AssignmentStateAnalyzer:
 
         return AssignmentState(tainted_vars=tainted_vars, string_constants=string_constants)
 
-    def _apply_unresolved_if_else_taint_join(
-        self,
-        source_code: str,
-        *,
-        tainted_vars: set[str],
-        string_constants: dict[str, str],
-        int_constants: dict[str, int],
-        char_constants: dict[str, str],
-        joined_taint_cutoffs: dict[str, int],
-    ) -> None:
-        for match in IF_ELSE_ASSIGNMENT_RE.finditer(source_code):
-            decision = self._evaluate_constant_boolean(match.group("condition"), int_constants)
-            if decision is not None:
-                continue
-            true_taints = self._simulate_assignment_flow(match.group("when_true"), tainted_vars)
-            false_taints = self._simulate_assignment_flow(match.group("when_false"), tainted_vars)
-            joined_tainted_vars = {
-                var
-                for var in (set(true_taints) & set(false_taints))
-                if true_taints.get(var, False) or false_taints.get(var, False)
-            }
-            for var in joined_tainted_vars:
-                joined_taint_cutoffs[var] = max(joined_taint_cutoffs.get(var, 0), match.end())
-                self._mark_tainted(
-                    var,
-                    tainted_vars=tainted_vars,
-                    string_constants=string_constants,
-                    int_constants=int_constants,
-                    char_constants=char_constants,
-                )
-
-    def _expr_is_tainted(self, expr: str, tainted_vars: set[str]) -> bool:
-        if any(pattern.search(expr) for pattern in self._taint_patterns):
-            return True
-        return bool(self.referenced_variables(expr) & tainted_vars)
-
-    def _apply_unresolved_if_taint_join(
-        self,
-        source_code: str,
-        *,
-        tainted_vars: set[str],
-        string_constants: dict[str, str],
-        int_constants: dict[str, int],
-        char_constants: dict[str, str],
-        joined_taint_cutoffs: dict[str, int],
-    ) -> None:
-        for match in IF_ASSIGNMENT_RE.finditer(source_code):
-            if IF_ELSE_ASSIGNMENT_RE.fullmatch(match.group(0).strip()):
-                continue
-            decision = self._evaluate_constant_boolean(match.group("condition"), int_constants)
-            if decision is not None:
-                continue
-            branch_taints = self._simulate_assignment_flow(match.group("body"), tainted_vars)
-            for var, is_tainted in branch_taints.items():
-                if not is_tainted:
-                    continue
-                joined_taint_cutoffs[var] = max(joined_taint_cutoffs.get(var, 0), match.end())
-                self._mark_tainted(
-                    var,
-                    tainted_vars=tainted_vars,
-                    string_constants=string_constants,
-                    int_constants=int_constants,
-                    char_constants=char_constants,
-                )
-
-    def _propagate_taint_from_assignments(
-        self,
-        source_code: str,
-        tainted_vars: set[str],
-        *,
-        joined_taint_cutoffs: dict[str, int],
-    ) -> None:
-        unresolved_spans = self._conditional_assignment_spans(source_code)
-        while True:
-            updated_taints = set(tainted_vars)
-            for match in SIMPLE_ASSIGNMENT_RE.finditer(source_code):
-                if any(start <= match.start() and match.end() <= end for start, end in unresolved_spans):
-                    continue
-                var = match.group(1)
-                rhs = match.group(2).strip()
-                rhs_is_tainted = self._expr_is_tainted(rhs, updated_taints)
-                if rhs_is_tainted:
-                    updated_taints.add(var)
-                else:
-                    if match.start() < joined_taint_cutoffs.get(var, -1):
-                        continue
-                    updated_taints.discard(var)
-            if updated_taints == tainted_vars:
-                return
-            tainted_vars.clear()
-            tainted_vars.update(updated_taints)
-
-    def _simulate_assignment_flow(self, source_code: str, tainted_vars: set[str]) -> dict[str, bool]:
-        simulated_taints = set(tainted_vars)
-        assigned_vars: list[str] = []
-        for assign in SIMPLE_ASSIGNMENT_RE.finditer(source_code):
-            var = assign.group(1)
-            rhs = assign.group(2).strip()
-            rhs_is_tainted = self._expr_is_tainted(rhs, simulated_taints)
-            if rhs_is_tainted:
-                simulated_taints.add(var)
-            else:
-                simulated_taints.discard(var)
-            if var not in assigned_vars:
-                assigned_vars.append(var)
-        return {var: var in simulated_taints for var in assigned_vars}
-
-    @staticmethod
-    def _conditional_assignment_spans(source_code: str) -> list[tuple[int, int]]:
-        spans = [match.span() for match in IF_ELSE_ASSIGNMENT_RE.finditer(source_code)]
-        for match in IF_ASSIGNMENT_RE.finditer(source_code):
-            if any(start <= match.start() and match.end() <= end for start, end in spans):
-                continue
-            spans.append(match.span())
-        return spans
-
-    @staticmethod
-    def referenced_variables(expr: str) -> set[str]:
-        return set(VAR_REF_RE.findall(expr))
-
-    @staticmethod
-    def _clear_var_state(
-        var: str,
-        *,
-        tainted_vars: set[str],
-        string_constants: dict[str, str],
-        int_constants: dict[str, int],
-        char_constants: dict[str, str],
-    ) -> None:
-        tainted_vars.discard(var)
-        string_constants.pop(var, None)
-        int_constants.pop(var, None)
-        char_constants.pop(var, None)
-
-    @classmethod
-    def _mark_tainted(
-        cls,
-        var: str,
-        *,
-        tainted_vars: set[str],
-        string_constants: dict[str, str],
-        int_constants: dict[str, int],
-        char_constants: dict[str, str],
-    ) -> None:
-        cls._clear_var_state(
-            var,
-            tainted_vars=tainted_vars,
-            string_constants=string_constants,
-            int_constants=int_constants,
-            char_constants=char_constants,
-        )
-        tainted_vars.add(var)
-
-    @classmethod
-    def _set_string_constant(
-        cls,
-        var: str,
-        value: str,
-        *,
-        tainted_vars: set[str],
-        string_constants: dict[str, str],
-        int_constants: dict[str, int],
-        char_constants: dict[str, str],
-    ) -> None:
-        cls._clear_var_state(
-            var,
-            tainted_vars=tainted_vars,
-            string_constants=string_constants,
-            int_constants=int_constants,
-            char_constants=char_constants,
-        )
-        string_constants[var] = value
-
-    @classmethod
-    def _set_int_constant(
-        cls,
-        var: str,
-        value: int,
-        *,
-        tainted_vars: set[str],
-        string_constants: dict[str, str],
-        int_constants: dict[str, int],
-        char_constants: dict[str, str],
-    ) -> None:
-        cls._clear_var_state(
-            var,
-            tainted_vars=tainted_vars,
-            string_constants=string_constants,
-            int_constants=int_constants,
-            char_constants=char_constants,
-        )
-        int_constants[var] = value
-
-    @staticmethod
-    def _evaluate_constant_boolean(expr: str, int_constants: dict[str, int]) -> bool | None:
-        return evaluate_constant_boolean(expr, int_constants)
-
-    @staticmethod
-    def _validate_numeric_value(value: int | float | bool) -> int | float | bool:
-        return validate_numeric_value(value)
-
-    @staticmethod
-    def _eval_boolean_ast(node) -> int | float | bool:
-        return eval_boolean_ast(node)
-
-    @staticmethod
-    def _resolve_selected_switch_body(source_code: str, char_constants: dict[str, str]) -> str:
-        return resolve_selected_switch_body(source_code, char_constants)
-
-    @classmethod
-    def _resolve_selected_list_gets(
-        cls,
-        source_code: str,
-        string_constants: dict[str, str],
-        tainted_vars: set[str],
-    ) -> str:
-        return resolve_selected_list_gets(source_code, string_constants, tainted_vars)
-
-    @classmethod
-    def _resolve_selected_map_gets(
-        cls,
-        source_code: str,
-        string_constants: dict[str, str],
-        tainted_vars: set[str],
-    ) -> str:
-        return resolve_selected_map_gets(source_code, string_constants, tainted_vars)
-
-    @staticmethod
-    def _resolve_collection_expr(
-        expr: str,
-        string_constants: dict[str, str],
-        tainted_vars: set[str],
-    ) -> str | None:
-        return resolve_collection_expr(expr, string_constants, tainted_vars)
-
+    _apply_unresolved_if_else_taint_join = staticmethod(_apply_unresolved_if_else_taint_join)
+    _apply_unresolved_if_taint_join = staticmethod(_apply_unresolved_if_taint_join)
+    _propagate_taint_from_assignments = staticmethod(_propagate_taint_from_assignments)
+    _simulate_assignment_flow = staticmethod(_simulate_assignment_flow)
+    _conditional_assignment_spans = staticmethod(_conditional_assignment_spans)
+    referenced_variables = staticmethod(_referenced_variables)
+    _clear_var_state = staticmethod(_clear_var_state)
+    _mark_tainted = staticmethod(_mark_tainted)
+    _set_string_constant = staticmethod(_set_string_constant)
+    _set_int_constant = staticmethod(_set_int_constant)
+    _evaluate_constant_boolean = staticmethod(evaluate_constant_boolean)
+    _validate_numeric_value = staticmethod(validate_numeric_value)
+    _eval_boolean_ast = staticmethod(eval_boolean_ast)
+    _resolve_selected_switch_body = staticmethod(resolve_selected_switch_body)
+    _resolve_selected_list_gets = staticmethod(resolve_selected_list_gets)
+    _resolve_selected_map_gets = staticmethod(resolve_selected_map_gets)
+    _resolve_collection_expr = staticmethod(resolve_collection_expr)

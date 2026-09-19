@@ -8,12 +8,48 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-MAX_RECORD_BYTES = 200_000
-MAX_STRING_CHARS = 20_000
-MAX_NOTES_CHARS = 4_000
-MAX_SOURCE_CODE_CHARS = 30_000
-MAX_LIST_ITEMS = 200
-MAX_DICT_KEYS = 500
+from codegraph.policy.review_store_scrub import (
+    MAX_DICT_KEYS,
+    MAX_LIST_ITEMS,
+    MAX_NOTES_CHARS,
+    MAX_RECORD_BYTES,
+    MAX_SOURCE_CODE_CHARS,
+    MAX_STRING_CHARS,
+    scrub_value,
+)
+from codegraph.policy.review_store_scrub import (
+    drop_ladder as _drop_ladder,
+)
+from codegraph.policy.review_store_scrub import (
+    json_size_bytes as _json_size_bytes,
+)
+from codegraph.policy.review_store_scrub import (
+    string_cap_for_path as _string_cap_for_path,
+)
+
+__all__ = [
+    "MAX_DICT_KEYS",
+    "MAX_LIST_ITEMS",
+    "MAX_NOTES_CHARS",
+    "MAX_RECORD_BYTES",
+    "MAX_SOURCE_CODE_CHARS",
+    "MAX_STRING_CHARS",
+    "AppendResult",
+    "_drop_ladder",
+    "_get_git_context",
+    "_json_size_bytes",
+    "_outputs_root",
+    "_repo_root",
+    "_safe_len",
+    "_string_cap_for_path",
+    "_summarize_compilation",
+    "_summarize_verification",
+    "append_review_jsonl",
+    "derive_violation_key",
+    "resolve_review_store_path",
+    "scrub_value",
+    "summarize_remediation_payload",
+]
 
 
 @dataclass(frozen=True)
@@ -26,7 +62,6 @@ class AppendResult:
 
 
 def _repo_root() -> Path:
-    # /.../codegraph/policy/review_store.py -> policy -> codegraph -> repo root
     return Path(__file__).resolve().parents[2]
 
 
@@ -47,7 +82,6 @@ def resolve_review_store_path(store_path: str) -> tuple[Path | None, str | None]
         candidate = repo_root / candidate
     resolved = candidate.resolve()
 
-    # Hard safety: only allow writing under <repo>/outputs
     try:
         resolved.relative_to(outputs_root)
     except ValueError:
@@ -111,125 +145,6 @@ def summarize_remediation_payload(payload: Any, *, kind: str) -> dict[str, Any]:
     return summary
 
 
-def _string_cap_for_path(path: str) -> int:
-    if path.endswith(".notes"):
-        return MAX_NOTES_CHARS
-    if path.endswith(".violation.evidence.source_code"):
-        return MAX_SOURCE_CODE_CHARS
-    return MAX_STRING_CHARS
-
-
-def scrub_value(value: Any, *, path: str) -> tuple[Any, list[str]]:
-    warnings: list[str] = []
-
-    if isinstance(value, str):
-        cap = _string_cap_for_path(path)
-        if len(value) > cap:
-            warnings.append(f"truncated_string:{path}")
-            return value[:cap], warnings
-        return value, warnings
-
-    if isinstance(value, list):
-        if len(value) > MAX_LIST_ITEMS:
-            warnings.append(f"truncated_list:{path}")
-            value = value[:MAX_LIST_ITEMS]
-        out: list[Any] = []
-        for idx, item in enumerate(value):
-            scrubbed, child_warnings = scrub_value(item, path=f"{path}[{idx}]")
-            out.append(scrubbed)
-            warnings.extend(child_warnings)
-        return out, warnings
-
-    if isinstance(value, dict):
-        keys = sorted(value.keys(), key=lambda x: str(x))
-        if len(keys) > MAX_DICT_KEYS:
-            warnings.append(f"truncated_dict:{path}")
-            keys = keys[:MAX_DICT_KEYS]
-        out: dict[str, Any] = {}
-        for key in keys:
-            k = str(key)
-            scrubbed, child_warnings = scrub_value(value.get(key), path=f"{path}.{k}")
-            out[k] = scrubbed
-            warnings.extend(child_warnings)
-        return out, warnings
-
-    return value, warnings
-
-
-def _json_size_bytes(obj: Any) -> int:
-    payload = json.dumps(obj, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-    return len(payload.encode("utf-8"))
-
-
-def _drop_ladder(record: dict[str, Any], warnings: list[str]) -> tuple[dict[str, Any] | None, list[str]]:
-    def current_size() -> int:
-        return _json_size_bytes(record)
-
-    def pop_path() -> Any:
-        return record.get("violation") if isinstance(record.get("violation"), dict) else None
-
-    if current_size() <= MAX_RECORD_BYTES:
-        return record, warnings
-
-    violation = pop_path()
-    if isinstance(violation, dict):
-        evidence = violation.get("evidence") if isinstance(violation.get("evidence"), dict) else None
-        if isinstance(evidence, dict) and "vector_context" in evidence:
-            evidence.pop("vector_context", None)
-            warnings.append("drop_ladder:dropped_violation.evidence.vector_context")
-            if current_size() <= MAX_RECORD_BYTES:
-                return record, warnings
-
-        gc = (
-            evidence.get("graph_context")
-            if isinstance(evidence, dict) and isinstance(evidence.get("graph_context"), dict)
-            else None
-        )
-        if isinstance(gc, dict):
-            for k in ("calls", "callers", "uses_fields"):
-                if k in gc:
-                    gc.pop(k, None)
-            warnings.append("drop_ladder:reduced_violation.evidence.graph_context")
-            if current_size() <= MAX_RECORD_BYTES:
-                return record, warnings
-
-        if isinstance(evidence, dict) and "source_code" in evidence:
-            evidence.pop("source_code", None)
-            warnings.append("drop_ladder:dropped_violation.evidence.source_code")
-            if current_size() <= MAX_RECORD_BYTES:
-                return record, warnings
-
-        if "evidence" in violation:
-            violation.pop("evidence", None)
-            warnings.append("drop_ladder:dropped_violation.evidence")
-            if current_size() <= MAX_RECORD_BYTES:
-                return record, warnings
-
-    llm = record.get("llm")
-    if isinstance(llm, dict) and isinstance(llm.get("explanation"), str):
-        if len(llm["explanation"]) > 5000:
-            llm["explanation"] = llm["explanation"][:5000]
-            warnings.append("drop_ladder:truncated_llm.explanation_5000")
-            if current_size() <= MAX_RECORD_BYTES:
-                return record, warnings
-
-    remediation = record.get("remediation")
-    if isinstance(remediation, dict) and "preview" in remediation:
-        remediation.pop("preview", None)
-        warnings.append("drop_ladder:dropped_remediation.preview")
-        if current_size() <= MAX_RECORD_BYTES:
-            return record, warnings
-    if isinstance(remediation, dict) and "apply" in remediation:
-        remediation.pop("apply", None)
-        warnings.append("drop_ladder:dropped_remediation.apply")
-        if current_size() <= MAX_RECORD_BYTES:
-            return record, warnings
-
-    if current_size() > MAX_RECORD_BYTES:
-        return None, warnings
-    return record, warnings
-
-
 def _get_git_context(repo_root: Path) -> dict[str, str]:
     context: dict[str, str] = {}
     try:
@@ -275,7 +190,7 @@ def append_review_jsonl(
     if error:
         return AppendResult(status="ERROR", error=error, scrub_warnings=[])
 
-    assert resolved is not None  # for mypy
+    assert resolved is not None
     resolved.parent.mkdir(parents=True, exist_ok=True)
 
     review_id = str(uuid.uuid4())

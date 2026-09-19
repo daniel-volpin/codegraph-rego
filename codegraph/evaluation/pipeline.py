@@ -66,8 +66,7 @@ def clear_graph() -> None:
             # Deleting a full-corpus graph in one transaction exceeds Neo4j's
             # transaction memory limit, so commit in batches.
             session.run(
-                "MATCH (n) CALL (n) { DETACH DELETE n } "
-                f"IN TRANSACTIONS OF {_GRAPH_DELETE_BATCH_ROWS} ROWS"
+                f"MATCH (n) CALL (n) {{ DETACH DELETE n }} IN TRANSACTIONS OF {_GRAPH_DELETE_BATCH_ROWS} ROWS"
             ).consume()
     finally:
         driver.close()
