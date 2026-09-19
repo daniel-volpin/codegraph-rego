@@ -1,0 +1,36 @@
+{
+  "benchmark_root": "${OWASP_BENCHMARK_ROOT}",
+  "java_relative_root": "src/main/java",
+  "ground_truth_path": "${OWASP_BENCHMARK_ROOT}/expectedresults-1.2.csv",
+  "categories": [
+    "hash-md5",
+    "rng-insecure",
+    "crypto-md5",
+    "sql-injection"
+  ],
+  "testcase_ids": [
+    "BenchmarkTest00267",
+    "BenchmarkTest02308",
+    "BenchmarkTest00073",
+    "BenchmarkTest01166",
+    "BenchmarkTest00790",
+    "BenchmarkTest02140",
+    "BenchmarkTest00298",
+    "BenchmarkTest01648",
+    "BenchmarkTest01999",
+    "BenchmarkTest00086",
+    "BenchmarkTest00521",
+    "BenchmarkTest02374",
+    "BenchmarkTest01637",
+    "BenchmarkTest00055",
+    "BenchmarkTest00258",
+    "BenchmarkTest01004",
+    "BenchmarkTest00849",
+    "BenchmarkTest00027",
+    "BenchmarkTest00773",
+    "BenchmarkTest01459"
+  ],
+  "seed": 42,
+  "debug_fn_analysis": false,
+  "build_command": "mvn -q -DskipTests -Dspotless.apply.skip=true -Dspotless.check.skip=true compile"
+}

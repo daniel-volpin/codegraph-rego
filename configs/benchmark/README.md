@@ -11,6 +11,7 @@
 - `framework_demo.json` – curated benchmark demo pack aligned to the UI demo focus mode
 - `remediation_hash_smoke.json` – targeted remediation smoke for weak-hash fix-and-verify
 - `remediation_bounded_smoke.json` – targeted remediation smoke across full and guarded remediation tiers
+- `golden_20_remediation.json` – curated 20-case golden evaluation dataset (5 cases per category across Hash, Randomness, Crypto, and SQL Injection)
 - `remediation_supported_medium.json` – thesis-final supported remediation set (full + guarded tiers)
 - `sql_fn_recovery_smoke.json` – pinned SQL-injection testcases with `debug_fn_analysis` for FN-recovery checks
 - `lexical_noise_v1.json` – LexicalNoiseJava v1 manifest for the F10 lexical-noise eval (`run_lexical_noise_eval.py`)
