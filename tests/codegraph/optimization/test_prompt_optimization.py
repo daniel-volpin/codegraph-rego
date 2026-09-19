@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 from codegraph.optimization.critic import format_transcript_summary
@@ -179,3 +180,110 @@ class TestTextGradAndDSPyOptimizers(unittest.TestCase):
         self.assertEqual(len(demos), 1)
         self.assertEqual(demos[0].rule_id, "ISO-A.10-WEAK-HASH")
         self.assertEqual(demos[0].final_patch, "+ SHA-256")
+
+
+class TestContinuousEvolutionAndTrajectoryBank(unittest.TestCase):
+    def test_trajectory_bank_deposit_and_query(self) -> None:
+        import tempfile
+
+        from codegraph.optimization.trajectory_bank import TrajectoryBank, TrajectoryBankEntry
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage = Path(tmpdir) / "bank.json"
+            bank = TrajectoryBank(storage_path=storage)
+
+            entry = TrajectoryBankEntry(
+                case_id="case_001",
+                rule_id="ISO-A.10-WEAK-HASH",
+                target_method="App.hash()",
+                initial_code="MD5",
+                diff="--- a\n+++ b\n+ SHA-256",
+                turns_count=2,
+                tool_sequence=["read_file", "edit_file"],
+                verification_summary="Passed 3 gates.",
+                timestamp="2026-09-19T12:00:00Z",
+            )
+            bank.deposit(entry)
+            bank.save()
+
+            reloaded = TrajectoryBank(storage_path=storage)
+            matches = reloaded.query_exemplars("ISO-A.10-WEAK-HASH")
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0].case_id, "case_001")
+            self.assertIn("SHA-256", matches[0].diff)
+
+    def test_continuous_evolution_engine_epoch(self) -> None:
+        import tempfile
+
+        from codegraph.optimization.evolution_loop import ContinuousEvolutionEngine
+
+        critic_response = '{"root_failure_mode": "missing_params", "textual_gradient": "Use PreparedStatement"}'
+        optimizer_response = '{"updated_prompt": "Evolved system prompt v1", "rationale": "Improved guidance"}'
+
+        call_idx = 0
+
+        def mock_llm(*_args, **_kwargs):
+            nonlocal call_idx
+            call_idx += 1
+            content = critic_response if call_idx == 1 else optimizer_response
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+            )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            engine = ContinuousEvolutionEngine(
+                llm_client=mock_llm,
+                checkpoints_dir=tmpdir,
+            )
+
+            results = [
+                AgentRemediationResult(
+                    status="SUCCESS",
+                    rule_id="ISO-A.10-WEAK-HASH",
+                    method_key="pkg.App#hash()",
+                    target_method="pkg.App.hash()",
+                    workspace_root="/tmp",
+                    modified_files=["App.java"],
+                    diff="+ SHA-256",
+                    verification=AgentVerificationStatus(
+                        compile_passed=True,
+                        compile_output="",
+                        tests_passed=True,
+                        test_output="",
+                        policy_passed=True,
+                        policy_findings=[],
+                        remaining_violations=[],
+                    ),
+                    turns=[AgentTurn(role="assistant", content="fixed", tool_calls=[AgentToolCall("1", "edit_file", {})])],
+                    reason="Fixed",
+                    iterations=1,
+                ),
+                AgentRemediationResult(
+                    status="MAX_TURNS_EXCEEDED",
+                    rule_id="ISO-A.8-SQL-INJECTION",
+                    method_key="pkg.App#query()",
+                    target_method="pkg.App.query()",
+                    workspace_root="/tmp",
+                    modified_files=[],
+                    diff="",
+                    verification=AgentVerificationStatus(
+                        compile_passed=True,
+                        compile_output="",
+                        tests_passed=True,
+                        test_output="",
+                        policy_passed=False,
+                        policy_findings=[],
+                        remaining_violations=["ISO-A.8-SQL-INJECTION"],
+                    ),
+                    turns=[AgentTurn(role="assistant", content="test", tool_calls=[])],
+                    reason="failed",
+                    iterations=1,
+                ),
+            ]
+
+            prompt, report = engine.evolve_epoch(1, "Initial system prompt", results)
+            self.assertEqual(prompt, "Evolved system prompt v1")
+            self.assertEqual(report.epoch, 1)
+            self.assertEqual(report.pass_rate, 0.5)
+            self.assertTrue((Path(tmpdir) / "SYSTEM_PROMPT_v1.md").exists())
+

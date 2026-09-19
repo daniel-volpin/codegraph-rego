@@ -59,8 +59,16 @@ def _parse_model_response(raw_response: Any) -> tuple[str, list[AgentToolCall]]:
 class AgenticRemediationService:
     """Autonomous agentic remediation service with 3-gate verification and telemetry."""
 
-    def __init__(self, *, llm_client: Callable[..., Any] = generate_chat_completion) -> None:
+    def __init__(
+        self,
+        *,
+        llm_client: Callable[..., Any] = generate_chat_completion,
+        trajectory_bank: Any | None = None,
+        system_prompt: str | None = None,
+    ) -> None:
         self.llm_client = llm_client
+        self.trajectory_bank = trajectory_bank
+        self.system_prompt = system_prompt or SYSTEM_PROMPT_TEMPLATE
 
     def remediate_finding(
         self,
@@ -69,11 +77,13 @@ class AgenticRemediationService:
         workspace_root: str | Path,
         max_turns: int = 15,
         model: str | None = None,
+        system_prompt: str | None = None,
     ) -> AgentRemediationResult:
         rule_id = str(finding.get("violation_id") or finding.get("rule_id") or "")
         method_key = str(finding.get("method_key") or "")
         target_method = str(finding.get("target_method") or method_key)
         effective_model = model or settings.llm_model
+        active_system_prompt = system_prompt or self.system_prompt
 
         with _tracer.start_as_current_span("remediation.agentic") as span:
             span.set_attribute("openinference.span.kind", "AGENT")
@@ -90,9 +100,12 @@ class AgenticRemediationService:
                 executor = AgentToolExecutor(env, target_rule_id=rule_id)
                 turns: list[AgentTurn] = []
 
-                initial_user_msg = _build_initial_user_prompt(finding)
+                initial_user_msg = _build_initial_user_prompt(
+                    finding,
+                    trajectory_bank=self.trajectory_bank,
+                )
                 messages: list[dict[str, Any]] = [
-                    {"role": "system", "content": SYSTEM_PROMPT_TEMPLATE},
+                    {"role": "system", "content": active_system_prompt},
                     {"role": "user", "content": initial_user_msg},
                 ]
                 turns.append(AgentTurn(role="user", content=initial_user_msg))

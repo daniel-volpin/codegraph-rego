@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from codegraph.remediation.contracts import get_fix_strategy
+
+if TYPE_CHECKING:
+    from codegraph.optimization.trajectory_bank import TrajectoryBank
 
 SYSTEM_PROMPT_TEMPLATE = """You are an autonomous security refactoring agent.
 Your objective is to assess a flagged security finding and remediate it at its root cause with minimal, surgical edits.
@@ -37,7 +40,11 @@ def format_taint_path_dossier(taint_paths: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_initial_user_prompt(finding: dict[str, Any]) -> str:
+def build_initial_user_prompt(
+    finding: dict[str, Any],
+    *,
+    trajectory_bank: TrajectoryBank | None = None,
+) -> str:
     rule_id = str(finding.get("violation_id") or finding.get("rule_id") or "")
     method_key = str(finding.get("method_key") or "")
     target_method = str(finding.get("target_method") or method_key)
@@ -75,6 +82,15 @@ def build_initial_user_prompt(finding: dict[str, Any]) -> str:
     taint_paths = finding.get("taint_paths") or (finding.get("evidence") or {}).get("taint_paths") or []
     if taint_paths:
         prompt_parts.append(format_taint_path_dossier(taint_paths))
+
+    if trajectory_bank is not None:
+        exemplars = trajectory_bank.query_exemplars(rule_id, limit=1)
+        if exemplars:
+            demo = exemplars[0]
+            prompt_parts.append(
+                f"\nVerified Exemplar Refactoring for `{rule_id}`:\n"
+                f"```diff\n{demo.diff}\n```"
+            )
 
     prompt_parts.append(
         "\nAction Plan:\n"
