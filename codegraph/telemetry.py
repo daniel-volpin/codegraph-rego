@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 from opentelemetry import metrics, trace
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
@@ -115,7 +116,9 @@ class _FileSpanExporter:
     """
 
     def __init__(self, path: str) -> None:
-        self._fh = open(path, "a", encoding="utf-8")  # noqa: SIM115
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        self._fh = p.open("a", encoding="utf-8")
         # ConsoleSpanExporter accepts an ``out`` file-like; reuse its serialisation.
         self._inner = ConsoleSpanExporter(out=self._fh)
 

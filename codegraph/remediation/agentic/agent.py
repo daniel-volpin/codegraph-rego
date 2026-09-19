@@ -76,6 +76,8 @@ class AgenticRemediationService:
         effective_model = model or settings.llm_model
 
         with _tracer.start_as_current_span("remediation.agentic") as span:
+            span.set_attribute("openinference.span.kind", "AGENT")
+            span.set_attribute("agent.name", "CodeGraphRemediationAgent")
             span.set_attribute("gen_ai.system", "codegraph.agentic")
             span.set_attribute("remediation.rule_id", rule_id)
             span.set_attribute("remediation.method_key", method_key)

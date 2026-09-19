@@ -146,12 +146,19 @@ def set_common_span_attributes(
     task_type: str,
     retry_index: int,
 ) -> None:
+    provider = infer_provider(config.api_base)
+    span.set_attribute("openinference.span.kind", "LLM")
     span.set_attribute("llm.model", config.model)
-    span.set_attribute("llm.provider", infer_provider(config.api_base))
+    span.set_attribute("llm.model_name", config.model)
+    span.set_attribute("llm.provider", provider)
+    span.set_attribute("gen_ai.system", provider)
+    span.set_attribute("gen_ai.request.model", config.model)
     span.set_attribute("llm.base_url", config.api_base or "")
     if config.temperature is not None:
         span.set_attribute("llm.temperature", config.temperature)
+        span.set_attribute("gen_ai.request.temperature", config.temperature)
     span.set_attribute("llm.max_tokens", config.max_tokens if config.max_tokens is not None else -1)
+    span.set_attribute("gen_ai.request.max_tokens", config.max_tokens if config.max_tokens is not None else -1)
     span.set_attribute("llm.task_type", task_type)
     span.set_attribute("llm.response_format", str(request.response_format is not None))
     span.set_attribute("llm.retry_index", retry_index)

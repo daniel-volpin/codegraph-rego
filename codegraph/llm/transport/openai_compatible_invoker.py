@@ -66,6 +66,9 @@ def set_usage_attributes(
     span.set_attribute("llm.prompt_tokens", prompt_units)
     span.set_attribute("llm.completion_tokens", completion_units)
     span.set_attribute("llm.total_tokens", total_units or -1)
+    span.set_attribute("llm.token_count.prompt", prompt_units)
+    span.set_attribute("llm.token_count.completion", completion_units)
+    span.set_attribute("llm.token_count.total", total_units or -1)
     span.set_attribute("gen_ai.usage.input_tokens", prompt_units)
     span.set_attribute("gen_ai.usage.output_tokens", completion_units)
 
