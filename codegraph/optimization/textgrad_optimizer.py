@@ -23,6 +23,11 @@ Maintain the core 3-gate invariants (Compilation, Test Regression, Policy Cleara
 Incorporate the specific feedback to eliminate observed failure modes while keeping the prompt concise,
 authoritative, and actionable.
 
+Scientific Generalization & Overfitting Guardrails:
+- Keep all instructions strictly generic to standard Java idioms, libraries, and security controls (e.g. standard JDBC PreparedStatement, ProcessBuilder array arguments, java.security.SecureRandom, java.nio.file.Path containment).
+- Do NOT reference specific benchmark class names (e.g. BenchmarkTest*, DatabaseHelper), specific test IDs, or hardcode solution strings for specific cases.
+- Focus on general reasoning protocols, tool-calling discipline, and standard Java security remediation principles.
+
 Current Prompt:
 {current_prompt}
 

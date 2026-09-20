@@ -27,6 +27,10 @@ Analyze why the agent failed or diverged:
 2. Did the agent produce compiler errors (syntax/scoping)?
 3. Did the agent waste turns thinking without calling tools?
 
+Generalization Rule (Zero Overfitting):
+- Formulate the textual gradient as a general principle of sound Java security design and tool protocol.
+- Do NOT include benchmark-specific class names (e.g. BenchmarkTest*, DatabaseHelper), filenames, or case IDs in the gradient.
+
 Output your critique in structured JSON:
 {{
   "root_failure_mode": "string",
