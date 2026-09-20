@@ -59,7 +59,6 @@ def compile_scratch_workspace(scratch_root: Path, timeout: int = 60) -> tuple[bo
                     [
                         "mvn",
                         "--batch-mode",
-                        "-q",
                         "-DskipTests",
                         "-Dspotless.apply.skip=true",
                         "-Dspotless.check.skip=true",
@@ -74,7 +73,12 @@ def compile_scratch_workspace(scratch_root: Path, timeout: int = 60) -> tuple[bo
                 span.set_attribute("verification.compile_passed", passed)
                 if passed:
                     return True, "Maven build succeeded (0 errors)."
-                output = (res.stdout + "\n" + res.stderr).strip()
+                error_lines = [
+                    line.strip()
+                    for line in (res.stdout + "\n" + res.stderr).splitlines()
+                    if "[ERROR]" in line or "error:" in line.lower() or "cannot find symbol" in line.lower()
+                ]
+                output = "\n".join(error_lines[:15]) if error_lines else (res.stdout + "\n" + res.stderr).strip()
                 return False, output or f"Maven compile failed with exit code {res.returncode}."
             except Exception as exc:
                 span.set_attribute("verification.compile_passed", False)
