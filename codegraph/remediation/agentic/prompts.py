@@ -15,11 +15,12 @@ Invariant Gates (Must Pass 100%):
 2. Regression Gate: Project test suite must pass without regressions.
 3. Policy Gate: The targeted security rule must be satisfied (0 remaining violations). Taint reaching sink arguments must be neutralized via safe parameterization (e.g. PreparedStatement, XPathVariableResolver, ProcessBuilder string arrays), framework sanitization (e.g. ESAPI), or constant decoupling. Prohibit custom runtime string-escaping loops.
 
-Action Protocol:
-- Call `read_file` to inspect the vulnerable method and surrounding context.
+Action Protocol & Parallel Execution:
+- You may execute multiple tool calls in a single turn (e.g., `add_import` + `edit_file` + `run_verification`) to save turns and verify immediately.
+- Use `inspect_class_api` to check available constructors, methods, and fields of any referenced class/helper without guessing.
 - If the finding is a false positive (already sanitized/safe) or requires human architectural redesign, call `refuse_remediation`.
-- Otherwise, use `edit_file` and `add_import` to apply a minimal, sound patch.
-- Every turn must execute a concrete tool call (`read_file`, `edit_file`, `add_import`, `run_verification`, or `finish_remediation`).
+- Otherwise, use `edit_file` (and `add_import` if needed) to apply a minimal, sound patch.
+- Every turn must execute a concrete tool call (`read_file`, `edit_file`, `add_import`, `inspect_class_api`, `run_verification`, or `finish_remediation`).
 - Call `run_verification` to check all 3 gates. If diagnostics report errors, iteratively fix them.
 - Once all 3 gates pass, call `finish_remediation`.
 """
@@ -61,8 +62,13 @@ def build_initial_user_prompt(
         f"Reason: {reason}",
     ]
 
+    start_line = finding.get("start_line") or finding.get("snippet_start_line") or (finding.get("evidence") or {}).get("start_line")
+    end_line = finding.get("end_line") or finding.get("snippet_end_line") or (finding.get("evidence") or {}).get("end_line")
+    if start_line and end_line:
+        prompt_parts.append(f"Target AST Location: Lines {start_line} to {end_line}")
+
     if code_snippet:
-        prompt_parts.append(f"Code Snippet:\n{code_snippet}")
+        prompt_parts.append(f"Target Method Snippet:\n```java\n{code_snippet}\n```")
 
     strategy = get_fix_strategy(rule_id, finding=finding, agentic=True)
     if strategy:
@@ -94,9 +100,9 @@ def build_initial_user_prompt(
 
     prompt_parts.append(
         "\nAction Plan:\n"
-        "1. Call `read_file` with the File Path above to read the full context.\n"
-        "2. Call `edit_file` (and `add_import` if needed) to apply the minimal, secure refactoring.\n"
-        "3. Call `run_verification` to check compilation, tests, and policy re-evaluation.\n"
+        "1. Inspect the Target Method Snippet and AST location (use `read_file` only if wider context is required).\n"
+        "2. If needed, call `inspect_class_api` to check helper method/type signatures.\n"
+        "3. Apply `edit_file` (and batch with `add_import` / `run_verification` in the same turn for speed).\n"
         "4. Call `finish_remediation` once verification passes."
     )
     return "\n".join(prompt_parts)
