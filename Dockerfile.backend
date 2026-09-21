@@ -1,4 +1,4 @@
-FROM maven:3-eclipse-temurin-26@sha256:2bc6924d954a6efefde0a9629228914acf72e4abcdb927b68f19edd1135a0cb1 AS java-parser-build
+FROM maven:3-eclipse-temurin-26@sha256:c30718f442eb39c55b2d45440bb849d8755ad8d9d6ef67aadefcce150267116f AS java-parser-build
 
 WORKDIR /java-parser
 COPY tools/java-parser/pom.xml tools/java-parser/settings.xml ./
