@@ -72,6 +72,15 @@ outputs/2026-09-14-detection-full/group_*/*
 !outputs/2026-09-14-detection-full/group_*/provenance.json
 !outputs/2026-09-14-detection-full/group_*/table.md
 
+# Current agentic remediation baseline (84-case multi-category sample)
+!outputs/2026-09-22-agentic-remediation-final/
+outputs/2026-09-22-agentic-remediation-final/*
+!outputs/2026-09-22-agentic-remediation-final/agentic_outcomes.json
+!outputs/2026-09-22-agentic-remediation-final/provenance.json
+!outputs/2026-09-22-agentic-remediation-final/remediation_metrics.csv
+!outputs/2026-09-22-agentic-remediation-final/summary.md
+!outputs/2026-09-22-agentic-remediation-final/table.md
+
 # Checksum manifest protecting the canonical artifacts below from silent change.
 !outputs/canonical_manifest.sha256
 

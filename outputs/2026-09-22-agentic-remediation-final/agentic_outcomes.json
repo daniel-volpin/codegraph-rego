@@ -1,0 +1,9 @@
+{
+  "total": 84,
+  "correct_fix": 60,
+  "correct_abstain": 2,
+  "missed_fix": 0,
+  "false_fix": 10,
+  "inconclusive_error_or_timeout": 12,
+  "correct_outcome_rate": 0.7381
+}

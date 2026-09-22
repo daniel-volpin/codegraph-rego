@@ -1,0 +1,9 @@
+category,total,tp,fp,success,refused,inconclusive,build_pass
+Command Injection (CWE-78),10,8,2,6,0,4,7
+Crypto (CWE-327),12,12,0,9,0,3,12
+Hash (CWE-328),10,10,0,9,0,1,10
+LDAP Injection (CWE-90),10,7,3,10,0,0,10
+Path Traversal (CWE-22),11,6,5,11,0,0,11
+Randomness (CWE-330),11,8,3,8,1,2,10
+SQL Injection (CWE-89),12,9,3,10,0,2,12
+XPath Injection (CWE-643),8,7,1,7,1,0,7

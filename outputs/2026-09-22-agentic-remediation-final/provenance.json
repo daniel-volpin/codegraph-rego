@@ -1,0 +1,49 @@
+{
+  "config": {
+    "path": "configs/benchmark/remediation_retry_failed.json",
+    "sha256": "838ddcdd860f40b45e8df25b84feefb1db2e4815613000b3fc2082014b59b777"
+  },
+  "eval_kind": "agentic_remediation",
+  "extra": {
+    "correct_outcome_rate": 0.7381,
+    "llm_api_base": "http://127.0.0.1:1234/v1",
+    "mode": "agentic",
+    "model": "qwen/qwen3.8-27b",
+    "total_cases": 84
+  },
+  "generated_at": "2026-09-22T16:05:33+00:00",
+  "git": {
+    "branch": "main",
+    "dirty": true,
+    "dirty_files": [
+      "?? scripts/evaluation/export_final_artifact.py"
+    ],
+    "last_commit_subject": "Merge remote-tracking branch 'origin/main' into main",
+    "sha": "3fabbea84d0bcfe89af8380c1136e8f64fa3f633"
+  },
+  "ground_truth": null,
+  "llm": null,
+  "neo4j": {
+    "uri": "bolt://127.0.0.1:7687",
+    "user": "neo4j"
+  },
+  "opa": {
+    "raw": "Version: 1.20.2\nBuild Commit: b2c26708e9d55645d7f837db495031f7e4152594\nBuild Timestamp: 2026-09-03T20:35:14Z\nBuild Hostname: \nGo Version: go1.27.1\nPlatform: darwin/arm64\nRego Version: v1\nWebAssembly: available"
+  },
+  "output_dir": "outputs/2026-09-22-agentic-remediation-final",
+  "package_version": null,
+  "platform": {
+    "machine": "arm64",
+    "release": "25.6.0",
+    "system": "Darwin"
+  },
+  "pyproject_sha256": "f39f7694e64b745827793d7c134a8b31c056871f241fa20cde267e8f650b67ec",
+  "python": {
+    "executable": "python3",
+    "implementation": "CPython",
+    "version": "3.14.7"
+  },
+  "schema_version": 2,
+  "seed": 42,
+  "uv_lock_sha256": "fdf99da423c8b2380aee6de6d0a05acb6b758475df13a4b44f3f1f48d403e811"
+}
