@@ -1,7 +1,7 @@
 # Agentic Remediation Evaluation - Final Merged Baseline
 
 - **Artifact Directory**: `outputs/2026-09-22-agentic-remediation-final/`
-- **Commit**: `3fabbea84d0bcfe89af8380c1136e8f64fa3f633`
+- **Commit**: `db304bdf5a09cc81e1ce06b9b3bb9ce226228374`
 - **Model**: `qwen/qwen3.8-27b` (local MLX / LM Studio)
 - **Evaluation Mode**: `agentic` (3-gate verification: JDT compilation, regression tests, policy recheck)
 - **Total Evaluated Cases**: `84`

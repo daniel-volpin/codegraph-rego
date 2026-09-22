@@ -21,7 +21,7 @@ The existing `thesis_final_*` and `_vN` names stay. `canonical_manifest.sha256` 
 | `thesis_final_remediation_v4/` | verified-success rate and confidence calibration | canonical | `80d0084` | `thesis-remediation-v4-source` |
 | `2026-09-14-detection-full/detection_composed/` | current detection baseline, merged from the eight `group_*` runs | current; summary files only | none of its own | see `composed_from` |
 | `2026-09-14-detection-full/group_*/` | the eight per-group runs it merges | current; summary and provenance only | `1dd1510`, clean tree | ancestor of `main`, no tag needed |
-| `2026-09-22-agentic-remediation-final/` | agentic remediation baseline (84 cases across 8 categories, 73.81% correct outcome rate) | current agentic remediation baseline | `ba77516`, clean tree | ancestor of `main`, no tag needed |
+| `2026-09-22-agentic-remediation-final/` | agentic remediation baseline (84 cases across 8 categories, 73.81% correct outcome rate) | current agentic remediation baseline | `db304bdf`, clean tree | ancestor of `main`, no tag needed |
 
 A composed directory is a merge, not a run, so nothing writes a `provenance.json` into it: `compose_benchmark_eval.py` records `composed_from` in `metrics.json`, and the per-group directories it names carry the provenance.
 
