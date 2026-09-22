@@ -44,3 +44,5 @@ rules:
       - pattern: new ProcessBuilder(...)
     pattern-sanitizers:
       - pattern: $ESAPI.encoder().encodeForOS(...)
+      - pattern: org.owasp.esapi.ESAPI.encoder().encodeForOS(...)
+      - pattern: $STR.replaceAll(...)

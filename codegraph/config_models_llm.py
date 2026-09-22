@@ -27,7 +27,7 @@ class BaseLLMSettings(BaseSettings):
         description="Explicit provider endpoint; auto preserves hosted Responses and local LM Studio Chat behavior.",
     )
     llm_timeout_seconds: float = Field(
-        180.0, gt=0, le=600, description="HTTP request timeout for model calls, not a total agent-run deadline.",
+        360.0, gt=0, le=600, description="HTTP request timeout for model calls, not a total agent-run deadline.",
     )
     llm_max_concurrent_requests: int = Field(
         1,
@@ -87,7 +87,7 @@ class BaseLLMSettings(BaseSettings):
         description="Maximum tokens to generate for explanation calls.",
     )
     llm_max_tokens_remediation: int | None = Field(
-        4096,
+        8192,
         gt=0,
         validation_alias=AliasChoices("LLM_MAX_TOKENS_REMEDIATION", "llm_max_tokens_remediation"),
         description="Maximum tokens to generate for remediation calls, including any reasoning content.",

@@ -35,3 +35,6 @@ rules:
           - pattern: java.nio.file.Files.readAllLines(...)
     pattern-sanitizers:
       - pattern: $ESAPI.encoder().encodeForOS(...)
+      - pattern: (new java.io.File(...)).getName()
+      - pattern: $F.getName()
+

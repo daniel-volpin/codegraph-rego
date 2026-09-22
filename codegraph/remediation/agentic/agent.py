@@ -116,12 +116,13 @@ class AgenticRemediationService:
 
                 for turn_idx in range(max_turns):
                     LOGGER.info("Agentic remediation turn %d/%d for %s", turn_idx + 1, max_turns, rule_id)
+                    effective_max_tokens = max(int(settings.llm_max_tokens_remediation or 8192), 8192)
                     try:
                         raw_response = self.llm_client(
                             messages,
                             tools=AGENT_TOOL_DEFINITIONS,
                             model=effective_model,
-                            max_tokens=settings.llm_max_tokens_remediation,
+                            max_tokens=effective_max_tokens,
                         )
                     except Exception as exc:
                         LOGGER.error("LLM client call failed in agent turn: %s", exc)
@@ -136,7 +137,10 @@ class AgenticRemediationService:
                     if not tool_calls:
                         LOGGER.info("no_tool_call content=%s", content[:300])
                         messages.append({"role": "assistant", "content": content})
-                        followup = "Please execute a tool call (edit_file, add_import, run_verification, or finish_remediation) to proceed."
+                        followup = (
+                            "CRITICAL: Do not write long reasoning. In `<think>`, write at most 1-2 sentences, "
+                            "close `</think>`, and IMMEDIATELY emit a tool call (edit_file, add_import, run_verification, or finish_remediation)."
+                        )
                         messages.append({"role": "user", "content": followup})
                         turns.append(current_turn)
                         continue

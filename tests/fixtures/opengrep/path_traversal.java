@@ -24,4 +24,12 @@ class PathTraversalFixtures {
         // ok: ISO-A.8-PATH-TRAVERSAL
         new java.io.FileInputStream(new java.io.File("/var/testfiles/fixed.txt"));
     }
+
+    void sanitizedFileNameIsSafe(HttpServletRequest request) throws Exception {
+        String param = request.getHeader("x");
+        String sanitized = new java.io.File(param).getName();
+        String fileName = "/var/testfiles/" + sanitized;
+        // ok: ISO-A.8-PATH-TRAVERSAL
+        new java.io.FileInputStream(new java.io.File(fileName));
+    }
 }

@@ -31,4 +31,12 @@ class CommandInjectionFixtures {
         // ok: ISO-A.8-CMD-INJECTION
         r.exec("echo fixed");
     }
+
+    void sanitizedReplaceAllIsSafe(HttpServletRequest request) throws Exception {
+        String param = request.getParameter("x");
+        String safe = param.replaceAll("[^a-zA-Z0-9_.-]", "");
+        Runtime r = Runtime.getRuntime();
+        // ok: ISO-A.8-CMD-INJECTION
+        r.exec("echo " + safe);
+    }
 }

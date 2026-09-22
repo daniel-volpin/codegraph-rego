@@ -146,10 +146,10 @@ AGENTIC_FIX_STRATEGIES: dict[str, dict[str, Any]] = {
         "extra_examples": [],
     },
     "ISO-A.8-PATH-TRAVERSAL": {
-        "objective": "Prevent path traversal by verifying canonical base directory containment.",
+        "objective": "Prevent path traversal by decoupling untrusted input or extracting safe file basenames before reaching file-access APIs.",
         "allowed_transformations": [
-            "Normalize paths using Path.normalize() and verify canonical containment against the base directory.",
-            "Use Path.resolve() instead of string concatenation for file paths.",
+            "Extract safe file basenames (e.g., using new java.io.File(untrustedInput).getName()) before constructing file paths.",
+            "Decouple untrusted input from file access APIs using a whitelist of fixed constants or safe default values.",
         ],
         "non_goals": [
             "Do not change file permissions or filesystem structure.",
@@ -157,10 +157,11 @@ AGENTIC_FIX_STRATEGIES: dict[str, dict[str, Any]] = {
         "extra_examples": [],
     },
     "ISO-A.8-CMD-INJECTION": {
-        "objective": "Prevent command injection by using structured argument arrays with ProcessBuilder.",
+        "objective": "Prevent command injection by sanitizing untrusted input, using an allowlist of constants, or structuring discrete ProcessBuilder argument arrays.",
         "allowed_transformations": [
-            "Replace Runtime.getRuntime().exec string concatenation with ProcessBuilder argument arrays.",
-            "Pass individual command arguments as separate array elements to prevent shell token splitting.",
+            "Sanitize untrusted command arguments using input validation or regex sanitization (e.g., param.replaceAll(\"[^a-zA-Z0-9_.-]\", \"\")).",
+            "Decouple untrusted input by mapping inputs to fixed constant command strings or safe default values.",
+            "Replace string concatenation in Runtime.getRuntime().exec with discrete ProcessBuilder argument arrays with sanitized inputs.",
         ],
         "non_goals": [
             "Do not modify the underlying executable or external environment.",
