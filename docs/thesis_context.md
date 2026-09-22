@@ -131,6 +131,8 @@ Canonical thesis runs:
   SHA `7ad90a2`, fully verified success rate `0.72` (`18/25`), attempted-only calibration Brier `0.094698` / ECE `0.083900`.
 - remediation v4: `outputs/thesis_final_remediation_v4/`, provenance
   SHA `80d0084`, fully verified success rate `1.00` (`25/25`), Brier `0.005723` / ECE `0.069612`.
+- agentic remediation (current): `outputs/2026-09-22-agentic-remediation-final/`,
+  provenance SHA `ba77516`, evaluated on 84 cases across all 8 benchmark categories (crypto, hash, random, SQL injection, path traversal, command injection, LDAP injection, XPath injection). Reaches `73.81%` correct outcome rate (`60` correct fixes, `2` correct abstentions, `0` missed fixes, `10` false fixes, `12` inconclusive/timeouts) under model `qwen/qwen3.8-27b` with autonomous multi-turn 3-gate verification (JDT compilation, regression tests, policy recheck).
 
 ## Remediation IR (`RepairIntent`)
 

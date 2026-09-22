@@ -36,16 +36,23 @@ Remediation support tiers:
 
 ## Follow-Up Evidence
 
-- Provenance-backed remediation rerun: `outputs/thesis_final_remediation_v3/`
+- Provenance-backed bounded remediation rerun: `outputs/thesis_final_remediation_v3/`
   - `18/25 = 0.72`
-- Strongest provenance-backed remediation anchor: `outputs/thesis_final_remediation_v4/`
+- Strongest provenance-backed bounded remediation anchor: `outputs/thesis_final_remediation_v4/`
   - `25/25 = 1.00`
   - `Brier=0.0057`, `ECE=0.0696`
+- Autonomous agentic remediation baseline (multi-turn, 8 categories): `outputs/2026-09-22-agentic-remediation-final/`
+  - `60/84` correct fixes, `2/84` correct abstentions, `0` missed fixes (`73.81%` correct outcome rate)
+  - `qwen/qwen3.8-27b` via local MLX / LM Studio under 3-gate verification (JDT compile, regression tests, OPA/OpenGrep policy)
 
-If a minimum remediation threshold of `70%` is required, use:
+## Canonical Citation Mapping for Thesis
 
-- primary anchor: `25/25` remediation v4 artifact
-- fallback anchor: `18/25` remediation v3 artifact
+| Thesis Section | Empirical Evaluation Focus | Primary Canonical Artifact | Key Metrics |
+| :--- | :--- | :--- | :--- |
+| **Detection (RQ1)** | OPA + OpenGrep policy compliance checks | `outputs/2026-09-14-detection-full/detection_composed/` | Per-category PRF & union any-rule metrics |
+| **Explanation (RQ2)** | Graph-grounded vs context-free citations | `outputs/thesis_final_explanation_full_v2/` | `Citation@TP = 1.000` vs `0.009` |
+| **Bounded Remediation (RQ3a)** | Single-method bounded repair with calibration | `outputs/thesis_final_remediation_v4/` | `25/25 = 100%`, `Brier = 0.0057`, `ECE = 0.0696` |
+| **Agentic Remediation (RQ3b)** | Autonomous multi-turn 3-gate refactoring | `outputs/2026-09-22-agentic-remediation-final/` | `73.81%` correct outcome rate (60 fixes, 0 missed) |
 
 ## Run And Citation Guidance
 
