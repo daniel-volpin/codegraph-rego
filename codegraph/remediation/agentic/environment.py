@@ -5,6 +5,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import logging
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -150,10 +151,10 @@ class IsolatedWorktreeEnvironment:
         if not target.is_file():
             raise FileNotFoundError(f"File not found: {relative_path}")
         text = target.read_text(encoding="utf-8")
-        raw_stmt = import_statement.strip().rstrip(";")
-        if not raw_stmt.startswith("import "):
-            raw_stmt = f"import {raw_stmt}"
-        stmt = f"{raw_stmt};"
+        stmt = import_statement.strip().rstrip(";")
+        if not re.match(r"^import\s+", stmt):
+            stmt = f"import {stmt}"
+        stmt += ";"
         if stmt in text:
             return True
         lines = text.splitlines(keepends=True)
