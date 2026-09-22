@@ -21,7 +21,7 @@ dependencies = [
     "pydantic==2.13.5",
     "pydantic-settings==2.15.0",
     "python-dotenv==1.2.3",
-    "openai==3.13.0",
+    "openai==3.16.2",
     "opentelemetry-sdk==1.44.0",
     "opentelemetry-instrumentation-fastapi==0.65b0",
     "opentelemetry-instrumentation-httpx==0.65b0",
