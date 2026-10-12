@@ -1,11 +1,11 @@
-FROM maven:3-eclipse-temurin-26@sha256:2bc6924d954a6efefde0a9629228914acf72e4abcdb927b68f19edd1135a0cb1 AS java-parser-build
+FROM maven:3-eclipse-temurin-27@sha256:d0d38ebffce1172d5c9c0be2e28691f598f9a91f578858a77d133abeb91434f9 AS java-parser-build
 
 WORKDIR /java-parser
 COPY tools/java-parser/pom.xml tools/java-parser/settings.xml ./
 COPY tools/java-parser/src ./src
 RUN mvn --batch-mode --no-transfer-progress --settings settings.xml package
 
-FROM python:3.14.7-slim-trixie@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
+FROM python:3.14.8-slim-trixie@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 
 WORKDIR /app
 
